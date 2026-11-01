@@ -38,6 +38,9 @@ import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
+import { notifyDSMLBuffering } from "./provider/dsml-recovery-audit.js"
+import { RequestDiagnostic, REQUEST_DIAGNOSTIC_HEADER } from "./provider/request-diagnostic.js"
+import { guardDSMLStream, isDSV4Scope, recoverDSMLStream, recoveryStatus } from "./session/llm/dsml-recovery.js"
 import { State } from "./state.js"
 import { stringify } from "./tool/runtime.js"
 
@@ -409,8 +412,12 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+    streamPrepared: (prepared, request, _runtime, options) =>
+      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http, {
+        sessionID: request.http?.headers?.["x-opencode-session-id"] ?? "unknown",
+        messageID: request.id ?? "unknown",
+        diagnosticToken: request.http?.headers?.[REQUEST_DIAGNOSTIC_HEADER],
+      }),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -708,7 +715,18 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
+type RecoveryContext = {
+  readonly sessionID: string
+  readonly messageID: string
+  readonly diagnosticToken?: string
+}
+
+function streamLanguage(
+  language: LanguageModelV3,
+  options: LanguageModelV3CallOptions,
+  http?: HttpMiddleware,
+  recovery?: RecoveryContext,
+) {
   const state: StreamState = { step: 0, toolNames: {}, open: {} }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
@@ -723,7 +741,7 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
       }).pipe(
         Effect.map((result) =>
           Stream.fromReadableStream({
-            evaluate: () => result.stream,
+            evaluate: () => recoverStream(language, options, result, recovery),
             onError: (error) => llmError(error, "read"),
           }).pipe(
             Stream.mapEffect((event) => streamPartEvents(state, event)),
@@ -733,6 +751,55 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
       ),
     ),
   )
+}
+
+function recoverStream(
+  language: LanguageModelV3,
+  options: LanguageModelV3CallOptions,
+  result: Awaited<ReturnType<LanguageModelV3["doStream"]>>,
+  recovery: RecoveryContext | undefined,
+) {
+  if (!recovery || !isDSV4Scope(language.provider, language.modelId)) return result.stream
+  const onError = (message: string) => {
+    if (recovery.diagnosticToken) RequestDiagnostic.trigger(recovery.diagnosticToken, { type: "provider-error", message })
+  }
+  const stream =
+    recoveryStatus() === "enabled"
+      ? recoverDSMLStream(result.stream, {
+          params: options,
+          sessionID: recovery.sessionID,
+          messageID: recovery.messageID,
+          gatewayRequestID: result.response?.headers?.["x-llmgw-request-id"],
+          onSuspect: () => notifyDSMLBuffering(recovery.sessionID),
+          onError,
+        })
+      : guardDSMLStream(result.stream, onError)
+  if (!recovery.diagnosticToken) return stream
+  return closeOnEnd(stream, recovery.diagnosticToken)
+}
+
+function closeOnEnd(stream: ReadableStream<LanguageModelV3StreamPart>, token: string) {
+  const reader = stream.getReader()
+  return new ReadableStream<LanguageModelV3StreamPart>({
+    async pull(ctrl) {
+      try {
+        const next = await reader.read()
+        if (next.done) {
+          RequestDiagnostic.close(token)
+          ctrl.close()
+          return
+        }
+        ctrl.enqueue(next.value)
+      } catch (error) {
+        RequestDiagnostic.close(token)
+        ctrl.error(error)
+      }
+    },
+    cancel() {
+      RequestDiagnostic.close(token)
+      void reader.cancel().catch(() => {})
+    },
+  })
 }
 
 type Fragment = "text" | "reasoning"

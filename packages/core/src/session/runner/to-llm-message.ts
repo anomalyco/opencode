@@ -13,6 +13,12 @@ import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
+import {
+  DSML_GUARD_MESSAGE,
+  EMPTY_VETTING_LOOP_MESSAGE,
+  emptyVettingLoopDetector,
+  withoutAttemptedDSMLInvocation,
+} from "../llm/dsml.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
@@ -159,12 +165,28 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const reasoningInterrupted = message.content.some(
     (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
   )
-  const content = message.content.flatMap((item): ContentPart[] => {
+  const dsmlScope = model.providerID === "llmgw" && model.id === "dsv4"
+  // Older aborted turns can contain the same loop without a fixed guard error.
+  // Feed assistant text only, keeping stream state across parts.
+  const loop = dsmlScope && message.error?.type === "aborted" ? emptyVettingLoopDetector() : undefined
+  const legacyLoop =
+    loop !== undefined && message.content.some((item) => item.type === "text" && loop.feed(item.text) !== -1)
+  // A marker or loop failure can follow a genuinely executed SDK tool. Replay
+  // its completed result so a resume remembers the actual effect.
+  const dsmlFailure =
+    legacyLoop ||
+    (message.error?.type === "unknown" &&
+      (message.error.message === DSML_GUARD_MESSAGE || message.error.message === EMPTY_VETTING_LOOP_MESSAGE))
+  const replay = dsmlFailure
+    ? message.content.filter((item) => item.type === "tool" && item.state.status === "completed")
+    : message.content
+  if (dsmlFailure && replay.length === 0) return []
+  const content = replay.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
         {
           type: "text",
-          text: item.text,
+          text: dsmlScope ? withoutAttemptedDSMLInvocation(item.text) : item.text,
           // Text can carry provider-bound state (e.g. Gemini thought signatures),
           // which is only replayable against the model that produced it.
           providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
@@ -207,7 +229,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = replay
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
       toolResult(item, reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined),
