@@ -237,6 +237,18 @@ export function make(input: {
   const ormolu = executable("ormolu", [".hs"], ["-i", "$FILE"], findExecutable)
   const cljfmt = executable("cljfmt", [".clj", ".cljs", ".cljc", ".edn"], ["fix", "--quiet", "$FILE"], findExecutable)
   const dfmt = executable("dfmt", [".d"], ["-i", "$FILE"], findExecutable)
+  const stylua = executable("stylua", [".lua"], ["$FILE"], findExecutable)
+  const scalafmt: Info = {
+    name: "scalafmt",
+    extensions: [".scala", ".sc"],
+    // Without a .scalafmt.conf pinning a version, scalafmt exits non-zero with
+    // "missing Scalafmt configuration file", so stay inert until one exists.
+    enabled: Effect.gen(function* () {
+      const bin = findExecutable("scalafmt")
+      if (!bin) return disabled
+      return (yield* findUp(".scalafmt.conf")).length ? [bin, "$FILE"] : disabled
+    }).pipe(Effect.orElseSucceed(() => disabled)),
+  }
 
   return [
     gofmt,
@@ -265,6 +277,8 @@ export function make(input: {
     ormolu,
     cljfmt,
     dfmt,
+    stylua,
+    scalafmt,
   ] satisfies Info[]
 }
 
