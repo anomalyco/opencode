@@ -41,6 +41,84 @@ const usageChunk = (usage: object) => ({
 })
 
 describe("OpenAI-compatible Chat route", () => {
+  it.effect("replays a rejected multi-dot tool call without invalidating the next request", () =>
+    Effect.gen(function* () {
+      const call = ToolCallPart.make({
+        id: "call_unknown",
+        name: "browser.tabs.open",
+        input: { url: "https://example.com" },
+      })
+      const error = 'No tool named "browser.tabs.open" is currently available.'
+      const request = LLM.request({
+        model,
+        tools: [
+          ToolDefinition.make({
+            name: "browser_tabs_open",
+            description: "Open a tab",
+            inputSchema: { type: "object" },
+          }),
+        ],
+        messages: [
+          Message.user("Open the page"),
+          Message.assistant([call]),
+          Message.tool({ id: call.id, name: call.name, result: error, resultType: "error" }),
+          Message.user("Continue"),
+        ],
+      })
+      const prepared = yield* compileRequest(request)
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user" },
+        { role: "assistant", tool_calls: [{ id: call.id, function: { name: "browser_tabs_open" } }] },
+        { role: "tool", tool_call_id: call.id, content: error },
+        { role: "user" },
+      ])
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "browser_tabs_open" } }])
+      expect(request.messages[1].content[0]).toEqual(call)
+      expect(call.name).toBe("browser.tabs.open")
+    }),
+  )
+
+  it.effect("normalizes unadvertised names while preserving advertised names", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            ToolDefinition.make({
+              name: "plugin.custom.lookup",
+              description: "Lookup",
+              inputSchema: { type: "object" },
+            }),
+          ],
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_one", name: "other.lookup", input: {} }),
+              ToolCallPart.make({ id: "call_two", name: "plugin.custom.lookup", input: {} }),
+              ToolCallPart.make({ id: "call_three", name: "invalid/name with space", input: {} }),
+            ]),
+            Message.tool({ id: "call_one", name: "other.lookup", result: "done" }),
+            Message.tool({ id: "call_two", name: "plugin.custom.lookup", result: "done" }),
+            Message.tool({ id: "call_three", name: "invalid/name with space", result: "done" }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "assistant",
+          tool_calls: [
+            { function: { name: "other_lookup" } },
+            { function: { name: "plugin.custom.lookup" } },
+            { function: { name: "invalid_name_with_space" } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_one" },
+        { role: "tool", tool_call_id: "call_two" },
+        { role: "tool", tool_call_id: "call_three" },
+      ])
+    }),
+  )
+
   it.effect("serializes user and tool video for unknown compatible providers", () =>
     Effect.gen(function* () {
       const inline = "data:video/mp4;base64,AAEC"
