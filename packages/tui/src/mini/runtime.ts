@@ -12,8 +12,10 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
+import { normalizeModelVariant } from "../model-preference"
 import { errorMessage } from "../util/error"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
+import { resolveMiniModelPreference } from "./model-preference"
 import {
   resolveMiniSettings,
   resolveModelInfo,
@@ -22,7 +24,7 @@ import {
   resolveSessionInfo,
 } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
-import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
+import { cycleVariant, fitVariant, formatModelLabel, resolveVariant } from "./variant.shared"
 import { verbosityPreset } from "./verbosity"
 import type {
   LocalReplayRow,
@@ -116,6 +118,7 @@ type RuntimeState = {
   sdk: RunInput["sdk"]
   shown: boolean
   model: RunInput["model"]
+  modelFromPreference: boolean
   defaultModel: RunInput["model"]
   providers: RunProvider[]
   variants: string[]
@@ -207,11 +210,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: undefined as RunInput["model"],
     variant: undefined as string | undefined,
   }
-  const savedVariant = await input.host.preferences.resolveVariant(ctx.model)
+  const savedVariant = await input.host.preferences.variant(ctx.model)
   const state: RuntimeState = {
     sdk: ctx.sdk,
     shown: !session.first,
     model: ctx.model ?? session.model,
+    modelFromPreference: false,
     defaultModel: undefined,
     providers: [],
     variants: [],
@@ -275,7 +279,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormReply: async (next) => {
       if (state.demo?.formReply(next)) return
       try {
-        await state.sdk.session.form.reply(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.reply(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }
@@ -284,7 +291,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormCancel: async (next) => {
       if (state.demo?.formCancel(next)) return
       try {
-        await state.sdk.session.form.cancel(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.cancel(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }
@@ -299,6 +309,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       if (!state.model) state.model = model
+      state.modelFromPreference = false
       state.activeVariant = cycleVariant(state.activeVariant, state.variants)
       void input.host.preferences.saveVariant(model, state.activeVariant)
       return {
@@ -309,8 +320,18 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
     onAgentSelect: (agent) => {
       state.agent = agent
+      if (state.model && !state.modelFromPreference) return
+      state.model = undefined
+      state.modelFromPreference = true
+      state.defaultModel = undefined
+      state.activeVariant = normalizeModelVariant(ctx.variant)
+      state.variants = []
+      modelPreferencePending = true
+      modelAttempt?.abort()
+      state.switching = requestModelLoad().then(() => loadDefaultModel(clientAttempt()))
     },
     onModelSelect: async (model) => {
+      state.modelFromPreference = false
       if (state.model?.providerID === model.providerID && state.model.modelID === model.modelID) {
         return
       }
@@ -318,7 +339,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       state.model = model
       state.activeVariant = undefined
       state.variants = variantsFor(state.providers, model)
-      const switching = input.host.preferences.resolveVariant(model).then((saved) => {
+      const switching = input.host.preferences.variant(model).then((saved) => {
         const current = state.model
         if (!current || current.providerID !== model.providerID || current.modelID !== model.modelID) {
           return
@@ -359,6 +380,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       if (!state.model) state.model = model
+      state.modelFromPreference = false
       state.activeVariant = variant
       void input.host.preferences.saveVariant(model, state.activeVariant)
       return {
@@ -425,6 +447,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   let modelLoad: Promise<void> | undefined
   let modelLoadQueued = false
   let modelLoadStarted = false
+  let modelPreferencePending = true
 
   const updateClient = (sdk: RunInput["sdk"]) => {
     if (state.sdk === sdk) return
@@ -469,6 +492,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         state.agent = next.agent
         state.location = next.location
         state.model = next.model
+        state.modelFromPreference = false
         state.activeVariant = next.variant
         footer.event({ type: "agent", agent: state.agent })
         if (!next.resume) return
@@ -481,7 +505,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         state.shown = !resumed.first
         state.history = [...resumed.history]
         state.model = next.model ?? resumed.model
-        const resumedSavedVariant = state.model ? await input.host.preferences.resolveVariant(state.model) : undefined
+        const resumedSavedVariant = state.model ? await input.host.preferences.variant(state.model) : undefined
         state.activeVariant = resolveVariant(next.variant, resumed.variant, resumedSavedVariant, [])
         session.variant = state.activeVariant
         footer.event({ type: "history", history: resumed.history })
@@ -507,17 +531,60 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     const generation = clientGeneration
     const sdk = state.sdk
     const selected = state.model
+    const agent = state.agent
     const controller = new AbortController()
     const signal = AbortSignal.any([runtimeController.signal, controller.signal])
     modelAttempt = controller
     try {
-      const info = await abortable(resolveModelInfo(sdk, state.location, signal), signal)
+      const info = await abortable(resolveModelInfoStrict(sdk, state.location, signal), signal)
       if (
-        !info ||
         !currentModelLoad(generation, sdk) ||
+        state.agent !== agent ||
         (selected && (state.model?.providerID !== selected.providerID || state.model.modelID !== selected.modelID))
       )
         return
+      // A catalog read that failed is not evidence that the model is gone; the
+      // catalog refresh runs this load again once the providers are known.
+      if (!info) return
+      if (!state.model) {
+        // Read shared preferences and the agent configuration together.
+        const [recent, configured, agents] = await Promise.all([
+          input.host.preferences.recentModels(),
+          sdk.config.get({ location: { directory: state.location.directory } }, { signal }).catch(() => undefined),
+          loadRunAgents(sdk, state.location, signal).catch(() => undefined),
+        ])
+        if (!currentModelLoad(generation, sdk) || state.agent !== agent) return
+        // A failed config read must not promote a recent model over an unknown
+        // configured model. Leave selection to the server until a refresh retries.
+        modelPreferencePending = configured === undefined || agents === undefined
+        // A model selected while the preference was loading wins over it.
+        const preference =
+          state.model || !configured || !agents
+            ? undefined
+            : resolveMiniModelPreference({
+                agent: (agent ? agents.find((item) => item.id === agent) : agents[0])?.model,
+                providers: info.providers,
+                recent,
+                configured,
+              })
+        if (preference) {
+          const saved = preference.model ? await input.host.preferences.variant(preference.model) : undefined
+          if (!currentModelLoad(generation, sdk) || state.agent !== agent || state.model) return
+          state.model = preference.model
+          state.modelFromPreference = state.modelFromPreference || preference.model !== undefined
+          if (preference.model) {
+            // Pick the winner before normalizing so an explicit "default" keeps
+            // outranking the configured variant, the order the full TUI reads in
+            // preferredSelection.
+            state.activeVariant =
+              ctx.variant !== undefined
+                ? normalizeModelVariant(ctx.variant)
+                : fitVariant(saved ?? preference.variant, variantsFor(info.providers, preference.model))
+          }
+          if (preference.warning)
+            footer.append({ kind: "system", text: preference.warning, phase: "final", source: "system" })
+        }
+      }
       applyModelInfo(
         info,
         selected ? session.variant : state.activeVariant,
@@ -651,9 +718,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     if (state.model || !currentClient(attempt)) return
     if (defaultModelLoad) {
       defaultModelQueued = true
-      return
+      return defaultModelLoad.then(() => defaultModelLoad)
     }
     defaultModelQueued = false
+    const agent = state.agent
     defaultModelLoad = attempt.sdk.model
       .default(
         {
@@ -664,16 +732,19 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         { signal: attempt.signal },
       )
       .then(async (result) => {
-        if (!result.data || state.model || !currentClient(attempt)) return
+        if (!result.data || state.model || !currentClient(attempt) || state.agent !== agent) return
         const model = { providerID: result.data.providerID, modelID: result.data.id }
         const changed =
           state.defaultModel?.providerID !== model.providerID || state.defaultModel.modelID !== model.modelID
-        const saved = changed ? await input.host.preferences.resolveVariant(model) : undefined
-        if (state.model || !currentClient(attempt)) return
+        const saved = changed ? await input.host.preferences.variant(model) : undefined
+        if (state.model || !currentClient(attempt) || state.agent !== agent) return
         state.defaultModel = model
         state.variants = variantsFor(state.providers, model)
         if (changed) state.activeVariant = resolveVariant(ctx.variant, state.activeVariant, saved, state.variants)
-        if (state.activeVariant) state.model = model
+        if (!modelPreferencePending && (state.activeVariant || state.modelFromPreference)) {
+          state.model = model
+          state.modelFromPreference = true
+        }
         footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
         footer.event({
           type: "model",
@@ -686,6 +757,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         defaultModelLoad = undefined
         if (defaultModelQueued) loadDefaultModel(clientAttempt())
       })
+    return defaultModelLoad
   }
   const requestCatalogRefresh = (signal?: AbortSignal): Promise<void> => {
     const attempt = clientAttempt(signal)
@@ -716,8 +788,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
           abortable(resolveModelInfoStrict(attempt.sdk, state.location, attempt.signal), attempt.signal),
         ])
         if (!currentClient(attempt)) return
+        const retryModelPreference = modelPreferencePending || state.providers.length === 0
         if (catalog) applyCatalog(catalog, attempt)
         if (info) applyModelInfo(info, state.activeVariant, attempt)
+        // Retry preferences once an unavailable catalog or config recovers.
+        if (retryModelPreference && info?.providers.length && !state.model) await requestModelLoad()
         loadDefaultModel(attempt)
       }
     })()
