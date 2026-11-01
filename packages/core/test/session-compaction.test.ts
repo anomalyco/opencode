@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import {
   AIError,
-  GenerationOptions,
   InvalidRequestError,
   LLMClient,
   LLMEvent,
@@ -723,7 +722,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": parentID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    expect(requests[0]?.maxTokens).toBe(30_000)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
@@ -819,7 +818,7 @@ it.effect("summary compaction past the ceiling keeps the conversation unchanged 
     expect(requests).toHaveLength(1)
     expect(requests[0].messages).toHaveLength(3)
     expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
-    expect(requests[0].generation?.maxTokens).toBeLessThan(20_000)
+    expect(requests[0].maxTokens).toBeLessThan(20_000)
   }),
 )
 
@@ -870,7 +869,7 @@ it.effect("compaction lowers the output limit when it sends a request it could n
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 1_024 }))
+    expect(requests[0]?.maxTokens).toBe(1_024)
   }),
 )
 
@@ -890,7 +889,7 @@ it.effect("compaction keeps the output limit for a request that fits its target"
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    expect(requests[0]?.maxTokens).toBe(30_000)
   }),
 )
 
@@ -1084,7 +1083,7 @@ for (const background of [false, true]) {
         system: normal.request.system,
         tools: normal.request.tools,
         messages: [...normal.request.messages, Message.user(SessionCompaction.buildPrompt(false))],
-        generation: { maxTokens: summaryBuffer },
+        maxTokens: summaryBuffer,
       })
     }),
   )
@@ -1193,7 +1192,7 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
     }
     expect(yield* fixture.run(context)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0].generation?.maxTokens).toBeLessThanOrEqual(summaryBuffer / 5)
+    expect(requests[0].maxTokens).toBeLessThanOrEqual(summaryBuffer / 5)
     // Switching back restores the measured prefix; discarding usage for every agent is not sufficient.
     expect(yield* fixture.run()).toEqual({ status: "completed" })
     expect(requests).toHaveLength(2)
@@ -1203,7 +1202,7 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
         ...toLLMMessages(fixture.context.messages, resolved.ref),
         Message.user(SessionCompaction.buildPrompt(false)),
       ],
-      generation: { maxTokens: summaryBuffer },
+      maxTokens: summaryBuffer,
     })
   }),
 )
