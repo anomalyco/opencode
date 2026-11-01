@@ -51,9 +51,11 @@ const interactionsRoute = (input: Config) => {
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   const media = MediaRoute.deployment(input, auth(input))
+  const gemini = (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
+    model: gemini,
+    gemini,
     interactions: (modelID: string | ModelID) =>
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -84,6 +86,7 @@ function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings
 }
 
 export const image = provider.image
+export const gemini = provider.gemini
 export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech

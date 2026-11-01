@@ -5,6 +5,7 @@ import {
   GenerationOptions,
   HttpOptions,
   InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
   LLMEvent,
   LLMRequest,
@@ -24,14 +25,20 @@ import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js
 import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
+export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> =
+  RequestFields<SelectedLanguageModel> & PromptOrMessages
+
+/** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
+export type PromptOrMessages =
+  | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
+  | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
+
+type RequestFields<SelectedLanguageModel extends LanguageModel> = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
   "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
   readonly model: SelectedLanguageModel
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-  readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
-  readonly messages?: ReadonlyArray<Message | Message.Input>
   /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
@@ -111,13 +118,14 @@ export function stream(input: Input, options?: StreamOptions) {
 }
 
 export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
-  RequestInput<SelectedLanguageModel>,
+  RequestFields<SelectedLanguageModel>,
   "tools"
-> & {
-  readonly tools: ReadonlyArray<ExecutableTool>
-  /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
-  readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
-}
+> &
+  PromptOrMessages & {
+    readonly tools: ReadonlyArray<ExecutableTool>
+    /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
+    readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
+  }
 
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
@@ -207,11 +215,7 @@ const prepare = (input: Input) => {
   return tryRequest(() => {
     const description = "Return the structured result by calling this tool."
     const output: Tool | undefined =
-      schema === undefined
-        ? undefined
-        : Schema.isSchema(schema)
-          ? tool({ name: OBJECT_TOOL, description, parameters: schema })
-          : tool({ name: OBJECT_TOOL, description, jsonSchema: schema })
+      schema === undefined ? undefined : tool({ name: OBJECT_TOOL, description, input: schema })
     const tools = rest.tools ?? []
     const built = request(
       output === undefined
@@ -234,17 +238,14 @@ const decodeObject = (output: Tool, response: LLMResponse) => {
   const call = response.toolCalls.find((event) => event.name === OBJECT_TOOL)
   const invalid = (message: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ message, cause }), partial: response })
+  // A cut-off call arrives with truncated or empty input, so its decode error would hide the real cause.
+  if (response.finishReason.normalized === "length")
+    return Effect.fail(invalid("output hit the token limit before the forced tool call completed"))
   if (call)
     return output
       ._decode(call.input)
       .pipe(Effect.mapError((error) => invalid(`schema decode failed: ${error.message}`, error)))
-  return Effect.fail(
-    invalid(
-      response.finishReason.normalized === "length"
-        ? "output hit the token limit before the forced tool call completed"
-        : `model did not call the forced \`${OBJECT_TOOL}\` tool`,
-    ),
-  )
+  return Effect.fail(invalid(`model did not call the forced \`${OBJECT_TOOL}\` tool`))
 }
 
 const withObject = (output: Tool, event: Finish, state: LLMResponse.State): Effect.Effect<LLMEvent, AIError> => {
@@ -268,10 +269,14 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     http: requestHttp,
     ...rest
   } = input
+  if ((prompt === undefined) === (messages === undefined))
+    throw new AIError({
+      reason: new InvalidRequestError({ message: "Pass exactly one of `prompt` or `messages`, not both or neither" }),
+    })
   return new LLMRequest({
     ...rest,
     system: SystemPart.content(requestSystem),
-    messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
+    messages: prompt === undefined ? (messages ?? []).map(Message.make) : [Message.user(prompt)],
     tools: tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),

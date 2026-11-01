@@ -90,7 +90,7 @@ const tools = [
   tool({
     name: "get_weather",
     description: "Get current weather for a city.",
-    parameters: Schema.Struct({ city: Schema.String }),
+    input: Schema.Struct({ city: Schema.String }),
     success: Schema.Struct({ forecast: Schema.String }),
     execute: (input) => Effect.succeed({ forecast: `${input.city}: sunny, 72F` }),
   }),

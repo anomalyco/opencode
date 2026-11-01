@@ -75,15 +75,17 @@ export const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment({ ...input, baseURL: endpoint ?? baseURL }, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+  const chat = (modelID: string | ModelID) =>
+    configured.model<OpenAIProviderOptionsInput>({
+      id: modelID,
+      compatibility: {
+        supportsPromptCacheKey: true,
+      },
+    })
   return {
     id,
-    model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({
-        id: modelID,
-        compatibility: {
-          supportsPromptCacheKey: true,
-        },
-      }),
+    model: chat,
+    chat,
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     image,
@@ -95,6 +97,7 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
+export const chat = provider.chat
 export const responses = provider.responses
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>

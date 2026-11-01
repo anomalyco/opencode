@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
-import {
-  ai,
-  LLMRequest,
-  Message,
-  ToolCallPart,
-  ToolDefinition,
-  ToolNamespace,
-} from "../src/effect.js"
+import { ai, LLMRequest, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -119,6 +112,7 @@ describe("request option precedence", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+          prompt: "Hello",
           tools: [
             ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
             ToolNamespace.make({

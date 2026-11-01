@@ -64,7 +64,7 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
     ]) {
       const provider = Alibaba.configure({ region, apiKey: "fixture" })
       for (const api of ["chat", "messages", "responses"] as const) {
-        const request = ai.request({ model: provider[api]("qwen3.8-max") })
+        const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
         const compiled = yield* compileRequest(request)
         expect(Endpoint.render(request.model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
           `https://${host}${paths[api]}`,
@@ -118,7 +118,7 @@ it.effect("Alibaba resolves explicit auth, API keys, and regional environment cr
     ]) {
       const provider = Alibaba.configure({ region: "ap-southeast-1", ...item.config })
       for (const api of ["chat", "messages", "responses"] as const) {
-        const request = ai.request({ model: provider[api]("qwen3.8-max") })
+        const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
         const headers = yield* request.model.route.auth
           .apply({ request, method: "POST", url: "https://fixture", body: "{}", headers: Headers.empty })
           .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: item.env }))))
@@ -133,13 +133,21 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
     const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
     for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-effort"]) {
       const chat = yield* compileRequest(
-        ai.request({ model: provider.chat("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({
+          model: provider.chat("qwen3.8-max"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: effort },
+        }),
       )
       const messages = yield* compileRequest(
-        ai.request({ model: provider.messages("qwen3.8-max"), providerOptions: { effort } }),
+        ai.request({ model: provider.messages("qwen3.8-max"), prompt: "Hello", providerOptions: { effort } }),
       )
       const responses = yield* compileRequest(
-        ai.request({ model: provider.responses("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({
+          model: provider.responses("qwen3.8-max"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: effort },
+        }),
       )
       expect(chat.body.reasoning_effort).toBe(effort)
       expect(messages.body.output_config).toEqual({ effort })
@@ -153,6 +161,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
       const chat = yield* compileRequest(
         ai.request({
           model: provider.chat("qwen3.7-plus"),
+          prompt: "Hello",
           tools: [tool],
           generation: { maxTokens: 1234, topK: 20 },
           providerOptions: {
@@ -190,6 +199,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
       const responses = yield* compileRequest(
         ai.request({
           model: provider.responses("qwen3.7-plus"),
+          prompt: "Hello",
           providerOptions: { enableThinking, store: false, previousResponseId: "resp_previous" },
         }),
       )
@@ -206,7 +216,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
       { type: "future", budget_tokens: 4096 },
     ]) {
       const messages = yield* compileRequest(
-        ai.request({ model: provider.messages("qwen3.7-plus"), providerOptions: { thinking } }),
+        ai.request({ model: provider.messages("qwen3.7-plus"), prompt: "Hello", providerOptions: { thinking } }),
       )
       expect(messages.body.thinking).toEqual({
         type: thinking.type,
@@ -252,7 +262,7 @@ it.effect("Alibaba validates malformed options before execution", () =>
       ["responses", { enableThinking: "false" }],
     ] as const) {
       const model = provider[api]("qwen3.8-max").route.with({ providerOptions }).model({ id: "qwen3.8-max" })
-      const error = yield* compileRequest(ai.request({ model })).pipe(Effect.flip)
+      const error = yield* compileRequest(ai.request({ model, prompt: "Hello" })).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }
   }),

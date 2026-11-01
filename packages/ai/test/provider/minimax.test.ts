@@ -73,13 +73,18 @@ describe("MiniMax provider", () => {
     Effect.gen(function* () {
       const minimax = MiniMax.configure({ apiKey: "fixture" })
       const messages = yield* compileRequest(
-        ai.request({ model: minimax.model("MiniMax-M3"), providerOptions: { thinking: { type: "adaptive" } } }),
+        ai.request({
+          model: minimax.model("MiniMax-M3"),
+          prompt: "Hello",
+          providerOptions: { thinking: { type: "adaptive" } },
+        }),
       )
       expect(messages.body.thinking).toEqual({ type: "adaptive" })
       expect(messages.body.output_config).toBeUndefined()
       const chat = yield* compileRequest(
         ai.request({
           model: minimax.chat("MiniMax-M3"),
+          prompt: "Hello",
           generation: { maxTokens: 128 },
           providerOptions: { thinking: { type: "disabled" }, reasoningSplit: false },
         }),
@@ -92,7 +97,11 @@ describe("MiniMax provider", () => {
       })
       expect(chat.body.store).toBeUndefined()
       const responses = yield* compileRequest(
-        ai.request({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "minimal" } }),
+        ai.request({
+          model: minimax.responses("MiniMax-M3"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: "minimal" },
+        }),
       )
       expect(responses.body.reasoning).toEqual({ effort: "minimal" })
       expect(responses.body.include).toBeUndefined()
