@@ -59,8 +59,11 @@ it fails). Each step ends with its own `step-finish`; one `finish` ends the loop
 and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
-`name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
-goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
+`name`, and two tools with the same name fail the request. Tool arguments that are not valid JSON go back to the model
+as an error result so it can retry. A step that hits the output token limit ends the loop without running its tool
+calls, which may be cut off. A forced `toolChoice` applies to the first step only; later steps use `auto`. `tool` takes
+a plain `async` execute; a throw or rejection goes back to the model as an error result, and `signal` aborts when the
+loop is interrupted.
 `input` is an Effect Schema that decodes and types the arguments, or a raw JSON Schema object, such as an MCP tool's,
 whose arguments arrive as `unknown` (pair it with an optional JSON Schema `outputSchema`). `tool` from
 `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:

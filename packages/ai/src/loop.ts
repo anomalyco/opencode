@@ -5,45 +5,80 @@ import {
   LLMResponse,
   Message,
   Usage,
+  LLMEvent,
+  ToolCallPart,
+  ToolChoice,
   type Finish,
   type FinishReasonDetails,
-  type LLMEvent,
   type LLMRequest,
-  type ToolCallPart,
+  type ToolInputError,
 } from "./schema/index.js"
-import type { DispatchResult } from "./tool-runtime.js"
+import type { DispatchResult, PendingCall } from "./tool-runtime.js"
 
-/** Client calls to run before the next step. A step that calls `answerTool` is final, even alongside other tools. */
-export const pendingCalls = (response: LLMResponse, answerTool?: string): ReadonlyArray<ToolCallPart> =>
-  answerTool !== undefined && response.toolCalls.some((call) => call.name === answerTool)
-    ? []
-    : response.toolCalls.filter((call) => call.providerExecuted !== true)
+/**
+ * Client calls to answer before the next step. A call whose input was not valid JSON carries the error the model
+ * gets back, so it can retry. A step is final when it calls `answerTool`, even alongside other tools, or when it hits
+ * the output token limit, which may have cut its calls off.
+ */
+export const pendingCalls = (response: LLMResponse, answerTool?: string): ReadonlyArray<PendingCall> => {
+  if (response.finishReason.normalized === "length") return []
+  if (answerTool !== undefined && response.toolCalls.some((call) => call.name === answerTool)) return []
+  return [
+    ...response.toolCalls.filter((call) => call.providerExecuted !== true).map((call) => ({ call })),
+    ...response.events.filter(LLMEvent.is.toolInputError).map((event) => ({
+      call: invalidCall(event),
+      error: `Invalid tool arguments: the input is not valid JSON. Received: ${event.raw}`,
+    })),
+  ]
+}
+
+/** The call to replay for input that was not valid JSON. Providers require an object input, so it is empty. */
+const invalidCall = (event: ToolInputError) =>
+  ToolCallPart.make({ id: event.id, name: event.name, namespace: event.namespace, input: {} })
+
+/** Add the replayed calls for invalid input to the assistant message, so each tool result has its call. */
+const withInvalidCalls = (message: Message, calls: ReadonlyArray<ToolCallPart>) =>
+  calls.length === 0 ? message : new Message({ ...message, content: [...message.content, ...calls] })
 
 /** The step's assistant message followed by one tool message per call, in call order. */
 export const stepMessages = (
   response: LLMResponse,
-  calls: ReadonlyArray<ToolCallPart>,
+  calls: ReadonlyArray<PendingCall>,
   results: ReadonlyArray<DispatchResult>,
 ): ReadonlyArray<Message> => [
-  response.message,
-  ...calls.map((call, i) =>
+  withInvalidCalls(
+    response.message,
+    calls.flatMap((item) => (item.error === undefined ? [] : [item.call])),
+  ),
+  ...calls.map((item, i) =>
     Message.tool({
-      id: call.id,
-      name: call.name,
-      namespace: call.namespace,
+      id: item.call.id,
+      name: item.call.name,
+      namespace: item.call.namespace,
       result: results[i].result,
-      providerMetadata: call.providerMetadata,
+      providerMetadata: item.call.providerMetadata,
     }),
   ),
 ]
 
-/** The request for the step after `response`, with its messages and tool results appended. */
+/**
+ * The request for the step after `response`, with its messages and tool results appended. A caller's forced
+ * `toolChoice` applies to the first step only; with `keepForcedChoice` (the answer tool's) it stays.
+ */
 export const nextRequest = (
   request: LLMRequest,
   response: LLMResponse,
-  calls: ReadonlyArray<ToolCallPart>,
+  calls: ReadonlyArray<PendingCall>,
   results: ReadonlyArray<DispatchResult>,
-): LLMRequest => ({ ...request, messages: [...request.messages, ...stepMessages(response, calls, results)] })
+  keepForcedChoice: boolean,
+): LLMRequest => ({
+  ...request,
+  toolChoice:
+    !keepForcedChoice && (request.toolChoice?.type === "required" || request.toolChoice?.type === "tool")
+      ? new ToolChoice({ type: "auto", disableParallelToolUse: request.toolChoice.disableParallelToolUse })
+      : request.toolChoice,
+  messages: [...request.messages, ...stepMessages(response, calls, results)],
+})
 
 /** Sum usage across steps. */
 export const addUsage = (total: Usage | undefined, step: Usage | undefined) => {
@@ -106,6 +141,9 @@ export function collect<E, R>(
     let step = LLMResponse.empty()
     // Between a `step-finish` and the next `step-start`, tool results come from the loop running tools.
     let betweenSteps = false
+    // The last step's assistant message, and its calls with invalid input that the loop may answer.
+    let assistant = -1
+    let invalid: ReadonlyArray<ToolCallPart> = []
     let finish: Finish | undefined
     const close = (reason: FinishReasonDetails, usage: Usage | undefined) => {
       if (step.events.length === 0) return
@@ -116,7 +154,8 @@ export function collect<E, R>(
         finishReason: reason,
       })
       steps.push(response)
-      messages.push(response.message)
+      assistant = messages.push(response.message) - 1
+      invalid = step.events.filter(LLMEvent.is.toolInputError).map(invalidCall)
       step = LLMResponse.empty()
     }
     return Stream.runForEach(events, (event) =>
@@ -127,6 +166,8 @@ export function collect<E, R>(
           return
         }
         if (event.type === "tool-result" && betweenSteps) {
+          const call = invalid.find((item) => item.id === event.id)
+          if (call) messages[assistant] = withInvalidCalls(messages[assistant], [call])
           messages.push(
             Message.tool({
               id: event.id,

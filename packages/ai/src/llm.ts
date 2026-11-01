@@ -133,8 +133,9 @@ export type LLMLoopInput<Model extends LanguageModel = LanguageModel> = Omit<Tex
   }
 
 /**
- * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls or
- * `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index and usage; one `finish` ends
+ * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
+ * hits the output token limit, or `until` returns `true`. Tool calls whose input is not valid JSON get an error result
+ * so the model can retry. A forced `toolChoice` applies to the first step only. Each step's `step-start` and `step-finish` carry its step index and usage; one `finish` ends
  * the loop with the final step's reason and `message` and the usage summed across steps. With `schema`, the model ends
  * by calling the hidden answer tool, decoded into `object` on the `finish`.
  */
@@ -232,7 +233,14 @@ const driveLoop = (
       runTools(context.tools, calls).pipe(
         Effect.map((results) =>
           Stream.fromIterable(results.flatMap((result) => result.events)).pipe(
-            Stream.concat(driveLoop(context, nextRequest(request, step.response, calls, results), done, total)),
+            Stream.concat(
+              driveLoop(
+                context,
+                nextRequest(request, step.response, calls, results, context.output !== undefined),
+                done,
+                total,
+              ),
+            ),
           ),
         ),
       ),

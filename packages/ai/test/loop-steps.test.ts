@@ -8,19 +8,35 @@ const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", r
 
 const step = (...events: ReadonlyArray<LLMEvent>) =>
   LLMResponse.fromEvents([...events, LLMEvent.finish({ reason: { normalized: "tool-calls" } })])!
+const cutOff = (...events: ReadonlyArray<LLMEvent>) =>
+  LLMResponse.fromEvents([...events, LLMEvent.finish({ reason: { normalized: "length" } })])!
 
 const read = LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } })
 const hosted = LLMEvent.toolCall({ id: "call-2", name: "web_search", input: {}, providerExecuted: true })
+const invalid = LLMEvent.toolInputError({ id: "call-4", name: "read_file", raw: '{"path": "a' })
 const answer = LLMEvent.toolCall({ id: "call-3", name: "generate_object", input: { text: "hi" } })
 
 describe("pendingCalls", () => {
   test("returns client calls and skips provider-executed ones", () => {
-    expect(pendingCalls(step(read, hosted)).map((call) => call.id)).toEqual(["call-1"])
+    expect(pendingCalls(step(read, hosted)).map((item) => item.call.id)).toEqual(["call-1"])
+  })
+
+  test("answers input that is not valid JSON with an error and an empty replayed call", () => {
+    expect(pendingCalls(step(invalid))).toEqual([
+      {
+        call: expect.objectContaining({ type: "tool-call", id: "call-4", name: "read_file", input: {} }),
+        error: 'Invalid tool arguments: the input is not valid JSON. Received: {"path": "a',
+      },
+    ])
+  })
+
+  test("returns nothing when the step hit the output token limit", () => {
+    expect(pendingCalls(cutOff(read, invalid))).toEqual([])
   })
 
   test("returns nothing once the answer tool is called", () => {
     expect(pendingCalls(step(read, answer), "generate_object")).toEqual([])
-    expect(pendingCalls(step(read, answer)).map((call) => call.id)).toEqual(["call-1", "call-3"])
+    expect(pendingCalls(step(read, answer)).map((item) => item.call.id)).toEqual(["call-1", "call-3"])
   })
 })
 
@@ -29,13 +45,24 @@ describe("nextRequest", () => {
     const request = LLM.request({ model, prompt: "Read the file." })
     const response = step(read)
     const results = [{ result: { type: "text", value: "hello" } as const, events: [] }]
-    const next = nextRequest(request, response, [read], results)
+    const next = nextRequest(request, response, [{ call: read }], results, false)
 
     expect(next.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
     expect(next.messages[1]).toBe(response.message)
     expect(next.messages[2]).toEqual(
       Message.tool({ id: "call-1", name: "read_file", result: { type: "text", value: "hello" } }),
     )
+  })
+
+  test("resets a forced toolChoice unless it is kept, and adds the replayed call for invalid input", () => {
+    const request = LLM.request({ model, prompt: "Read the file.", toolChoice: "required" })
+    const response = step(invalid)
+    const calls = pendingCalls(response)
+    const results = [{ result: { type: "error", value: "bad" } as const, events: [] }]
+
+    expect(nextRequest(request, response, calls, results, false).toolChoice?.type).toBe("auto")
+    expect(nextRequest(request, response, calls, results, true).toolChoice?.type).toBe("required")
+    expect(nextRequest(request, response, calls, results, false).messages[1].content).toEqual([calls[0].call])
   })
 })
 
