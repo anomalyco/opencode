@@ -104,6 +104,38 @@ describe("provider package entrypoints", () => {
     }
   })
 
+  test("maps Fireworks and Groq Responses entrypoints onto provider-owned routes", async () => {
+    const settings = {
+      apiKey: "fixture",
+      headers: { "x-test": "fixture" },
+      body: { future_option: true },
+      reasoningEffort: "low",
+    }
+    const encrypted = { store: false, include: ["reasoning.encrypted_content"] }
+    const selected = [
+      [
+        (await import("@opencode/ai/providers/fireworks/responses")).model("gpt-oss", settings),
+        "fireworks-responses",
+        "https://api.fireworks.ai/inference/v1",
+        encrypted,
+      ],
+      [
+        (await import("@opencode/ai/providers/groq/responses")).model("gpt-oss", settings),
+        "groq-responses",
+        "https://api.groq.com/openai/v1",
+        { store: false },
+      ],
+    ] as const
+    for (const [model, route, baseURL, defaults] of selected) {
+      expect(model.route.id).toBe(route)
+      expect(model.route.protocol).toBe("open-responses")
+      expect(model.route.endpoint).toMatchObject({ baseURL, path: "/responses" })
+      expect(model.route.defaults.headers).toEqual(settings.headers)
+      expect(model.route.defaults.http?.body).toEqual(settings.body)
+      expect(model.route.defaults.providerOptions).toEqual({ reasoningEffort: "low", ...defaults })
+    }
+  })
+
   test("maps Cohere entrypoints onto native and compatibility routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/cohere"),
