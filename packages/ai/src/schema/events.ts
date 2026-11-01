@@ -219,7 +219,7 @@ export const ToolInputDelta = Schema.Struct({
   name: Schema.String,
   namespace: Schema.optional(Schema.String),
   text: Schema.String,
-  /** Best-effort parse of all input fragments received through this delta. */
+  /** Best-effort parse of all input fragments received through this delta. Not kept in `LLMResponse.events`. */
   input: Schema.optional(Schema.Unknown),
 }).annotate({ identifier: "LLM.Event.ToolInputDelta" })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>
@@ -635,9 +635,18 @@ const reduceToolCall = (state: ResponseState, event: ToolCall): ResponseState =>
   return { ...appendContent(state, toolCallContent(event)), toolInputs }
 }
 
+/**
+ * A retained delta keeps only its text. Its partial `input` parse is for live
+ * stream consumers; one per delta in a response grows with deltas × input length.
+ */
+const retainedEvent = (event: LLMEvent): LLMEvent =>
+  event.type === "tool-input-delta" && "input" in event
+    ? LLMEvent.toolInputDelta({ id: event.id, name: event.name, namespace: event.namespace, text: event.text })
+    : event
+
 const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseState => {
   if (event.type === "raw") return state
-  const next = appendEvent(state, event)
+  const next = appendEvent(state, retainedEvent(event))
   switch (event.type) {
     case "compaction":
       return appendContent(next, event)
