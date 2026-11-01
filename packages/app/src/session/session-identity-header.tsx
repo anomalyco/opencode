@@ -232,7 +232,6 @@ export function SessionLocation(props: {
             <Show when={!props.compact && worktree()}>
               {(name) => (
                 <>
-                  <SessionHeaderSeparator gap={0} before={0} after={0} />
                   <Icon
                     name="outline-worktree"
                     class="session-location-worktree-icon shrink-0 text-v2-icon-icon-muted"
