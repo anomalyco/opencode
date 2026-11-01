@@ -72,11 +72,12 @@ test("reads pre-2.0.15 checkpoint media without rewriting the stored payload", a
       media: { source: { type: "base64", data: "AQID", mediaType: "image/png" } },
       filename: "attachment.png",
       cache: { type: "ephemeral" },
-      metadata: { attachment: "original" },
       providerMetadata: { openai: { detail: "high" } },
     },
     { type: "media", media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
   ])
+  // The stored `metadata` key is no longer part of `MediaPart`, so decoding drops it.
+  expect(decoded[0]?.content[1]).not.toHaveProperty("metadata")
   expect(decoded[1]?.content).toMatchObject(legacyMedia[1]?.content ?? [])
   expect(JSON.stringify(legacyMedia)).toBe(before)
 })

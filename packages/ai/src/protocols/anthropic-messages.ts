@@ -625,59 +625,15 @@ const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart,
   } satisfies AnthropicServerToolResultBlock
 })
 
-const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = metadata.anthropic
-  if (ProviderShared.isRecord(anthropic)) {
-    if (typeof anthropic.file_id === "string") return anthropic.file_id
-    if (typeof anthropic.fileId === "string") return anthropic.fileId
-  }
-  if (typeof metadata.file_id === "string") return metadata.file_id
-  if (typeof metadata.fileId === "string") return metadata.fileId
-  return undefined
-}
-
-const transformationsFromMetadata = (
-  metadata: MediaPart["metadata"],
-): AnthropicImageBlock["transformations"] | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  const raw = anthropic?.transformations ?? metadata.transformations
-  if (ProviderShared.isRecord(raw)) {
-    const value = raw.oversized_image
-    if (value === "downsize" || value === "error") return { oversized_image: value }
-  }
-  if (anthropic && (anthropic.oversized_image === "downsize" || anthropic.oversized_image === "error"))
-    return { oversized_image: anthropic.oversized_image }
-  return undefined
-}
-
-const documentTitleFromPart = (part: MediaPart): string | undefined => {
-  if (part.metadata !== undefined) {
-    const anthropic = part.metadata.anthropic
-    if (ProviderShared.isRecord(anthropic) && typeof anthropic.title === "string") return anthropic.title
-    if (typeof part.metadata.title === "string") return part.metadata.title
-  }
-  if (part.filename && part.filename.length > 0) return part.filename
-  return undefined
-}
-
-const documentContextFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  if (anthropic && typeof anthropic.context === "string") return anthropic.context
-  if (typeof metadata.context === "string") return metadata.context
-  return undefined
-}
-
-const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocumentBlock["citations"] | undefined => {
-  if (!metadata) return undefined
-  const raw = ProviderShared.isRecord(metadata.anthropic)
-    ? (metadata.anthropic.citations ?? metadata.citations)
-    : metadata.citations
-  if (ProviderShared.isRecord(raw) && typeof raw.enabled === "boolean") return { enabled: raw.enabled }
-  return undefined
-}
+// Per-part Anthropic block fields, read from `providerMetadata[providerMetadataKey]` with Anthropic's wire names.
+const MediaOptions = Schema.Struct({
+  file_id: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  citations: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
+  transformations: Schema.optional(AnthropicImageTransformations),
+})
+const decodeMediaOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(MediaOptions))
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
@@ -701,34 +657,31 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
       ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
     } satisfies AnthropicVideoBlock
   }
-  const fileId = fileIdFromMetadata(part.metadata)
-  const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => {
-    const transformations = transformationsFromMetadata(part.metadata)
-    return {
-      type: "image",
-      source,
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(transformations === undefined ? {} : { transformations }),
-    }
-  }
+  const options = yield* decodeMediaOptions(
+    part.providerMetadata?.[request.model.route.providerMetadataKey ?? request.model.provider] ?? {},
+  )
+  const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => ({
+    type: "image",
+    source,
+    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    ...(options.transformations === undefined ? {} : { transformations: options.transformations }),
+  })
   const document = (source: AnthropicDocumentBlock["source"]): AnthropicDocumentBlock => {
-    const title = documentTitleFromPart(part)
-    const context = documentContextFromMetadata(part.metadata)
-    const citations = citationsFromMetadata(part.metadata)
+    const title = options.title ?? (part.filename ? part.filename : undefined)
     return {
       type: "document",
       source,
       ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
       ...(title === undefined ? {} : { title }),
-      ...(context === undefined ? {} : { context }),
-      ...(citations === undefined ? {} : { citations }),
+      ...(options.context === undefined ? {} : { context: options.context }),
+      ...(options.citations === undefined ? {} : { citations: options.citations }),
     }
   }
 
   // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
-  if (fileId) {
-    if (mime.startsWith("image/")) return image({ type: "file", file_id: fileId })
-    return document({ type: "file", file_id: fileId })
+  if (options.file_id) {
+    if (mime.startsWith("image/")) return image({ type: "file", file_id: options.file_id })
+    return document({ type: "file", file_id: options.file_id })
   }
 
   const rawString = ProviderShared.mediaUrl(part.media)?.trim()
