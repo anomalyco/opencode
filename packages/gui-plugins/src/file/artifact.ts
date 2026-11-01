@@ -141,3 +141,24 @@ export function resolveArtifactPath(base: string, href: string) {
 
   return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
 }
+
+const frontmatter = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)??---[ \t]*(?:\r?\n|$)/
+
+/**
+ * Rewrite a leading YAML frontmatter block as a fenced `yaml` code block so Markdown preview does
+ * not render its closing `---` as a setext heading. Empty frontmatter blocks are dropped.
+ */
+export function previewMarkdown(text: string) {
+  const match = frontmatter.exec(text)
+
+  if (!match) return text
+  const body = text.slice(match[0].length)
+  const yaml = (match[1] ?? "").replace(/\r\n?/g, "\n")
+
+  if (!yaml.trim()) return body
+  const longest = Array.from(yaml.matchAll(/`+/g)).reduce((max, run) => Math.max(max, run[0].length), 0)
+  const fence = "`".repeat(Math.max(3, longest + 1))
+  const block = `${fence}yaml\n${yaml}\n${fence}`
+
+  return body.trim() ? `${block}\n\n${body}` : block
+}

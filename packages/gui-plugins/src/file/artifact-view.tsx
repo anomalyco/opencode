@@ -26,7 +26,14 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
-import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import {
+  blobUrlFromContent,
+  bytesFromContent,
+  contentBytes,
+  parseDelimited,
+  previewMarkdown,
+  resolveArtifactPath,
+} from "./artifact"
 import { FileViewer } from "@opencode/plugin/gui/file"
 import { ArtifactToolbar } from "./artifact-toolbar"
 
@@ -647,6 +654,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
+  const text = createMemo(() => previewMarkdown(props.text))
 
   return (
     <MarkdownProvider
@@ -656,7 +664,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
     >
       <div data-slot="artifact-markdown-page" data-component="document-surface">
         <div data-slot="artifact-markdown-content">
-          <Markdown text={props.text} cacheKey={props.cacheKey} />
+          <Markdown text={text()} cacheKey={props.cacheKey} />
         </div>
       </div>
     </MarkdownProvider>
