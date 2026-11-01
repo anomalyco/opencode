@@ -197,10 +197,12 @@ function DiagnosticsDisplay(props: { diagnostics: readonly Diagnostic[] }): JSX.
           {(diagnostic) => (
             <div data-slot="diagnostic">
               <span data-slot="diagnostic-label">{i18n.t("ui.messagePart.diagnostic.error")}</span>
-              <span data-slot="diagnostic-location">
+              <span data-slot="diagnostic-location" dir="ltr">
                 [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]
               </span>
-              <span data-slot="diagnostic-message">{diagnostic.message}</span>
+              <span data-slot="diagnostic-message" dir="auto">
+                {diagnostic.message}
+              </span>
             </div>
           )}
         </For>
@@ -1021,9 +1023,28 @@ export function CurrentFileToolGroup(props: {
       : result
   }, [])
 
-  const metadata = createMemo(() => ({
-    files: files().map((entry) => entry.value),
-  }))
+  const metadata = createMemo(() => {
+    const hasDiagnostics = props.tools.some((tool) => currentToolMetadata(tool).diagnostics !== undefined)
+
+    if (!hasDiagnostics) return { files: files().map((entry) => entry.value) }
+    const byID = new Map(props.tools.map((tool) => [tool.id, tool]))
+
+    return {
+      files: files().map((entry) => entry.value),
+      diagnostics: Object.fromEntries(
+        files().flatMap((entry) => {
+          const tool = byID.get(entry.toolID)
+
+          if (tool?.state.status !== "completed") return []
+          const map = toolMetadata(currentToolMetadata(tool)).diagnostics
+          const inputPath = toolInput(currentToolInput(tool)).path
+          const items = map?.[entry.value.file] ?? (inputPath ? map?.[inputPath] : undefined) ?? []
+
+          return [[entry.value.file, items] as const]
+        }),
+      ),
+    }
+  })
 
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
@@ -1229,6 +1250,7 @@ function FileAccordionItem(props: {
   onOpenChange: (open: boolean) => void
   type?: string
   header: JSX.Element
+  footer?: JSX.Element
   children: JSX.Element
 }) {
   const id = createUniqueId()
@@ -1270,6 +1292,7 @@ function FileAccordionItem(props: {
           {props.children}
         </div>
       </Show>
+      {props.footer}
     </div>
   )
 }
@@ -1277,6 +1300,7 @@ function FileAccordionItem(props: {
 function ToolFileAccordion(props: {
   path: string
   actions?: JSX.Element
+  footer?: JSX.Element
   children: JSX.Element
   defaultOpen?: boolean
   open?: boolean
@@ -1313,6 +1337,7 @@ function ToolFileAccordion(props: {
       <FileAccordionItem
         open={open()}
         onOpenChange={change}
+        footer={props.footer}
         header={
           <div data-slot="apply-patch-trigger-content">
             <div data-slot="apply-patch-file-info">
@@ -2382,8 +2407,14 @@ ToolRegistry.register({
     const metadata = createMemo(() => toolMetadata(props.metadata))
     const inputPath = () => input().path ?? ""
     const diff = createMemo(() => metadata().files?.find(changedFileDiff))
-    const diagnostics = createMemo(() => getDiagnostics(metadata().diagnostics, inputPath()))
     const path = createMemo(() => diff()?.file ?? inputPath())
+
+    const diagnostics = createMemo(() =>
+      getDiagnostics(
+        metadata().diagnostics,
+        metadata().diagnostics?.[inputPath()] !== undefined ? inputPath() : path(),
+      ),
+    )
 
     const pending = () => props.status === "streaming" || props.status === "running"
 
@@ -2427,7 +2458,7 @@ ToolRegistry.register({
     return (
       <div data-component="edit-tool">
         <FileTool {...props} title={i18n.t("ui.messagePart.title.edit")} count={path() ? 1 : 0}>
-          <Show when={path()}>
+          <Show when={path()} fallback={<DiagnosticsDisplay diagnostics={diagnostics()} />}>
             <ToolFileAccordion
               path={path()}
               defaultOpen={props.defaultOpen}
@@ -2435,6 +2466,7 @@ ToolRegistry.register({
               onOpenChange={props.onOpenChange}
               forceOpen={props.forceOpen}
               defer={props.deferContent !== false}
+              footer={<DiagnosticsDisplay diagnostics={diagnostics()} />}
               actions={
                 <Show when={!pending() ? diff() : undefined}>
                   {(diff) => <DiffChanges appearance="standard" changes={diff()} />}
@@ -2452,7 +2484,6 @@ ToolRegistry.register({
               </div>
             </ToolFileAccordion>
           </Show>
-          <DiagnosticsDisplay diagnostics={diagnostics()} />
         </FileTool>
       </div>
     )
@@ -2469,7 +2500,7 @@ ToolRegistry.register({
 
     return (
       <div data-component="write-tool">
-        <Show when={content() && path()}>
+        <Show when={content() && path()} fallback={<DiagnosticsDisplay diagnostics={diagnostics()} />}>
           <ToolFileAccordion
             path={path()}
             defaultOpen={props.defaultOpen}
@@ -2477,6 +2508,7 @@ ToolRegistry.register({
             onOpenChange={props.onOpenChange}
             forceOpen={props.forceOpen}
             defer={props.deferContent !== false}
+            footer={<DiagnosticsDisplay diagnostics={diagnostics()} />}
           >
             <div data-component="write-content">
               <Dynamic
@@ -2493,7 +2525,6 @@ ToolRegistry.register({
             </div>
           </ToolFileAccordion>
         </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </div>
     )
   },
@@ -2504,6 +2535,10 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
+
+    const diagnosticsByFile = createMemo(() =>
+      props.metadata.diagnostics !== undefined ? toolMetadata(props.metadata).diagnostics : undefined,
+    )
 
     const files = createMemo(
       () =>
@@ -2551,6 +2586,7 @@ ToolRegistry.register({
             <Index each={files()}>
               {(file) => {
                 const value = () => file().path
+                const diagnostics = createMemo(() => getDiagnostics(diagnosticsByFile(), value()))
                 const active = createMemo(() => open().includes(value()))
                 const [visible, setVisible] = createSignal(false)
 
@@ -2574,6 +2610,7 @@ ToolRegistry.register({
                       change(expanded ? [...open(), value()] : open().filter((path) => path !== value()))
                     }
                     type={file().type}
+                    footer={<DiagnosticsDisplay diagnostics={diagnostics()} />}
                     header={
                       <div data-slot="apply-patch-trigger-content">
                         <div data-slot="apply-patch-file-info">
