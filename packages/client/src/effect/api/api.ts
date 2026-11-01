@@ -2383,11 +2383,11 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: Session.ID
   readonly name?: string | undefined
-  readonly when?: Schedule.WhenInput | undefined
-  readonly if?: Schedule.ConditionInput | undefined
-  readonly until?: Schedule.ConditionInput | undefined
+  readonly when?: Schedule.When | undefined
+  readonly if?: Schedule.Condition | undefined
+  readonly until?: Schedule.Condition | undefined
   readonly ends?: Schedule.Ends | undefined
-  readonly prompt: string
+  readonly action: Schedule.Action
 }
 export type ExperimentalScheduleCreateOutput = Schedule.Info
 export type ExperimentalScheduleCreateOperation<E = never> = (

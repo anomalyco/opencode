@@ -1,13 +1,27 @@
 export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
-import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, min, or, sql } from "drizzle-orm"
+import {
+  Cause,
+  Clock,
+  Context,
+  Cron,
+  DateTime,
+  Effect,
+  Latch,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Scope,
+} from "effect"
+import { spaced } from "effect/Schedule"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
+  Action,
   Condition,
-  ConditionInput,
   CreateInput,
   durationMillis,
   type Ends,
@@ -15,15 +29,16 @@ import {
   Info,
   Outcome,
   Request,
+  SessionTarget,
   Status,
   type StoredCheck,
-  toCreateInput,
   When,
 } from "@opencode/schema/schedule"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
 import { Instance } from "./instance/service.js"
+import { Job } from "./job.js"
 import { KVTable } from "./kv/sql.js"
 import type { Permission } from "./permission.js"
 import { Session } from "./session.js"
@@ -31,10 +46,11 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
+import { ScheduleAction } from "./schedule/action.js"
 import { ScheduleCheck } from "./schedule/check.js"
 import { ScheduleTable } from "./schedule/sql.js"
 
-export { ID, Info, CreateInput, Request, Condition, ConditionInput, When, Status, Outcome, toCreateInput }
+export { Action, Condition, CreateInput, ID, Info, Outcome, Request, SessionTarget, Status, When }
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Schedule.NotFoundError", {
   scheduleID: ID,
@@ -99,10 +115,11 @@ const LEADER_TTL = 2 * MAX_SLEEP
 const DISABLED_RETRY = HOUR
 /** How long a schedule whose prompt failed waits before trying again. */
 const FAILED_RETRY = 5 * MINUTE
-/** How long a schedule whose check failed waits before trying again, up to MAX_CHECK_FAILURES. */
+/** How long a schedule whose check failed waits before trying again, up to MAX_FAILURES. */
 const CHECK_FAILED_RETRY = MINUTE
-const MAX_CHECK_FAILURES = 3
+const MAX_FAILURES = 3
 const TICK_CONCURRENCY = 4
+const TURN_TIMEOUT_MS = 30 * MINUTE
 
 const duration = (value: string) =>
   Option.match(durationMillis(value), {
@@ -164,9 +181,36 @@ const optionalTime = (value: number | null) => (value === null ? undefined : Dat
 
 const promptText = (prompt: string, message: string | undefined) => {
   if (!message?.trim()) return prompt
+  if (!prompt.trim()) return message
   return `${prompt}\n\n${message}`
 }
 
+const wakeDescription = (row: Pick<Row, "name" | "when" | "check" | "action">, run: number, suffix?: string) => {
+  const label = row.name ?? ScheduleAction.defaultLabel(row.action)
+  if (suffix !== undefined) return `${label} · ${suffix}`
+  const oneShot = row.when.type === "in" || row.when.type === "at" || row.check?.mode === "until"
+  return oneShot ? label : `${label} · #${run}`
+}
+
+const formatCompletionNotice = (
+  row: Pick<Row, "id" | "name" | "action">,
+  run: number,
+  state: "completed" | "error",
+  body: string,
+  targetSessionID?: SessionSchema.ID,
+  pausedStrikes?: number,
+) => {
+  const attrs = [
+    `id="${row.id}"`,
+    ...(row.name ? [`name=${JSON.stringify(row.name)}`] : []),
+    `run="${run}"`,
+    `action="${row.action.type}"`,
+    `state="${state}"`,
+    ...(targetSessionID ? [`sessionID="${targetSessionID}"`] : []),
+  ].join(" ")
+  const note = pausedStrikes !== undefined ? `\n\n[Schedule paused after ${pausedStrikes} failed runs]` : ""
+  return `<schedule ${attrs}>\n${body}${note}\n</schedule>`
+}
 const resolveStoredCheck = (input: CreateInput): Effect.Effect<StoredCheck | undefined, InvalidError> => {
   if (input.if !== undefined && input.until !== undefined)
     return Effect.fail(new InvalidError({ reason: "Choose either if or until, not both" }))
@@ -182,9 +226,16 @@ const resolveStoredCheck = (input: CreateInput): Effect.Effect<StoredCheck | und
   return Effect.succeed(check)
 }
 
+const validateAction = (action: Action): Effect.Effect<void, InvalidError> =>
+  Result.match(ScheduleAction.validate(action), {
+    onFailure: (reason) => Effect.fail(new InvalidError({ reason })),
+    onSuccess: () => Effect.void,
+  })
+
 const toInfo = (row: Row, lastOutput?: string): Info => ({
   id: row.id,
   sessionID: row.session_id ?? undefined,
+  activeJobID: row.active_job_id ?? undefined,
   name: row.name ?? undefined,
   when: row.when,
   tz: row.tz,
@@ -210,6 +261,8 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
+    const jobs = yield* Job.Service
+    const layerScope = yield* Scope.Scope
     const doorbell = yield* Latch.make()
 
     // Config is per location, so a schedule follows the config where its Session lives.
@@ -284,6 +337,343 @@ const layer = Layer.effect(
       return id
     })
 
+    const admitNotice = Effect.fnUntraced(function* (
+      row: Row,
+      sessionID: SessionSchema.ID,
+      run: number,
+      due: number,
+      late: boolean,
+      text: string,
+      options: {
+        readonly id: SessionMessage.ID
+        readonly suffix?: string
+        readonly check?: Record<string, unknown>
+        readonly extra?: Record<string, unknown>
+      },
+    ) {
+      yield* sessions.synthetic({
+        sessionID,
+        id: options.id,
+        text,
+        description: wakeDescription(row, run, options.suffix),
+        delivery: "queue",
+        metadata: {
+          source: "schedule",
+          schedule: {
+            id: row.id,
+            name: row.name ?? undefined,
+            run,
+            dueAt: due,
+            late,
+            ...(options.check === undefined ? {} : { check: options.check }),
+            ...(options.extra ?? {}),
+          },
+        },
+      })
+      return options.id
+    })
+
+    const runSessionTurn = Effect.fnUntraced(function* (targetSessionID: SessionSchema.ID) {
+      const settled = yield* sessions.resume(targetSessionID).pipe(
+        Effect.onInterrupt(() => sessions.interrupt(targetSessionID).pipe(Effect.asVoid)),
+        Effect.timeoutOption(TURN_TIMEOUT_MS),
+      )
+
+      if (Option.isNone(settled)) {
+        yield* sessions.interrupt(targetSessionID).pipe(Effect.ignore)
+        return yield* Effect.fail(new Error(`Scheduled turn timed out after ${TURN_TIMEOUT_MS / MINUTE}m`))
+      }
+
+      const messages = yield* sessions.messages({ sessionID: targetSessionID, order: "desc", limit: 20 })
+      const extracted = ScheduleAction.extractTurnReply(messages)
+
+      if (Result.isFailure(extracted)) return yield* Effect.fail(new Error(extracted.failure))
+
+      return extracted.success
+    })
+
+    const observeBackgroundRun = Effect.fnUntraced(function* (input: {
+      readonly row: Row
+      readonly ownerSessionID: SessionSchema.ID
+      readonly jobID: string
+      readonly run: number
+      readonly due: number
+      readonly late: boolean
+      readonly checkMessage?: string
+      readonly targetSessionID?: SessionSchema.ID
+    }) {
+      const { info } = yield* jobs.wait({ id: input.jobID })
+      const finishedAt = yield* Clock.currentTimeMillis
+      const current = yield* db
+        .select()
+        .from(ScheduleTable)
+        .where(eq(ScheduleTable.id, input.row.id))
+        .get()
+        .pipe(Effect.orDie)
+
+      if (current === undefined) return
+
+      const jobMatch = and(eq(ScheduleTable.id, input.row.id), eq(ScheduleTable.active_job_id, input.jobID))
+
+      if (!info || info.status === "cancelled") {
+        yield* db
+          .update(ScheduleTable)
+          .set({ active_job_id: null, time_updated: finishedAt })
+          .where(jobMatch)
+          .run()
+          .pipe(Effect.orDie)
+        return
+      }
+
+      const failed = info.status === "error"
+      const strikes = failed ? current.failures + 1 : 0
+      const autoPause = failed && strikes >= MAX_FAILURES
+      const output = failed ? (info.error ?? "Scheduled action failed") : (info.output ?? "").trim()
+      const quiet = !failed && ScheduleAction.isQuietOutput(output)
+      const notifyEnabled = ScheduleAction.shouldNotifyParent(input.row.action)
+      const shouldNotify = failed ? notifyEnabled || autoPause : !quiet && notifyEnabled
+
+      if (quiet && input.targetSessionID !== undefined) {
+        yield* sessions.archive(input.targetSessionID).pipe(Effect.ignore)
+      }
+
+      const noticeID = shouldNotify
+        ? yield* admitNotice(
+            input.row,
+            input.ownerSessionID,
+            input.run,
+            input.due,
+            input.late,
+            formatCompletionNotice(
+              input.row,
+              input.run,
+              failed ? "error" : "completed",
+              output,
+              input.targetSessionID,
+              autoPause ? strikes : undefined,
+            ),
+            {
+              id: SessionMessage.ID.make(`msg_${input.row.id}_${input.run}_done`),
+              ...(failed ? { suffix: autoPause ? "paused" : "failed" } : {}),
+              ...(input.checkMessage === undefined ? {} : { check: { message: input.checkMessage } }),
+              extra: {
+                state: failed ? "error" : "completed",
+                ...(input.targetSessionID === undefined ? {} : { sessionID: input.targetSessionID }),
+              },
+            },
+          ).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)))
+        : undefined
+
+      yield* db
+        .update(ScheduleTable)
+        .set({
+          active_job_id: null,
+          failures: strikes,
+          ...(failed ? { last_outcome: "failed" as const } : {}),
+          ...(noticeID === undefined ? {} : { last_message_id: noticeID }),
+          ...(autoPause
+            ? {
+                status: sql<Status>`case when ${ScheduleTable.status} = 'active' then 'paused' else ${ScheduleTable.status} end`,
+                retry_at: null,
+              }
+            : {}),
+          time_updated: finishedAt,
+        })
+        .where(jobMatch)
+        .run()
+        .pipe(Effect.orDie)
+    })
+
+    const dispatchAction = Effect.fnUntraced(function* (
+      row: Row,
+      session: SessionSchema.Info,
+      run: number,
+      due: number,
+      now: number,
+      late: boolean,
+      checkMessage: string | undefined,
+      advance: {
+        readonly checks?: number
+        readonly state?: Schema.Json
+        readonly forceDone?: boolean
+      },
+    ) {
+      const next = following(row, now)
+      const remaining =
+        advance.forceDone || row.check?.mode === "until"
+          ? 0
+          : row.remaining_runs === null
+            ? null
+            : row.remaining_runs - 1
+      const done = advance.forceDone || row.check?.mode === "until" || finished(row, next, remaining)
+      const advanceFields = {
+        run_count: run,
+        ...(advance.checks === undefined ? {} : { checks: advance.checks }),
+        ...(advance.state === undefined ? {} : { state: advance.state }),
+        last_fired_at: now,
+        last_outcome: (late ? "late" : "fired") as Outcome,
+        retry_at: null,
+        remaining_runs: remaining,
+        ...(done ? { status: "done" as const } : {}),
+        next_due_at: done ? null : next,
+        time_updated: now,
+      }
+
+      if (!ScheduleAction.isBackground(row.action)) {
+        let messageID: SessionMessage.ID | undefined
+        if (row.action.type === "prompt") {
+          messageID = yield* admitWake(
+            row,
+            session.id,
+            run,
+            due,
+            late,
+            promptText(row.action.prompt, checkMessage),
+            checkMessage === undefined ? undefined : { message: checkMessage },
+          )
+        } else if (row.action.type === "command") {
+          messageID = SessionMessage.ID.make(`msg_${row.id}_${run}`)
+          yield* sessions.command({
+            sessionID: session.id,
+            id: messageID,
+            command: row.action.name,
+            text: row.action.arguments ?? "",
+            delivery: "steer",
+            unattended: true,
+            note: checkMessage,
+          })
+        }
+
+        yield* db
+          .update(ScheduleTable)
+          .set({
+            ...advanceFields,
+            failures: 0,
+            ...(messageID === undefined ? {} : { last_message_id: messageID }),
+          })
+          .where(eq(ScheduleTable.id, row.id))
+          .run()
+          .pipe(Effect.orDie)
+        return
+      }
+
+      const createChildSession = (requestedAgent?: string, commandName?: string) =>
+        Effect.gen(function* () {
+          const childID = SessionSchema.ID.make(`ses_${row.id}_${run}`)
+          const existing = yield* sessions
+            .get(childID)
+            .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)))
+          if (existing !== undefined) return existing
+          const selected = yield* ScheduleAction.selectSubagent(session, requestedAgent, commandName).pipe(
+            instances.provide(session),
+          )
+          return yield* sessions.create({
+            id: childID,
+            parentID: session.id,
+            title: wakeDescription(row, run),
+            agent: selected.id,
+            model: selected.model,
+            permissions: session.permissions,
+            metadata: {
+              ...session.metadata,
+              schedule: { id: row.id, run, ownerSessionID: session.id, unattended: true },
+            },
+          })
+        })
+
+      const action = row.action
+      const prepared =
+        action.type === "shell" || action.type === "code"
+          ? {
+              targetSessionID: undefined,
+              runEffect: ScheduleAction.runDeterministic(session, action, {
+                messageID: SessionMessage.ID.make(`msg_${row.id}_${run}_exec`),
+                now,
+                run,
+                message: checkMessage,
+              }).pipe(instances.provide(session)),
+            }
+          : yield* Effect.gen(function* () {
+              const requestedAgent = action.target?.type === "subagent" ? action.target.agent : undefined
+              const target = yield* createChildSession(
+                requestedAgent,
+                action.type === "command" ? action.name : undefined,
+              )
+              const messageID = SessionMessage.ID.make(`msg_${row.id}_${run}_sub`)
+              return {
+                targetSessionID: target.id,
+                runEffect: Effect.gen(function* () {
+                  if (action.type === "prompt") {
+                    yield* sessions.prompt({
+                      sessionID: target.id,
+                      id: messageID,
+                      text: [
+                        "You are a scheduled background subagent. Complete the task autonomously without asking interactive questions. If there is nothing worth reporting, reply with NO_REPLY.",
+                        promptText(action.prompt, checkMessage),
+                      ].join("\n\n"),
+                      delivery: "queue",
+                      resume: false,
+                    })
+                  } else {
+                    yield* sessions.command({
+                      sessionID: target.id,
+                      id: messageID,
+                      command: action.name,
+                      text: action.arguments ?? "",
+                      delivery: "queue",
+                      unattended: true,
+                      inline: true,
+                      note: checkMessage,
+                    })
+                  }
+                  return yield* runSessionTurn(target.id)
+                }),
+              }
+            })
+
+      const jobID = `job_${row.id}_${run}`
+      yield* db
+        .update(ScheduleTable)
+        .set({
+          ...advanceFields,
+          active_job_id: jobID,
+        })
+        .where(eq(ScheduleTable.id, row.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* jobs.start({
+        id: jobID,
+        type: "schedule",
+        title: wakeDescription(row, run),
+        metadata: {
+          sessionID: session.id,
+          scheduleID: row.id,
+          run,
+          ...(prepared.targetSessionID === undefined ? {} : { targetSessionID: prepared.targetSessionID }),
+        },
+        run: prepared.runEffect,
+      })
+
+      yield* observeBackgroundRun({
+        row,
+        ownerSessionID: session.id,
+        jobID,
+        run,
+        due,
+        late,
+        checkMessage,
+        targetSessionID: prepared.targetSessionID,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logWarning("schedule background observer failed", { scheduleID: row.id, jobID, cause }),
+        ),
+        Effect.forkIn(layerScope, { startImmediately: true }),
+      )
+    })
+
     const fire = Effect.fnUntraced(function* (row: Row, session: SessionSchema.Info, due: number, now: number) {
       const late = now - due >= LATE_AFTER
       const next = following(row, now)
@@ -299,7 +689,7 @@ const layer = Layer.effect(
 
         if (!outcome.ok) {
           const strikes = row.failures + 1
-          if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
+          if (!outcome.invalid && strikes < MAX_FAILURES) {
             yield* update(row, {
               failures: strikes,
               last_outcome: "failed",
@@ -318,7 +708,7 @@ const layer = Layer.effect(
             run,
             due,
             late,
-            `${row.action.prompt}\n\n${note}`,
+            `${ScheduleAction.summaryText(row.action)}\n\n${note}`,
             { error: outcome.error, failures: strikes },
           )
           yield* db
@@ -350,7 +740,7 @@ const layer = Layer.effect(
               run,
               due,
               late,
-              `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
+              `${ScheduleAction.summaryText(row.action)}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
               { expired: true },
             )
             yield* db
@@ -386,62 +776,14 @@ const layer = Layer.effect(
           return
         }
 
-        const run = row.run_count + 1
-        const id = yield* admitWake(
-          row,
-          session.id,
-          run,
-          due,
-          late,
-          promptText(row.action.prompt, outcome.message),
-          outcome.message === undefined ? {} : { message: outcome.message },
-        )
-        const remaining =
-          check.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
-        const done = check.mode === "until" || finished(row, next, remaining)
-        // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
-        yield* db
-          .update(ScheduleTable)
-          .set({
-            run_count: run,
-            checks: row.checks + 1,
-            failures: 0,
-            state: outcome.state,
-            last_message_id: id,
-            last_fired_at: now,
-            last_outcome: late ? "late" : "fired",
-            retry_at: null,
-            remaining_runs: remaining,
-            ...(done ? { status: "done" as const } : {}),
-            next_due_at: done ? null : next,
-            time_updated: now,
-          })
-          .where(eq(ScheduleTable.id, row.id))
-          .run()
-          .pipe(Effect.orDie)
+        yield* dispatchAction(row, session, row.run_count + 1, due, now, late, outcome.message, {
+          checks: row.checks + 1,
+          state: outcome.state,
+        })
         return
       }
 
-      const run = row.run_count + 1
-      const id = yield* admitWake(row, session.id, run, due, late, row.action.prompt)
-      const remaining = row.remaining_runs === null ? null : row.remaining_runs - 1
-      const done = finished(row, next, remaining)
-      yield* db
-        .update(ScheduleTable)
-        .set({
-          run_count: run,
-          last_message_id: id,
-          last_fired_at: now,
-          last_outcome: late ? "late" : "fired",
-          retry_at: null,
-          remaining_runs: remaining,
-          ...(done ? { status: "done" as const } : {}),
-          next_due_at: done ? null : next,
-          time_updated: now,
-        })
-        .where(eq(ScheduleTable.id, row.id))
-        .run()
-        .pipe(Effect.orDie)
+      yield* dispatchAction(row, session, row.run_count + 1, due, now, late, undefined, {})
     })
 
     const step = Effect.fnUntraced(function* (row: Row, now: number) {
@@ -455,18 +797,28 @@ const layer = Layer.effect(
         yield* update(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }
-      if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
-        // The wake that followed admission may have been lost; waking again is harmless.
-        yield* execution.wake(session.id)
+      const skip = () => {
         const next = following(row, now)
         const done = finished(row, next, row.remaining_runs)
-        yield* update(row, {
+        return update(row, {
           last_outcome: "skipped",
           retry_at: null,
           status: done ? "done" : "active",
           next_due_at: done ? null : next,
           time_updated: now,
         })
+      }
+      if (row.active_job_id !== null) {
+        const activeJob = yield* jobs.get(row.active_job_id)
+        if (activeJob?.status === "running") {
+          yield* skip()
+          return
+        }
+      }
+      if (!ScheduleAction.isBackground(row.action) && row.last_message_id !== null && (yield* pending(row.last_message_id))) {
+        // The wake that followed admission may have been lost; waking again is harmless.
+        yield* execution.wake(session.id)
+        yield* skip()
         return
       }
       yield* fire(row, session, due, now)
@@ -529,25 +881,41 @@ const layer = Layer.effect(
     })
 
     // A crash between admitting a prompt and its Session claiming the work leaves the prompt unclaimed and the
-    // Session asleep, so wake every Session whose last scheduled prompt is still pending.
-    const rewake = db
-      .selectDistinct({ sessionID: ScheduleTable.session_id })
-      .from(ScheduleTable)
-      .innerJoin(SessionInboxTable, eq(SessionInboxTable.id, ScheduleTable.last_message_id))
-      .all()
-      .pipe(
-        Effect.orDie,
-        Effect.flatMap((rows) =>
-          Effect.forEach(rows, (row) => (row.sessionID === null ? Effect.void : execution.wake(row.sessionID)), {
-            discard: true,
-          }),
-        ),
-      )
+    // Session asleep, so wake every Session whose last scheduled prompt is still pending and clear stale job IDs.
+    const rewake = Effect.gen(function* () {
+      const tracked = yield* db
+        .select({ id: ScheduleTable.id, activeJobID: ScheduleTable.active_job_id })
+        .from(ScheduleTable)
+        .where(isNotNull(ScheduleTable.active_job_id))
+        .all()
+        .pipe(Effect.orDie)
+      const staleIDs: ID[] = []
+      for (const item of tracked) {
+        if (item.activeJobID === null) continue
+        const live = yield* jobs.get(item.activeJobID)
+        if (live?.status !== "running") staleIDs.push(item.id)
+      }
+      if (staleIDs.length > 0) {
+        yield* db
+          .update(ScheduleTable)
+          .set({ active_job_id: null })
+          .where(inArray(ScheduleTable.id, staleIDs))
+          .run()
+          .pipe(Effect.orDie)
+      }
+      const rows = yield* db
+        .selectDistinct({ sessionID: SessionInboxTable.session_id })
+        .from(ScheduleTable)
+        .innerJoin(SessionInboxTable, eq(SessionInboxTable.id, ScheduleTable.last_message_id))
+        .all()
+        .pipe(Effect.orDie)
+      yield* Effect.forEach(rows, (row) => execution.wake(row.sessionID), { discard: true })
+    })
 
     const hasActiveRows = db
       .select({ id: ScheduleTable.id })
       .from(ScheduleTable)
-      .where(eq(ScheduleTable.status, "active"))
+      .where(or(eq(ScheduleTable.status, "active"), isNotNull(ScheduleTable.active_job_id)))
       .limit(1)
       .get()
       .pipe(
@@ -590,7 +958,7 @@ const layer = Layer.effect(
     const heartbeat = Clock.currentTimeMillis.pipe(
       Effect.flatMap(claimLeader),
       Effect.ignore,
-      Effect.schedule(EffectSchedule.spaced(LEADER_TTL / 3)),
+      Effect.schedule(spaced(LEADER_TTL / 3)),
     )
 
     const loop = Effect.gen(function* () {
@@ -701,12 +1069,21 @@ const layer = Layer.effect(
     return Service.of({
       create: Effect.fn("Schedule.create")(function* (input) {
         const session = yield* sessions.get(input.sessionID)
+        const missingDirectory = () =>
+          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }))
+        const inSession = <A, E>(effect: Effect.Effect<A, E | string, Instance.Services>) =>
+          effect.pipe(
+            instances.provide(session),
+            Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
+            Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
+          )
+
         const config = yield* settings(session).pipe(
-          Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-            Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` })),
-          ),
+          Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
         if (!config.enabled) return yield* new DisabledError()
+        const action = ScheduleAction.normalize(input.action)
+        yield* validateAction(action)
         const check = yield* resolveStoredCheck(input)
         const when = input.when ?? (check?.mode === "until" ? DEFAULT_UNTIL_EVERY : undefined)
         if (when === undefined)
@@ -720,36 +1097,25 @@ const layer = Layer.effect(
         if (ends !== null && due > ends)
           return yield* new InvalidError({ reason: "The schedule ends before it first fires" })
 
+        yield* inSession(ScheduleAction.authorize(session, input.name, when, action))
+
         const scheduleID = ID.create()
         const seeded =
           check === undefined
             ? { matched: false as const, state: null as Schema.Json, checks: 0 }
             : yield* Effect.gen(function* () {
-                yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
-                  instances.provide(session),
-                  Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
-                )
+                yield* inSession(ScheduleCheck.authorize(session, input.name, when, check))
                 const shouldSeed =
                   check.mode === "until" ||
                   check.condition.type === "code" ||
                   (check.condition.type === "shell" && check.condition.changes === true)
                 if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
-                const init = yield* ScheduleCheck.evaluate(session, check, null, {
-                  messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
-                  now,
-                  checks: 0,
-                }).pipe(
-                  instances.provide(session),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
+                const init = yield* inSession(
+                  ScheduleCheck.evaluate(session, check, null, {
+                    messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
+                    now,
+                    checks: 0,
+                  }),
                 )
                 if (!init.ok) {
                   // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
@@ -762,6 +1128,7 @@ const layer = Layer.effect(
               })
 
         if (seeded.matched) {
+          const inlinePrompt = !ScheduleAction.isBackground(action) && action.type === "prompt"
           const row = yield* db
             .insert(ScheduleTable)
             .values({
@@ -771,23 +1138,33 @@ const layer = Layer.effect(
               check: check ?? null,
               state: seeded.state,
               checks: 1,
-              action: input.action,
+              action,
               when,
               tz: DateTime.zoneToString(zone),
               status: "done",
               next_due_at: null,
               ends_at: ends,
               remaining_runs: 0,
-              run_count: 1,
-              last_fired_at: now,
-              last_outcome: "fired",
+              run_count: inlinePrompt ? 1 : 0,
+              ...(inlinePrompt ? { last_fired_at: now, last_outcome: "fired" as const } : {}),
               time_created: now,
               time_updated: now,
             })
             .returning()
             .get()
             .pipe(Effect.orDie)
-          return toInfo(row, seeded.message)
+          if (inlinePrompt) return toInfo(row, seeded.message)
+          yield* dispatchAction(row, session, 1, now, now, false, seeded.message, {
+            checks: 1,
+            state: seeded.state,
+            forceDone: true,
+          }).pipe(
+            Effect.tapError(() =>
+              db.delete(ScheduleTable).where(eq(ScheduleTable.id, scheduleID)).run().pipe(Effect.ignore),
+            ),
+            Effect.mapError((error) => new InvalidError({ reason: error.message })),
+          )
+          return toInfo(yield* find(scheduleID).pipe(Effect.orDie), seeded.message)
         }
 
         const remaining = check?.mode === "until" ? 1 : (input.ends?.times ?? null)
@@ -800,7 +1177,7 @@ const layer = Layer.effect(
             check: check ?? null,
             state: seeded.state,
             checks: seeded.checks,
-            action: input.action,
+            action,
             when,
             tz: DateTime.zoneToString(zone),
             next_due_at: due,
@@ -859,7 +1236,8 @@ const layer = Layer.effect(
         return toInfo(yield* find(id))
       }),
       remove: Effect.fn("Schedule.remove")(function* (id) {
-        yield* find(id)
+        const row = yield* find(id)
+        if (row.active_job_id !== null) yield* jobs.cancel(row.active_job_id)
         yield* db.delete(ScheduleTable).where(eq(ScheduleTable.id, id)).run().pipe(Effect.orDie)
       }),
       enabled: Effect.fn("Schedule.enabled")(function* (sessionID) {
@@ -878,5 +1256,5 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, SessionExecution.node, Instance.node],
+  deps: [Database.node, Session.node, SessionExecution.node, Instance.node, Job.node],
 })

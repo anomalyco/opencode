@@ -12157,7 +12157,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Schedule a prompt, subagent, slash command, shell command, or Code Mode script to run once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -22020,8 +22020,57 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Command"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Code"
           }
-        ]
+        ],
+        "description": "What runs when the schedule fires: { type: \"prompt\", prompt, target? }, { type: \"command\", name, arguments?, target? }, { type: \"shell\", run, notify? }, or { type: \"code\", code, notify? }."
+      },
+      "Schedule.Action.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string",
+            "description": "Deterministic Code Mode JavaScript script executed with no model call (no fetch; static tools.<ns>.<tool> calls authorized once at creation)."
+          },
+          "notify": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Schedule.Action.Command": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["command"]
+          },
+          "name": {
+            "type": "string",
+            "description": "Slash command name (without leading `/`, e.g. \"morning-brief\")."
+          },
+          "arguments": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Schedule.SessionTarget"
+          }
+        },
+        "required": ["type", "name"],
+        "additionalProperties": false
       },
       "Schedule.Action.Prompt": {
         "type": "object",
@@ -22031,11 +22080,49 @@
             "enum": ["prompt"]
           },
           "prompt": {
-            "type": "string"
+            "type": "string",
+            "description": "Instruction for a model turn. Reply \"NO_REPLY\" in a subagent to finish quietly."
+          },
+          "target": {
+            "$ref": "#/components/schemas/Schedule.SessionTarget"
           }
         },
         "required": ["type", "prompt"],
         "additionalProperties": false
+      },
+      "Schedule.Action.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string",
+            "description": "Deterministic shell command executed in the Session's directory with no model call."
+          },
+          "notify": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "run"],
+        "additionalProperties": false
+      },
+      "Schedule.Action_1": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Command"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Code"
+          }
+        ]
       },
       "Schedule.Condition": {
         "anyOf": [
@@ -22055,7 +22142,8 @@
             "enum": ["code"]
           },
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake)."
           }
         },
         "required": ["type", "code"],
@@ -22069,7 +22157,8 @@
             "enum": ["shell"]
           },
           "run": {
-            "type": "string"
+            "type": "string",
+            "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
           },
           "is": {
             "type": "string"
@@ -22084,58 +22173,6 @@
         "required": ["type", "run"],
         "additionalProperties": false
       },
-      "Schedule.ConditionInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "run": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
-              },
-              "is": {
-                "type": "string"
-              },
-              "matches": {
-                "type": "string"
-              },
-              "changes": {
-                "type": "boolean"
-              },
-              "code": {
-                "not": {}
-              }
-            },
-            "required": ["run"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
-              },
-              "run": {
-                "not": {}
-              },
-              "is": {
-                "not": {}
-              },
-              "matches": {
-                "not": {}
-              },
-              "changes": {
-                "not": {}
-              }
-            },
-            "required": ["code"],
-            "additionalProperties": false
-          }
-        ]
-      },
       "Schedule.CreatePayload": {
         "type": "object",
         "properties": {
@@ -22146,24 +22183,22 @@
             "type": "string"
           },
           "when": {
-            "$ref": "#/components/schemas/Schedule.WhenInput"
+            "$ref": "#/components/schemas/Schedule.When"
           },
           "if": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
+            "$ref": "#/components/schemas/Schedule.Condition"
           },
           "until": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
+            "$ref": "#/components/schemas/Schedule.Condition"
           },
           "ends": {
             "$ref": "#/components/schemas/Schedule.Ends"
           },
-          "prompt": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
+          "action": {
+            "$ref": "#/components/schemas/Schedule.Action"
           }
         },
-        "required": ["sessionID", "prompt"],
+        "required": ["sessionID", "action"],
         "additionalProperties": false
       },
       "Schedule.Duration": {
@@ -22200,6 +22235,9 @@
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
           },
+          "activeJobID": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -22216,7 +22254,7 @@
             "$ref": "#/components/schemas/Schedule.Condition"
           },
           "action": {
-            "$ref": "#/components/schemas/Schedule.Action"
+            "$ref": "#/components/schemas/Schedule.Action_1"
           },
           "status": {
             "$ref": "#/components/schemas/Schedule.Status"
@@ -22267,9 +22305,47 @@
         "type": "string",
         "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
       },
+      "Schedule.SessionTarget": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Target.Session"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Target.Subagent"
+          }
+        ]
+      },
       "Schedule.Status": {
         "type": "string",
         "enum": ["active", "paused", "done"]
+      },
+      "Schedule.Target.Session": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["session"]
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "Schedule.Target.Subagent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["subagent"]
+          },
+          "agent": {
+            "type": "string"
+          },
+          "notify": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
       },
       "Schedule.When": {
         "anyOf": [
@@ -22354,98 +22430,6 @@
         },
         "required": ["type", "in"],
         "additionalProperties": false
-      },
-      "Schedule.WhenInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "in": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["in"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["at"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "every": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["every"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "cron": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["cron"],
-            "additionalProperties": false
-          }
-        ]
       },
       "ScheduleNotFoundErrorEncoded": {
         "type": "object",

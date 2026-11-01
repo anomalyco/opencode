@@ -333,7 +333,13 @@ export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; 
 
 export type ScheduleConditionCode = { type: "code"; code: string }
 
-export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
+export type ScheduleTargetSession = { type: "session" }
+
+export type ScheduleTargetSubagent = { type: "subagent"; agent?: string; notify?: boolean }
+
+export type ScheduleActionShell = { type: "shell"; run: string; notify?: boolean }
+
+export type ScheduleActionCode = { type: "code"; code: string; notify?: boolean }
 
 export type ScheduleStatus = "active" | "paused" | "done"
 
@@ -922,7 +928,7 @@ export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: s
 
 export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
 
-export type ScheduleAction = ScheduleActionPrompt
+export type ScheduleSessionTarget = ScheduleTargetSession | ScheduleTargetSubagent
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2191,6 +2197,15 @@ export type FormReplied = {
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
+export type ScheduleActionPrompt = { type: "prompt"; prompt: string; target?: ScheduleSessionTarget }
+
+export type ScheduleActionCommand = {
+  type: "command"
+  name: string
+  arguments?: string
+  target?: ScheduleSessionTarget
+}
+
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
 export type SessionInboxMove = {
@@ -2596,25 +2611,7 @@ export type CredentialEntry = {
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
-export type ScheduleInfo = {
-  id: ScheduleID
-  sessionID?: SessionID
-  name?: string
-  when: ScheduleWhen
-  tz: string
-  if?: ScheduleCondition
-  until?: ScheduleCondition
-  action: ScheduleAction
-  status: ScheduleStatus
-  nextDueAt?: number
-  endsAt?: number
-  remainingRuns?: number
-  runCount: number
-  lastFiredAt?: number
-  lastOutcome?: ScheduleOutcome
-  lastOutput?: string
-  time: { created: number; updated: number }
-}
+export type ScheduleAction = ScheduleActionPrompt | ScheduleActionCommand | ScheduleActionShell | ScheduleActionCode
 
 export type AgentInfo = {
   id: AgentID
@@ -2690,6 +2687,27 @@ export type SessionMessageAssistantContentEncoded =
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
+
+export type ScheduleInfo = {
+  id: ScheduleID
+  sessionID?: SessionID
+  activeJobID?: string
+  name?: string
+  when: ScheduleWhen
+  tz: string
+  if?: ScheduleCondition
+  until?: ScheduleCondition
+  action: ScheduleAction
+  status: ScheduleStatus
+  nextDueAt?: number
+  endsAt?: number
+  remainingRuns?: number
+  runCount: number
+  lastFiredAt?: number
+  lastOutcome?: ScheduleOutcome
+  lastOutput?: string
+  time: { created: number; updated: number }
+}
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
@@ -4495,74 +4513,55 @@ export type ExperimentalScheduleCreateInput = {
   readonly name?: string | undefined
   readonly when?:
     | (
-        | {
-            readonly in: string
-            readonly at?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly at: string
-            readonly in?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly every: string
-            readonly in?: never
-            readonly at?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly cron: string
-            readonly in?: never
-            readonly at?: never
-            readonly every?: never
-            readonly tz?: string
-          }
+        | { readonly type: "in"; readonly in: string; readonly tz?: string }
+        | { readonly type: "at"; readonly at: string; readonly tz?: string }
+        | { readonly type: "every"; readonly every: string; readonly tz?: string }
+        | { readonly type: "cron"; readonly cron: string; readonly tz?: string }
       )
     | undefined
   readonly if?:
     | (
         | {
+            readonly type: "shell"
             readonly run: string
             readonly is?: string
             readonly matches?: string
             readonly changes?: boolean
-            readonly code?: never
           }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
+        | { readonly type: "code"; readonly code: string }
       )
     | undefined
   readonly until?:
     | (
         | {
+            readonly type: "shell"
             readonly run: string
             readonly is?: string
             readonly matches?: string
             readonly changes?: boolean
-            readonly code?: never
           }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
+        | { readonly type: "code"; readonly code: string }
       )
     | undefined
   readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
-  readonly prompt: string
+  readonly action:
+    | {
+        readonly type: "prompt"
+        readonly prompt: string
+        readonly target?:
+          | { readonly type: "session" }
+          | { readonly type: "subagent"; readonly agent?: string; readonly notify?: boolean }
+      }
+    | {
+        readonly type: "command"
+        readonly name: string
+        readonly arguments?: string
+        readonly target?:
+          | { readonly type: "session" }
+          | { readonly type: "subagent"; readonly agent?: string; readonly notify?: boolean }
+      }
+    | { readonly type: "shell"; readonly run: string; readonly notify?: boolean }
+    | { readonly type: "code"; readonly code: string; readonly notify?: boolean }
 }
 
 export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
