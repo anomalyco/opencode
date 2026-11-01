@@ -48,7 +48,7 @@ export type ResolvedExecutionLimits = {
 export type Options<Provided extends Record<string, unknown> = {}, Extensions extends ReadonlyArray<Extension> = []> = {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
-  /** Hooks around every tool and extension call the program makes; see `Hooks`. */
+  /** Host hooks for execution and tool/extension calls; see `Hooks`. */
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
   /** Host functions exposed as globals; see `Extension.make`. */
   extensions?: Extensions
@@ -156,7 +156,8 @@ export const execute = <
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> =>
+  make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
 export const make = <

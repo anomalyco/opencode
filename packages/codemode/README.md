@@ -96,6 +96,9 @@ denies it: the host function is never called, and the program catches the failur
 fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
 throws.
 
+`execution.interrupted` receives `{ logs }` after interrupted calls finish cleanup. The execution still propagates
+interruption; the host can persist these logs alongside results observed by `tool.after` for later recovery.
+
 ### `Extension.make`
 
 Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
