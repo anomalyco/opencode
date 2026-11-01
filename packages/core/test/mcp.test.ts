@@ -2238,6 +2238,29 @@ const shutdownIt = testEffect(
     ],
   ),
 )
+
+for (const entry of [
+  { status: 401, expected: "needs_auth", action: "Sign in" },
+  { status: 503, expected: "failed", action: "Reconnect it" },
+] as const) {
+  shutdownIt.live(`MCP ${entry.expected} errors name each client's recovery command`, () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({
+        respond: (request) => new Response(null, { status: request.method === "POST" ? entry.status : 404 }),
+      })
+      const service = Context.get(yield* Layer.build(Mcp.layer()), Mcp.Service)
+      yield* service.transform((editor) => {
+        editor.set("resources", { type: "remote", url: server.url })
+      })
+      const error = yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.flip)
+
+      expect((yield* settled(service))?.status).toBe(entry.expected)
+      expect(error).toBeInstanceOf(Mcp.ToolCallError)
+      expect(error.message).toContain(`${entry.action} from /mcp in the desktop or web app, or /mcps in the TUI.`)
+    }),
+  )
+}
+
 shutdownIt.effect("discards in-flight and queued MCP notifications after its layer closes", () =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
