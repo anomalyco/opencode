@@ -15,6 +15,7 @@ import type { ServerConnection } from "@/runtime/server/registry"
 import { getRelativeTime } from "@/shell/time"
 import { createCommandPaletteFileEntry, createCommandPaletteModel, type CommandPaletteEntry } from "./palette"
 import { createCommandPaletteSearch, matchesCommandPaletteEntry } from "./search"
+import { usePluginPaletteSources } from "@/runtime/plugin/palette-sources"
 import "./dialog.css"
 import "../palette-menu.css"
 
@@ -26,6 +27,7 @@ function groupKey(entry: CommandPaletteEntry) {
 
 export function DialogCommandPalette(props: { onOpenFile?: (path: string) => void }) {
   const palette = createCommandPaletteModel(props)
+  const pluginSources = usePluginPaletteSources(() => palette.language.t("command.category.session"))
 
   const items = (q: string) => {
     if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries(), ...palette.sessions.items("")]
@@ -43,6 +45,7 @@ export function DialogCommandPalette(props: { onOpenFile?: (path: string) => voi
       items={items}
       sources={[
         palette.sessions.search,
+        pluginSources,
         async (query, signal) => {
           if (!query) return palette.recentFileEntries()
           const files = await palette.file.searchFiles(query, { signal })

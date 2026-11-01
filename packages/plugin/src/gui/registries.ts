@@ -73,6 +73,67 @@ export interface Command {
   run(input?: string): void | false | Promise<void>
 }
 
+/** One row a `PaletteSource` contributes to the command palette. */
+export interface PaletteEntry {
+  /** The row's id, unique within the source's results. */
+  readonly id: string
+  /** The row's title, e.g. the session's title. */
+  readonly title: string
+  /** The row's second line, e.g. the snippet around the match. */
+  readonly description?: string
+  /** Extra words the palette matches, separated by spaces. */
+  readonly keywords?: string
+  /** The server's host key, as `ServerRef.id`: `sidecar`, an http URL, or `${plugin}:${id}`. */
+  readonly server: string
+  /** The session the row opens. */
+  readonly session: string
+  /** The session's directory, which the palette names the row's project by. */
+  readonly directory?: string
+  /** Last activity, in epoch milliseconds; the palette ranks session rows by it. */
+  readonly updated?: number
+}
+
+/**
+ * A source of command palette results, searched alongside the palette's own commands, sessions, files and settings.
+ * Rows open a session and list in the palette's session section, ranked with its own session results: sessions open
+ * as tabs first, then the most recently `updated`. A session the palette's own search also finds lists once.
+ *
+ * @example
+ * ```ts
+ * ctx.add(PaletteSource, {
+ *   id: "history",
+ *   async search({ query, signal }) {
+ *     const hits = await fetch(`/history?q=${encodeURIComponent(query)}`, { signal }).then((res) => res.json())
+ *     return hits.map((hit) => ({
+ *       id: hit.session,
+ *       title: hit.title,
+ *       description: hit.snippet,
+ *       server: ctx.sessions.current()!.server.id,
+ *       session: hit.session,
+ *     }))
+ *   },
+ * })
+ * ```
+ */
+export interface PaletteSource {
+  /** The source's local id, unique within the plugin. */
+  readonly id: string
+  /**
+   * The rows for a query. The palette calls it on every keystroke with a signal it aborts when the query changes, so
+   * a slow search is cancelled rather than waited for. A source that throws or rejects is logged and lists no rows;
+   * other sources are unaffected.
+   *
+   * @param input - The query, and the signal that aborts the search.
+   * @returns The matching rows; the palette ranks them.
+   */
+  search(input: {
+    /** The query as typed, without trimming. */
+    readonly query: string
+    /** Aborted when the query changes or the palette closes; a fetch should pass it through. */
+    readonly signal: AbortSignal
+  }): Promise<readonly PaletteEntry[]>
+}
+
 /** The fields every `MenuItem` has, whichever menu it is in. */
 interface MenuItemBase {
   /** The item's id, unique within the plugin. */
@@ -745,6 +806,17 @@ export type Slot = {
  * ```
  */
 export const Command = Registry.define<Command>("command")
+
+/**
+ * The registry of command palette sources. The palette searches every source alongside its own results, and lists
+ * their rows with its own session results.
+ *
+ * @example
+ * ```ts
+ * ctx.add(PaletteSource, { id: "history", search: ({ query, signal }) => searchHistory(query, signal) })
+ * ```
+ */
+export const PaletteSource = Registry.define<PaletteSource>("palette-source")
 
 /**
  * The registry of host menu items.
