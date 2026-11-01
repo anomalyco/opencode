@@ -30,7 +30,7 @@ import { Token } from "../util/token.js"
 import type { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
-import type { SessionMessage } from "./message.js"
+import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
@@ -354,6 +354,10 @@ export const layer = Layer.effect(
       if (anchorIndex <= 0 || anchor?.type !== "assistant" || !anchor.tokens) return
       if (anchor.tokens.input + anchor.tokens.cache.read + anchor.tokens.cache.write < PRECOMPUTE_MIN_TOKENS) return
 
+      const pending = SessionHistory.pendingUsers(context.messages)[0]
+      const keepIndex = pending ? Math.min(anchorIndex, context.messages.indexOf(pending)) : anchorIndex
+      if (keepIndex === 0) return
+
       const sessionID = context.session.id
       const existing = precomputed.get(sessionID)
       const exit = existing?.fiber.pollUnsafe()
@@ -363,7 +367,8 @@ export const layer = Layer.effect(
         const index = heldIndex(existing, context)
         if (index >= 0 && !failed && tailTokens(context, index) <= existing.tailLimit) return
         // Summarizing up to the same response again would repeat the same request.
-        if (index >= 0 && (existing.keepID === anchor.id || failures >= PRECOMPUTE_MAX_FAILURES)) return
+        if (index >= 0 && (existing.keepID === context.messages[keepIndex].id || failures >= PRECOMPUTE_MAX_FAILURES))
+          return
         yield* Fiber.interrupt(existing.fiber)
         precomputed.delete(sessionID)
       }
@@ -371,17 +376,19 @@ export const layer = Layer.effect(
       if (anchor.model.id !== context.model.ref.id || anchor.model.variant !== context.model.ref.variant) return
 
       const model = yield* selectModel(context, settings.buffer, false)
+      const limit = tailLimit(settings.keep, model.cap)
+      if (tailTokens(context, keepIndex) > limit) return
       const usage: SessionUsage.Recorded[] = []
       const fiber = yield* summarize({ reason: "auto", context: model.context }, model.cap, settings.keep, {
-        messages: context.messages.slice(0, anchorIndex),
+        messages: context.messages.slice(0, keepIndex),
         usage: (recorded) => usage.push(recorded),
       }).pipe(Effect.forkIn(scope))
       precomputed.set(sessionID, {
         firstID: context.messages[0]?.id,
-        keepID: anchor.id,
+        keepID: context.messages[keepIndex].id,
         model: context.model.ref,
         initial: Instructions.join(context.initial),
-        tailLimit: tailLimit(settings.keep, model.cap),
+        tailLimit: limit,
         failures,
         usage,
         fiber,
@@ -422,7 +429,10 @@ export const layer = Layer.effect(
     const due = (context: SessionContext.Loaded, ceiling: number, estimate?: Estimate) => {
       const messages = context.messages
       // A compaction just completed; let the runner rebuild the request from it first.
-      const last = messages.at(-1)
+      const pending = new Set(SessionHistory.pendingUsers(messages).map((message) => message.id))
+      if (!messages.some((message) => !pending.has(message.id) && SessionRecentText.messageToText(message)))
+        return false
+      const last = messages.findLast((message) => !pending.has(message.id))
       if (last?.type === "compaction" && last.status === "completed") return false
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
@@ -457,8 +467,15 @@ export const layer = Layer.effect(
       background?: Background,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
-      const messages = background?.messages ?? context.messages
-      const split = splitConversation(messages, keep)
+      const pending = new Set(
+        trigger.reason === "manual" ? [] : SessionHistory.pendingUsers(context.messages).map((message) => message.id),
+      )
+      const source = background?.messages ?? context.messages
+      const messages = withPendingPlaceholders(source, pending)
+      const split = splitConversation(
+        source.filter((message) => !pending.has(message.id)),
+        keep,
+      )
       if (split === undefined) return yield* Effect.fail(NOTHING_TO_COMPACT)
       // A background summary covers all of its messages; what follows them is kept when it is swapped in.
       const keepID = background ? undefined : split.keepID
@@ -472,7 +489,9 @@ export const layer = Layer.effect(
       // estimate of what came after it. Characters overstate a conversation whose old reasoning the provider drops.
       // A hook can still make this request larger than that count; the provider then rejects it and it is resent as
       // text. An overflow already proved the count low, so it keeps the character estimate.
-      const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
+      // Removing pending input changes the measured transcript too, so size that summary request from its content.
+      const measured =
+        trigger.reason === "overflow" || pending.size > 0 ? undefined : measuredPrompt({ ...context, messages })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -550,10 +569,20 @@ export const layer = Layer.effect(
       keep: number,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
-      if (!context.messages.some(SessionRecentText.messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
-      const prepared = yield* prepare(context, context.messages, budget, "session")
+      const pending = new Set(
+        trigger.reason === "manual" ? [] : SessionHistory.pendingUsers(context.messages).map((message) => message.id),
+      )
+      if (
+        !context.messages.some(
+          (message) =>
+            !pending.has(message.id) &&
+            (SessionRecentText.messageToText(message) || SessionHistory.isNativeCompaction(message)),
+        )
+      )
+        return yield* Effect.fail(NOTHING_TO_COMPACT)
+      const prepared = yield* prepare(context, withPendingPlaceholders(context.messages, pending), budget, "session")
 
       const toResult = (window: ReadonlyArray<Message>, usage: Usage | undefined) =>
         spend(context.session.id, usage && SessionUsage.record(usage, context.model.cost)).pipe(
@@ -568,7 +597,11 @@ export const layer = Layer.effect(
         if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
-            const retained = recentUserMessages(history, context.model, keep)
+            const retained = recentUserMessages(
+              history.filter((message) => !pending.has(message.id)),
+              context.model,
+              keep,
+            )
             const response = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
@@ -737,7 +770,10 @@ export const layer = Layer.effect(
           )
           .filter((renders) => renders[0]),
       ]
-      if (exchanges.length === 0) return undefined
+      if (exchanges.length === 0)
+        return lead.length > 0 && estimateRequest({ ...request, tools: [], messages: lead }) <= target
+          ? { ...request, tools: [], messages: lead }
+          : undefined
       const note = (omitted: number) =>
         omitted ? `[${omitted} older ${omitted === 1 ? "exchange" : "exchanges"} omitted]\n\n` : ""
       const size = (text: string) => (text ? Token.estimate(text) + 1 : 0)
@@ -917,7 +953,15 @@ export const layer = Layer.effect(
           text: outcome.text,
           ...usage,
         },
-        { metadata: outcome.metadata },
+        {
+          metadata:
+            trigger.reason === "manual"
+              ? outcome.metadata
+              : {
+                  pendingUserIDs: SessionHistory.pendingUsers(context.messages).map((message) => message.id),
+                  ...outcome.metadata,
+                },
+        },
       )
       return { status: "completed" }
     })
@@ -979,6 +1023,25 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
     messages,
   })
 
+const withPendingPlaceholders = (
+  messages: ReadonlyArray<SessionMessage.Info>,
+  pending: ReadonlySet<SessionMessage.ID>,
+) => {
+  const lastAssistant = messages.findLastIndex((message) => message.type === "assistant" && message.content.length > 0)
+  return messages.flatMap((message, index) => {
+    if (!pending.has(message.id)) return [message]
+    // Keep role boundaries around tool steps without asking the summarizer to interpret the unanswered request.
+    if (index >= lastAssistant) return []
+    return [
+      SessionMessage.User.make({
+        id: message.id,
+        time: message.time,
+        text: "[Pending user request withheld; it will be replayed after compaction.]",
+      }),
+    ]
+  })
+}
+
 /**
  * The newest messages within `keep` tokens, from `keepID` on, are kept verbatim beside the summary.
  * Undefined when there is nothing to compact.
@@ -988,7 +1051,7 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
     const text = SessionRecentText.messageToText(message)
     return text ? [{ message, text }] : []
   })
-  if (entries.length === 0) return undefined
+  if (entries.length === 0) return previousCompaction(messages)?.summary ? { keepID: undefined } : undefined
 
   const first = entries[recentStart(entries, keep, previousCompaction(messages))]
   return {

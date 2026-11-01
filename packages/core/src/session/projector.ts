@@ -209,7 +209,10 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .orderBy(asc(SessionMessageTable.seq))
       .limit(ForkBatchSize)
       .all()
-      .pipe(Effect.orDie, Effect.flatMap((rows) => SessionHistory.withParts(db, rows)))
+      .pipe(
+        Effect.orDie,
+        Effect.flatMap((rows) => SessionHistory.withParts(db, rows)),
+      )
     if (rows.length === 0) break
 
     const values = yield* Effect.forEach(rows, (row) =>
@@ -223,7 +226,28 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           time_updated: row.time_updated,
           data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
         }
-        // A summary references the first message it kept, which the fork copied under a new ID.
+        // Compaction references must point to the fork's copies, including pending user input.
+        const pending = SessionHistory.pendingUserIDs({ type: row.type, metadata: row.data.metadata })
+        const users =
+          pending.length === 0
+            ? []
+            : yield* db
+                .select({ seq: SessionMessageTable.seq })
+                .from(SessionMessageTable)
+                .where(
+                  and(
+                    eq(SessionMessageTable.session_id, event.data.parentID),
+                    inArray(SessionMessageTable.id, pending),
+                  ),
+                )
+                .orderBy(asc(SessionMessageTable.seq))
+                .all()
+                .pipe(Effect.orDie)
+        if (users.length > 0)
+          copy.data = {
+            ...copy.data,
+            metadata: { ...copy.data.metadata, pendingUserIDs: users.map((user) => forkedID(user.seq)) },
+          }
         const keepID = row.type === "compaction" ? row.data.metadata?.keepID : undefined
         if (!Schema.is(SessionMessage.ID)(keepID)) return copy
         const kept = yield* db
@@ -235,7 +259,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         if (!kept) return copy
         return {
           ...copy,
-          data: { ...row.data, metadata: { ...row.data.metadata, keepID: forkedID(kept.seq) } },
+          data: { ...copy.data, metadata: { ...copy.data.metadata, keepID: forkedID(kept.seq) } },
         }
       }),
     )
@@ -847,7 +871,36 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        // Derive replay references from the ordered history so rebuilding the projection retains pending input too.
+        const derive = event.data.reason !== "manual" && event.metadata?.pendingUserIDs === undefined
+        const session = derive
+          ? yield* db
+              .select({ model: SessionTable.model })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, event.data.sessionID))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+        const pending = derive
+          ? SessionHistory.pendingUsers(
+              yield* SessionHistory.load(
+                db,
+                event.data.sessionID,
+                (event.data.native
+                  ? event.data.model
+                  : session?.model && Schema.decodeUnknownSync(Model.Ref)(session.model)) ?? "latest",
+              ).pipe(Effect.orDie),
+            )
+          : undefined
+        yield* run(
+          db,
+          pending
+            ? {
+                ...event,
+                metadata: { ...event.metadata, pendingUserIDs: pending.map((message) => message.id) },
+              }
+            : event,
+        )
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )

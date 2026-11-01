@@ -21,6 +21,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -339,6 +340,24 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
     expect(fixture.bodies[0]).toMatchObject({ tools: [expect.objectContaining({ name: "read" })] })
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
+    expect(JSON.stringify(fixture.bodies[1])).not.toContain("Later user")
+    expect(toLLMMessages((yield* fixture.load).messages, fixture.model.ref).at(-1)?.content).toEqual([
+      Message.text("Later user"),
+    ])
+  }),
+)
+
+it.live("automatic native trigger carries pending users after the provider checkpoint", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    yield* fixture.prompt("Earlier request")
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+    yield* fixture.prompt("Publish the change with these exact instructions.")
+    expect(yield* fixture.overflow).toEqual({ status: "completed" })
+    const context = toLLMMessages((yield* fixture.load).messages, fixture.model.ref)
+    expect(context.at(-2)?.content.some((part) => part.type === "compaction")).toBe(true)
+    expect(context.at(-1)?.content).toEqual([Message.text("Publish the change with these exact instructions.")])
+    expect(JSON.stringify(fixture.bodies[1])).not.toContain("Publish the change with these exact instructions.")
   }),
 )
 

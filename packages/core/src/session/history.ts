@@ -31,6 +31,28 @@ const PartQueryBatchSize = 500
  */
 export type Boundary = "latest" | "local" | Model.Ref
 
+/** User input since the last completed answer. Tool steps and empty stops do not answer it. */
+export const pendingUsers = (messages: ReadonlyArray<SessionMessage.Info>) => {
+  const answered = messages.findLastIndex(
+    (message) =>
+      message.type === "assistant" &&
+      message.finish === "stop" &&
+      !message.error &&
+      message.time.completed !== undefined &&
+      message.content.some((part) => part.type === "text" && part.text.trim().length > 0) &&
+      !message.content.some((part) => part.type === "tool" && !part.executed),
+  )
+  return messages.slice(answered + 1).filter((message) => message.type === "user")
+}
+
+/** Compaction metadata can also come from plugins or older versions. */
+export const pendingUserIDs = (
+  message: Pick<SessionMessage.Info, "type" | "metadata">,
+): ReadonlyArray<SessionMessage.ID> => {
+  const ids = message.type === "compaction" ? message.metadata?.pendingUserIDs : undefined
+  return Schema.is(Schema.Array(SessionMessage.ID))(ids) ? ids : []
+}
+
 /** A completed provider compaction, which replays `native.messages` instead of a summary. */
 export const isNativeCompaction = (
   message: SessionMessage.Info,
@@ -211,7 +233,31 @@ const messageEntries = Effect.fnUntraced(function* (
   const start = decoded[0]
   if (compaction && start && !replayable(start.message, boundary))
     return yield* messageEntries(db, sessionID, boundary, compaction.seq)
-  const entries = compaction ? yield* withRecentText(db, sessionID, decoded) : decoded
+  const recent = compaction ? yield* withRecentText(db, sessionID, decoded) : decoded
+  const ids = recent[0] ? pendingUserIDs(recent[0].message) : []
+  const pending =
+    ids.length === 0
+      ? []
+      : yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, sessionID),
+              eq(SessionMessageTable.type, "user"),
+              inArray(SessionMessageTable.id, ids),
+              lt(SessionMessageTable.seq, recent[0].seq),
+            ),
+          )
+          .orderBy(asc(SessionMessageTable.seq))
+          .all()
+          .pipe(Effect.orDie)
+  // Replay original user messages after the checkpoint, including their attachments and skills.
+  const users = yield* decodeMessageRows(db, pending)
+  const entries =
+    pending.length === 0
+      ? recent
+      : [recent[0], ...users.map((message, index) => ({ seq: pending[index].seq, message })), ...recent.slice(1)]
   // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
   // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
   // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
@@ -260,7 +306,18 @@ const withRecentText = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
   // The recent text names attachments by mime and name only, so their bytes are never read.
   const kept = yield* Effect.forEach(yield* withParts(db, rows), decodeStoredRow, { concurrency: 1 })
-  const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
+  const pending = new Set(pendingUserIDs(compaction))
+  const lastAssistant = kept.findLastIndex((message) => message.type === "assistant")
+  const recent = kept
+    .map((message, index) =>
+      pending.has(message.id)
+        ? index < lastAssistant
+          ? "[User]: [Pending request replayed below.]"
+          : ""
+        : SessionRecentText.messageToText(message),
+    )
+    .filter(Boolean)
+    .join("\n\n")
   return [{ ...first, message: { ...compaction, metadata: { ...compaction.metadata, recent } } }, ...entries.slice(1)]
 })
 
