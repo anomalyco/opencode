@@ -13,6 +13,7 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, measureEditText, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { keypadKeyName } from "../util/keypad"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import {
   createPermissionBodyState,
@@ -249,43 +250,44 @@ export function RunPermissionBody(props: {
   }
 
   useKeyboard((event) => {
+    const name = keypadKeyName(event.name)
     const cur = state()
     if (cur.stage === "reject") {
       return
     }
 
-    if (event.name === "pageup" || event.name === "pagedown") {
-      scroll?.scrollBy(event.name === "pageup" ? -1 : 1, "viewport")
+    if (name === "pageup" || name === "pagedown") {
+      scroll?.scrollBy(name === "pageup" ? -1 : 1, "viewport")
       event.preventDefault()
       return
     }
 
     if (cur.submitting) {
-      if (["left", "right", "h", "l", "tab", "return", "escape"].includes(event.name)) {
+      if (["left", "right", "h", "l", "tab", "return", "escape"].includes(name)) {
         event.preventDefault()
       }
       return
     }
 
-    if (event.name === "tab") {
+    if (name === "tab") {
       shift(event.shift ? -1 : 1)
       event.preventDefault()
       return
     }
 
-    if (event.name === "left" || event.name === "h") {
+    if (name === "left" || name === "h") {
       shift(-1)
       event.preventDefault()
       return
     }
 
-    if (event.name === "right" || event.name === "l") {
+    if (name === "right" || name === "l") {
       shift(1)
       event.preventDefault()
       return
     }
 
-    if (event.name === "return") {
+    if (name === "return") {
       run(state().selected)
       event.preventDefault()
       return

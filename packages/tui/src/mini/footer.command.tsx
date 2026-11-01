@@ -4,6 +4,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@open
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { Keymap } from "../context/keymap"
+import { keypadKeyName } from "../util/keypad"
 import { Config } from "../config"
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { SEED_MONO, WORK_SPINNERS } from "../ui/one-cell-motion"
@@ -192,7 +193,7 @@ function createSearchablePanelController<T extends PanelEntry>(input: {
       return
     }
 
-    const name = event.name.toLowerCase()
+    const name = keypadKeyName(event.name).toLowerCase()
     if (input.closeOnFirstUp && name === "up" && menu.selected() === 0) {
       event.preventDefault()
       input.onClose()
@@ -816,7 +817,7 @@ export function RunSettingsBody(props: {
     onClose: props.onClose,
     onSelect: change,
     onKey(event, item) {
-      const name = event.name.toLowerCase()
+      const name = keypadKeyName(event.name).toLowerCase()
       if (name !== "left" && name !== "right") return false
       event.preventDefault()
       if (item) change(item, name === "left" ? -1 : 1)
