@@ -58,7 +58,9 @@ export const CacheWarming = Schema.Union([
   Schema.Boolean,
   Schema.Struct({
     // Settings hold JSON, so durations stay strings here; the warming plugin parses them.
-    interval: Schema.String.pipe(optional).annotate({ description: 'Duration such as "4 minutes"' }),
+    interval: Schema.Union([Schema.Literal("auto"), Schema.String])
+      .pipe(optional)
+      .annotate({ description: 'Duration such as "4 minutes", or "auto" for 90% of the model\'s cache.ttl' }),
     duration: Schema.String.pipe(optional).annotate({ description: 'Duration such as "30 minutes"' }),
   }),
 ]).annotate({ identifier: "Provider.CacheWarming" })

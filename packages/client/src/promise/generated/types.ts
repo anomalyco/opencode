@@ -25,7 +25,7 @@ export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
 export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
 
-export type ProviderCacheWarming = boolean | { interval?: string; duration?: string }
+export type ProviderCacheWarming = boolean | { interval?: "auto" | (string & {}); duration?: string }
 
 export type ProviderTransport = "http" | "websocket"
 
