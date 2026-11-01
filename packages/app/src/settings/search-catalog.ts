@@ -164,6 +164,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "animation accessibility",
   },
   {
+    tab: "appearance",
+    label: "settings.appearance.row.codeWrap.title",
+    target: "settings-code-wrap",
+    keywords: "word wrap long lines overflow scroll markdown",
+  },
+  {
     tab: "notifications",
     label: "settings.general.notifications.agent.title",
     target: "settings-notifications-agent",

@@ -500,6 +500,13 @@
   }
 }
 
+:root[data-code-wrap="on"] {
+  [data-component="markdown"] pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
 [data-component="markdown"] > * {
   unicode-bidi: plaintext;
 }
