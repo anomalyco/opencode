@@ -140,3 +140,19 @@ test("rejects only when no clipboard route accepted the write", async () => {
   expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
   expect(writes).toEqual([["hello", { destination: "all-available", selection: "clipboard" }]])
 })
+
+test("rejects unsupported clipboard reads so paste can show feedback", async () => {
+  const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
+
+  const error = await clipboard.read().then(undefined, (error) => error)
+  expect(error).toBeInstanceOf(Error)
+  expect(error.message).toMatch(/not supported/)
+})
+
+test("stays silent for empty and cancelled reads", async () => {
+  const empty = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
+  const cancelled = createClipboardAdapter(coreClipboard({ read: { status: "cancelled" } }))
+
+  expect(await empty.read()).toBeUndefined()
+  expect(await cancelled.read()).toBeUndefined()
+})
