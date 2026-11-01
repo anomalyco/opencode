@@ -22,6 +22,7 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import marketplaceMigration from "@opencode/core/database/migration/20261031060845_marketplace_local"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -212,6 +213,21 @@ describe("DatabaseMigration", () => {
           time_viewed: null,
           idle_outcome: null,
         })
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 1 })
+      }),
+    )
+  })
+
+  test("adds the Marketplace registry without changing existing tables", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY, title text)`)
+        yield* db.run(sql`INSERT INTO session_v2 VALUES ('ses_existing', 'Existing')`)
+        yield* DatabaseMigration.applyOnly(db, [marketplaceMigration])
+        yield* DatabaseMigration.applyOnly(db, [marketplaceMigration])
+        expect(yield* db.all(sql`SELECT * FROM marketplace_registry`)).toEqual([])
+        expect(yield* db.get(sql`SELECT * FROM session_v2`)).toEqual({ id: "ses_existing", title: "Existing" })
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 1 })
       }),
     )
