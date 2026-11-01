@@ -17,6 +17,7 @@ import { SessionHistory } from "../history.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
+import { UsageLimits } from "../../usage-limits.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
@@ -457,6 +458,7 @@ export const node = makeLocationNode({
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,
+    UsageLimits.node,
     Database.node,
   ],
 })

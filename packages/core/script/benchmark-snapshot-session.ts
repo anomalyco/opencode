@@ -32,6 +32,7 @@ import { SessionMessage } from "../src/session/message"
 import { SessionProjector } from "../src/session/projector"
 import { SessionRunnerModel } from "../src/session/runner/model"
 import { SessionStep } from "../src/session/runner/step"
+import { UsageLimits } from "../src/usage-limits"
 import { SessionTable } from "../src/session/sql"
 import { Snapshot } from "../src/snapshot"
 import { ToolOutput } from "../src/tool-output"
@@ -171,7 +172,13 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
         AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
           Bus.node.replace(Bus.configured({ persist: true })),
         ]),
-        TestLLM.testLayer(),
+        Layer.merge(
+          TestLLM.testLayer(),
+          Layer.mock(UsageLimits.Service)({
+            get: () => Effect.succeed(undefined),
+            observe: () => Effect.void,
+          }),
+        ),
       ),
     ),
     Effect.provide(Logger.layer([])),

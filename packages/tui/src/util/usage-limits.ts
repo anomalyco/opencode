@@ -70,6 +70,44 @@ export function usageLevel(usage: ModelUsage, model: LimitedModel): UsageLevel {
   return "plenty"
 }
 
+/** One provider quota window as the usage dialog reads it. */
+export type MetaWindow = {
+  readonly label: string
+  readonly used: string
+  readonly resets: string | undefined
+  readonly danger: boolean
+}
+
+/** The Meta rate-limit windows the location's responses reported, for a Meta model. */
+export function metaUsage(
+  info: UsageLimitsInfo | undefined,
+  providerID: string,
+): readonly MetaWindow[] | undefined {
+  if (providerID !== "meta") return undefined
+  const meta = info?.meta
+  if (!meta) return undefined
+  const rows = (
+    [
+      ["Requests", meta.requests],
+      ["Tokens", meta.tokens],
+    ] as const
+  ).flatMap(([label, window]): readonly MetaWindow[] => {
+    if (!window || typeof window.percent !== "number") return []
+    return [
+      {
+        label,
+        used: `${window.percent}% used`,
+        resets:
+          typeof window.resetsAt !== "number" || !Number.isFinite(window.resetsAt)
+            ? undefined
+            : `Resets ${formatReset(window.resetsAt)}`,
+        danger: window.limited || window.percent >= 90,
+      },
+    ]
+  })
+  return rows.length > 0 ? rows : undefined
+}
+
 /** Dollars as limits read: whole amounts without cents, and a sliver as "<$0.01" rather than "$0.00". */
 export function formatDollars(value: number) {
   if (value > 0 && value < 0.01) return "<$0.01"

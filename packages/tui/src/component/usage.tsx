@@ -15,6 +15,7 @@ import {
   formatDollars,
   formatReset,
   limitScope,
+  metaUsage,
   modelUsage,
   goLimitLink,
   goLimitName,
@@ -140,6 +141,7 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
   const limits = useUsageLimits()
   const theme = useTheme().surface("dialog")
   const usage = () => limits.usage(props.model)
+  const meta = () => metaUsage(limits.info() ?? undefined, props.model.providerID)
   const short = () => {
     const value = usage()
     if (!value) return false
@@ -161,16 +163,40 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
         />
       }
     >
-      <Show when={usage()} fallback={<text fg={theme.text.muted}>No limits apply to {props.model.name}.</text>}>
-        {(value) => (
-          <box gap={1}>
+      <box gap={1}>
+        <Show when={meta()}>
+          {(windows) => (
             <box>
-              <text fg={short() ? theme.text.feedback.error.base : theme.text.base} attributes={TextAttributes.BOLD}>
-                {formatDollars(value().left)} remaining
-              </text>
-              <text fg={theme.text.muted}>Resets {formatReset(value().resetsAt)}</text>
+              <text fg={theme.text.muted}>Meta rate limits</text>
+              <For each={windows()}>
+                {(window) => (
+                  <box>
+                    <text fg={window.danger ? theme.text.feedback.error.base : theme.text.base}>
+                      {window.label}: {window.used}
+                    </text>
+                    <Show when={window.resets}>
+                      {(resets) => (
+                        <box paddingLeft={2}>
+                          <text fg={theme.text.muted}>{resets()}</text>
+                        </box>
+                      )}
+                    </Show>
+                  </box>
+                )}
+              </For>
             </box>
-            <box>
+          )}
+        </Show>
+        <Show when={usage()} fallback={<text fg={theme.text.muted}>No limits apply to {props.model.name}.</text>}>
+          {(value) => (
+            <box gap={1}>
+              <box>
+                <text fg={short() ? theme.text.feedback.error.base : theme.text.base} attributes={TextAttributes.BOLD}>
+                  {formatDollars(value().left)} remaining
+                </text>
+                <text fg={theme.text.muted}>Resets {formatReset(value().resetsAt)}</text>
+              </box>
+              <box>
               <text fg={theme.text.muted}>Limits</text>
               <For each={value().limits}>
                 {(item, index) => (
@@ -202,6 +228,7 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
           </box>
         )}
       </Show>
+      </box>
     </DialogLayout>
   )
 }

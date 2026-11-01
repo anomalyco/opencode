@@ -1,12 +1,13 @@
 export * as UsageLimits from "./usage-limits.js"
 
+import type { HttpRateLimitDetails } from "@opencode/ai/effect"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
 import { Provider } from "@opencode/schema/provider"
 import { UsageLimits } from "@opencode/schema/usage-limits"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
-import { Context, Duration, Effect, Layer, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Option, Ref, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConsoleAccess } from "./console-access.js"
 import type { Credential } from "./credential.js"
@@ -22,15 +23,31 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Us
 export interface Interface {
   /** The usage limits of the OpenCode Console workspace this location is signed in to, if it is. */
   readonly get: () => Effect.Effect<Info | undefined, UnavailableError>
+  /**
+   * Remembers the latest rate-limit snapshot a provider's responses reported, so
+   * `get` can surface a meter for providers with no Console allowance.
+   */
+  readonly observe: (providerID: string, snapshot: HttpRateLimitDetails) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/UsageLimits") {}
+
+/**
+ * The `x-ratelimit-*` snapshot the current model stream last saw. The runner
+ * provides one per model call; the executor middleware records into it, so the
+ * capture stays with the request that produced it.
+ */
+export class RateLimitCapture extends Context.Service<
+  RateLimitCapture,
+  { readonly ref: Ref.Ref<Option.Option<HttpRateLimitDetails>> }
+>()("@opencode/UsageLimits.RateLimitCapture") {}
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const integrations = yield* Integration.Service
     const http = yield* HttpClient.HttpClient
+    const snapshots = yield* Ref.make(new Map<string, HttpRateLimitDetails>())
 
     const get = Effect.fn("UsageLimits.get")(function* () {
       const connection = yield* integrations.connection.active(Integration.ID.make("opencode"))
@@ -51,8 +68,9 @@ export const layer = Layer.effect(
           orElse: () => Effect.fail(new UnavailableError({ message: "OpenCode Console usage limits timed out" })),
         }),
       )
-      // Best-effort: a Meta failure can never take down the Console limits above.
-      const meta = yield* readMeta(http, integrations)
+      // Observed headers only: no request leaves this location, so a provider
+      // outage can never take down the Console limits above.
+      const meta = metaMeter((yield* Ref.get(snapshots)).get("meta"))
       return {
         workspace: {
           id: workspaceID,
@@ -65,7 +83,18 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ get })
+    const observe = Effect.fn("UsageLimits.observe")(function* (providerID: string, snapshot: HttpRateLimitDetails) {
+      // A bare `retry-after` with no quota windows reports no allowance to show.
+      if (
+        snapshot.limit === undefined &&
+        snapshot.remaining === undefined &&
+        snapshot.reset === undefined
+      )
+        return
+      yield* Ref.update(snapshots, (previous) => new Map(previous).set(providerID, snapshot))
+    })
+
+    return Service.of({ get, observe })
   }),
 )
 
@@ -195,47 +224,58 @@ function meter(value: typeof GoMeter.Type) {
 }
 
 /**
- * Meta API quota, polled from a compatible usage endpoint when configured.
- * Meta publishes no stable usage endpoint; its per-response `x-ratelimit-*`
- * headers are the live quota signal and raw per-request cost already flows
- * through `SessionUsage.record`. Set `META_USAGE_URL` (GET, bearer key from
- * the stored Meta connection) to surface a monthly meter in
- * `UsageLimits.Info.meta`; unset means no meter, 403/404 means no allowance
- * to show. Best-effort with its own timeout: any failure yields no meter.
+ * The Meta quota meter, built from the `x-ratelimit-*` headers Meta's own
+ * responses report. Dimensions that name tokens feed `tokens`, everything
+ * else feeds `requests`; dimensions without a usable limit are skipped.
  */
-const MetaUsage = Schema.Struct({
-  usage: Schema.Struct({ monthly: GoMeter }),
-})
+function metaMeter(snapshot: HttpRateLimitDetails | undefined): UsageLimits.Meta | undefined {
+  if (!snapshot) return undefined
+  const dimensions = new Set([...Object.keys(snapshot.limit ?? {}), ...Object.keys(snapshot.remaining ?? {})])
+  const meter: { requests?: UsageLimits.MetaMeter; tokens?: UsageLimits.MetaMeter } = {}
+  for (const dimension of dimensions) {
+    const limit = Number(snapshot.limit?.[dimension])
+    const remaining = Number(snapshot.remaining?.[dimension])
+    if (!(limit > 0) || !Number.isFinite(remaining)) continue
+    const resetsAt = parseReset(snapshot.reset?.[dimension])
+    const window: UsageLimits.MetaMeter = {
+      percent: Math.max(0, Math.min(100, Math.round(((limit - remaining) / limit) * 100))),
+      limited: remaining <= 0,
+      ...(resetsAt === undefined ? {} : { resetsAt }),
+    }
+    if (meter[dimension.toLowerCase().includes("token") ? "tokens" : "requests"] === undefined)
+      meter[dimension.toLowerCase().includes("token") ? "tokens" : "requests"] = window
+  }
+  return meter.requests === undefined && meter.tokens === undefined ? undefined : meter
+}
 
-function readMeta(http: HttpClient.HttpClient, integrations: Integration.Interface) {
-  const url = process.env.META_USAGE_URL
-  if (!url) return Effect.succeed(undefined)
-  return Effect.gen(function* () {
-    const connection = yield* integrations.connection.active(Integration.ID.make("meta"))
-    if (!connection) return undefined
-    const credential = yield* integrations.connection.resolve(connection)
-    if (!credential || credential.type === "external") return undefined
-    const key = credential.type === "oauth" ? credential.access : credential.key
-    return yield* HttpClient.withScope(http)
-      .execute(
-        HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.bearerToken(key)),
-      )
-      .pipe(
-        Effect.flatMap((response) =>
-          response.status === 403 || response.status === 404
-            ? Effect.succeed(undefined)
-            : HttpClientResponse.filterStatusOk(response).pipe(
-                Effect.flatMap(HttpClientResponse.schemaBodyJson(MetaUsage)),
-                Effect.map((body) => ({ monthly: meter(body.usage.monthly) })),
-              ),
-        ),
-        Effect.scoped,
-      )
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: Duration.seconds(10),
-      orElse: () => Effect.succeed(undefined),
-    }),
-    Effect.catch(() => Effect.succeed(undefined)),
-  )
+/**
+ * When a quota window resets, from a provider `reset` value: a duration like
+ * `1s` or `6m0s` counts from now, a large number is an epoch, and anything
+ * else tries a date parse. Values that name no future point yield no reset.
+ */
+function parseReset(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const text = value.trim()
+  if (/[dhms]/i.test(text)) {
+    const parts = /^(?:(\d+(?:\.\d+)?)\s*d)?(?:(\d+(?:\.\d+)?)\s*h)?(?:(\d+(?:\.\d+)?)\s*m(?!s))?(?:(\d+(?:\.\d+)?)\s*s)?$/i.exec(
+      text,
+    )
+    if (!parts || parts.slice(1).every((part) => part === undefined)) return undefined
+    const millis =
+      Number(parts[1] ?? 0) * 86_400_000 +
+      Number(parts[2] ?? 0) * 3_600_000 +
+      Number(parts[3] ?? 0) * 60_000 +
+      Number(parts[4] ?? 0) * 1000
+    return Number.isFinite(millis) ? Date.now() + millis : undefined
+  }
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    const epoch = Number(text)
+    if (!Number.isFinite(epoch)) return undefined
+    // Seconds and milliseconds both appear in the wild; anything smaller is not a usable point in time.
+    if (epoch >= 1_000_000_000_000) return epoch
+    if (epoch >= 1_000_000_000) return epoch * 1000
+    return undefined
+  }
+  const date = Date.parse(text)
+  return Number.isNaN(date) ? undefined : date
 }

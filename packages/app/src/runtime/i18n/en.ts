@@ -1253,6 +1253,9 @@ export const dict = {
 
   "usage.title": "Usage",
   "usage.section.go": "OpenCode Go",
+  "usage.section.meta": "Meta rate limits",
+  "usage.meta.requests": "Requests",
+  "usage.meta.tokens": "Tokens",
   "usage.section.console": "OpenCode Console",
   "usage.workspace.fallback": "your workspace",
   "usage.time": "{{date}} at {{time}} ({{zone}})",

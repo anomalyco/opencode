@@ -58,10 +58,18 @@ export type GoRow = {
   readonly resetsAt: number
 }
 
+export type MetaRow = {
+  readonly window: "requests" | "tokens"
+  readonly percent: number
+  readonly limited: boolean
+  readonly resetsAt?: number
+}
+
 export type UsageView = {
   readonly workspace: string | undefined
   readonly callout?: Callout
   readonly go?: readonly GoRow[]
+  readonly meta?: readonly MetaRow[]
   readonly budgets: readonly BudgetRow[]
   /** A callout explains why paid models are paused, so the budgets are shown as context. */
   readonly dimmed: boolean
@@ -88,10 +96,12 @@ export function usageView(
   const reachedModels = budgets.find((entry) => entry.reached && entry.budget.coverage === "models")
   const resetsAt = Math.min(...info.budgets.map((budget) => budget.resetsAt))
   const go = info.go
+  const meta = info.meta
   return {
     workspace: info.workspace.name,
     callout,
     go: go && (["rolling", "weekly", "monthly"] as const).map((window) => ({ window, ...go[window] })),
+    meta: meta && (["requests", "tokens"] as const).flatMap((window) => (meta[window] ? [{ window, ...meta[window] }] : [])),
     budgets: budgets.map((entry, index) => ({
       id: entry.budget.id,
       label: label(entry.budget),

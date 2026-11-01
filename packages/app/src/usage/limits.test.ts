@@ -138,4 +138,12 @@ describe("usageView", () => {
     expect(view.footer).toEqual({ kind: "budgets-reset", resetsAt: RESET })
     expect(usageView(info(), { credits: true }).footer).toEqual({ kind: "credits-only" })
   })
+
+  test("carries the Meta rate-limit windows the responses reported", () => {
+    const withMeta = { ...info(), meta: { requests: { percent: 63, limited: false, resetsAt: RESET } } }
+    expect(usageView(withMeta).meta).toEqual([
+      { window: "requests", percent: 63, limited: false, resetsAt: RESET },
+    ])
+    expect(usageView(info()).meta).toBeUndefined()
+  })
 })

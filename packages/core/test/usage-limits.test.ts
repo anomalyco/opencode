@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { HttpRateLimitDetails } from "@opencode/ai/effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { UsageLimits } from "@opencode/core/usage-limits"
@@ -49,27 +50,42 @@ const budget = {
 
 const meter = (status: string, percent: number) => ({ status, percent, resetsAt: "2026-10-24T17:00:00.000Z" })
 
-const META_URL = "https://meta.example/usage"
+/** Console without a Go subscription: budgets load, Go has nothing to show. */
+const consoleWithoutGo = (url: string) =>
+  url.endsWith("/zen/go/v1/usage")
+    ? Response.json({ type: "error" }, { status: 403 })
+    : Response.json([budget])
 
-const metaKey = Credential.Key.make({ type: "key", key: "meta-key" })
+/** A rate-limit snapshot as a provider's responses report it. */
+const snapshot = (windows: Record<string, { limit: string; remaining: string; reset?: string }>) =>
+  HttpRateLimitDetails.make({
+    limit: Object.fromEntries(Object.entries(windows).map(([dimension, window]) => [dimension, window.limit])),
+    remaining: Object.fromEntries(
+      Object.entries(windows).map(([dimension, window]) => [dimension, window.remaining]),
+    ),
+    ...(Object.values(windows).some((window) => window.reset !== undefined)
+      ? {
+          reset: Object.fromEntries(
+            Object.entries(windows)
+              .filter((entry): entry is [string, { limit: string; remaining: string; reset: string }] =>
+                entry[1].reset !== undefined,
+              )
+              .map(([dimension, window]) => [dimension, window.reset]),
+          ),
+        }
+      : {}),
+  })
 
-/** Sets `META_USAGE_URL` for one read; Meta is otherwise unconfigured. */
-const withMetaURL = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      process.env.META_USAGE_URL = META_URL
-    }),
-    () => effect,
-    () => Effect.sync(() => void delete process.env.META_USAGE_URL),
-  )
-
-/** Reads usage limits for a location whose active connections resolve to `connections`. */
+/** Reads usage limits for a location whose active OpenCode Console connection resolves to `credential`. */
 const read = (
-  connections: { console?: Credential.Value; meta?: Credential.Value } | undefined,
+  credential: Credential.Value | undefined,
   respond: (url: string) => Response,
   requests: HttpClientRequest.HttpClientRequest[] = [],
+  observed: HttpRateLimitDetails | undefined = undefined,
 ) =>
-  Effect.flatMap(UsageLimits.Service, (limits) => limits.get()).pipe(
+  Effect.flatMap(UsageLimits.Service, (limits) =>
+    Effect.andThen(observed ? limits.observe("meta", observed) : Effect.void, limits.get()),
+  ).pipe(
     Effect.provide(
       UsageLimits.layer.pipe(
         Layer.provide(
@@ -78,28 +94,16 @@ const read = (
               revision: () => 0,
               get: unused,
               connection: {
-                active: (id: Integration.ID) =>
+                active: () =>
                   Effect.succeed(
-                    id === "meta"
-                      ? connections?.meta && {
-                          type: "credential" as const,
-                          id: Credential.ID.make("meta"),
-                          label: "Meta",
-                          method: "key" as const,
-                        }
-                      : connections?.console && {
-                          type: "credential" as const,
-                          id: Credential.ID.make("console"),
-                          label: "Anomaly",
-                          method: "oauth" as const,
-                        },
+                    credential && {
+                      type: "credential" as const,
+                      id: Credential.ID.make("console"),
+                      label: "Anomaly",
+                      method: "oauth" as const,
+                    },
                   ),
-                resolve: (connection) =>
-                  Effect.succeed(
-                    connection.type === "credential" && connection.id === "meta"
-                      ? connections?.meta
-                      : connections?.console,
-                  ),
+                resolve: () => Effect.succeed(credential),
                 key: unused,
                 external: unused,
                 activate: unused,
@@ -129,7 +133,7 @@ it.effect("reads the member's Go allowance and budgets from the Console they sig
   Effect.gen(function* () {
     const requests: HttpClientRequest.HttpClientRequest[] = []
     const limits = yield* read(
-      { console: signedIn },
+      signedIn,
       (url) =>
         url.endsWith("/zen/go/v1/usage")
           ? Response.json({
@@ -201,7 +205,7 @@ it.effect("reads the member's Go allowance and budgets from the Console they sig
 it.effect("has no Go allowance or budgets to show where Console refuses them", () =>
   Effect.gen(function* () {
     // Go refuses a workspace without the member's subscription; Console refuses budgets to a service account's key.
-    const limits = yield* read({ console: signedIn }, () => Response.json({ type: "error" }, { status: 403 }))
+    const limits = yield* read(signedIn, () => Response.json({ type: "error" }, { status: 403 }))
 
     expect(limits).toEqual({
       workspace: {
@@ -223,7 +227,7 @@ it.effect("has nothing to show for a location that isn't signed in to OpenCode C
 it.effect("reports a Console that can't answer as unavailable", () =>
   Effect.gen(function* () {
     // Go has nothing to show, so only the Console's failure can fail the read.
-    const exit = yield* read({ console: signedIn }, (url) =>
+    const exit = yield* read(signedIn, (url) =>
       url.endsWith("/current-budgets")
         ? new Response("upstream down", { status: 502 })
         : Response.json({ type: "error" }, { status: 403 }),
@@ -235,22 +239,16 @@ it.effect("reports a Console that can't answer as unavailable", () =>
   }),
 )
 
-it.effect("attaches the Meta monthly meter from the stored Meta connection", () =>
+it.effect("attaches the Meta meter from the response headers Meta reported", () =>
   Effect.gen(function* () {
-    const requests: HttpClientRequest.HttpClientRequest[] = []
-    const limits = yield* withMetaURL(
-      read(
-        { console: signedIn, meta: metaKey },
-        (url) =>
-          url === META_URL
-            ? Response.json({ usage: { monthly: meter("ok", 63) } })
-            : url.endsWith("/zen/go/v1/usage")
-              ? Response.json({
-                  usage: { rolling: meter("ok", 42), weekly: meter("ok", 18), monthly: meter("ok", 55) },
-                })
-              : Response.json([budget]),
-        requests,
-      ),
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({
+        requests: { limit: "100", remaining: "37", reset: "1780000000" },
+        tokens: { limit: "200000", remaining: "200000" },
+      }),
     )
 
     expect(limits?.workspace).toEqual({
@@ -258,80 +256,77 @@ it.effect("attaches the Meta monthly meter from the stored Meta connection", () 
       name: "Anomaly",
       usageURL: "https://dev.opencode.ai/console/wrk_anomaly/activity/overview",
     })
+    // 63 of 100 requests used; the token window is untouched and names no reset.
     expect(limits?.meta).toEqual({
-      monthly: { percent: 63, limited: false, resetsAt: Date.parse("2026-10-24T17:00:00.000Z") },
+      requests: { percent: 63, limited: false, resetsAt: 1780000000000 },
+      tokens: { percent: 0, limited: false },
     })
-    // The Meta read authenticates with the stored Meta key, not the Console credential.
-    expect(requests.find((request) => request.url === META_URL)?.headers.authorization).toBe(
-      "Bearer meta-key",
-    )
   }),
 )
 
-it.effect("keeps the Console limits when the Meta endpoint fails", () =>
+it.effect("reads a duration reset from the response headers", () =>
   Effect.gen(function* () {
-    const limits = yield* withMetaURL(
-      read({ console: signedIn, meta: metaKey }, (url) =>
-        url === META_URL
-          ? new Response("meta down", { status: 500 })
-          : url.endsWith("/zen/go/v1/usage")
-            ? Response.json({
-                usage: { rolling: meter("ok", 42), weekly: meter("ok", 18), monthly: meter("ok", 55) },
-              })
-            : Response.json([budget]),
-      ),
+    const before = Date.now()
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({ requests: { limit: "60", remaining: "59", reset: "90s" } }),
     )
+
+    expect(limits?.meta?.requests?.percent).toBe(2)
+    expect(limits?.meta?.requests?.limited).toBe(false)
+    expect(limits?.meta?.requests?.resetsAt).toBeGreaterThanOrEqual(before + 90_000)
+    expect(limits?.meta?.requests?.resetsAt).toBeLessThanOrEqual(Date.now() + 90_000)
+  }),
+)
+
+it.effect("has no Meta meter without observed headers", () =>
+  Effect.gen(function* () {
+    const limits = yield* read(signedIn, consoleWithoutGo)
 
     expect(limits?.workspace.id).toBe("wrk_anomaly")
-    expect(limits?.go?.monthly.percent).toBe(55)
-    expect(limits?.budgets).toHaveLength(1)
     expect(limits).not.toHaveProperty("meta")
   }),
 )
 
-it.effect("has no Meta meter without a Meta connection", () =>
+it.effect("ignores observed snapshots with no usable window", () =>
   Effect.gen(function* () {
-    const requests: HttpClientRequest.HttpClientRequest[] = []
-    const limits = yield* withMetaURL(
-      read(
-        { console: signedIn },
-        (url) =>
-          url === META_URL
-            ? Response.json({ usage: { monthly: meter("ok", 63) } })
-            : url.endsWith("/zen/go/v1/usage")
-              ? Response.json({
-                  usage: { rolling: meter("ok", 42), weekly: meter("ok", 18), monthly: meter("ok", 55) },
-                })
-              : Response.json([budget]),
-        requests,
-      ),
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({ requests: { limit: "0", remaining: "0" } }),
     )
 
     expect(limits).not.toHaveProperty("meta")
-    expect(requests.some((request) => request.url === META_URL)).toBe(false)
   }),
 )
 
-it.effect("has nothing to show for Meta alone without a Console workspace", () =>
+it.effect("ignores an observed snapshot with no quota windows at all", () =>
   Effect.gen(function* () {
-    // The Meta meter only attaches to a Console workspace; it never fabricates one.
-    const limits = yield* withMetaURL(
-      read({ meta: metaKey }, () => Response.json({ usage: { monthly: meter("ok", 63) } })),
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      HttpRateLimitDetails.make({}),
     )
-    expect(limits).toBeUndefined()
+
+    expect(limits).not.toHaveProperty("meta")
   }),
 )
 
-it.effect("reports a Console that can't answer as unavailable even when Meta also fails", () =>
+it.effect("reports a Console that can't answer as unavailable after observing headers", () =>
   Effect.gen(function* () {
-    const exit = yield* withMetaURL(
-      read({ console: signedIn, meta: metaKey }, (url) =>
-        url === META_URL
-          ? new Response("meta down", { status: 500 })
-          : url.endsWith("/current-budgets")
-            ? new Response("upstream down", { status: 502 })
-            : Response.json({ type: "error" }, { status: 403 }),
-      ),
+    // Observed headers never mask a Console failure: the read still fails.
+    const exit = yield* read(
+      signedIn,
+      (url) =>
+        url.endsWith("/current-budgets")
+          ? new Response("upstream down", { status: 502 })
+          : Response.json({ type: "error" }, { status: 403 }),
+      [],
+      snapshot({ requests: { limit: "100", remaining: "37" } }),
     ).pipe(Effect.exit)
 
     expect(Exit.isFailure(exit) && Exit.findErrorOption(exit)).toMatchObject({

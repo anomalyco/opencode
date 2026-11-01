@@ -4,6 +4,7 @@ import {
   formatDollars,
   formatReset,
   limitScope,
+  metaUsage,
   modelUsage,
   refusalReset,
   usageLevel,
@@ -135,5 +136,24 @@ describe("util.usage-limits", () => {
       }),
     ).toBe(RESET)
     expect(refusalReset({ response: { body: "{}" } })).toBeUndefined()
+  })
+
+  test("reads the Meta rate-limit windows a Meta model reported", () => {
+    setSystemTime(new Date(2026, 9, 24, 9))
+    const withMeta: UsageLimitsInfo = {
+      ...info(),
+      meta: {
+        requests: { percent: 63, limited: false, resetsAt: new Date(2026, 9, 24, 17).getTime() },
+        tokens: { percent: 100, limited: true },
+      },
+    }
+    expect(metaUsage(withMeta, "meta")).toEqual([
+      { label: "Requests", used: "63% used", resets: "Resets 5:00 PM today", danger: false },
+      { label: "Tokens", used: "100% used", resets: undefined, danger: true },
+    ])
+    // Other providers never read the Meta meter, and an empty meter reads as nothing.
+    expect(metaUsage(withMeta, "opencode")).toBeUndefined()
+    expect(metaUsage(info(), "meta")).toBeUndefined()
+    expect(metaUsage(undefined, "meta")).toBeUndefined()
   })
 })
