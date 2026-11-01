@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Formatter, Logger, Option, Schedule, Stream, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
+import { redact } from "./redact.js"
 import { runID } from "./shared.js"
 
 // One log file is shared by every opencode process on the machine and only ever appended to, so it
@@ -16,7 +17,7 @@ const LOG_TRIM_CHUNK = 64 * 1024
 function formatter(id: string = runID()) {
   return Logger.map(Logger.formatStructured, (output) => {
     const messages = Array.isArray(output.message) ? output.message : [output.message]
-    return [
+    const line = [
       ["timestamp", output.timestamp],
       ["level", output.level],
       ["run", id],
@@ -27,6 +28,7 @@ function formatter(id: string = runID()) {
     ]
       .map(([key, value]) => `${key}=${format(value)}`)
       .join(" ")
+    return redact(line)
   })
 }
 
