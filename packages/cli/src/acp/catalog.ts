@@ -1,4 +1,5 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import type { Agent } from "@opencode/schema/agent"
 import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
@@ -128,11 +129,30 @@ const poll = Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seco
 
 // A cold Location lists no plugins until activation finishes, and providers may still discover models after that.
 const load = Effect.fn("cli.acp.catalog.load")(function* (client: OpenCodeClient, cwd: string) {
-  yield* client.plugin
+  const attempt = client.plugin
     .list({ location: { directory: cwd } })
-    .pipe(Effect.repeat({ until: (plugins) => plugins.data.length > 0, schedule: poll }), Effect.ignore)
-  return yield* read(client, cwd).pipe(
-    Effect.retry({ while: (error) => error._tag === "ACPCatalogNotReadyError", schedule: poll }),
+    .pipe(
+      Effect.repeat({ until: (plugins) => plugins.data.length > 0, schedule: poll }),
+      Effect.ignore,
+      Effect.andThen(read(client, cwd)),
+    )
+  // A timed-out catalog read can still be waiting on activation, so recheck readiness before retrying it.
+  return yield* attempt.pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "ACPCatalogNotReadyError" ||
+        (error._tag === "ACPCatalogLoadError" &&
+          error.cause instanceof ServiceUnavailableError &&
+          error.cause.service === "plugin"),
+      schedule: poll,
+    }),
+    Effect.mapError((error) =>
+      error._tag === "ACPCatalogLoadError" &&
+      error.cause instanceof ServiceUnavailableError &&
+      error.cause.service === "plugin"
+        ? new ACPError.CatalogNotReadyError({ reason: "plugins" })
+        : error,
+    ),
   )
 })
 
