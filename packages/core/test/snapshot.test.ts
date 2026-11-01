@@ -127,6 +127,47 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("keeps files the source tracks even when an ignore rule matches them", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "entry.S"), "one\n")
+            await fs.writeFile(path.join(project, "debug.log"), "one\n")
+            await initGit(project)
+            // `*.s` matches `entry.S` only where Git ignores case, as on macOS and Windows.
+            await fs.writeFile(path.join(project, ".gitignore"), "*.s\n*.log\n")
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(project, "entry.S"), "two\n")
+              await fs.writeFile(path.join(project, "debug.log"), "two\n")
+            })
+            const after = yield* snapshot.capture()
+            if (!before || !after) throw new globalThis.Error("capture failed")
+            expect(yield* snapshot.files({ from: before, to: after })).toEqual([
+              RelativePath.make("debug.log"),
+              RelativePath.make("entry.S"),
+            ])
+            yield* snapshot.restore({
+              files: new Map([
+                [RelativePath.make("entry.S"), before],
+                [RelativePath.make("debug.log"), before],
+              ]),
+            })
+            expect(yield* read(path.join(project, "entry.S"))).toBe("one\n")
+            expect(yield* read(path.join(project, "debug.log"))).toBe("one\n")
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("recovers from a corrupt index and ignores a stale index lock", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

@@ -636,12 +636,23 @@ const layer = Layer.effect(
       repository: Repository
       paths: readonly RelativePath[]
     }) {
+      // Like Git, ignore rules skip paths the index tracks. Reading the index makes check-ignore scan every entry
+      // per path, so only paths that match a rule are checked against it.
+      const matched = yield* checkIgnore({ ...input, flags: ["--no-index"] })
+      return yield* checkIgnore({ repository: input.repository, paths: [...matched], flags: [] })
+    })
+
+    const checkIgnore = Effect.fnUntraced(function* (input: {
+      repository: Repository
+      paths: readonly RelativePath[]
+      flags: readonly string[]
+    }) {
       if (!input.paths.length) return new Set<RelativePath>()
       const result = yield* proc
         .run(
           ChildProcess.make(
             gitExecutable(),
-            repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]),
+            repositoryArgs(input.repository, ["check-ignore", ...input.flags, "--stdin", "-z"]),
             {
               cwd: input.repository.worktree,
               extendEnv: true,
