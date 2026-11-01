@@ -22,6 +22,7 @@ const handler = Effect.fn("cli.session.list")(function* (
         {
           project: location.project.id,
           parentID: null,
+          search: Option.getOrUndefined(input.search),
           order: "desc",
           limit: Option.getOrElse(input.maxCount, () => 100),
         },
