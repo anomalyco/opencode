@@ -1589,3 +1589,21 @@ story.describe("with the new question UI experiment enabled", () => {
     })
   })
 })
+
+story("preserves elicitation message whitespace as plain text and wraps long lines", async ({ mount, page }) => {
+  const component = await mount("app-current-session-surface--mcp-elicitation-request")
+  const text = component.locator('[data-component="session-elicitation-dock"] [data-slot="question-text"]')
+  const message =
+    "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
+
+  await expect(text).toBeVisible()
+  await expect.poll(() => text.innerText()).toBe(message)
+  await expect(text.locator("a, strong, release")).toHaveCount(0)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(text).toBeVisible()
+  expect(await text.evaluate((element) => element.clientWidth)).toBeGreaterThan(0)
+  await expect.poll(() => text.innerText()).toBe(message)
+  await expect.poll(() => text.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+})
