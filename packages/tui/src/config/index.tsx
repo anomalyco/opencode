@@ -154,6 +154,10 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      context: Schema.optional(Schema.Literals(["expanded", "compact"])).annotate({
+        description:
+          "Sidebar Context block: 'expanded' shows tokens, percent used and cost on separate lines, 'compact' on one line sized to the sidebar",
+      }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
