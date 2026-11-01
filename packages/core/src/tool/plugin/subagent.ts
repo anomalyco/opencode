@@ -43,7 +43,7 @@ export const Input = Schema.Struct({
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+      "Run the subagent in the background and return immediately (default: true). You will be notified automatically when it completes; DO NOT sleep, poll, or proactively check on its progress. Set background: false only when you must block on its final response before taking any next step.",
   }),
 })
 
@@ -56,9 +56,8 @@ export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
-  "Foreground (default) runs the subagent to completion and returns its final response.",
-  "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
-  "Use background only for independent work that can run while you continue elsewhere.",
+  "Runs in the background by default (background=true), returning immediately and notifying you automatically when it finishes.",
+  "Set background=false only when you must wait synchronously for its final response before taking any next action.",
 ].join("\n")
 
 export const Plugin = {
@@ -203,7 +202,7 @@ export const Plugin = {
                     ),
                   ))
 
-              const background = input.background === true
+              const background = input.background !== false
               yield* context.progress({ sessionID: child.id, status: "running" })
 
               // Standard prompt admission outside the job: Job.start joining a running child skips

@@ -403,7 +403,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-configured-nested-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "nested", prompt: "should run" },
+              input: { agent: "reviewer", description: "nested", prompt: "should run", background: false },
             },
           })
 
@@ -445,7 +445,14 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: "" },
+              input: {
+                agent: "reviewer",
+                description: "review",
+                prompt: "review this",
+                model: "",
+                sessionID: "",
+                background: false,
+              },
             },
           })
 
@@ -475,7 +482,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent-fallback",
               name: SubagentTool.name,
-              input: { agent: "fallback", description: "fallback", prompt: "fallback" },
+              input: { agent: "fallback", description: "fallback", prompt: "fallback", background: false },
             },
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
@@ -506,7 +513,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent-first",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this" },
+              input: { agent: "reviewer", description: "review", prompt: "review this", background: false },
             },
           })
           const childID = outputSessionID(first.metadata)
@@ -523,6 +530,7 @@ describe("SubagentTool", () => {
                 prompt: "continue this",
                 sessionID: childID,
                 model: "",
+                background: false,
               },
             },
           })
@@ -640,9 +648,9 @@ describe("SubagentTool", () => {
             }).pipe(Effect.timeout("2 seconds"))
 
           const launched = yield* followUp("call-launch", { background: true })
-          const steered = yield* followUp("call-steer", { background: true })
-          const unflagged = yield* followUp("call-steer-foreground", {})
-          ;[launched, steered, unflagged].forEach((result) =>
+          const steered = yield* followUp("call-steer", {})
+          const foregroundFollowUp = yield* followUp("call-steer-foreground", { background: false })
+          ;[launched, steered, foregroundFollowUp].forEach((result) =>
             expect(result).toMatchObject({ metadata: { sessionID: child.id, status: "running" } }),
           )
 
@@ -687,7 +695,7 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent, description: "follow up", prompt: "continue", sessionID },
+                input: { agent, description: "follow up", prompt: "continue", sessionID, background: false },
               },
             })
 
@@ -771,7 +779,7 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "review", prompt: "review this", ...input },
+                input: { agent: "reviewer", description: "review", prompt: "review this", background: false, ...input },
               },
             })
 
@@ -837,7 +845,7 @@ describe("SubagentTool", () => {
                 type: "tool-call",
                 id: "call-subagent-failure",
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "fail review", prompt: "please fail" },
+                input: { agent: "reviewer", description: "fail review", prompt: "please fail", background: false },
               },
             }),
           ).toEqual({
@@ -880,7 +888,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-background-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+              input: { agent: "reviewer", description: "background review", prompt: "review" },
             },
           })
           const childID = outputSessionID(settled.metadata)

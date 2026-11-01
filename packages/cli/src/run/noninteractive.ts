@@ -7,7 +7,9 @@ import type {
   SessionMessageInfo,
   ToolContent,
 } from "@opencode/client/promise"
+import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Schema } from "effect"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
 import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
@@ -85,6 +87,9 @@ export async function runNonInteractivePrompt(input: Input) {
   const renderedText = new Map<string, string>()
   const renderedReasoning = new Map<string, string>()
   const renderedTools = new Set<string>()
+  const backgroundSubagents = new Set<string>()
+  const pendingWakeIds = new Set<string>()
+  const isSessionID = Schema.is(Session.ID)
   // Live step events stop being read once the session goes idle, and the last step usually ends after
   // that. Reconcile uses this to emit only the step_start/step_finish lines the live stream missed.
   const steps = new Map<string, "started" | "ended">()
@@ -236,10 +241,30 @@ export async function runNonInteractivePrompt(input: Input) {
         await cancelForm(event.data.form)
         continue
       }
+      if (event.type === "session.deleted") {
+        backgroundSubagents.delete(event.data.sessionID)
+        if (event.data.sessionID !== input.sessionID) continue
+      }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       const time = toMillis("created" in event ? event.created : undefined)
 
+      if (event.type === "session.inbox.enqueued" && promoted) {
+        if (
+          event.data.item.type === "synthetic" &&
+          event.data.item.payload.metadata?.source === "subagent" &&
+          isSessionID(event.data.item.payload.metadata.childID) &&
+          backgroundSubagents.delete(event.data.item.payload.metadata.childID)
+        ) {
+          pendingWakeIds.add(event.data.inboxID)
+        }
+        continue
+      }
+      if (event.type === "session.inbox.cancelled") {
+        pendingWakeIds.delete(event.data.inboxID)
+        continue
+      }
       if (event.type === "session.inbox.delivered") {
+        pendingWakeIds.delete(event.data.inboxID)
         if (event.data.inboxID === messageID) {
           promoted = true
           prePromotionError = undefined
@@ -432,6 +457,13 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         tools.delete(key)
         renderedTools.add(key)
+        if (
+          current.tool === "subagent" &&
+          event.data.metadata?.status === "running" &&
+          isSessionID(event.data.metadata.sessionID)
+        ) {
+          backgroundSubagents.add(event.data.metadata.sessionID)
+        }
         if (!emit("tool_use", time, { part })) await input.renderTool(tool)
         continue
       }
@@ -546,7 +578,10 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         return
       }
-      if (event.type === "session.execution.succeeded") return
+      if (event.type === "session.execution.succeeded") {
+        if (backgroundSubagents.size > 0 || pendingWakeIds.size > 0) continue
+        return
+      }
     }
   }
 
@@ -711,6 +746,11 @@ export async function runNonInteractivePrompt(input: Input) {
     interrupted = true
     process.exitCode = 130
     admission?.abort()
+    for (const childID of backgroundSubagents) {
+      void input.client.session.interrupt({ sessionID: childID }).catch(() => {})
+    }
+    backgroundSubagents.clear()
+    pendingWakeIds.clear()
     void input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
   }
   process.on("SIGINT", interrupt)
@@ -790,7 +830,52 @@ export async function runNonInteractivePrompt(input: Input) {
       return
     }
 
-    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
+    const waitUntilSettled = async () => {
+      const idleChildren = new Set<string>()
+      let idleWakeChecks = 0
+      while (true) {
+        await input.client.experimental.session.wait({ sessionID: input.sessionID })
+        if (
+          interrupted ||
+          permissionRejected ||
+          formCancelled ||
+          emittedError ||
+          (backgroundSubagents.size === 0 && pendingWakeIds.size === 0)
+        ) {
+          return
+        }
+        const children = [...backgroundSubagents]
+        if (children.length > 0) {
+          await Promise.all(
+            children.map((sessionID) =>
+              input.client.experimental.session.wait({ sessionID }).catch(() => {
+                backgroundSubagents.delete(sessionID)
+              }),
+            ),
+          )
+        }
+        if (backgroundSubagents.size > 0 || pendingWakeIds.size > 0) {
+          await Promise.race([completed, new Promise((resolve) => setTimeout(resolve, 50))])
+        }
+        if (backgroundSubagents.size === 0 && pendingWakeIds.size === 0) return
+        const inbox = await input.client.session.inbox.list({ sessionID: input.sessionID }).catch(() => [])
+        if (inbox.length > 0) {
+          idleChildren.clear()
+          idleWakeChecks = 0
+          continue
+        }
+        for (const sessionID of children) {
+          if (!backgroundSubagents.has(sessionID)) continue
+          if (idleChildren.has(sessionID)) backgroundSubagents.delete(sessionID)
+          else idleChildren.add(sessionID)
+        }
+        if (pendingWakeIds.size > 0) {
+          idleWakeChecks += 1
+          if (idleWakeChecks >= 2) pendingWakeIds.clear()
+        }
+      }
+    }
+    const waiting = waitUntilSettled()
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
     const projected = await reconcile()
