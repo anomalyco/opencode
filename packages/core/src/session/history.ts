@@ -343,22 +343,36 @@ export const synthetics = Effect.fn("SessionHistory.synthetics")(function* (
   return yield* Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
 })
 
-/** The id and text of the session's first user message. */
+/** The id, text and files of the session's first user message, with text attachment bodies inlined. */
 export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
   const row = yield* db
-    .select({
-      id: SessionMessageTable.id,
-      text: sql<unknown>`json_extract(${SessionMessageTable.data}, '$.text')`,
-    })
+    .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
     .get()
     .pipe(Effect.orDie)
-  return row && Schema.is(Schema.String)(row.text) ? { id: row.id, text: row.text } : undefined
+  if (!row) return
+  const message = yield* decodeStoredRow(row).pipe(
+    Effect.catchTag("Session.MessageDecodeError", () => Effect.succeed(undefined)),
+  )
+  if (message?.type !== "user") return
+  // Only text bodies feed the title, so other attachments keep their refs instead of loading every blob.
+  const files = yield* Effect.forEach(
+    message.files ?? [],
+    (file) => {
+      if (!Schema.is(SessionStored.FileRef)(file) || file.mime !== "text/plain") return Effect.succeed(file)
+      const { uri, ...rest } = file
+      return SessionBlob.read(db, SessionStored.refHash(uri)).pipe(
+        Effect.map((blob) => (blob ? { ...rest, data: Buffer.from(blob.data).toString("base64") } : file)),
+      )
+    },
+    { concurrency: 1 },
+  )
+  return { id: message.id, text: message.text, files }
 })
 
 export * as SessionHistory from "./history.js"
