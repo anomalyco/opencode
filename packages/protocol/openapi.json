@@ -16851,6 +16851,9 @@
           "modelID": {
             "type": "string"
           },
+          "base": {
+            "type": "string"
+          },
           "type": {
             "$ref": "#/components/schemas/Model.Type"
           },

@@ -74,6 +74,10 @@ export type Reasoning = typeof Reasoning.Type
 
 class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   modelID: ID.pipe(optional),
+  base: ID.pipe(optional).annotate({
+    description:
+      "Catalog model this model inherits capabilities, limits, cost, and variants from, while requests keep using this model's own ID. Use it for aliases such as Vercel AI Gateway virtual models.",
+  }),
   type: Type.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String.pipe(optional),
