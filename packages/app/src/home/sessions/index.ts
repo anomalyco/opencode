@@ -13,19 +13,23 @@ export const HOME_SESSION_LIMIT = 64
 // query cache and every per-update re-merge stay bounded by directory count.
 export const HOME_SESSION_INDEX_LIMIT = HOME_SESSION_LIMIT + SESSION_RECENT_LIMIT
 
-export async function loadHomeSessionIndex(
-  list: (
-    input: {
-      limit: number
-      order: "desc"
-      parentID: null
-      cursor?: string
-    },
-    options: { signal?: AbortSignal },
-  ) => Promise<SessionsResponse>,
-  signal?: AbortSignal,
-) {
+type SessionList = (
+  input: {
+    limit: number
+    order: "desc"
+    parentID: null
+    cursor?: string
+  },
+  options: { signal?: AbortSignal },
+) => Promise<SessionsResponse>
+
+export async function loadHomeSessionIndex(list: SessionList, signal?: AbortSignal) {
+  return (await loadHomeSessionInventory(list, signal)).sessions
+}
+
+export async function loadHomeSessionInventory(list: SessionList, signal?: AbortSignal) {
   const now = Date.now()
+  const inventory = new Map<string, Pick<SessionInfo, "id" | "projectID" | "location">>()
   let retained: SessionInfo[] = []
   let cursor: string | undefined
 
@@ -43,12 +47,19 @@ export async function loadHomeSessionIndex(
     // Fold each page in as it arrives: pages are newest first, so later pages
     // can only fill directories that still have room. Peak allocation is one
     // page plus the retained subset, not the whole history.
-    retained = retainHomeSessions([...retained, ...parseHomeSessionIndex(response.data)], HOME_SESSION_INDEX_LIMIT, now)
+    const visible = parseHomeSessionIndex(response.data)
+    visible.forEach((session) =>
+      inventory.set(session.id, { id: session.id, projectID: session.projectID, location: session.location }),
+    )
+    retained = retainHomeSessions([...retained, ...visible], HOME_SESSION_INDEX_LIMIT, now)
 
-    if (response.data.length < HOME_V2_SESSION_PAGE_LIMIT || !response.cursor.next) return retained
+    if (response.data.length < HOME_V2_SESSION_PAGE_LIMIT || !response.cursor.next)
+      return { sessions: retained, inventory: [...inventory.values()] }
     cursor = response.cursor.next
   }
 }
+
+export type HomeSessionInventory = Awaited<ReturnType<typeof loadHomeSessionInventory>>["inventory"]
 
 // Keep this filter for locally known sessions merged into the fetched index.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {

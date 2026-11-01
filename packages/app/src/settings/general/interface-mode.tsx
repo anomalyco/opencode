@@ -7,6 +7,7 @@ const modes = [
   { id: "top", layout: "horizontal" },
   { id: "side", layout: "vertical" },
   { id: "inbox", layout: "inbox" },
+  { id: "sidebar", layout: "sidebar" },
 ] as const satisfies { id: string; layout: TabLayout }[]
 
 export function InterfaceModeSetting() {
@@ -39,6 +40,9 @@ export function InterfaceModeSetting() {
                 </Match>
                 <Match when={mode.id === "side"}>
                   <SideTabsPreview />
+                </Match>
+                <Match when={mode.id === "sidebar"}>
+                  <SidebarPreview />
                 </Match>
                 <Match when={mode.id === "inbox"}>
                   <InboxPreview />
@@ -95,6 +99,41 @@ function SideTabsPreview() {
               <i />
               <span style={{ width: `${width}%` }} />
             </span>
+          )}
+        </For>
+      </div>
+      <PreviewWorkspace />
+    </div>
+  )
+}
+
+function SidebarPreview() {
+  return (
+    <div data-slot="preview-body">
+      <div data-slot="preview-rail">
+        <span data-slot="preview-rail-heading" />
+        <span data-slot="preview-tab">
+          <i data-status="working" />
+          <span style={{ width: "68%" }} />
+        </span>
+        <For
+          each={[
+            [70, 52],
+            [64, 44],
+          ]}
+        >
+          {(rows) => (
+            <>
+              <span data-slot="preview-rail-heading" />
+              <For each={rows}>
+                {(width) => (
+                  <span data-slot="preview-tab">
+                    <i />
+                    <span style={{ width: width + "%" }} />
+                  </span>
+                )}
+              </For>
+            </>
           )}
         </For>
       </div>

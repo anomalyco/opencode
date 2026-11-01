@@ -7,12 +7,14 @@ import { createEffect, createMemo, startTransition } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
+import { useSettings } from "@/settings/model"
 
 export function createHomeController() {
   const layout = useLayout()
   const global = useGlobal()
   const servers = useServers()
   const tabs = useTabs()
+  const settings = useSettings()
   const selection = layout.home.selection
 
   const focusedServer = createMemo<ServerConnection.Any | undefined>(
@@ -21,8 +23,15 @@ export function createHomeController() {
 
   const focusedServerCtx = useServerCtx(focusedServer)
   const focusedSync = () => focusedServerCtx()?.sync
-  // Home lists the server's projects this client has used.
-  const projects = createMemo(() => focusedServerCtx()?.projects.used() ?? [])
+  // Only the local Side bar mode broadens Home to the server's project inventory.
+  function projectsFor(conn: ServerConnection.Any) {
+    const ctx = global.ensureServerCtx(conn)
+    return settings.appearance.tabLayout() === "sidebar" ? ctx.projects.visible() : ctx.projects.used()
+  }
+  const projects = createMemo(() => {
+    const conn = focusedServer()
+    return conn ? projectsFor(conn) : []
+  })
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
 
   const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
@@ -58,7 +67,7 @@ export function createHomeController() {
 
     if (!ctx.sync.project.ready()) return
 
-    if (ctx.projects.used().some((project) => pathKey(project.worktree) === pathKey(directory))) return
+    if (projectsFor(conn).some((project) => pathKey(project.worktree) === pathKey(directory))) return
     setSelection({ server: current.server })
   })
 
@@ -101,19 +110,13 @@ export function createHomeController() {
       list: projects,
       selected: selectedProject,
       newSession: newSessionProject,
-      forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.used(),
+      forServer: projectsFor,
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
 
         if (global.servers.health[key]?.healthy === false) return
 
-        if (
-          !global
-            .ensureServerCtx(conn)
-            .projects.used()
-            .some((project) => project.worktree === directory)
-        )
-          return
+        if (!projectsFor(conn).some((project) => project.worktree === directory)) return
         setSelection(toggleHomeProjectSelection(selection(), key, directory))
       },
       add: async (conn: ServerConnection.Any, directories: string[]) => {

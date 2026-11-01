@@ -1,0 +1,106 @@
+[data-component="active-sessions"] {
+  display: flex;
+  flex: none;
+  min-height: 0;
+  flex-direction: column;
+  padding-block-end: 8px;
+  margin-block-end: 8px;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+
+  [data-slot="active-sessions-header"] {
+    display: flex;
+    height: 24px;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: 6px;
+    color: var(--v2-text-text-muted);
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+    font-weight: 530;
+  }
+
+  [data-slot="active-sessions-list"] {
+    min-height: 0;
+    max-height: min(288px, 40dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  [data-slot="active-sessions-empty"] {
+    padding: 6px;
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+  }
+
+  [data-slot="active-session"] {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    grid-template-rows: 16px 16px;
+    column-gap: 6px;
+    width: 100%;
+    height: 36px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    text-align: start;
+
+    &:is(:hover, :focus-visible) {
+      outline: none;
+      background: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    &[data-state="active"] {
+      background: var(--v2-background-bg-layer-02);
+    }
+  }
+
+  [data-slot="active-session-mark"] {
+    display: flex;
+    grid-row: 1 / 3;
+    align-items: center;
+    justify-content: center;
+    color: var(--v2-icon-icon-muted);
+  }
+
+  [data-slot="active-session-waiting"] {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--v2-state-fg-warning);
+  }
+
+  [data-slot="active-session-title"] {
+    color: var(--v2-text-text-base);
+    font-size: 13px;
+    font-weight: 530;
+  }
+
+  [data-slot="active-session-status"] {
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+
+    &[data-waiting] {
+      color: var(--v2-state-fg-warning);
+    }
+  }
+
+  [data-slot="active-session-project"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    grid-column: 2 / 4;
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+  }
+
+  :is([data-slot="active-session-title"], [data-slot="active-session-project"]) {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  :is([data-slot="active-session-title"], [data-slot="active-session-project"], [data-slot="active-session-status"]) {
+    line-height: var(--line-height-compact);
+  }
+}

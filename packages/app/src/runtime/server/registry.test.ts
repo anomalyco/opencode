@@ -19,6 +19,7 @@ function serverSchema() {
     hidden: {},
     lastProjectID: {},
     usedProjectIDs: {},
+    hiddenProjectIDs: {},
     hostnames: {},
     projects: {},
   })
@@ -77,9 +78,7 @@ test("treats WSL and mismatched-port loopback servers as remote connections", ()
       windowsSidecar,
     ),
   ).toBe(false)
-  expect(
-    ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } }),
-  ).toBe(true)
+  expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } })).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28894" } }, windowsSidecar)).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28894" } }, windowsSidecar)).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } }, windowsSidecar)).toBe(false)
@@ -149,6 +148,11 @@ test("used and last projects follow dynamic server scopes, and migration consume
   projects.migrate(["a", "b"])
   projects.touch("a")
   projects.hide(["b"])
+  expect(projects.hidden()).toEqual(["b"])
+  projects.touch("b")
+  expect(projects.hidden()).toEqual([])
+  projects.hide(["b"])
+  projects.touch("a")
   expect(projects.legacy()).toBeUndefined()
   expect(store.projects).toEqual({ other: [{ worktree: "/b" }] })
   expect(store.lastProjectID).toEqual({ local: "a", [props.server]: "remote-project" })
