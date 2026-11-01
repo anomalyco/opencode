@@ -271,7 +271,7 @@ export interface BuiltinDesktop extends Desktop {
 /** `Layout` with the abilities only built-ins use. */
 export interface BuiltinLayout extends Layout {
   /**
-   * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog). Does nothing when the
+   * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcps` dialog). Does nothing when the
    * command is unavailable or disabled. App command ids are the app's own, not a plugin contract.
    *
    * @param id - The app command's id.

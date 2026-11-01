@@ -574,7 +574,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.mcp.toggle"),
       description: language.t("command.mcp.toggle.description"),
       keybind: "mod+;",
-      slash: "mcp",
+      slash: "mcps",
       onSelect: chooseMcp,
     }),
   ]

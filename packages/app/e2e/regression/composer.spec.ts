@@ -1146,7 +1146,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/export",
     "/open",
     "/terminal",
-    "/mcp",
+    "/mcps",
     "/model",
     "/connect",
     "/reload",
