@@ -1555,3 +1555,80 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("keeps changed files from live step events (#61039)", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => Response.json({ data: [], cursor: {} }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const emit = (event: OpenCodeEvent) =>
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    const started = (id: string, messageID: string): OpenCodeEvent => ({
+      id,
+      created: 1,
+      type: "session.step.started",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: messageID,
+        agent: "build",
+        model: { providerID: "provider", id: "model" },
+        started: 1,
+      },
+    })
+    emit(started("evt_started", "msg_live"))
+    emit({
+      id: "evt_ended",
+      created: 2,
+      type: "session.step.ended",
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_live",
+        finish: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        files: ["hello.txt"],
+      },
+    })
+    const live = setup.data.session.message.get("ses_refresh", "msg_live")
+    expect(live?.type).toBe("assistant")
+    if (live?.type === "assistant") expect(live.snapshot?.files).toEqual(["hello.txt"])
+    emit(started("evt_started_failed", "msg_failed"))
+    emit({
+      id: "evt_failed",
+      created: 3,
+      type: "session.step.failed",
+      durable: { aggregateID: "ses_refresh", seq: 3, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_failed",
+        error: { type: "provider.no-route", message: "Model unavailable" },
+        files: ["other.txt"],
+      },
+    })
+    const failed = setup.data.session.message.get("ses_refresh", "msg_failed")
+    expect(failed?.type).toBe("assistant")
+    if (failed?.type === "assistant") expect(failed.snapshot?.files).toEqual(["other.txt"])
+  } finally {
+    setup.dispose()
+  }
+})
