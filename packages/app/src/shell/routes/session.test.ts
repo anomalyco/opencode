@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/runtime/server/registry"
-import { requireServerKey, rootSession, sessionHref } from "./session"
+import { parseServerKey, requireServerKey, rootSession, sessionHref } from "./session"
 
 describe("session routes", () => {
   test("builds and decodes a server-keyed session route", () => {
@@ -13,6 +13,7 @@ describe("session routes", () => {
 
   test("rejects malformed server keys", () => {
     expect(() => requireServerKey("not-base64")).toThrow("Invalid server route")
+    expect(parseServerKey("not-base64")).toBeUndefined()
   })
 
   test("resolves the root session", async () => {

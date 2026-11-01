@@ -11,6 +11,20 @@ test.use({ serviceWorkers: "block" })
 const row = (page: Page, title: string) =>
   page.locator('[data-component="home-session-row"]').filter({ hasText: title })
 
+test("unknown OAuth callback routes redirect to Home", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "UnknownRoute" })
+  await page.goto("/oauth2/callback?code=abc&state=xyz")
+  await expect(page).toHaveURL("/")
+  await expect(row(page, workspace.sessions[0]!.title)).toBeVisible()
+})
+
+test("session routes with invalid server keys redirect to Home", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "InvalidServerKey" })
+  await page.goto("/server/notakey/session/abc")
+  await expect(page).toHaveURL("/")
+  await expect(row(page, workspace.sessions[0]!.title)).toBeVisible()
+})
+
 async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>[1] = {}) {
   await mockStressTimeline(page, input)
   await seed(page, { usedProjects: { local: [fixture.project.id] } })
