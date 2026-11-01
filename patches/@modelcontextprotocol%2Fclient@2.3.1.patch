@@ -1,7 +1,16 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54793e82ce 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..789b1636fc6f0adf8137addb648b2af0ac8d9e25 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
+@@ -725,7 +725,7 @@
+ 	}
+ 	if (freshDiscoveryState) await provider.saveDiscoveryState?.(freshDiscoveryState);
+ 	const selectedResource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-	const resource = selectedResource && resourceMetadata && !provider.validateResourceURL ? resourceMetadata.resource : selectedResource;
++	const resource = selectedResource && resourceMetadata && selectedResource.href === new URL(resourceMetadata.resource).href ? resourceMetadata.resource : selectedResource;
+ 	if (resource) await provider.saveResourceUrl?.(resourceIndicatorToString(resource));
+ 	const resolvedScope = determineScope({
+ 		requestedScope: scope,
 @@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
@@ -28,9 +37,18 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54
  				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
  				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bf457bdfdef05ad8d09f3fbb94c6ac1aecc59487 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..3356a2e3df5122dc993b3a0cc39a73a8581b0cbe 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -722,7 +722,7 @@
+ 	}
+ 	if (freshDiscoveryState) await provider.saveDiscoveryState?.(freshDiscoveryState);
+ 	const selectedResource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-	const resource = selectedResource && resourceMetadata && !provider.validateResourceURL ? resourceMetadata.resource : selectedResource;
++	const resource = selectedResource && resourceMetadata && selectedResource.href === new URL(resourceMetadata.resource).href ? resourceMetadata.resource : selectedResource;
+ 	if (resource) await provider.saveResourceUrl?.(resourceIndicatorToString(resource));
+ 	const resolvedScope = determineScope({
+ 		requestedScope: scope,
 @@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
