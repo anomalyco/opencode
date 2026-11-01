@@ -11,31 +11,15 @@ import fs from "fs/promises"
 import { rmSync } from "fs"
 import os from "os"
 import path from "path"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
-import { TestLLM } from "@opencode/ai/testing"
+import type { LLMEvent } from "@opencode/ai/effect"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
-import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Logger, ManagedRuntime, Stream } from "effect"
-import { Agent } from "../src/agent"
-import { Bus } from "../src/bus"
-import { Database } from "../src/database/database"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { Git } from "../src/git"
 import { Location } from "../src/location"
-import { Project } from "../src/project"
-import { ProjectTable } from "../src/project/sql"
 import { AbsolutePath, RelativePath } from "../src/schema"
-import { Session } from "../src/session"
-import { SessionMessage } from "../src/session/message"
-import { SessionProjector } from "../src/session/projector"
-import { SessionRunnerModel } from "../src/session/runner/model"
-import { SessionStep } from "../src/session/runner/step"
-import { SessionTable } from "../src/session/sql"
 import { Snapshot } from "../src/snapshot"
-import { ToolOutput } from "../src/tool-output"
 
 const root = path.join(process.env.SNAPSHOT_BENCH_ROOT ?? os.tmpdir(), "opencode-snapshot-bench")
 
@@ -235,27 +219,47 @@ const trace = [
   "text",
 ] as const
 
-const model = SessionRunnerModel.resolved(
-  LanguageModel.make({ id: "bench-model", provider: "test", route: OpenAIChat.route }),
-  {
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
-    limit: { context: 100_000, output: 1_000 },
-    cost: [
-      {
-        input: Money.USDPerMillionTokens.make(1),
-        output: Money.USDPerMillionTokens.make(2),
-        cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
-      },
-    ],
-  },
-)
-
 /**
  * One agent session through the real SessionStep.attempt: the scripted trace, each model response
  * after `ttft` ms, with snapshots on (a real store) or off. The difference between the two is what
  * snapshots add to a session's wall time.
  */
 export async function session(snapshots: "on" | "off", ttft: number) {
+  // Loaded here, not at the top: the snapshot cases then load at git refs whose session and model
+  // APIs differ, and the first session call (a warmup run) pays for the import.
+  const { ai, LanguageModel } = await import("@opencode/ai/effect")
+  const { OpenAIChat } = await import("@opencode/ai/protocols/openai-chat")
+  const { TestLLM } = await import("@opencode/ai/testing")
+  const { LayerNode } = await import("@opencode/util/effect/layer-node")
+  const { Money } = await import("@opencode/schema/money")
+  const { Agent } = await import("../src/agent")
+  const { Bus } = await import("../src/bus")
+  const { Database } = await import("../src/database/database")
+  const { Project } = await import("../src/project")
+  const { ProjectTable } = await import("../src/project/sql")
+  const { Session } = await import("../src/session")
+  const { SessionMessage } = await import("../src/session/message")
+  const { SessionProjector } = await import("../src/session/projector")
+  const { SessionRunnerModel } = await import("../src/session/runner/model")
+  const { SessionStep } = await import("../src/session/runner/step")
+  const { SessionTable } = await import("../src/session/sql")
+  const { ToolOutput } = await import("../src/tool-output")
+
+  const model = SessionRunnerModel.resolved(
+    LanguageModel.make({ id: "bench-model", provider: "test", route: OpenAIChat.route }),
+    {
+      capabilities: { tools: true, input: ["text"], output: ["text"] },
+      limit: { context: 100_000, output: 1_000 },
+      cost: [
+        {
+          input: Money.USDPerMillionTokens.make(1),
+          output: Money.USDPerMillionTokens.make(2),
+          cache: { read: Money.USDPerMillionTokens.make(0.1), write: Money.USDPerMillionTokens.make(0.5) },
+        },
+      ],
+    },
+  )
+
   const before = spawns
   const layer = snapshots === "on" ? snapshotLayer(state.data, state.dir) : Snapshot.noopLayer
   const delayed = (response: ReturnType<typeof TestLLM.stop>) =>
