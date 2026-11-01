@@ -211,7 +211,7 @@ describe("SessionRunnerLLM recorded", () => {
           id: sessionID,
           project_id: Project.ID.global,
           slug: "test",
-          directory: "/project",
+          directory: AbsolutePath.make("/project"),
           title: "test",
           version: "test",
         })

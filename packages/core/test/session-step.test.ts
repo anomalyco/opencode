@@ -66,7 +66,13 @@ for (const fixture of [
         .run()
       yield* db
         .insert(SessionTable)
-        .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "step",
+          directory: AbsolutePath.make("/project"),
+          version: "test",
+        })
         .run()
       const model = SessionRunnerModel.resolved(
         LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),

@@ -46,7 +46,7 @@ describe("Session tool progress", () => {
           id: sessionID,
           project_id: Project.ID.global,
           slug: "progress",
-          directory: "/project",
+          directory: AbsolutePath.make("/project"),
           title: "progress",
           version: "test",
         })

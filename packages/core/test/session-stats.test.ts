@@ -48,13 +48,19 @@ describe("SessionStats", () => {
       yield* db
         .insert(SessionTable)
         .values([
-          { id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" },
+          {
+            id: sessionID,
+            project_id: projectID,
+            slug: "root",
+            directory: AbsolutePath.make("/stats"),
+            version: "test",
+          },
           {
             id: childID,
             project_id: projectID,
             parent_id: sessionID,
             slug: "child",
-            directory: "/stats",
+            directory: AbsolutePath.make("/stats"),
             version: "test",
           },
           {
@@ -62,12 +68,24 @@ describe("SessionStats", () => {
             project_id: projectID,
             fork_session_id: sessionID,
             slug: "fork",
-            directory: "/stats",
+            directory: AbsolutePath.make("/stats"),
             version: "test",
             time_created: Date.UTC(2026, 0, 4),
           },
-          { id: usageOnlyID, project_id: projectID, slug: "usage", directory: "/stats", version: "test" },
-          { id: otherSessionID, project_id: otherProjectID, slug: "other", directory: "/other", version: "test" },
+          {
+            id: usageOnlyID,
+            project_id: projectID,
+            slug: "usage",
+            directory: AbsolutePath.make("/stats"),
+            version: "test",
+          },
+          {
+            id: otherSessionID,
+            project_id: otherProjectID,
+            slug: "other",
+            directory: AbsolutePath.make("/other"),
+            version: "test",
+          },
         ])
         .run()
         .pipe(Effect.orDie)

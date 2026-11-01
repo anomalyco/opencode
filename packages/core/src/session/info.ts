@@ -1,7 +1,5 @@
 import { DateTime, Schema } from "effect"
 import { Model } from "@opencode/schema/model"
-import { Provider } from "@opencode/schema/provider"
-import { AbsolutePath, RelativePath } from "../schema.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionTable } from "./sql.js"
 import { PersistedRevert } from "@opencode/schema/session-revert"
@@ -25,8 +23,8 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
     agent: row.agent ?? undefined,
     model: row.model
       ? {
-          id: Model.ID.make(row.model.id),
-          providerID: Provider.ID.make(row.model.providerID),
+          id: row.model.id,
+          providerID: row.model.providerID,
           variant: Model.VariantID.make(row.model.variant ?? "default"),
         }
       : undefined,
@@ -41,10 +39,10 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       },
     },
     location: {
-      directory: AbsolutePath.make(row.directory),
+      directory: row.directory,
       workspaceID: row.workspace_id ?? undefined,
     },
-    subpath: row.path ? RelativePath.make(row.path) : undefined,
+    subpath: row.path || undefined,
     metadata: row.metadata ?? undefined,
     permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
