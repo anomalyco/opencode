@@ -3,6 +3,21 @@ import { RendererControlState } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { destroyRenderer, setTerminalTitle } from "../../src/util/renderer"
 
+test("replaces control characters that the native title rejects", () => {
+  const calls: string[] = []
+  setTerminalTitle(
+    {
+      isDestroyed: false,
+      controlState: RendererControlState.IDLE,
+      setTerminalTitle(title) {
+        calls.push(title)
+      },
+    },
+    "Fix parser bug\nin tokenizer\tnow",
+  )
+  expect(calls).toEqual(["Fix parser bug in tokenizer now"])
+})
+
 test("clears the terminal title before destroying the renderer", () => {
   const calls: string[] = []
   destroyRenderer({

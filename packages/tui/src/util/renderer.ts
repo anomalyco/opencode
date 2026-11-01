@@ -5,7 +5,9 @@ type TitleRenderer = Pick<CliRenderer, "isDestroyed" | "controlState" | "setTerm
 // OpenTUI rejects terminal control from suspend() until resume() completes, e.g. while $EDITOR runs.
 export function setTerminalTitle(renderer: TitleRenderer, title: string) {
   if (renderer.isDestroyed || renderer.controlState === RendererControlState.EXPLICIT_SUSPENDED) return
-  renderer.setTerminalTitle(title)
+  // The native layer rejects control characters (for example a newline in a generated session
+  // title) with InvalidArgument, which would otherwise crash the TUI.
+  renderer.setTerminalTitle(title.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " "))
 }
 
 export function destroyRenderer(renderer: TitleRenderer & Pick<CliRenderer, "destroy">) {
