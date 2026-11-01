@@ -305,6 +305,16 @@ test("narrow terminals show the panel full screen, then compact, and dock again 
   expect(node(setup, "session-panel")).toBe(panel)
 })
 
+test("subagent sessions show the sidebar with their context usage", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, { parentID: "ses_panel_parent", sidebar: "auto" })
+  await setup.ready
+  await setup.waitForFrame(
+    (frame) => frame.includes("Transcript item 11") && frame.includes("1,234 tokens") && frame.includes("12% used"),
+    { maxPasses: 200 },
+  )
+})
+
 test("split eligibility uses the columns remaining beside vertical session tabs", async () => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, {
@@ -557,6 +567,8 @@ async function createSessionFixture(
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
     form?: boolean
+    parentID?: string
+    sidebar?: "auto" | "hide"
   } = {},
 ) {
   // Drafts survive app disposal in memory, so each production app needs its own session identity.
@@ -564,6 +576,7 @@ async function createSessionFixture(
     id: `ses_panel_${crypto.randomUUID()}`,
     title: "Panel fixture",
     projectID: "proj_panel",
+    ...(input.parentID ? { parentID: input.parentID } : {}),
     location: { directory },
     agent: "build",
     model: { providerID: "fixture", id: "model" },
@@ -608,7 +621,7 @@ async function createSessionFixture(
     config: {
       animations: false,
       tabs: input.tabs ?? { enabled: false },
-      session: { sidebar: "hide" },
+      session: { sidebar: input.sidebar ?? "hide" },
       // Keep patch geometry stable while testing host presentation changes, not split/unified diff layout.
       diffs: { tree: false, view: "unified", ...input.diffs },
       keybinds: { "diff.open": "f6", ...input.keybinds },
@@ -619,7 +632,18 @@ async function createSessionFixture(
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "fixture", name: "Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: "fixture",
+              name: "Model",
+              variants: [],
+              limit: { context: 10_000, output: 1_000 },
+            },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "fixture", name: "Fixture" }] })
       if (url.pathname === "/api/vcs") return json({ location, data: { branch: { current: "panel", default: "v2" } } })
       if (url.pathname === "/api/vcs/base") {
@@ -633,12 +657,29 @@ async function createSessionFixture(
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (url.pathname === `/api/session/${session.id}/message`)
         return json({
-          data: Array.from({ length: 12 }, (_, index) => ({
-            id: `msg_panel_${String(index).padStart(2, "0")}`,
-            type: "user",
-            text: `Transcript item ${index}`,
-            time: { created: index + 1 },
-          })).toReversed(),
+          data: [
+            ...Array.from({ length: 12 }, (_, index) => ({
+              id: `msg_panel_${String(index).padStart(2, "0")}`,
+              type: "user",
+              text: `Transcript item ${index}`,
+              time: { created: index + 1 },
+            })),
+            ...(input.parentID
+              ? [
+                  {
+                    id: "msg_panel_12",
+                    type: "assistant",
+                    agent: session.agent,
+                    model: session.model,
+                    time: { created: 13, completed: 14 },
+                    finish: "stop",
+                    cost: 0,
+                    tokens: { ...session.tokens, input: 1234 },
+                    content: [],
+                  },
+                ]
+              : []),
+          ].toReversed(),
           cursor: {},
         })
       if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
