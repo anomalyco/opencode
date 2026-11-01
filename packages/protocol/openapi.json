@@ -27087,6 +27087,12 @@
               "text": {
                 "type": "string"
               },
+              "pendingUserIDs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Session.Message.ID"
+                }
+              },
               "cost": {
                 "$ref": "#/components/schemas/Money.USD"
               },
