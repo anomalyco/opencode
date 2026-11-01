@@ -238,7 +238,9 @@ export function SessionActivityChips(props: {
             class="tabular-nums duration-150 ease-out motion-reduce:animate-none"
             classList={{ "animate-in fade-in": enter() }}
           >
-            <SessionProgressIndicatorV2 class="shrink-0" />
+            <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+              <SessionProgressIndicatorV2 />
+            </span>
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
               {language.activitySummaryRich(counts(), (text) => (
                 <span class="truncate">
