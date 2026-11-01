@@ -174,6 +174,7 @@ Use configuration for other options. Store secrets in environment variables rath
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
 | `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
+| `tls` | No | TLS trust settings for self-signed or private-CA certificates. See [TLS Trust](#tls-trust). |
 
 Use `oauth: false` only when the server exclusively uses an API key or another header credential:
 
@@ -185,6 +186,93 @@ Use `oauth: false` only when the server exclusively uses an API key or another h
   "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
 }
 ```
+
+## TLS Trust
+
+Servers on private networks often use self-signed certificates or certificates from a private certificate authority. Trust one for a single server without changing verification for the rest of OpenCode:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "opnsense": {
+        "type": "remote",
+        "url": "https://192.168.1.1/mcp",
+        "tls": {
+          "ca_file": "~/.config/mcp/opnsense-ca.pem",
+        },
+      },
+    },
+  },
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `ca_file` | PEM-encoded CA certificate file. Relative paths resolve from the workspace; `~` expands to the home directory. |
+| `ca_pem` | Inline PEM-encoded CA certificate. Useful when the appliance ships its configuration self-contained. |
+| `fingerprint` | SHA256 fingerprint of the server certificate to pin, like an SSH host key. |
+
+Set `ca_file` and `ca_pem` together to trust several authorities at once:
+
+```jsonc
+{
+  "tls": {
+    "ca_file": "/etc/company/ca.pem",
+    "ca_pem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+  },
+}
+```
+
+Pin the exact certificate a server presents with `fingerprint`, formatted as `SHA256:AA:BB:CC:...`, `AA:BB:CC:...`, or bare hex:
+
+```jsonc
+{
+  "tls": {
+    "fingerprint": "SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+  },
+}
+```
+
+OpenCode compares the certificate the server presents against the fingerprint and then anchors the connection to that exact certificate: every handshake verifies the chain against it and re-checks the fingerprint. Name matching is not enforced, so this also works for appliance certificates without an IP SAN. Get a fingerprint from the server with:
+
+```sh
+openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
+
+### First use on a private network
+
+When the server URL is a private IP address (RFC 1918, loopback, or link-local), you can skip the `tls` config and trust the certificate on first use instead. The first connection fails with the certificate the server presents:
+
+```text
+TLS certificate for 192.168.1.1:443 is not trusted.
+Fingerprint: SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77.
+Subject: CN=OPNsense. If this is a server on your private network, trust it with:
+opencode mcp trust https://192.168.1.1/mcp
+```
+
+Check that the fingerprint matches what the server presents (with the `openssl s_client` command above), then trust it:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp
+```
+
+The command shows the certificate's subject, validity, and fingerprint and asks for confirmation. Pass `--yes` to trust without being asked; without an interactive terminal it is required. The pin is stored on this machine, per project, and later connections verify that the server presents exactly that certificate. If the appliance rotates its certificate, the connection fails until you re-pin it:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp --force
+```
+
+Scripts that re-pin non-interactively combine the flags:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp --force --yes
+```
+
+Only private IP literals qualify — hostnames never do, so a name cannot be pointed at another server through DNS. An explicit `tls` config always takes precedence.
+
+A TLS failure shows up as the server's connection status in `opencode mcp list` and `/mcps`. Unlike [NODE_EXTRA_CA_CERTS](/network), the trust applies to this server only.
 
 ## OAuth
 

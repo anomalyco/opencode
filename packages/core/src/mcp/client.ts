@@ -302,16 +302,22 @@ export const connect = Effect.fnUntraced(function* (
       return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory })
+    const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
     if (addedCodemode) url.searchParams.set("codemode", "false")
+    // A missing CA file or a fingerprint mismatch fails the connect instead of the first request.
+    const tls = config.tls
+    const resolved = tls
+      ? yield* Effect.tryPromise({ try: () => McpTls.resolveTls(tls, directory, url), catch: toError })
+      : undefined
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider,
-        fetch,
+        fetch: resolved ? McpTls.withTls(resolved, fetch) : fetch,
       })
       return yield* initialize(session.transport)
     })

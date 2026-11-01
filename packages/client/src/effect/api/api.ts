@@ -1754,6 +1754,15 @@ export interface McpApi<E = never> {
   /** @deprecated Use `client.experimental.mcp.disconnect`. Removed in the next minor. */
   readonly disconnect: ExperimentalMcpDisconnectOperation<E>
 
+  /** @deprecated Use `client.experimental.mcp.trust`. Removed in the next minor. */
+  readonly trust: {
+    /** @deprecated Use `client.experimental.mcp.trust.inspect`. Removed in the next minor. */
+    readonly inspect: ExperimentalMcpTrustInspectOperation<E>
+
+    /** @deprecated Use `client.experimental.mcp.trust.pin`. Removed in the next minor. */
+    readonly pin: ExperimentalMcpTrustPinOperation<E>
+  }
+
   /** @deprecated Use `client.experimental.mcp.client`. Removed in the next minor. */
   readonly client: {
     /** @deprecated Use `client.experimental.mcp.client.token`. Removed in the next minor. */
@@ -1798,6 +1807,29 @@ export type ExperimentalMcpDisconnectOperation<E = never> = (
   input: ExperimentalMcpDisconnectInput,
 ) => Effect.Effect<ExperimentalMcpDisconnectOutput, E>
 
+export type ExperimentalMcpTrustInspectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+export type ExperimentalMcpTrustInspectOutput = {
+  readonly location: Location.PublicRef
+  readonly data: Mcp.TrustInspect
+}
+export type ExperimentalMcpTrustInspectOperation<E = never> = (
+  input: ExperimentalMcpTrustInspectInput,
+) => Effect.Effect<ExperimentalMcpTrustInspectOutput, E>
+
+export type ExperimentalMcpTrustPinInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+  readonly force?: boolean | undefined
+  readonly expectFingerprint?: string | undefined
+}
+export type ExperimentalMcpTrustPinOutput = { readonly location: Location.PublicRef; readonly data: Mcp.TrustResult }
+export type ExperimentalMcpTrustPinOperation<E = never> = (
+  input: ExperimentalMcpTrustPinInput,
+) => Effect.Effect<ExperimentalMcpTrustPinOutput, E>
+
 export type ExperimentalMcpClientTokenInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly name: string
@@ -1816,6 +1848,10 @@ export interface ExperimentalMcpApi<E = never> {
   readonly remove: ExperimentalMcpRemoveOperation<E>
   readonly connect: ExperimentalMcpConnectOperation<E>
   readonly disconnect: ExperimentalMcpDisconnectOperation<E>
+  readonly trust: {
+    readonly inspect: ExperimentalMcpTrustInspectOperation<E>
+    readonly pin: ExperimentalMcpTrustPinOperation<E>
+  }
   readonly client: { readonly token: ExperimentalMcpClientTokenOperation<E> }
 }
 
@@ -2949,6 +2985,24 @@ export type McpDisconnectOutput = ExperimentalMcpDisconnectOutput
 
 /** @deprecated Use `ExperimentalMcpDisconnectOperation`. Removed in the next minor. */
 export type McpDisconnectOperation<E = never> = ExperimentalMcpDisconnectOperation<E>
+
+/** @deprecated Use `ExperimentalMcpTrustInspectInput`. Removed in the next minor. */
+export type McpTrustInspectInput = ExperimentalMcpTrustInspectInput
+
+/** @deprecated Use `ExperimentalMcpTrustInspectOutput`. Removed in the next minor. */
+export type McpTrustInspectOutput = ExperimentalMcpTrustInspectOutput
+
+/** @deprecated Use `ExperimentalMcpTrustInspectOperation`. Removed in the next minor. */
+export type McpTrustInspectOperation<E = never> = ExperimentalMcpTrustInspectOperation<E>
+
+/** @deprecated Use `ExperimentalMcpTrustPinInput`. Removed in the next minor. */
+export type McpTrustPinInput = ExperimentalMcpTrustPinInput
+
+/** @deprecated Use `ExperimentalMcpTrustPinOutput`. Removed in the next minor. */
+export type McpTrustPinOutput = ExperimentalMcpTrustPinOutput
+
+/** @deprecated Use `ExperimentalMcpTrustPinOperation`. Removed in the next minor. */
+export type McpTrustPinOperation<E = never> = ExperimentalMcpTrustPinOperation<E>
 
 /** @deprecated Use `ExperimentalMcpClientTokenInput`. Removed in the next minor. */
 export type McpClientTokenInput = ExperimentalMcpClientTokenInput
