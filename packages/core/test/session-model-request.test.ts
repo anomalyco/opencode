@@ -19,8 +19,12 @@ describe("SessionModelRequest.unsupportedParts", () => {
 
     expect(messages[0]?.content).toEqual([
       Message.text("Describe these files"),
-      Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
-      Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
+      Message.text(
+        'ERROR: Cannot read "logo.png" (this model is not configured to accept image input in OpenCode). Inform the user.',
+      ),
+      Message.text(
+        'ERROR: Cannot read "document.pdf" (this model is not configured to accept pdf input in OpenCode). Inform the user.',
+      ),
     ])
   })
 
@@ -52,7 +56,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
           { type: "text", text: "Image read successfully" },
           {
             type: "text",
-            text: 'ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.',
+            text: 'ERROR: Cannot read "logo.png" (this model is not configured to accept image input in OpenCode). Inform the user.',
           },
         ],
       },
@@ -163,7 +167,10 @@ describe("SessionModelRequest.unsupportedParts", () => {
         type: "content",
         value: [
           { type: "text", text: "Read" },
-          { type: "text", text: "ERROR: Cannot read pdf (this model does not support pdf input). Inform the user." },
+          {
+            type: "text",
+            text: "ERROR: Cannot read pdf (this model is not configured to accept pdf input in OpenCode). Inform the user.",
+          },
         ],
       },
     })
