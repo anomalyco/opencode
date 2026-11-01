@@ -5701,6 +5701,72 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("retry hook can retry a content-filter finish before output", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    let retries = 0
+    yield* hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        retries++
+        expect(event.decision).toEqual({ retry: false })
+        expect(event.error).toEqual({
+          type: "provider.content-filter",
+          message: "Provider blocked the response (safety): Blocked",
+        })
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.complete({
+        reason: { normalized: "content-filter", raw: "SAFETY", category: "safety", explanation: "Blocked" },
+      }),
+      TestLLM.text("Recovered", "content-filter-retry"),
+    )
+
+    yield* s.runPrompt("Retry content filter")
+
+    expect(retries).toBe(1)
+    expect(s.requests).toHaveLength(2)
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Retry content filter"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
+  scenario("retry hook can continue a content-filter finish after output", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    let retries = 0
+    yield* hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        retries++
+        expect(event.decision).toEqual({ retry: false })
+        expect(event.error).toMatchObject({ type: "provider.content-filter", message: "Provider blocked the response" })
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "content-filter", raw: "SAFETY" } },
+        LLMEvent.textStart({ id: "content-filter-partial" }),
+        LLMEvent.textDelta({ id: "content-filter-partial", text: "Partial" }),
+      ),
+      TestLLM.text("Recovered", "content-filter-continuation"),
+    )
+
+    yield* s.runPrompt("Continue content filter")
+
+    expect(retries).toBe(1)
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Continue content filter"),
+      Expected.assistant({ finish: "content-filter", error: { type: "provider.content-filter" } }, [
+        Expected.text("Partial"),
+      ]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+    ])
+  })
+
   scenario("projects content-filter finishes as visible terminal failures", function* (s) {
     yield* s.llm.push(
       TestLLM.complete(
