@@ -102,6 +102,10 @@ export function createAppearanceSettingsController() {
       current: settings.appearance.reduceMotion,
       select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
+    codeWrap: {
+      current: settings.appearance.codeWrap,
+      select: (value: boolean) => settings.appearance.setCodeWrap(value),
+    },
     fonts: {
       ui: createMemo(() => ({
         value: sansInput(settings.appearance.uiFont()),
