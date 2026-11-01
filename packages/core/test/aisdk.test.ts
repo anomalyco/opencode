@@ -99,6 +99,23 @@ it.effect("rejects native provider compaction rather than silently dropping repl
   }),
 )
 
+it.effect("drops assistant turns with no provider content from the wire prompt", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => streamModel([]) }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai-compatible"))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [Message.assistant([]), Message.assistant(""), Message.user("hi")],
+      }),
+    )
+    expect(prepared.body.prompt).toEqual([{ role: "user", content: [{ type: "text", text: "hi" }] }])
+  }),
+)
+
 it.effect("keys language models by package and flattened overlays", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
