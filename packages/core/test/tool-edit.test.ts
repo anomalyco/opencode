@@ -728,6 +728,35 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("keeps mixed endings through a small change inside a large match", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "large.txt")
+      // A full LCS table over this many lines would be larger than a typed array can hold.
+      const lines = Array.from({ length: 70_000 }, (_, index) => `line ${index}`)
+      const content = lines.map((line, index) => line + (index % 2 ? "\n" : "\r\n")).join("")
+      return Effect.promise(() => fs.writeFile(target, content)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({
+                path: "large.txt",
+                oldString: lines.join("\n") + "\n",
+                newString: lines.map((line, index) => (index === 35_000 ? "changed" : line)).join("\n") + "\n",
+              }),
+            ),
+          ),
+        ),
+        Effect.tap((settled) => Effect.sync(() => expect(settled.status).toBe("completed"))),
+        Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((result) =>
+          Effect.sync(() => expect(result).toBe(content.replace("line 35000\r\n", "changed\r\n"))),
+        ),
+      )
+    }),
+  )
+
   it.live("applies edits that differ only in \\r to the exact bytes", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
