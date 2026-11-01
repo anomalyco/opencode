@@ -898,6 +898,73 @@ test("vertical tabs stay flat when only one server has open tabs", async ({ page
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
 })
 
+test("server groups limit their visible tabs and collapse from the header", async ({ page }) => {
+  const local = [1, 2, 3, 4].map((index) =>
+    session({ id: `ses_group_more_${index}`, directory: "C:/server-a", title: `Local ${index}` }),
+  )
+
+  const remote = session({ id: "ses_group_more_remote", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: local, b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical" } },
+    tabs: [local[0]!.id, { session: remote.id, server: REMOTE_SERVER }, ...local.slice(1).map((item) => item.id)],
+  })
+  await page.goto(sessionHref(local[0]!.id))
+
+  const visibleTabs = page.locator("[data-titlebar-tab-slot]:visible")
+  await expect(visibleTabs).toHaveCount(4)
+
+  const showMore = page.locator(`[data-action="tab-server-group-show-more"][data-server="${SERVER}"]`)
+  await expect(showMore).toHaveText("Show more")
+  await showMore.click()
+  await expect(visibleTabs).toHaveCount(5)
+
+  const showLess = page.locator(`[data-action="tab-server-group-show-less"][data-server="${SERVER}"]`)
+  await expect(showLess).toHaveText("Show less")
+  await showLess.click()
+  await expect(visibleTabs).toHaveCount(4)
+
+  const toggle = page.locator(`[data-action="tab-server-group-toggle"][data-server="${SERVER}"]`)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(visibleTabs).toHaveCount(1)
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(visibleTabs).toHaveCount(4)
+})
+
+test("server groups can be reordered by dragging their headers", async ({ page }) => {
+  const local = session({ id: "ses_group_order_a", directory: "C:/server-a", title: "Local one" })
+  const remote = session({ id: "ses_group_order_b", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical" } },
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const headers = page.locator('[data-slot="tab-server-group"]')
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+
+  const remoteHeader = page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`)
+  await remoteHeader.hover()
+  await page
+    .locator(`[data-action="tab-server-group-drag"][data-server="${REMOTE_SERVER}"]`)
+    .dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`))
+
+  await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+
+        return settings.appearance?.tabServerOrder
+      }),
+    )
+    .toEqual([REMOTE_SERVER, SERVER])
+})
+
 test("a remote tab stays busy while a child session runs", async ({ page }) => {
   const sessionA = session({ id: "ses_server_a", directory: "C:/server-a", title: "Server A session" })
   const sessionB = session({ id: "ses_server_b", directory: "/home/server-b", title: "Server B session" })
