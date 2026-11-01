@@ -206,9 +206,9 @@ const reference = (asset: Media.Asset, provider: ProviderID) =>
  * How input images travel. `edits` is OpenAI's `/images/edits`, uploading owned bytes as multipart; `json-edits` sends
  * every edit there as JSON with data URLs, for hosts that reject multipart (the ChatGPT backend); `references` keeps
  * every request on `/images/generations` and lists them as `input_references`, for gateways without an edits endpoint
- * (OpenRouter).
+ * (OpenRouter); `none` rejects them, for hosts that take no input images on this API (Together, Venice).
  */
-export type OpenAIImageInput = "edits" | "json-edits" | "references"
+export type OpenAIImageInput = "edits" | "json-edits" | "references" | "none"
 
 type Options = { readonly sizing: OpenAIImageSizing; readonly imageInput: OpenAIImageInput }
 
@@ -218,6 +218,8 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (
 ) {
   const images = request.images ?? []
   const mask = request.providerOptions?.mask
+  if (options.imageInput === "none" && (images.length > 0 || mask !== undefined))
+    return yield* route.unsupported("media.images", `${request.model.provider} image generation takes no input images`)
   if (options.imageInput === "references" && mask !== undefined)
     return yield* route.unsupported("media.mask", `${request.model.provider} image edits take no mask`)
   if (mask !== undefined && images.length === 0)
@@ -429,7 +431,8 @@ export const model = (
     {
       protocol: input.provider === undefined ? base : { ...base, provider: ProviderID.make(input.provider) },
       baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => (imageInput !== "references" && isEdit(request) ? EDIT_PATH : PATH),
+      path: ({ request }) =>
+        imageInput !== "references" && imageInput !== "none" && isEdit(request) ? EDIT_PATH : PATH,
     },
     input,
   )
