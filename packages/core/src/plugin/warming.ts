@@ -24,20 +24,21 @@ export const Plugin = define({
     // A model's or provider's `cache.warming` overrides the top-level `warming`.
     const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
       // Warming must never fail the request it hooks, so an unreadable catalog falls back to the top-level setting.
-      const model = yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined))
-      const configured = model?.settings?.cache?.warming
-      const decoded = configured === undefined ? undefined : Option.getOrUndefined(decodeWarming(configured))
-      if (configured !== undefined && decoded === undefined)
-        yield* Effect.logWarning("invalid cache.warming setting; using the top-level warming setting", { model: event.model })
+      const cache = (yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined)))?.settings?.cache
+      const local = cache?.warming === undefined ? undefined : Option.getOrUndefined(decodeWarming(cache.warming))
+      if (cache?.warming !== undefined && local === undefined)
+        yield* Effect.logWarning("invalid cache.warming setting; using the top-level warming setting", {
+          model: event.model,
+        })
       const global = Config.latest(yield* config.entries(), "warming")
-      if (!(decoded ?? global)) return
+      if (!(local ?? global)) return
       // The keep-alive prompt is only set at the top level; a model's setting changes timing.
       const settings = {
         ...defaults,
         ...(typeof global === "object" ? global : {}),
-        ...(typeof decoded === "object" ? decoded : {}),
+        ...(typeof local === "object" ? local : {}),
       }
-      const interval = settings.interval === "auto" ? autoInterval(model?.settings?.cache?.ttl) : settings.interval
+      const interval = settings.interval === "auto" ? autoInterval(cache?.ttl) : settings.interval
       // "auto" doesn't warm a model without a cache.ttl.
       if (interval === undefined) return
       const { duration } = settings
