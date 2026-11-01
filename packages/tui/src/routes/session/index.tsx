@@ -128,6 +128,7 @@ import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import { createPathLinks, PathLinksBar } from "./path-links"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
@@ -195,6 +196,13 @@ export function Session(props: {
 
   createEffect(() => currentLocation.set(location()))
 
+  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
+  const pathLinks = createPathLinks({
+    messages,
+    base: () => location()?.directory,
+    markdownMode,
+  })
+
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
     epilogue.session({ title, sessionID: session()?.id })
@@ -242,7 +250,6 @@ export function Session(props: {
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
-  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
@@ -1222,6 +1229,16 @@ export function Session(props: {
       },
     },
     {
+      title: "Open a path from the last response",
+      id: "session.file_links",
+      group: "Session",
+      slash: { name: "paths" },
+      run: () => {
+        pathLinks.activate()
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       id: "session.messages_last_user",
       group: "Session",
@@ -1463,6 +1480,7 @@ export function Session(props: {
       () => route.sessionID,
       () => {
         setComposer("open", false)
+        pathLinks.close()
         clearMessageNavigation()
       },
     ),
@@ -1505,6 +1523,7 @@ export function Session(props: {
         diffWrapMode,
         models,
         messageIndex: (messageID) => messageIndexes().get(messageID),
+        pathLinks: pathLinks.mark,
         legacyTurns: legacy,
         config,
         mutatePending,
@@ -1570,6 +1589,7 @@ export function Session(props: {
                 </Show>
               </scrollbox>
             </box>
+            <PathLinksBar state={pathLinks.state()} />
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={firstJump()}>
                 <text fg={theme.text.feedback.info.base}>Loading session history…</text>
@@ -1991,6 +2011,7 @@ function SessionPartView(props: {
             <TextPart
               part={item() as SessionMessageAssistantText}
               message={message() as SessionMessageAssistant}
+              partID={props.partRef.partID}
               last={false}
             />
           </Match>
