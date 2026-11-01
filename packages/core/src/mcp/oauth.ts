@@ -202,6 +202,9 @@ export const provider = (options: Options): OAuthClientProvider => {
       if (!redirect) throw refuse("user authorization")
       if (url.protocol !== "http:" && url.protocol !== "https:")
         throw new Error(`MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`)
+      // Google-style authorization servers only issue refresh tokens when the authorization request
+      // asks for offline access (access_type=offline); RFC 6749 §3.1 requires other servers to ignore it.
+      url.searchParams.set("access_type", "offline")
       return redirect.open(url)
     },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
