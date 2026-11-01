@@ -3,7 +3,7 @@ import { RendererControlState } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { destroyRenderer, setTerminalTitle } from "../../src/util/renderer"
 
-test("clears the terminal title before destroying the renderer", () => {
+test("clears the terminal title and root program status before destroying the renderer", () => {
   const calls: string[] = []
   destroyRenderer({
     isDestroyed: false,
@@ -11,11 +11,15 @@ test("clears the terminal title before destroying the renderer", () => {
     setTerminalTitle(title) {
       calls.push(`title:${title}`)
     },
+    setProgramStatus(status) {
+      calls.push(`status:${status.state}:${status.id ?? "root"}`)
+      return true
+    },
     destroy() {
       calls.push("destroy")
     },
   })
-  expect(calls).toEqual(["title:", "destroy"])
+  expect(calls).toEqual(["title:", "status:clear:root", "destroy"])
 })
 
 test("skips the title from suspend until resume completes and destroys a suspended renderer", async () => {
