@@ -27,9 +27,9 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
         generation: { maxTokens: 1024 },
       }),
     )
+    expect(compiled.body.thinking).toBeUndefined()
     expect(compiled.body).toMatchObject({
       max_tokens: 1024,
-      thinking: { type: "adaptive", display: "omitted" },
       output_config: { effort: "low" },
       tools: [
         { type: "web_search", name: "web_search", user_location: { type: "approximate", country: "US" } },

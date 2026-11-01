@@ -40,16 +40,10 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
 export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
   const id = modelID.toLowerCase()
   if (!id.includes("gpt-5") || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
-  return openAIProviderOptions({
-    reasoningEffort: "medium",
-    reasoningSummary: "auto",
-    // GPT-5 reasoning models are configured stateless (`store: false`) by
-    // `openAIDefaultOptions` below, so the only way a follow-up turn can
-    // carry reasoning state is via the encrypted reasoning include. Without
-    // this, callers using the default model facade get reasoning summaries
-    // they cannot replay statelessly.
-    include: ["reasoning.encrypted_content"],
-  })
+  // GPT-5 reasoning models are configured stateless (`store: false`) by
+  // `openAIDefaultOptions` below, so the only way a follow-up turn can carry
+  // reasoning state is via the encrypted reasoning include.
+  return openAIProviderOptions({ include: ["reasoning.encrypted_content"] })
 }
 
 export const openAIDefaultOptions = (modelID: string): ProviderOptions | undefined =>

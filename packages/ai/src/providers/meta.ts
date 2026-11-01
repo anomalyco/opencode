@@ -113,7 +113,6 @@ const messagesRoute = Route.make({
   protocol: MetaMessages.protocol,
   endpoint: Endpoint.path("/messages", { baseURL }),
   framing: AnthropicMessages.framing,
-  defaults: { providerOptions: { thinking: { type: "adaptive", display: "omitted" } } },
 })
 
 export const routes = [responsesRoute, chatRoute, messagesRoute]
