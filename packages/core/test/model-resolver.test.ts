@@ -471,7 +471,7 @@ describe("ModelResolver", () => {
           body: {},
         }),
       )
-      const request = ai.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
+      const request = ai.request({ model: resolved, prompt: "Hello", maxTokens: 10 })
       const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
