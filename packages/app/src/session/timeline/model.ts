@@ -1,6 +1,6 @@
 import { createMemo, createResource, type Accessor } from "solid-js"
-import type { SessionMessageInfo } from "@opencode/client/promise"
-import { useData } from "@/runtime/server/current"
+import { ClientError, type SessionMessageInfo } from "@opencode/client/promise"
+import { useData, useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
 import type { SessionModel } from "../model"
 
@@ -14,13 +14,24 @@ const enrichmentTurns = new WeakMap<SessionMessageInfo[], string>()
 
 export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
   const data = useData()
+  const server = useServer()
 
   const [resource] = createResource(
-    () => input.session.identity.sessionID(),
+    () => server.ctx.sdk.connection.status() === "connected" && input.session.identity.sessionID(),
     async (id) => {
       if (!id) return
       const owner = input.session.ownership.capture()
-      await Promise.all([data.session.message.sync(id), data.session.pending.sync(id)])
+
+      const loaded = await Promise.all([data.session.message.sync(id), data.session.pending.sync(id)]).catch(
+        (error) => {
+          // A server restart interrupts reads before the event stream notices. Keep the view mounted;
+          // the connection source refreshes the transcript when the native client reconnects.
+          if (error instanceof ClientError && error.reason === "Transport") return
+          throw error
+        },
+      )
+
+      if (!loaded) return
       await enrichLeadingTurn({
         current: owner.current,
         messages: () => data.session.message.list(id),
