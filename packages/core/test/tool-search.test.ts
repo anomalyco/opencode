@@ -67,6 +67,26 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 })
 
 describe("search tools", () => {
+  it.live("reports malformed glob and grep include patterns", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "visible.ts"), "needle\n"))
+      yield* withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          for (const request of [
+            call("glob", { pattern: "[" }),
+            call("grep", { pattern: "needle", include: "[" }),
+          ]) {
+            const result = yield* executeTool(registry, request)
+            expect(result).toMatchObject({ status: "error" })
+            expect(result.error?.message).toContain("error parsing glob")
+            expect(result.error?.message).toContain("unclosed character class")
+          }
+        }),
+      )
+    }),
+  )
+
   for (const hidden of [undefined, false, true]) {
     for (const limit of hidden ? [10] : [1, 10]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
