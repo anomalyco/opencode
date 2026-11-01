@@ -727,7 +727,7 @@ function App() {
   // Opens the release highlights once after an update, but only into an idle home screen during startup.
   const storage = useStorage()
   const paths = useTuiPaths()
-  const linkBase = () => location.current?.directory || paths.cwd
+  const linkBase = () => location.current?.directory || location.ref?.directory || paths.cwd
   let highlighted = false
   createEffect(() => {
     if (highlighted || !plugins.ready() || client.connection.status() !== "connected") return
