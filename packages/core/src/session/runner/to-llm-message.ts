@@ -152,28 +152,45 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+// A call cut off before it ran (by Esc, a crash or a failed stream) is not replayed. Input
+// errors stay so the model can reissue the call.
+const isAbandonedTool = (item: SessionMessage.AssistantContent) =>
+  item.type === "tool" &&
+  item.time.ran === undefined &&
+  !(item.state.status === "error" && item.state.error.type.startsWith("tool.input"))
+
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
-  const reuseProviderMetadata = sameModel && message.error === undefined
-  const reasoningInterrupted = message.content.some(
-    (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
-  )
-  const content = message.content.flatMap((item): ContentPart[] => {
+  const failed = message.error !== undefined && message.error.type !== "aborted"
+  // A failed stream is left out unless a tool already ran, whether it was retried or retries ran out.
+  if (failed && !message.content.some((item) => item.type === "tool" && item.time.ran !== undefined)) return []
+  const items = message.content.filter((item) => !isAbandonedTool(item))
+  // A stream cut by Esc or a crash may end mid-block, so its last block's provider state is not replayed,
+  // and reasoning is only replayed once the model moved on to output.
+  const cut = message.error?.type === "aborted" || message.finish === undefined
+  const tail = cut ? message.content.at(-1) : undefined
+  const content = items.flatMap((item, index): ContentPart[] => {
     if (item.type === "text")
       return [
         {
           type: "text",
           text: item.text,
-          // Text can carry provider-bound state (e.g. Gemini thought signatures),
-          // which is only replayable against the model that produced it.
-          providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+          providerMetadata:
+            sameModel && !failed && item !== tail ? providerMetadata(providerMetadataKey, item.native) : undefined,
         },
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning") {
-      if (message.error !== undefined || reasoningInterrupted) return []
-      return reuseProviderMetadata
+      if (failed) return []
+      if (
+        cut &&
+        !items
+          .slice(index + 1)
+          .some((after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""))
+      )
+        return []
+      return sameModel
         ? [
             {
               type: "reasoning",
@@ -188,12 +205,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
-    const reuseToolProviderMetadata =
-      reuseProviderMetadata ||
-      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
     const call = toolCall(
       item,
-      reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+      sameModel && (!failed || item.executed === true) ? providerMetadata(providerMetadataKey, item.native) : undefined,
     )
     if (item.executed !== true) return [call]
     // Hosted tools (e.g. google_search) run inside the provider, so their
@@ -203,14 +217,14 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
+    if (part.type === "text") return cut ? part.text.trim() !== "" : part.text !== ""
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = items
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined),
+      toolResult(item, sameModel && !failed ? providerMetadata(providerMetadataKey, item.native) : undefined),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
