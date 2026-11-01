@@ -57,6 +57,26 @@ export async function mockLargeDraft(page: Page, server: string) {
   return { path: sessionHref(sessionID, server) }
 }
 
+/**
+ * Counts every composer document the draft store encodes, as strobe's `count.draft.encode`. The draft adapter parses
+ * each encoded document once before its asynchronous blob walk, so the count is taken before superseded writes are
+ * discarded. strobe installs its counter only for series that declare the metric; elsewhere this is one prefix test
+ * per `JSON.parse`.
+ */
+export function countDraftEncodes(page: Page) {
+  return page.addInitScript(() => {
+    const parse = JSON.parse
+    // SAFETY: strobe installs this optional global in pages whose series count something.
+    const host = globalThis as { __strobeCount?: (name: string) => void }
+    // `String` as `JSON.parse` itself does: the app may parse a value that is not a string.
+    JSON.parse = (text: string, reviver?: Parameters<typeof parse>[1]) => {
+      if (String(text).startsWith('{"prompt":[')) host.__strobeCount?.("draft.encode")
+
+      return reviver ? parse(text, reviver) : parse(text)
+    }
+  })
+}
+
 /** The newest history entry's first sentence, which the first ArrowUp recalls. */
 export const recalled = "Review the retry policy in src/network/request-0.ts."
 

@@ -1,9 +1,10 @@
 // The composer with a lot in it: a 44,000-character saved draft, and a long prompt history with screenshots. At
 // 1440×900.
-import { bench, web } from "@strobe/bench"
+import { bench, web } from "@hona/strobe-bench"
 import { fixture, mockStressTimeline } from "../e2e/utils/session-fixture"
-import { draftEnd, mockLargeDraft, recalled, seedHistory } from "./fixtures/composer"
+import { countDraftEncodes, draftEnd, mockLargeDraft, recalled, seedHistory } from "./fixtures/composer"
 import { installProjects } from "./fixtures/home"
+import { cached } from "./fixtures/mock"
 
 const composer = '[data-component="composer-editor"]'
 
@@ -15,13 +16,19 @@ export default bench({
   targets: {
     web: web({
       viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, url }) {
+      async prepare({ case: name, playwright, mock, url }) {
         const server = new URL(url).origin
+        const page = cached(playwright.page, mock)
 
-        if (!name.includes("history")) return mockLargeDraft(playwright.page, server)
-        await seedHistory(playwright.page, server)
-        await mockStressTimeline(playwright.page, { server })
-        await installProjects(playwright.page, [fixture.directory])
+        if (!name.includes("history")) {
+          await countDraftEncodes(page)
+
+          return mockLargeDraft(page, server)
+        }
+
+        await seedHistory(page, server)
+        await mockStressTimeline(page, { server })
+        await installProjects(page, [fixture.directory])
 
         return { path: "/" }
       },
@@ -45,10 +52,10 @@ export default bench({
   },
 
   cases: {
-    // Each keystroke changes the draft and saves it.
+    // Each keystroke changes the draft and saves it; `count.draft.encode` is how many times the draft was encoded.
     "type in a large draft": {
       primary: "main.work",
-      metrics: ["interaction.p95"],
+      metrics: ["interaction.p95", "count.draft.encode"],
       async run({ page }) {
         await page.type(composer, typed, { delay: 50 })
         await page.idle()
@@ -62,7 +69,7 @@ export default bench({
     // Twenty caret moves: each saves the caret position, not the text.
     "move the cursor in a large draft": {
       primary: "main.work",
-      metrics: ["interaction.p95"],
+      metrics: ["interaction.p95", "count.draft.encode"],
       async run({ page }) {
         for (let step = 0; step < 20; step++) await page.press("ArrowLeft", { until: "frame" })
         await page.idle()

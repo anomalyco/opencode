@@ -5,13 +5,14 @@
 import { readFileSync } from "node:fs"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { Page } from "@playwright/test"
-import { bench, web, type Case } from "@strobe/bench"
+import { bench, web, type Case } from "@hona/strobe-bench"
 import { pageMessagesFrom, sessionHref } from "../e2e/utils/app"
 import { expected, messages } from "../e2e/utils/markdown-sessions"
 import { mockOpenCodeServer, type MockSession } from "../e2e/utils/mock-server"
 import { fixture, installTimelineSettings } from "../e2e/utils/session-fixture"
 import { reviewDiffs } from "./fixtures/diffs"
 import { openReview, review } from "./fixtures/review"
+import { cached } from "./fixtures/mock"
 import { installTabs } from "./fixtures/tabs"
 
 // The last answer, formatted and on screen: what a person waits for after clicking a tab. A cold timeline stays
@@ -33,10 +34,11 @@ const exportFile = process.env.OPENCODE_PERF_SESSION
 // SAFETY: `opencode export` writes this shape; a file that is not an export fails the first block's load.
 const exported = exportFile ? (JSON.parse(readFileSync(exportFile, "utf8")) as SessionExport) : undefined
 
-// The destination was rendered before and is cached: switching back and forth.
+// The destination was rendered before and is cached: switching back and forth. A cached transcript is not fetched
+// again (`net.requests` on the history endpoint stays 0), and the switch moves nothing that was already on screen.
 const warm: Case<{}> = {
   primary: "main.work",
-  metrics: ["run.duration", "interaction.p50"],
+  metrics: ["run.duration", "interaction.p50", "net.requests{/api/session/*/message}", "layout.shift"],
   run: ({ page, prepared }) => page.click(tab(prepared.target), { until: prepared.targetReady }),
   async reset({ page, prepared }) {
     await page.click(tab(prepared.source), { until: prepared.sourceReady })
@@ -52,7 +54,7 @@ const cold: Case<{}> = {
 
     if (name.includes("review open")) await openReview(page)
     // Off the tab strip: a pointer resting on a tab for 100 ms prefetches its transcript, and the switch is no longer cold.
-    await page.click(composer)
+    await page.hover(composer)
     await page.idle()
   },
 }
@@ -80,17 +82,18 @@ const cases = {
   "open an unvisited tab with review open": cold,
   // 1,200 models in the catalog. With `--probes memory --repeat 10`: does memory grow from switch to switch?
   "switch tab with a large model catalog": warm,
-}
+} satisfies Record<string, Case<{}>>
 
 export default bench({
   targets: {
     web: web({
       viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, url }) {
+      async prepare({ case: name, playwright, mock, url }) {
         const server = new URL(url).origin
+        const page = cached(playwright.page, mock)
 
-        if (exported && name.endsWith("your session")) return mockExport(playwright.page, server, exported)
-        await mockOpenCodeServer(playwright.page, {
+        if (exported && name.endsWith("your session")) return mockExport(page, server, exported)
+        await mockOpenCodeServer(page, {
           server,
           sessions: fixture.sessions,
           provider: name.includes("model catalog") ? catalog(1_200) : fixture.provider,
@@ -99,8 +102,8 @@ export default bench({
           vcsDiff: name.includes("review") ? reviewDiffs() : undefined,
           pageMessages: (sessionID) => ({ items: messages[sessionID] ?? [] }),
         })
-        await installTimelineSettings(playwright.page)
-        await installTabs(playwright.page, {
+        await installTimelineSettings(page)
+        await installTabs(page, {
           server,
           directory: fixture.directory,
           sessions: [fixture.sourceID, fixture.targetID],

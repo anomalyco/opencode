@@ -2,12 +2,13 @@
 // stress fixture (a 12-turn and a 72-turn session with every tool and diffs up to 300 lines, and a subagent's child
 // session), paginated as the server does. Every case starts from a fresh document, so each run pays what the first
 // visit pays: lazy chunks, the first history page and the first render.
-import { bench, web, type Case } from "@strobe/bench"
+import { bench, web, type Case } from "@hona/strobe-bench"
 import { draftHref, sessionHref } from "../e2e/utils/app"
 import { messages } from "../e2e/utils/markdown-sessions"
 import { mockOpenCodeServer } from "../e2e/utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../e2e/utils/session-fixture"
 import { installProjects } from "./fixtures/home"
+import { cached } from "./fixtures/mock"
 import { installTabs } from "./fixtures/tabs"
 
 const draftID = "draft_perf_navigation"
@@ -21,6 +22,8 @@ const target = last(fixture.expected.targetMessageIDs)
 const child = last(fixture.expected.childMessageIDs)
 
 const tab = (href: string) => `[data-slot="titlebar-tabs"] a[href="${href}"]`
+
+const tabItem = (href: string) => `[data-slot="titlebar-tabs"] [data-slot="titlebar-tab-item"]:has(a[href="${href}"])`
 
 const home = '[data-component="home-session-search"]'
 
@@ -97,14 +100,15 @@ export default bench({
   targets: {
     web: web({
       viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, url }) {
+      async prepare({ case: name, playwright, mock, url }) {
         const server = new URL(url).origin
         const scene = scenes.get(name)
+        const page = cached(playwright.page, mock)
 
         if (!scene) throw new Error(`navigation.bench.ts: no scene for "${name}"`)
 
         if (scene === restoring)
-          await mockOpenCodeServer(playwright.page, {
+          await mockOpenCodeServer(page, {
             server,
             sessions: restored,
             provider: fixture.provider,
@@ -112,10 +116,10 @@ export default bench({
             project: fixture.project,
             pageMessages: (sessionID) => ({ items: pages[sessionID] ?? [] }),
           })
-        else await mockStressTimeline(playwright.page, { server })
-        await installTimelineSettings(playwright.page)
-        await installProjects(playwright.page, [fixture.directory])
-        await installTabs(playwright.page, {
+        else await mockStressTimeline(page, { server })
+        await installTimelineSettings(page)
+        await installProjects(page, [fixture.directory])
+        await installTabs(page, {
           server,
           directory: fixture.directory,
           sessions: scene.tabs,
@@ -144,12 +148,15 @@ export default bench({
       ...fresh,
     },
 
-    // With the app's shortcut: the tab's close button shows only on hover.
+    // As a person closes it: the close button shows on hover.
     "close the last tab": {
       primary: "main.work",
       metrics,
-      async run({ page }) {
-        await page.press("ControlOrMeta+w", { until: home })
+      async run({ page, prepared }) {
+        const item = tabItem(sessionHref(fixture.sourceID, prepared.server))
+        const close = `${item} [data-slot="tab-close"] button`
+        await page.hover(item, { until: close })
+        await page.click(close, { until: home })
         await page.waitFor(homeRow(fixture.targetID))
       },
       ...fresh,
@@ -205,22 +212,23 @@ export default bench({
       ...fresh,
     },
 
-    // Loading the app with eight tabs to restore, to the active one's last answer on screen.
+    // Loading the app with eight tabs to restore, to the active one's last answer on screen. Transcripts fetched
+    // (`net.requests` on the history endpoint): the active tab's, not one per restored tab.
     "restore 8 tabs": {
       primary: "main.work",
-      metrics: ["run.duration"],
+      metrics: ["run.duration", "net.requests{/api/session/*/message}"],
       run: ({ page, prepared }) => page.goto(prepared.first, { until: prepared.ready, timeout: 60_000 }),
     },
 
     "activate a restored tab": {
       primary: "main.work",
-      metrics,
+      metrics: [...metrics, "net.requests{/api/session/*/message}"],
       run: ({ page, prepared }) =>
         page.click(tab(sessionHref(restored[1].id, prepared.server)), { until: answer(restored[1].id) }),
       async reset({ page, prepared }) {
         await page.goto(prepared.first, { until: prepared.ready, timeout: 60_000 })
         // Off the tab strip: a pointer resting on a tab for 100 ms prefetches its transcript.
-        await page.click('[data-component="composer-editor"]')
+        await page.hover('[data-component="composer-editor"]')
         await page.idle()
       },
     },

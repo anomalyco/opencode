@@ -1,6 +1,7 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
-import { bench, web } from "@strobe/bench"
+import { bench, web } from "@hona/strobe-bench"
 import { editTools } from "./fixtures/diffs"
+import { cached } from "./fixtures/mock"
 import { composer, mockTimelineSession, oldestPrompt, timeline } from "./fixtures/timeline"
 
 const find = '[data-component="timeline-search-bar"] input'
@@ -16,8 +17,8 @@ export default bench({
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      prepare: async ({ case: name, playwright, url }) =>
-        mockTimelineSession(playwright.page, {
+      prepare: async ({ case: name, playwright, mock, url }) =>
+        mockTimelineSession(cached(playwright.page, mock), {
           server: new URL(url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
           historyTurns: name === "expand an edit" ? 0 : 120,

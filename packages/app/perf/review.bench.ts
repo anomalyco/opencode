@@ -1,20 +1,23 @@
-// The review pane on a large change: 100 or 10,000 changed files of 100 changed lines each (400 KB or 40 MB of
-// patches), 100 files to a folder, at 1366×768.
-import { bench, web } from "@strobe/bench"
+// The review pane on a large change: 1 to 10,000 changed files of 100 changed lines each (4 KB to 40 MB of patches),
+// 100 files to a folder, at 1366×768.
+import { bench, web } from "@hona/strobe-bench"
 import { scalingDiffs, scalingRows } from "./fixtures/diffs"
+import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
 export default bench({
-  params: { files: [100, 10_000] },
+  // 100 and 10,000 by default; `--params all` adds the rest of the curve.
+  params: { files: { run: [100, 10_000], more: [1, 10, 1_000] } },
 
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      async prepare({ params, playwright, url }) {
-        const session = await mockTimelineSession(playwright.page, { server: new URL(url).origin, historyTurns: 0 })
+      async prepare({ params, playwright, mock, url }) {
+        const page = cached(playwright.page, mock)
+        const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
         // The app asks for the changes only when the pane opens.
-        await serveDiffs(playwright.page, scalingDiffs(params.files))
+        await serveDiffs(page, scalingDiffs(params.files))
 
         return session
       },
