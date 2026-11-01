@@ -16,6 +16,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -110,6 +111,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Provider.node,
       Model.node,
       Command.node,
+      InstructionDiscovery.node,
       Integration.node,
       Job.node,
       KV.node,
