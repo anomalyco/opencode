@@ -6,7 +6,10 @@ import type { Transform } from "./registration.js"
 export interface WebSearchDefinition {
   readonly id: string
   readonly name: string
-  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+  readonly execute: (
+    input: WebSearch.ProviderInput,
+    settings?: WebSearch.Settings,
+  ) => Effect.Effect<readonly WebSearch.Result[], unknown>
 }
 
 export interface WebSearchDomain extends WebSearchApi<unknown> {
@@ -19,5 +22,9 @@ export interface WebSearchEditor {
   readonly default: {
     get(): string | false | undefined
     set(selection: string | false): void
+  }
+  readonly settings: {
+    set(id: string, settings: WebSearch.Settings): void
+    clear(): void
   }
 }

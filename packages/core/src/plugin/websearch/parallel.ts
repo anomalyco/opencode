@@ -5,6 +5,7 @@ import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://search.parallel.ai/mcp"
 
@@ -67,13 +68,12 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "parallel",
         name: "Parallel",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("parallel")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "parallel", settings, endpoint)
             const result = yield* WebSearchMcp.call(
               http,
-              endpoint,
+              resolved.endpoint,
               "web_search",
               { input: McpInput, output: McpOutput },
               {
@@ -82,7 +82,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
               },
               {
                 "User-Agent": App.useragent(ctx.app),
-                ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
+                ...(resolved.key ? { Authorization: `Bearer ${resolved.key}` } : {}),
               },
             )
             return (

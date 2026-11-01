@@ -6,6 +6,7 @@ import { HttpClient, HttpClientRequest } from "effect/http"
 import { App } from "../../app.js"
 import { collectBoundedResponseBody } from "../../tool/http-body.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://agent.tinyfish.ai/mcp"
 
@@ -65,21 +66,18 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "tinyfish",
         name: "TinyFish",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("tinyfish")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "tinyfish", settings, endpoint)
             const headers = {
               "User-Agent": App.useragent(ctx.app),
-              ...(credential?.type === "key"
-                ? { "X-API-Key": credential.key }
-                : { "X-TinyFish-Access-Mode": "keyless" }),
+              ...(resolved.key ? { "X-API-Key": resolved.key } : { "X-TinyFish-Access-Mode": "keyless" }),
             }
             // Keyed requests are rejected without the `Mcp-Session-Id` returned by `initialize`; keyless ones are not.
-            const session = credential?.type === "key" ? yield* initialize(http, headers) : undefined
+            const session = resolved.key ? yield* initialize(http, resolved.endpoint, headers) : undefined
             const result = yield* WebSearchMcp.call(
               http,
-              endpoint,
+              resolved.endpoint,
               "search",
               { input: McpInput, output: McpOutput },
               { query: input.query },
@@ -101,10 +99,10 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   }),
 })
 
-const initialize = (http: HttpClient.HttpClient, headers: Record<string, string>) =>
+const initialize = (http: HttpClient.HttpClient, url: string, headers: Record<string, string>) =>
   Effect.gen(function* () {
     const client = HttpClient.withScope(HttpClient.filterStatusOk(http))
-    const request = yield* HttpClientRequest.post(endpoint).pipe(
+    const request = yield* HttpClientRequest.post(url).pipe(
       HttpClientRequest.accept("application/json, text/event-stream"),
       HttpClientRequest.setHeaders(headers),
       HttpClientRequest.schemaBodyJson(InitializeRequest)({
@@ -127,7 +125,7 @@ const initialize = (http: HttpClient.HttpClient, headers: Record<string, string>
     const session = response.headers["mcp-session-id"]
     if (session === undefined)
       return yield* Effect.fail(new Error("TinyFish MCP initialize did not return an Mcp-Session-Id header"))
-    const notification = yield* HttpClientRequest.post(endpoint).pipe(
+    const notification = yield* HttpClientRequest.post(url).pipe(
       HttpClientRequest.accept("application/json, text/event-stream"),
       HttpClientRequest.setHeaders({ ...headers, "Mcp-Session-Id": session }),
       HttpClientRequest.schemaBodyJson(InitializedNotification)({
