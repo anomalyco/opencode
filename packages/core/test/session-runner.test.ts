@@ -7442,7 +7442,7 @@ describe("SessionRunnerLLM", () => {
       }),
     )
     yield* s.admit("Echo before moving")
-    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.tool("call-move", "echo", { text: "moving" }))
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.toolCall("call-move", "echo", { text: "moving" }))
     const tools = yield* s.blockTools()
     const runner = yield* SessionRunner.Service
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
@@ -7507,7 +7507,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("First turn")
     yield* s.llm.push(
       TestLLM.text("First", "text-first"),
-      TestLLM.tool("call-blocked", "echo", { text: "granted steer work" }),
+      TestLLM.toolCall("call-blocked", "echo", { text: "granted steer work" }),
       TestLLM.text("Second", "text-second"),
       TestLLM.text("Third", "text-third"),
     )
