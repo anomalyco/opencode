@@ -15,11 +15,17 @@ const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
   Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 
 describe("attachment size limit", () => {
-  test("rejects the selection before files are read when its total exceeds the limit", () => {
-    expect(() =>
-      assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES / 2 }, { size: MAX_ATTACHMENT_BYTES / 2 }]),
-    ).not.toThrow()
-    expect(() => assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES }, { size: 1 }])).toThrow("20 MB limit")
+  test("rejects the selection before files are read when its total exceeds the limit", async () => {
+    await expect(
+      Effect.runPromise(
+        assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES / 2 }, { size: MAX_ATTACHMENT_BYTES / 2 }]),
+      ),
+    ).resolves.toBeUndefined()
+    await expect(
+      Effect.runPromise(assertAttachmentBudget([{ size: MAX_ATTACHMENT_BYTES }, { size: 1 }])),
+    ).rejects.toMatchObject({
+      message: "Selected attachments exceed the 20 MB limit",
+    })
   })
 
   test("reads an approved file and rejects an oversized one before allocating its contents", async () => {
@@ -32,7 +38,9 @@ describe("attachment size limit", () => {
       expect(new TextDecoder().decode(await run(readAttachment(file)))).toBe("lorem ipsum")
       await writeFile(oversized, "")
       await truncate(oversized, MAX_ATTACHMENT_BYTES + 1)
-      await expect(run(readAttachment(oversized))).rejects.toThrow("20 MB limit")
+      await expect(run(readAttachment(oversized))).rejects.toMatchObject({
+        message: "Selected attachments exceed the 20 MB limit",
+      })
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
