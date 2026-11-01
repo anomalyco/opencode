@@ -97,6 +97,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const location = yield* Location.Service
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
+    const onlyFree = ["1", "true"].includes(process.env.OPENCODE_ONLY_FREE_MODELS?.toLowerCase() ?? "")
     let input: Provider.Snapshot | undefined
     const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
       name: "model",
@@ -226,10 +227,11 @@ const layer = Layer.effect(
             ]
           }),
         )
-        if (disableFree)
+        if (disableFree || onlyFree)
           for (const providerID of [Provider.ID.opencode, Provider.ID.make("opencode-go")])
             byProvider.get(providerID)?.forEach((model, id, models) => {
-              if (!model.cost.some((cost) => cost.input > 0)) models.delete(id)
+              const free = !model.cost.some((cost) => cost.input > 0)
+              if (free ? disableFree : onlyFree) models.delete(id)
             })
         // Non-chat models (image, decision…) only show up when listed by type, so nothing that
         // picks or resolves a session model can reach them.

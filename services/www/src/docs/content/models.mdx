@@ -71,9 +71,25 @@ For the shared background server:
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-Free means an `opencode` or `opencode-go` model with no input price. These models disappear from the catalog and defaults;
-explicitly selecting one fails with `Model unavailable`. Signed out, the `opencode` provider is absent until you connect
-an OpenCode Console account or set `OPENCODE_API_KEY`, which restores its paid models.
+To show **only free OpenCode models** instead, set `OPENCODE_ONLY_FREE_MODELS=1` (or `true`):
+
+```bash
+OPENCODE_ONLY_FREE_MODELS=1 opencode serve
+```
+
+Or on the shared background server:
+
+```bash
+opencode service set env OPENCODE_ONLY_FREE_MODELS 1
+```
+
+Free means an `opencode` or `opencode-go` model with no input price. Filtered models disappear from the catalog and defaults;
+explicitly selecting one fails with `Model unavailable`. Other providers are unaffected.
+
+With `OPENCODE_DISABLE_FREE_MODELS`, the `opencode` provider is absent while signed out until you connect an OpenCode
+Console account or set `OPENCODE_API_KEY`, which restores its paid models. With `OPENCODE_ONLY_FREE_MODELS`, free OpenCode
+models remain available whether or not you're signed in. If both flags are enabled, all `opencode` and `opencode-go`
+models are hidden.
 
 ## Variants
 
