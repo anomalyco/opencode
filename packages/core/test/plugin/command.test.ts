@@ -20,7 +20,8 @@ import PROMPT_INITIALIZE from "../../src/plugin/command/initialize.txt"
 import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
 
 const directory = AbsolutePath.make("/repo/packages/app")
-const project = AbsolutePath.make("/repo")
+// project directory exercises every $-sequence the bug applies to: $&, $', $` and $$
+const project = AbsolutePath.make("/repo$&$'$`$$")
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory }, { projectDirectory: project })),
@@ -112,22 +113,22 @@ describe("CommandPlugin.Plugin", () => {
       })
       expect(prompts).toEqual([
         {
-          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
+          text: PROMPT_INITIALIZE.replace("${path}", () => project).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
           delivery: "queue",
         },
         {
-          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
+          text: PROMPT_REVIEW.replace("${path}", () => project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
           files: undefined,
           delivery: "steer",
         },
         {
-          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          text: PROMPT_INITIALIZE.replace("${path}", () => project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
         },
         {
-          text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          text: PROMPT_REVIEW.replace("${path}", () => project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
         },
