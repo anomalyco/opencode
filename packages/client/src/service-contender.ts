@@ -99,10 +99,11 @@ export function contenderPool(timing: EnsureTiming) {
     },
     /**
      * Whether to start another attempt now. A registration that has not answered yet gets one
-     * spawn delay before an attempt competes with it.
+     * spawn delay before an attempt competes with it, unless the registered process is gone: a
+     * restart or crash leaves the file behind with nothing to answer.
      */
-    shouldRecruit(registered: boolean) {
-      if (lastSpawn === 0 && registered) lastSpawn = Date.now()
+    shouldRecruit(owner: number | undefined) {
+      if (lastSpawn === 0 && owner !== undefined && running(owner)) lastSpawn = Date.now()
       // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
       // survivors finish without recruiting replacements that could hide the error indefinitely.
       return failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay
@@ -129,6 +130,16 @@ function contenderFailure(contender: ServiceContender) {
 
 export function contenderFinished(contender: ServiceContender) {
   return contender.error() !== undefined || contender.closed()
+}
+
+// Only ESRCH means the process is gone; EPERM is a live process this user cannot signal.
+function running(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return !(error instanceof Error && "code" in error && error.code === "ESRCH")
+  }
 }
 
 function startupError(message: string, stderr: string) {
