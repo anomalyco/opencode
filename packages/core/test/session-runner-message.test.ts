@@ -498,6 +498,73 @@ Earlier work
     ])
   })
 
+  for (const fixture of [
+    { mime: "image/avif", name: "preview.avif" },
+    { mime: "image/tiff", name: "scan.tiff" },
+    { mime: "application/zip", name: "archive.zip" },
+    { mime: "application/octet-stream", name: "document.docx" },
+  ]) {
+    test(`retains unsupported attachments instead of dropping ${fixture.name}`, () => {
+      const file = FileAttachment.make({
+        data: Base64.make("YmluYXJ5"),
+        ...fixture,
+        source: { type: "inline" },
+      })
+      const user = SessionMessage.User.make({
+        id: id("unsupported-attachment"),
+        type: "user",
+        text: "",
+        files: [file],
+        time: { created },
+      })
+      expect(toLLMMessages([user], model)).toMatchObject([
+        {
+          id: user.id,
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `ERROR: Cannot read "${fixture.name}" (unsupported attachment format: ${fixture.mime}). Inform the user.`,
+            },
+          ],
+        },
+      ])
+    })
+  }
+
+  for (const fixture of [
+    {
+      source: { type: "uri" as const, uri: pathToFileURL(path.resolve("/project/preview.avif")).href },
+      expected: path.resolve("/project/preview.avif"),
+    },
+    {
+      source: { type: "uri" as const, uri: "https://example.com/preview.avif" },
+      expected: "https://example.com/preview.avif",
+    },
+    { source: { type: "inline" as const }, expected: "inline attachment" },
+  ]) {
+    test(`names unsupported attachments from ${fixture.expected}`, () => {
+      const messages = toLLMMessages(
+        [
+          SessionMessage.User.make({
+            id: id("unnamed-attachment"),
+            type: "user",
+            text: "Inspect it",
+            files: [FileAttachment.make({ data: Base64.make("YmluYXJ5"), mime: "image/avif", source: fixture.source })],
+            time: { created },
+          }),
+        ],
+        model,
+      )
+      expect(messages[0]?.content).toEqual([
+        Message.text("Inspect it"),
+        Message.text(
+          `ERROR: Cannot read ${JSON.stringify(fixture.expected)} (unsupported attachment format: image/avif). Inform the user.`,
+        ),
+      ])
+    })
+  }
+
   test("uses materialized image and PDF data as provider media", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
