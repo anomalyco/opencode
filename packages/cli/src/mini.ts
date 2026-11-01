@@ -108,6 +108,23 @@ export async function runMini(input: MiniCommandInput) {
           agent: target.agent,
           resume: false,
         }))
+      const open = (client: OpenCodeClient, sessionID: string, signal?: AbortSignal) =>
+        resolveSessionTarget({
+          client,
+          location: { directory },
+          session: sessionID,
+          environment,
+          prepare,
+          signal,
+        }).then((target) => ({
+          sessionID: target.session.id,
+          sessionTitle: target.session.title,
+          location: target.location,
+          model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
+          variant: target.model?.variant,
+          agent: target.agent,
+          resume: true,
+        }))
       const frontend = await frontendTask
       return frontend.runMiniFrontend({
         host: createMiniHost({ terminal, directory, paths: input.paths }),
@@ -116,6 +133,7 @@ export async function runMini(input: MiniCommandInput) {
         target: resolveTarget,
         reconnect: connection.reconnect,
         createSession: create,
+        openSession: open,
         agent: input.agent,
         model,
         variant: requested?.variant,

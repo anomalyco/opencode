@@ -10,7 +10,7 @@
 // Resolves when the footer closes and all in-flight work finishes.
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Locale } from "../util/locale"
-import { isCompactCommand, isExitCommand, isNewCommand } from "./prompt.shared"
+import { isCompactCommand, isExitCommand, isLocalCommand, isNewCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, RunDelivery, RunPrompt } from "./types"
 
 type Trace = {
@@ -25,6 +25,7 @@ export type QueueInput = {
   onAdmissionError?: (prompt: RunPrompt, error: unknown) => void | Promise<void>
   onNewSession?: () => void | Promise<void>
   onCompact?: () => void | Promise<void>
+  onLocalCommand?: (text: string) => void | Promise<void>
   admit: (prompt: RunPrompt, delivery: RunDelivery, signal: AbortSignal) => Promise<void>
   settle: () => Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal, admitted: () => void) => Promise<void>
@@ -140,6 +141,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               },
             )
             await input.onCompact?.()
+            continue
+          }
+
+          if (prompt.mode !== "shell" && !prompt.command && isLocalCommand(prompt.text)) {
+            await input.onLocalCommand?.(prompt.text)
             continue
           }
 
@@ -261,7 +267,12 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       prompt.command?.source !== "skill" &&
       !isNewCommand(prompt.text) &&
       !isCompactCommand(prompt.text) &&
-      !state.queue.some((item) => item.mode !== "shell" && (isNewCommand(item.text) || isCompactCommand(item.text)))
+      !isLocalCommand(prompt.text) &&
+      !state.queue.some(
+        (item) =>
+          item.mode !== "shell" &&
+          (isNewCommand(item.text) || isCompactCommand(item.text) || isLocalCommand(item.text)),
+      )
     ) {
       const sent = { ...prompt, messageID: SessionMessage.ID.create() }
       const admission = state.admission
@@ -276,7 +287,10 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     }
 
     state.queue.push(prompt)
-    if (prompt.mode !== "shell" && (isNewCommand(prompt.text) || isCompactCommand(prompt.text))) {
+    if (
+      prompt.mode !== "shell" &&
+      (isNewCommand(prompt.text) || isCompactCommand(prompt.text) || isLocalCommand(prompt.text))
+    ) {
       drain()
       return
     }

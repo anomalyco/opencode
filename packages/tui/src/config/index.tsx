@@ -252,6 +252,9 @@ export const Info = Schema.Struct({
     description: "Show the release highlights once after OpenCode updates",
   }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
+  screen_reader: Schema.optional(Schema.Boolean).annotate({
+    description: "Use the screen reader friendly interface",
+  }),
   cursor: Schema.optional(Cursor),
 })
 export type Info = Schema.Schema.Type<typeof Info>

@@ -160,6 +160,58 @@ describe("run runtime queue", () => {
     expect(order).toEqual(["run:first", "compact", "run:later"])
   })
 
+  test("handles session slash commands locally, after the active turn", async () => {
+    const ui = createFooterApiFixture()
+    const active = Promise.withResolvers<void>()
+    const order: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onLocalCommand: async (text) => {
+        order.push(`local:${text}`)
+      },
+      admit: async (prompt) => {
+        order.push(`admit:${prompt.text}`)
+      },
+      run: async (prompt) => {
+        order.push(`run:${prompt.text}`)
+        if (prompt.text === "first") await active.promise
+        if (prompt.text === "later") ui.api.close()
+      },
+    })
+
+    ui.submit("first")
+    await Promise.resolve()
+    ui.submit("/rename New title")
+    ui.submit("later")
+    await Promise.resolve()
+    expect(order).toEqual(["run:first"])
+
+    active.resolve()
+    await task
+    expect(order).toEqual(["run:first", "local:/rename New title", "run:later"])
+  })
+
+  test("a configured command with a local command's name runs as that command", async () => {
+    const ui = createFooterApiFixture()
+    const order: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onLocalCommand: async (text) => {
+        order.push(`local:${text}`)
+      },
+      run: async (prompt) => {
+        order.push(`run:${prompt.command?.name}`)
+        ui.api.close()
+      },
+    })
+
+    ui.submit({ text: "/fork", parts: [], command: { name: "fork", arguments: "" } })
+    await task
+    expect(order).toEqual(["run:fork"])
+  })
+
   test("shell mode submits /exit as a shell command", async () => {
     const ui = createFooterApiFixture()
     const seen: RunPrompt[] = []

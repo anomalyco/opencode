@@ -34,6 +34,11 @@ const ServerParams = {
   server: Server.flag,
 }
 
+const ScreenReaderParam = Flag.Boolean("screen-reader").pipe(
+  Flag.withDescription("Use the screen reader friendly interface (--no-screen-reader forces it off)"),
+  Flag.optional,
+)
+
 const PermissionParams = {
   auto: Flag.Boolean("auto").pipe(
     Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
@@ -66,6 +71,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       Flag.optional,
     ),
     prompt: Flag.String("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
+    screenReader: ScreenReaderParam,
   },
   commands: [
     Spec.make("upgrade", {
@@ -365,6 +371,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Start the minimal interactive interface",
       globalFlags: ServerFlags,
       params: {
+        ...PermissionParams,
         continue: Flag.Boolean("continue").pipe(
           Flag.withAlias("c"),
           Flag.withDescription("Continue the last session"),
@@ -395,6 +402,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         agent: Flag.String("agent").pipe(Flag.withDescription("Agent to use"), Flag.optional),
         prompt: Flag.String("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
         demo: Flag.Boolean("demo").pipe(Flag.withDefault(false), Flag.withHidden),
+        screenReader: ScreenReaderParam,
       },
     }),
     Spec.make("run", {
