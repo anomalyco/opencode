@@ -19,6 +19,7 @@ function serverSchema() {
     hidden: {},
     lastProjectID: {},
     usedProjectIDs: {},
+    hiddenProjectIDs: {},
     hostnames: {},
     projects: {},
   })
@@ -149,6 +150,11 @@ test("used and last projects follow dynamic server scopes, and migration consume
   projects.migrate(["a", "b"])
   projects.touch("a")
   projects.hide(["b"])
+  expect(projects.hidden()).toEqual(["b"])
+  projects.touch("b")
+  expect(projects.hidden()).toEqual([])
+  projects.hide(["b"])
+  projects.touch("a")
   expect(projects.legacy()).toBeUndefined()
   expect(store.projects).toEqual({ other: [{ worktree: "/b" }] })
   expect(store.lastProjectID).toEqual({ local: "a", [props.server]: "remote-project" })

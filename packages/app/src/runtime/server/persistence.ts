@@ -29,7 +29,7 @@ const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).p
   }),
 )
 
-// Project data comes from the server; per server scope, the client keeps only which projects it has used.
+// Project data comes from the server; per scope, the client remembers used and explicitly hidden project IDs.
 // `projects` is the directory list older builds kept: each scope's entry is migrated to project IDs once the
 // server's list loads, then deleted. Stored `recentlyClosed` and directory-keyed `lastProject` fields are not part
 // of this schema, so decoding drops them.
@@ -44,6 +44,7 @@ export const ServerState = Persistence.struct({
     Schema.mutableKey(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   ),
   usedProjectIDs: Persistence.record(Persistence.array(Schema.String)),
+  hiddenProjectIDs: Persistence.record(Persistence.array(Schema.String)),
   // The last hostname each server reported, so its name shows before the first health check answers.
   hostnames: Schema.Record(
     Schema.String,
