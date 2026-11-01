@@ -472,10 +472,12 @@ export const layer = Layer.effect(
       )
       const source = background?.messages ?? context.messages
       const messages = withPendingPlaceholders(source, pending)
-      const split = splitConversation(
-        source.filter((message) => !pending.has(message.id)),
-        keep,
-      )
+      const split =
+        splitConversation(
+          source.filter((message) => !pending.has(message.id)),
+          keep,
+        ) ??
+        (trigger.reason === "overflow" && previousCompaction(messages)?.summary ? { keepID: undefined } : undefined)
       if (split === undefined) return yield* Effect.fail(NOTHING_TO_COMPACT)
       // A background summary covers all of its messages; what follows them is kept when it is swapped in.
       const keepID = background ? undefined : split.keepID
@@ -578,7 +580,8 @@ export const layer = Layer.effect(
         !context.messages.some(
           (message) =>
             !pending.has(message.id) &&
-            (SessionRecentText.messageToText(message) || SessionHistory.isNativeCompaction(message)),
+            (SessionRecentText.messageToText(message) ||
+              (trigger.reason === "overflow" && SessionHistory.isNativeCompaction(message))),
         )
       )
         return yield* Effect.fail(NOTHING_TO_COMPACT)
@@ -1051,7 +1054,7 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
     const text = SessionRecentText.messageToText(message)
     return text ? [{ message, text }] : []
   })
-  if (entries.length === 0) return previousCompaction(messages)?.summary ? { keepID: undefined } : undefined
+  if (entries.length === 0) return undefined
 
   const first = entries[recentStart(entries, keep, previousCompaction(messages))]
   return {
