@@ -133,6 +133,60 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("inherits catalog limits for aliases whose modelID only adds a routing suffix", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("openrouter")
+      const catalogID = Model.ID.make("openai/gpt-6.1-sol")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/openrouter"
+        })
+        editor.models.update(providerID, catalogID, (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              openrouter: {
+                models: {
+                  floor: { modelID: "openai/gpt-6.1-sol:floor", name: "Sol Workhorse Floor" },
+                  plain: { modelID: "openai/gpt-6.1-sol" },
+                  missing: { modelID: "openai/no-such-base:floor" },
+                  free: { modelID: "openai/gpt-6.1-sol:free" },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+      // The suffixed alias resolves to the base catalog model instead of the 200k default.
+      const floor = required(yield* models.get(providerID, Model.ID.make("floor")))
+      expect(floor.modelID).toBe(Model.ID.make("openai/gpt-6.1-sol:floor"))
+      expect(floor.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+      // Exact matches and unknown bases keep their existing behavior.
+      expect(required(yield* models.get(providerID, Model.ID.make("plain"))).limit).toEqual({
+        context: 1_050_000,
+        input: 922_000,
+        output: 128_000,
+      })
+      expect(required(yield* models.get(providerID, Model.ID.make("missing"))).limit).toEqual({
+        context: 200_000,
+        output: 32_000,
+      })
+      // A non-modifier suffix (":free" is its own catalog SKU, absent here) must not
+      // silently adopt the base model's metadata.
+      expect(required(yield* models.get(providerID, Model.ID.make("free"))).limit).toEqual({
+        context: 200_000,
+        output: 32_000,
+      })
+    }),
+  )
+
   it.effect("lets configured provider compatibility override built-in provider defaults", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
