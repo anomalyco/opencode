@@ -104,7 +104,9 @@ fn main() {
     }
     build.arg("--prefix").arg(&install);
     build.arg("--cache-dir").arg(out.join("zig-cache"));
-    if env::var("HOST").as_deref() != Ok(target.as_str()) {
+    // Android builds always pin the target: the host is Android on Termux, but the
+    // API level must stay explicit so Zig does not consult getprop.
+    if env::var("HOST").as_deref() != Ok(target.as_str()) || target == "aarch64-linux-android" {
         let zig_target = match target.as_str() {
             "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
             "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
@@ -114,6 +116,8 @@ fn main() {
             "aarch64-apple-darwin" => "aarch64-macos",
             "x86_64-pc-windows-msvc" => "x86_64-windows-msvc",
             "aarch64-pc-windows-msvc" => "aarch64-windows-msvc",
+            // Pin the API level so Zig does not shell out to getprop, matching Bun's Android target.
+            "aarch64-linux-android" => "aarch64-linux-android.28",
             _ => panic!("unsupported Ghostty target: {target}"),
         };
         build.arg(format!("-Dtarget={zig_target}"));

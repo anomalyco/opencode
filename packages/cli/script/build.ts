@@ -49,6 +49,7 @@ const allTargets: {
   { os: "linux", arch: "arm64", abi: "musl" },
   { os: "linux", arch: "x64", abi: "musl" },
   { os: "linux", arch: "x64", abi: "musl", avx2: false },
+  { os: "android", arch: "arm64" },
   { os: "darwin", arch: "arm64" },
   { os: "darwin", arch: "x64" },
   { os: "darwin", arch: "x64", avx2: false },
@@ -180,7 +181,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
+      target: compileTarget(item) as Bun.Build.CompileTarget,
       ...(executablePath ? { executablePath } : {}),
       outfile: path.join(outdir, name, "bin", binary),
       execArgv: [
@@ -234,12 +235,13 @@ async function compileExecutable(item: (typeof allTargets)[number]) {
   const release = process.env.BUN_COMPILE_RELEASE
   if (!release) return
 
-  const platform = item.os === "win32" ? "windows" : item.os
+  const platform = item.os === "win32" ? "windows" : item.os === "android" ? "linux" : item.os
   const name = [
     "bun",
     platform,
     item.arch === "arm64" ? "aarch64" : item.arch,
     item.abi,
+    item.os === "android" ? "android" : undefined,
     item.avx2 === false ? "baseline" : undefined,
   ]
     .filter(Boolean)
@@ -329,4 +331,10 @@ function targetName(item: (typeof allTargets)[number]) {
   ]
     .filter(Boolean)
     .join("-")
+}
+
+// Bun names the Android target as a Linux one with an Android suffix, unlike the npm package name.
+function compileTarget(item: (typeof allTargets)[number]) {
+  if (item.os === "android") return "bun-linux-arm64-android"
+  return targetName(item).replace(binary, "bun")
 }
