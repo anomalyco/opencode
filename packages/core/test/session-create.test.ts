@@ -7,11 +7,15 @@ import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
+import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { Hash } from "@opencode/util/hash"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
@@ -39,6 +43,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { initGit } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
+import { tempGlobalLayer } from "./fixture/global"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -70,6 +75,31 @@ const liveIt = testEffect(
       SessionExecution.node.replace(SessionExecution.noopLayer),
       offlineModels,
     ],
+  ),
+)
+const llmLayer = TestLLM.testLayer({ fallback: TestLLM.text("Assistant reply", "reply") })
+const runIt = testEffect(
+  Layer.merge(
+    llmLayer,
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        Project.node,
+        SessionProjector.node,
+        SessionStore.node,
+        Session.node,
+        SessionExecution.node,
+        LocationServiceMap.node,
+      ]),
+      [
+        Bus.node.replace(Bus.configured({ persist: true })),
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        Watcher.node.replace(Watcher.configured({ enabled: false })),
+        LayerNodePlatform.llmClient.replace(llmLayer),
+      ],
+    ),
   ),
 )
 const projectIt = testEffect(
@@ -358,9 +388,7 @@ describe("Session.create", () => {
       const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
 
       expect(created.location.directory).toBe(location.directory)
-      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([
-        created.id,
-      ])
+      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([created.id])
     }),
   )
 
@@ -852,9 +880,10 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const parent = yield* session.create({ location })
 
-      expect(
-        yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
+      expect(yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.ForkEmptyError",
+        sessionID: parent.id,
+      })
     }),
   )
 
@@ -969,7 +998,12 @@ describe("Session.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* db.update(SessionTable).set({ agent: Agent.defaultID }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ agent: Agent.defaultID })
+        .where(eq(SessionTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
 
       expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
     }),
@@ -1260,6 +1294,22 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("ignores an agent switch when the selected agent is unchanged", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const agent = Agent.ID.make("build")
+      const created = yield* session.create({ location, agent })
+
+      yield* session.switchAgent({ sessionID: created.id, agent })
+
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
+      ).toHaveLength(1)
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual([])
+    }),
+  )
+
   it.effect("rejects a model switch for a missing Session", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -1277,6 +1327,108 @@ describe("Session.create", () => {
           ),
       ).toBe("Session.NotFoundError")
     }),
+  )
+
+  runIt.live("skips switches matching the resolved agent and model while recording real switches", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(directory, "opencode.json"),
+            JSON.stringify({
+              default_agent: "lead",
+              providers: {
+                sim: {
+                  package: "@opencode/ai/providers/openai-compatible",
+                  settings: { baseURL: "https://sim.invalid/v1" },
+                  models: {
+                    alpha: { variants: [{ id: "high" }, { id: "low" }] },
+                    beta: {},
+                  },
+                },
+              },
+              agents: {
+                lead: { mode: "primary", model: "sim/alpha#high" },
+                reviewer: { mode: "primary", model: "sim/alpha#high" },
+              },
+            }),
+          ),
+        )
+
+        const session = yield* Session.Service
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+        const lead = Agent.ID.make("lead")
+        const reviewer = Agent.ID.make("reviewer")
+        const alphaHigh = Model.Ref.make({
+          providerID: Provider.ID.make("sim"),
+          id: Model.ID.make("alpha"),
+          variant: Model.VariantID.make("high"),
+        })
+        const beta = Model.Ref.make({
+          providerID: Provider.ID.make("sim"),
+          id: Model.ID.make("beta"),
+        })
+
+        // Session created with an agent and no model (API pattern).
+        const apiSession = yield* session.create({ location: ref, title: "api-session", agent: lead })
+        yield* session.prompt({ sessionID: apiSession.id, text: "First from API" })
+        yield* session.wait(apiSession.id)
+        expect((yield* session.get(apiSession.id)).model).toBeUndefined()
+
+        // Client submits with the same agent and resolved model.
+        yield* session.switchModel({ sessionID: apiSession.id, model: alphaHigh })
+        yield* session.prompt({ sessionID: apiSession.id, text: "Second from client" })
+        yield* session.wait(apiSession.id)
+
+        const apiMessages = yield* session.messages({ sessionID: apiSession.id, order: "asc" })
+        expect(apiMessages.filter((message) => message.type === "model-switched")).toEqual([])
+        expect(apiMessages.filter((message) => message.type === "assistant")).toMatchObject([
+          { agent: "lead", model: alphaHigh },
+          { agent: "lead", model: alphaHigh },
+        ])
+
+        // Real model change on the same session is still recorded with the resolved previous model.
+        yield* session.switchModel({ sessionID: apiSession.id, model: beta })
+        yield* session.prompt({ sessionID: apiSession.id, text: "Third after switch" })
+        yield* session.wait(apiSession.id)
+
+        expect(
+          (yield* session.messages({ sessionID: apiSession.id, order: "asc" })).filter(
+            (message) => message.type === "model-switched",
+          ),
+        ).toMatchObject([{ type: "model-switched", model: beta, previous: alphaHigh }])
+
+        // Session created without agent or model (ACP / minimal API pattern).
+        const bareSession = yield* session.create({ location: ref, title: "bare-session" })
+        yield* session.prompt({ sessionID: bareSession.id, text: "First bare prompt" })
+        yield* session.wait(bareSession.id)
+        expect(yield* session.get(bareSession.id)).toMatchObject({ agent: undefined, model: undefined })
+
+        yield* session.switchAgent({ sessionID: bareSession.id, agent: lead })
+        yield* session.switchModel({ sessionID: bareSession.id, model: alphaHigh })
+        yield* session.prompt({ sessionID: bareSession.id, text: "Second bare prompt" })
+        yield* session.wait(bareSession.id)
+
+        expect(
+          (yield* session.messages({ sessionID: bareSession.id, order: "asc" })).filter(
+            (message) => message.type === "agent-switched" || message.type === "model-switched",
+          ),
+        ).toEqual([])
+
+        // Real agent and model switches on that session are recorded with resolved previous values.
+        yield* session.switchAgent({ sessionID: bareSession.id, agent: reviewer })
+        yield* session.switchModel({ sessionID: bareSession.id, model: beta })
+
+        expect(
+          (yield* session.messages({ sessionID: bareSession.id, order: "asc" })).filter(
+            (message) => message.type === "agent-switched" || message.type === "model-switched",
+          ),
+        ).toMatchObject([
+          { type: "agent-switched", agent: reviewer, previous: lead },
+          { type: "model-switched", model: beta, previous: alphaHigh },
+        ])
+      }),
+    ),
   )
 })
 
