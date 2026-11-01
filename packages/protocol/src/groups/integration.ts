@@ -8,6 +8,7 @@ import {
   IntegrationMethodNotFoundError,
   IntegrationNotFoundError,
   InvalidRequestError,
+  ServiceUnavailableError,
 } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
@@ -16,6 +17,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
     HttpApiEndpoint.get("integration.list", "/api/integration", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Integration.Info)),
+      error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -31,7 +33,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       params: { integrationID: Integration.ID },
       query: LocationQuery,
       success: Location.response(Integration.Info),
-      error: IntegrationNotFoundError,
+      error: [IntegrationNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -68,7 +70,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: HttpApiSchema.NoContent,
-      error: [IntegrationNotFoundError, InvalidRequestError],
+      error: [IntegrationNotFoundError, InvalidRequestError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -89,7 +91,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: HttpApiSchema.NoContent,
-      error: [IntegrationNotFoundError, InvalidRequestError],
+      error: [IntegrationNotFoundError, InvalidRequestError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -110,7 +112,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: Location.response(Integration.Attempt),
-      error: InvalidRequestError,
+      error: [InvalidRequestError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -126,7 +128,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.AttemptStatus),
-      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
+      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -146,7 +148,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         query: LocationQuery,
         payload: Schema.Struct({ code: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
-        error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, InvalidRequestError],
+        error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, InvalidRequestError, ServiceUnavailableError],
       },
     )
       .annotateMerge(locationQueryOpenApi)
@@ -182,7 +184,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: Location.response(Integration.CommandAttempt),
-      error: [IntegrationNotFoundError, IntegrationMethodNotFoundError, InvalidRequestError],
+      error: [IntegrationNotFoundError, IntegrationMethodNotFoundError, InvalidRequestError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -198,7 +200,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.CommandAttemptStatus),
-      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
+      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
