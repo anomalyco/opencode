@@ -2,12 +2,12 @@ import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
-import { matchesVersion } from "../service-version.js"
+import { atLeast, matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
-export { headers }
+export { atLeast, headers }
 /** Contents of the local service registration file. */
 export type Info = typeof Info.Type
 
