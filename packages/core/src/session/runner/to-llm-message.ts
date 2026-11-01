@@ -159,25 +159,12 @@ const isAbandonedTool = (item: SessionMessage.AssistantContent) =>
   item.time.ran === undefined &&
   !(item.state.status === "error" && item.state.error.type.startsWith("tool.input"))
 
-const assistant = (
-  message: SessionMessage.Assistant,
-  next: SessionMessage.Info | undefined,
-  model: Model.Ref,
-  providerMetadataKey: string,
-) => {
+const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   const failed = message.error !== undefined && message.error.type !== "aborted"
-  // A failure before any tool ran is retried from the prompt, so the fresh attempt replaces it. Running out
-  // of retries, Esc during the retry wait (idle) and older continuations (synthetic) keep the visible text.
-  if (
-    failed &&
-    message.retry !== undefined &&
-    next?.type !== "synthetic" &&
-    next?.type !== "idle" &&
-    !message.content.some((item) => item.type === "tool" && item.time.ran !== undefined)
-  )
-    return []
+  // A failed stream is left out unless a tool already ran, whether it was retried or retries ran out.
+  if (failed && !message.content.some((item) => item.type === "tool" && item.time.ran !== undefined)) return []
   const items = message.content.filter((item) => !isAbandonedTool(item))
   // A stream cut by Esc or a crash may end mid-block, so its last block's provider state is not replayed,
   // and reasoning is only replayed once the model moved on to output.
@@ -266,12 +253,7 @@ const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref):
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(
-  message: SessionMessage.Info,
-  next: SessionMessage.Info | undefined,
-  model: Model.Ref,
-  providerMetadataKey: string,
-): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -323,7 +305,7 @@ function toLLMMessage(
         }),
       ]
     case "assistant":
-      return assistant(message, next, model, providerMetadataKey)
+      return assistant(message, model, providerMetadataKey)
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
@@ -353,4 +335,4 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message, index) => toLLMMessage(message, messages[index + 1], model, providerMetadataKey))
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

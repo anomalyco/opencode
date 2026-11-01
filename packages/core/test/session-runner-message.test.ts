@@ -1289,33 +1289,51 @@ Earlier work
       ],
     ])
 
-    const terminalFailed = toLLMMessages(
+    // A failed stream stays out of model history whether it was retried, retries ran out, or Esc landed
+    // during the retry wait. Only a failure after a tool ran is kept, for its results.
+    const failedTurn = (value: string, content: SessionMessage.Assistant["content"]) =>
+      SessionMessage.Assistant.make({
+        id: id(value),
+        type: "assistant",
+        agent: build,
+        model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+        content,
+        error: { type: "provider.unknown", message: "Stream dropped" },
+        finish: "error",
+        time: { created, completed: created },
+      })
+    const failedTurns = toLLMMessages(
       [
-        SessionMessage.Assistant.make({
-          id: id("assistant-provider-failed"),
-          type: "assistant",
-          agent: build,
-          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
-          content: [
-            SessionMessage.AssistantText.make({
-              type: "text",
-              text: "Partial visible answer",
-              native: { phase: "commentary" },
+        failedTurn("retries-exhausted", [
+          SessionMessage.AssistantText.make({
+            type: "text",
+            text: "Partial visible answer",
+            native: { phase: "commentary" },
+          }),
+        ]),
+        SessionMessage.Idle.make({ id: id("idle-failed"), type: "idle", outcome: "failed", time: { created } }),
+        failedTurn("tool-ran-before-failure", [
+          SessionMessage.AssistantText.make({ type: "text", text: "Reading first", native: { phase: "commentary" } }),
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: "ran",
+            name: "read",
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { path: "README.md" },
+              content: [{ type: "text", text: "Hello" }],
             }),
-          ],
-          error: { type: "provider.unknown", message: "Stream dropped" },
-          time: { created, completed: created },
-        }),
+            time: { created, completed: created, ran: created },
+          }),
+        ]),
       ],
       Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
     )
-    expect(terminalFailed[0]?.content).toEqual([
-      {
-        type: "text",
-        text: "Partial visible answer",
-        providerMetadata: undefined,
-      },
+    expect(failedTurns.map((item) => ({ role: item.role, types: item.content.map((part) => part.type) }))).toEqual([
+      { role: "assistant", types: ["text", "tool-call"] },
+      { role: "tool", types: ["tool-result"] },
     ])
+    expect(failedTurns[0]?.content[0]).toEqual({ type: "text", text: "Reading first", providerMetadata: undefined })
 
     const supersededFailed = toLLMMessages(
       [
@@ -1369,82 +1387,6 @@ Earlier work
         type: "text",
         text: "Clean retry answer",
         providerMetadata: { provider: { phase: "final_answer" } },
-      },
-    ])
-
-    // Legacy continuation sessions (retry still set on the partial message before a synthetic continuation)
-    // and Esc-cancelled retry countdowns (followed by an idle marker) must retain visible partial text.
-    const legacyContinuedAndEscDuringBackoff = toLLMMessages(
-      [
-        SessionMessage.Assistant.make({
-          id: id("assistant-legacy-continued"),
-          type: "assistant",
-          agent: build,
-          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
-          content: [
-            SessionMessage.AssistantText.make({
-              type: "text",
-              text: "First half",
-              native: { phase: "final_answer" },
-            }),
-          ],
-          retry: {
-            attempt: 1,
-            at: created,
-            error: { type: "provider.invalid-output", message: "Incomplete" },
-          },
-          error: { type: "provider.invalid-output", message: "Incomplete" },
-          time: { created, completed: created },
-        }),
-        SessionMessage.Synthetic.make({
-          id: id("synthetic-continue"),
-          type: "synthetic",
-          text: "The previous response was interrupted. Continue from where you left off without repeating completed text or tool work.",
-          time: { created },
-        }),
-        SessionMessage.Assistant.make({
-          id: id("assistant-esc-during-backoff"),
-          type: "assistant",
-          agent: build,
-          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
-          content: [
-            SessionMessage.AssistantText.make({
-              type: "text",
-              text: "Kept after Esc during retry wait",
-              native: { phase: "final_answer" },
-            }),
-          ],
-          retry: {
-            attempt: 1,
-            at: created,
-            error: { type: "provider.rate-limit", message: "Rate limited" },
-          },
-          error: { type: "provider.rate-limit", message: "Rate limited" },
-          time: { created, completed: created },
-        }),
-        SessionMessage.Idle.make({
-          id: id("idle-aborted"),
-          type: "idle",
-          outcome: "interrupted",
-          time: { created },
-        }),
-      ],
-      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
-    )
-    expect(legacyContinuedAndEscDuringBackoff.map((item) => ({ role: item.role, content: item.content }))).toEqual([
-      { role: "assistant", content: [{ type: "text", text: "First half", providerMetadata: undefined }] },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "The previous response was interrupted. Continue from where you left off without repeating completed text or tool work.",
-          },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "Kept after Esc during retry wait", providerMetadata: undefined }],
       },
     ])
 
@@ -1532,7 +1474,7 @@ Earlier work
       { type: "text", text: "Visible answer before Esc", providerMetadata: undefined },
     ])
 
-    // A failed stream drops a hosted call that never ran (marked executed at input start) but keeps input
+    // A cut stream drops a hosted call that never ran (marked executed at input start) but keeps input
     // feedback so the model can reissue a malformed call.
     const failedWithCalls = toLLMMessages(
       [
@@ -1545,7 +1487,7 @@ Earlier work
               SessionMessage.ToolStateError.make({
                 status: "error",
                 input: {},
-                error: { type: "provider.unknown", message: "Stream dropped" },
+                error: stepAborted,
               }),
               true,
             ),
@@ -1558,7 +1500,7 @@ Earlier work
               }),
             ),
           ],
-          { type: "provider.unknown", message: "Stream dropped" },
+          stepAborted,
         ),
       ],
       Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
