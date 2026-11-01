@@ -1,5 +1,6 @@
 import { isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
+import { pairPagePayload } from "@opencode/util/pairing-link"
 import { checkServerHealth } from "@/runtime/server/health"
 import { normalizeServerUrl } from "@/runtime/server/registry"
 
@@ -24,9 +25,10 @@ const decodePayload = Schema.decodeUnknownOption(
 )
 
 // `opencode pair` prints links carrying a single-use code that the server exchanges for a session token.
-// Its QR code carries the same code with every reachable server address as {"code","urls"} JSON.
+// Its QR code carries the same code with every reachable server address as {"code","urls"} JSON, inside an
+// https://opencode.ai/pair link (older versions encoded the bare JSON).
 export function pairingLink(value: string) {
-  const trimmed = value.trim()
+  const trimmed = pairPagePayload(value) ?? value.trim()
 
   if (trimmed.startsWith("{")) {
     const payload = Option.getOrUndefined(decodePayload(trimmed))
