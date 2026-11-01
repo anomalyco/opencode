@@ -164,10 +164,14 @@ $ opencode session --help
 
 ## auth
 
-Manages AI providers and credentials.
+Manages AI providers and credentials. The default table shows the integration name, account label or environment variable,
+connection type, and credential ID. Environment connections show `-` instead of an ID.
 
 ```bash
 $ opencode auth list
+Anthropic  work                        stored       cred_work
+Anthropic  work                        stored       cred_other
+Anthropic  ANTHROPIC_API_KEY           environment  -
 ```
 
 List them as JSON.
@@ -188,16 +192,18 @@ Log in with a specific authentication method.
 $ opencode auth login anthropic --method key
 ```
 
-Log out of a saved account.
+Log out of a saved account by label or credential ID. Use the ID from `auth list` when labels are identical.
 
 ```bash
 $ opencode auth logout anthropic work
+$ opencode auth logout anthropic cred_other
 ```
 
-Switch the active account for an integration.
+Switch the active account for an integration by label or credential ID.
 
 ```bash
 $ opencode auth switch anthropic work
+$ opencode auth switch anthropic cred_work
 ```
 
 Export saved credentials and import them on another machine. The file contains secrets.
