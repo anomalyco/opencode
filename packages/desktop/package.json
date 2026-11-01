@@ -17,8 +17,7 @@
     "migration": "bun run script/migration.ts",
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
-    "preview": "electron-vite preview",
-    "bench:startup": "bun run script/bench-startup.ts"
+    "preview": "electron-vite preview"
   },
   "main": "./out/main/index.js",
   "dependencies": {
@@ -31,6 +30,7 @@
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.3",
     "@effect/platform-node": "catalog:",
+    "@hona/strobe-bench": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode/app": "workspace:*",
     "@opencode/gui-plugins": "workspace:*",

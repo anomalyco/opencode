@@ -19,6 +19,6 @@
     "types": ["vite/client", "node", "electron"]
   },
   "references": [{ "path": "../app" }],
-  "include": ["src", "package.json"],
+  "include": ["src", "perf", "package.json"],
   "exclude": ["src/**/*.test.ts"]
 }

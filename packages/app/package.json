@@ -31,15 +31,12 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
     "test:service-worker": "bun run build && playwright test --config e2e/service-worker/playwright.config.ts",
-    "test:stability": "bun test ./e2e/performance/unit/visual-stability.test.ts && playwright test --config e2e/performance/timeline-stability/playwright.config.ts",
-    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts",
-    "bench:tabs": "PLAYWRIGHT_BUILD=1 playwright test --config e2e/performance/playwright.config.ts timeline/session-tab-switch-benchmark.spec.ts --repeat-each=20 --workers=1 --retries=0 --reporter=line,./e2e/performance/tab-switch-reporter.ts",
-    "bench:entry": "PLAYWRIGHT_BUILD=1 playwright test --config e2e/performance/playwright.config.ts timeline/session-entry-benchmark.spec.ts --repeat-each=20 --workers=1 --retries=0 --reporter=line,./e2e/performance/tab-switch-reporter.ts",
-    "test:bench:devex": "bun test ./e2e/performance/unit/desktop-startup.test.ts && playwright test --config e2e/performance/devex/playwright.config.ts"
+    "test:stability": "bun test ./e2e/stability/oracle.test.ts ./e2e/stability/fixture.test.ts && playwright test --config e2e/stability/playwright.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
+    "@hona/strobe-bench": "catalog:",
     "@playwright/test": "catalog:",
     "@sentry/vite-plugin": "catalog:",
     "@tailwindcss/vite": "4.3.3",

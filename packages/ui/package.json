@@ -107,11 +107,11 @@
     "typecheck:tsc": "tsc --noEmit",
     "test": "bun test src --only-failures",
     "dev": "vite",
-    "bench:motion": "bun script/motion-bench.ts",
     "generate:tailwind": "bun run script/tailwind.ts",
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {
+    "@hona/strobe-bench": "catalog:",
     "@solidjs/meta": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",

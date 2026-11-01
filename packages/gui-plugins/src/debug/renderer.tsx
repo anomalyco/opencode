@@ -113,7 +113,7 @@ const setup: Plugin.Setup<typeof Debug> = (ctx) => {
         <Show when={visible() || memoryState()?.on}>
           <Suspense>
             <DebugBar
-              diagnostics={import.meta.env.DEV}
+              devTools={import.meta.env.DEV}
               memory={memoryControl()}
               onClose={hide}
               motion={Motion ? { open: motion(), toggle: toggleMotion } : undefined}
