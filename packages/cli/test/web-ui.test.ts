@@ -198,13 +198,13 @@ describe("web UI", () => {
           const script = yield* Effect.promise(() => fetch(`${origin}/_assets/app.js`))
           expect(yield* Effect.promise(() => script.text())).toBe("console.log('embedded')")
           expect(script.headers.get("content-type")).toContain("javascript")
-          expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+          expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable, no-transform")
 
           const worker = yield* Effect.promise(() => fetch(`${origin}/sw.js`))
-          expect(worker.headers.get("cache-control")).toBe("no-cache")
+          expect(worker.headers.get("cache-control")).toBe("no-cache, no-transform")
 
           const registration = yield* Effect.promise(() => fetch(`${origin}/registerSW.js`))
-          expect(registration.headers.get("cache-control")).toBe("no-cache")
+          expect(registration.headers.get("cache-control")).toBe("no-cache, no-transform")
 
           const font = yield* Effect.promise(() => fetch(`${origin}/font.woff2`))
           expect(font.headers.get("content-type")).toBe("font/woff2")
@@ -214,6 +214,7 @@ describe("web UI", () => {
 
           const fallback = yield* Effect.promise(() => fetch(`${origin}/workspace/example`))
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
+          expect(fallback.headers.get("cache-control")).toBe("no-cache, no-transform")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
           expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("worker-src 'self' blob:")
