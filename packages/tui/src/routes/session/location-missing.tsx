@@ -10,12 +10,14 @@ import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import { DialogWorkspaces, type WorkspaceSelection } from "../../component/dialog-workspaces"
 import { useData } from "../../context/data"
+import { useLocation } from "../../context/location"
 
 export function SessionLocationMissing(props: { directory: string; projectID: string; sessionID: string }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
   const data = useData()
+  const location = useLocation()
 
   function open() {
     dialog.replace(() => (
@@ -48,6 +50,10 @@ export function SessionLocationMissing(props: { directory: string; projectID: st
               return undefined
             })
     if (!directory) return
+    if (directory === props.directory) {
+      location.set({ ...location.ref, directory })
+      return
+    }
     await client.api.session.move({ sessionID: props.sessionID, directory }).catch((error) => {
       toast.show({ title: "Failed to move session", message: errorMessage(error), variant: "error" })
     })
