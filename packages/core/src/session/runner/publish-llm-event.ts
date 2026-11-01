@@ -590,8 +590,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     }
   }, Effect.uninterruptible)
 
-  const publishTraced = Effect.fn("SessionRunner.publishLLMEvent")(publish)
-
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)
     if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
@@ -625,11 +623,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   return {
-    publish: (event: LLMEvent) => {
-      if (event.type === "text-delta" || event.type === "reasoning-delta" || event.type === "tool-input-delta")
-        return publish(event)
-      return publishTraced(event)
-    },
+    publish: (event: LLMEvent): Effect.Effect<void> => publish(event),
     progress,
     toolExecution,
     flush,

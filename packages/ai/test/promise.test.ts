@@ -445,7 +445,7 @@ describe("AI promise client", () => {
     const read_file = AI.tool({
       name: "read_file",
       description: "Read a file.",
-      parameters: Schema.Struct({ path: Schema.String }),
+      input: Schema.Struct({ path: Schema.String }),
       execute: async ({ path }) => {
         if (path === "missing.txt") throw new Error(`No such file: ${path}`)
         if (path === "empty.txt") return

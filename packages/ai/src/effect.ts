@@ -194,6 +194,8 @@ export type {
   Tool,
   ToolExecute,
   ToolExecuteContext,
+  ToolInput,
+  ToolInputType,
   ToolModelOutputInput,
   ToolOptions,
   ToolSchema,

@@ -223,6 +223,7 @@ describe("OpenAI Responses route", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",
@@ -265,6 +266,7 @@ describe("OpenAI Responses route", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model,
+          prompt: "Hello",
           tools: [
             {
               type: "namespace",

@@ -76,7 +76,7 @@ const en = {
   "modal.success": "You're subscribed.",
   "modal.error": "Failed to subscribe",
   "product.allUsers": "All Users",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1 Day",
   "range.1W": "1 Week",

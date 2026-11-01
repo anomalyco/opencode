@@ -1,6 +1,5 @@
 import "./index.css"
 import { Meta, Title } from "@solidjs/meta"
-import { A } from "@solidjs/router"
 import { Faq } from "~/component/faq"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
@@ -44,7 +43,7 @@ export default function Download() {
       <Meta name="description" content={i18n.t("download.meta.description")} />
       <SocialMeta title={i18n.t("download.title")} description={i18n.t("download.meta.description")} path="/download" />
       <div data-component="container">
-        <Header hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="download-section">
@@ -403,7 +402,7 @@ export default function Download() {
                   {i18n.t("download.faq.a3.localLink")}
                 </a>{" "}
                 {i18n.t("download.faq.a3.afterLocal.beforeZen")}{" "}
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
                 {i18n.t("download.faq.a3.afterZen")}
               </Faq>
             </li>
@@ -417,7 +416,7 @@ export default function Download() {
             <li>
               <Faq question={i18n.t("home.faq.q6")}>
                 {i18n.t("download.faq.a5.p1")} {i18n.t("download.faq.a5.p2.beforeZen")}{" "}
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
                 {i18n.t("download.faq.a5.p2.afterZen")}
               </Faq>
             </li>

@@ -12,7 +12,7 @@ const it = testEffect(TestLLM.testLayer())
 const read_file = tool({
   name: "read_file",
   description: "Read a file.",
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
   execute: ({ path }) =>
     path === "missing.txt" ? new ToolFailure({ message: `No such file: ${path}` }) : Effect.succeed("hello"),
@@ -93,7 +93,7 @@ describe("ai.loop", () => {
       const add = AI.tool({
         name: "add",
         description: "Add two numbers.",
-        parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+        input: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
         success: Schema.Number,
         execute: async ({ a, b }) => (a < 0 ? "negative" : a + b) as number,
         toModelOutput: ({ output }) => [{ type: "text", text: `sum=${output}` }],
@@ -149,7 +149,7 @@ describe("ai.loop", () => {
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.push(TestLLM.text("Done.", "text-1"))
-      const search = tool({ name: "search", description: "Search.", parameters: Schema.String })
+      const search = tool({ name: "search", description: "Search.", input: Schema.String })
 
       yield* ai.generate({
         model,
@@ -164,7 +164,7 @@ describe("ai.loop", () => {
   it.effect("fails the request when two tools share a name", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const copy = tool({ name: "read_file", description: "Read again.", parameters: Schema.String })
+      const copy = tool({ name: "read_file", description: "Read again.", input: Schema.String })
       const loop = yield* ai
         .loop({ model, prompt: "Hi.", tools: [read_file, read_file] })
         .pipe(Stream.runDrain, Effect.flip)
@@ -172,6 +172,23 @@ describe("ai.loop", () => {
 
       expect(loop.reason).toMatchObject({ _tag: "InvalidRequest", message: "Duplicate tool name: read_file" })
       expect(generate.reason).toMatchObject({ _tag: "InvalidRequest", message: "Duplicate tool name: read_file" })
+      expect(yield* client.requests()).toHaveLength(0)
+    }),
+  )
+
+  it.effect("fails untyped input that has neither or both of prompt and messages", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const untyped = (input: object) => input as LLM.RequestInput
+      const message = "Pass exactly one of `prompt` or `messages`, not both or neither"
+      const neither = yield* ai.generate(untyped({ model })).pipe(Effect.flip)
+      const both = yield* ai
+        .loop({ ...untyped({ model, prompt: "Hi.", messages: [] }), tools: [read_file] })
+        .pipe(Stream.runDrain, Effect.flip)
+
+      expect(neither.reason).toMatchObject({ _tag: "InvalidRequest", message })
+      expect(both.reason).toMatchObject({ _tag: "InvalidRequest", message })
+      expect(() => ai.request(untyped({ model, system: "Be brief." }))).toThrow(message)
       expect(yield* client.requests()).toHaveLength(0)
     }),
   )

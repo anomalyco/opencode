@@ -47,7 +47,7 @@ export const weatherTool = ToolDefinition.make({
 export const weatherRuntimeTool = tool({
   name: weatherToolName,
   description: weatherTool.description,
-  parameters: Schema.Struct({ city: Schema.String }),
+  input: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.succeed(
