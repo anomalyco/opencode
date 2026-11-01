@@ -462,6 +462,37 @@ For another endpoint or an authenticated server, set its OpenAI-compatible URL:
 - Path-prefixed proxies are supported. For example, `https://example.com/vllm/v1` checks `/vllm/health` and discovers
   `/vllm/v1/models`.
 
+On Apple Silicon, [install vLLM Metal](https://docs.vllm.ai/projects/vllm-metal/en/latest/installation/) to serve an MLX
+checkpoint through the same `vllm` provider:
+
+```bash
+vllm serve mlx-community/Qwen3.5-9B-4bit \
+  --host 127.0.0.1 \
+  --max-model-len 65536 --max-num-seqs 4 \
+  --gpu-memory-utilization 0.6 \
+  --enable-auto-tool-choice --tool-call-parser qwen3_xml \
+  --reasoning-parser qwen3
+```
+
+Select the model and enable tool support in OpenCode:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/mlx-community/Qwen3.5-9B-4bit",
+  "providers": {
+    "vllm": {
+      "models": {
+        "mlx-community/Qwen3.5-9B-4bit": {
+          "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
+          "limit": { "context": 65536, "output": 2048 },
+        },
+      },
+    },
+  },
+}
+```
+
 ### Compatible
 
 For another OpenAI-compatible server, define its provider package, endpoint, and at least one model:
