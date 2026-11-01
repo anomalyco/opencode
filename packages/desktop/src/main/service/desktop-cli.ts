@@ -17,6 +17,9 @@ export interface Resolved {
   readonly version: string
   readonly command: readonly string[]
   readonly binary?: string
+  // The executable shipped with the app, when `binary` is a staged copy of it. It runs in place if the staged
+  // copy cannot be started.
+  readonly bundled?: string
 }
 
 export interface Interface {
@@ -86,7 +89,7 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
   const version = yield* bundledVersion(bundled)
   const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
 
-  return { version, binary, command: [binary] }
+  return { version, binary, command: [binary], bundled: binary === bundled ? undefined : bundled }
 })
 
 // Spawning the bundled executable for `--version` costs ~400 ms of startup on a 200 MB binary (and
