@@ -168,3 +168,74 @@ test("prices cache reads from either token price spelling", async () => {
     await server.stop(true)
   }
 })
+
+test("prices cache writes and the long-context tier", async () => {
+  // Copilot rate card shape: per-request tiers selected by prompt size, e.g. Claude Haiku 5.5 above 100K tokens.
+  const item = (id: string, token_prices: Record<string, unknown> | undefined, maxPromptTokens = 272_000) => ({
+    model_picker_enabled: true,
+    id,
+    name: id,
+    version: `${id}-2026-01-01`,
+    supported_endpoints: ["/chat/completions"],
+    ...(token_prices ? { billing: { token_prices } } : {}),
+    capabilities: {
+      family: "claude",
+      limits: { max_output_tokens: 64_000, max_prompt_tokens: maxPromptTokens },
+      supports: { tool_calls: true },
+    },
+  })
+  const tiered = {
+    batch_size: 1_000_000,
+    default: { input_price: 10, output_price: 50, cache_read_price: 1, cache_write_price: 12.5, max_prompt_tokens: 100_000 },
+    long_context: { input_price: 50, output_price: 250, cache_read_price: 5, cache_write_price: 62.5 },
+  }
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          item("tiered", tiered),
+          item("flat", {
+            batch_size: 1_000_000,
+            default: { input_price: 10, output_price: 50, cache_read_price: 1, cache_write_price: 12.5 },
+          }),
+          // A long_context missing its prices must not drop the usable model from the catalog.
+          item("malformed-tier", {
+            batch_size: 1_000_000,
+            default: { input_price: 10, output_price: 50 },
+            long_context: { input_price: 50 },
+          }),
+          // Without a boundary on the default tier, fall back to the advertised prompt limit.
+          item("boundary-fallback", {
+            batch_size: 1_000_000,
+            default: { input_price: 10, output_price: 50 },
+            long_context: { input_price: 50, output_price: 250 },
+          }),
+        ],
+      }),
+  })
+
+  try {
+    const models = await CopilotModels.get(server.url.origin, {}, [])
+    const tieredModel = models.get(Model.ID.make("tiered"))
+    expect(tieredModel?.cost).toHaveLength(2)
+    expect(tieredModel?.cost[0]).toMatchObject({ input: 0.1, output: 0.5, cache: { read: 0.01, write: 0.125 } })
+    expect(tieredModel?.cost[1]).toMatchObject({
+      tier: { type: "context", size: 100_000 },
+      input: 0.5,
+      output: 2.5,
+      cache: { read: 0.05, write: 0.625 },
+    })
+    const flat = models.get(Model.ID.make("flat"))
+    expect(flat?.cost).toHaveLength(1)
+    expect(flat?.cost[0]).toMatchObject({ input: 0.1, output: 0.5, cache: { read: 0.01, write: 0.125 } })
+    const malformed = models.get(Model.ID.make("malformed-tier"))
+    expect(malformed?.cost).toHaveLength(1)
+    expect(malformed?.cost[0]).toMatchObject({ input: 0.1, output: 0.5 })
+    expect(models.get(Model.ID.make("boundary-fallback"))?.cost[1]).toMatchObject({
+      tier: { type: "context", size: 272_000 },
+    })
+  } finally {
+    await server.stop(true)
+  }
+})
