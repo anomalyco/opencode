@@ -63,7 +63,13 @@ type FormEvent = Extract<OpenCodeEvent, { type: "form.created" }>
 type CreatedEvent = Extract<OpenCodeEvent, { type: "session.created" }>
 
 export type Output =
-  | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate; readonly diff?: DiffSource }
+  | {
+      readonly _tag: "SessionUpdate"
+      readonly update: SessionUpdate
+      readonly diff?: DiffSource
+      /** Set when a child update was projected onto the parent stream, so background turns can suppress it. */
+      readonly child?: ACPChild.Session
+    }
   | { readonly _tag: "ChildUpdate"; readonly update: ACPChild.Update; readonly diff?: DiffSource }
   | {
       readonly _tag: "PermissionAsk"
@@ -132,6 +138,17 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
 export function fromTrackedChild(state: TurnState, event: OpenCodeEvent) {
   const sessionID = event.type === "session.created" ? event.data.parentID : sessionIDFromEvent(event)
   return sessionID !== undefined && state.children.has(sessionID)
+}
+
+/** Root session events, including children a resumed root turn creates. */
+export function fromRoot(ctx: TurnContext, event: OpenCodeEvent) {
+  if (event.type === "session.created") return event.data.parentID === ctx.sessionID
+  return sessionIDFromEvent(event) === ctx.sessionID
+}
+
+/** Continues session-scoped tracking into a new turn while clearing the fields that report one turn's result. */
+export function renew(state: TurnState): TurnState {
+  return { ...state, usage: undefined, finish: undefined, stepError: undefined, executionError: undefined }
 }
 
 export function failure(state: TurnState) {
@@ -419,7 +436,7 @@ function route(ctx: TurnContext, child: ACPChild.Session | undefined, update: Se
   if (!child) return [{ _tag: "SessionUpdate", update }]
   const projected = ACPChild.project(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
-  return [{ _tag: "SessionUpdate", update: projected }]
+  return [{ _tag: "SessionUpdate", update: projected, child }]
 }
 
 function childStatus(ctx: TurnContext, child: ACPChild.Session, event: ACPChild.Event): Output[] {

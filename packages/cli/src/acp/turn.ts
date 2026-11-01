@@ -54,6 +54,15 @@ type Turn = {
   readonly subscription: Subscription
   readonly cancelled: Deferred.Deferred<void>
   readonly background: boolean
+  readonly adopted: boolean
+}
+
+/** A foreground turn claims this to continue an already connected session stream where the background consumer stopped. */
+type Background = {
+  readonly subscription: Subscription
+  readonly state: Ref.Ref<ACPTranslate.TurnState>
+  readonly stop: Deferred.Deferred<void>
+  readonly stopped: Deferred.Deferred<void>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -66,8 +75,32 @@ export const make = Effect.fnUntraced(function* (input: {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
   const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
+  const backgrounds = new Map<string, Background>()
 
   const open = Effect.fnUntraced(function* (ctx: ACPTranslate.TurnContext, state: Ref.Ref<ACPTranslate.TurnState>) {
+    const claimed = yield* Effect.sync(() => {
+      const background = backgrounds.get(ctx.sessionID)
+      if (background) backgrounds.delete(ctx.sessionID)
+      return background
+    })
+    if (claimed) {
+      // The claiming turn continues where the background consumer stopped, so no update is dropped or repeated.
+      yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          yield* Deferred.succeed(claimed.stop, undefined)
+          yield* Deferred.await(claimed.stopped)
+          yield* Ref.set(state, ACPTranslate.renew(yield* Ref.get(claimed.state)))
+        }),
+      )
+      return {
+        ctx,
+        state,
+        subscription: claimed.subscription,
+        cancelled: yield* Deferred.make<void>(),
+        background: false,
+        adopted: true,
+      } satisfies Turn
+    }
     // Parented to the service scope; the session scope may already be closed.
     const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
@@ -86,7 +119,14 @@ export const make = Effect.fnUntraced(function* (input: {
       Effect.forever,
       Effect.forkIn(subscriptionScope),
     )
-    return { ctx, state, subscription, cancelled: yield* Deferred.make<void>(), background: false } satisfies Turn
+    return {
+      ctx,
+      state,
+      subscription,
+      cancelled: yield* Deferred.make<void>(),
+      background: false,
+      adopted: false,
+    } satisfies Turn
   })
 
   const take = (subscription: Subscription) =>
@@ -134,7 +174,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const interpret = (turn: Turn, output: ACPTranslate.Output) => {
     switch (output._tag) {
       case "SessionUpdate":
-        if (turn.background) return Effect.void
+        if (turn.background && output.child) return Effect.void
         return ACPPermission.withCompletedDiffs(output.update, output.diff, turn.ctx.cwd).pipe(
           Effect.flatMap((update) => input.connection.sessionUpdate({ sessionId: turn.ctx.sessionID, update })),
         )
@@ -197,7 +237,7 @@ export const make = Effect.fnUntraced(function* (input: {
     const event = yield* take(turn.subscription)
     const folded = yield* Ref.modify(turn.state, (current) => {
       const next =
-        turn.background && !ACPTranslate.fromTrackedChild(current, event)
+        turn.background && !ACPTranslate.fromTrackedChild(current, event) && !ACPTranslate.fromRoot(turn.ctx, event)
           ? { state: current, outputs: [] }
           : ACPTranslate.fold(current, event, turn.ctx)
       return [next, next.state]
@@ -216,10 +256,12 @@ export const make = Effect.fnUntraced(function* (input: {
     }
   })
 
-  const followChildren = Effect.fnUntraced(function* (turn: Turn) {
+  // A child settling wakes its parent, so the consumer outlives the children and exits only when the root is left idle.
+  const followSession = Effect.fnUntraced(function* (turn: Turn) {
     while (true) {
       const folded = yield* advance(turn)
-      if (folded.state.openChildren.size === 0) return yield* asksSettled(turn.subscription)
+      if (folded.terminal !== undefined && folded.state.openChildren.size === 0)
+        return yield* asksSettled(turn.subscription)
     }
   })
 
@@ -280,10 +322,13 @@ export const make = Effect.fnUntraced(function* (input: {
 
   const execute = (attached: Attached, prompt: ACPPrompt.Prepared, turn: Turn) =>
     Effect.gen(function* () {
-      // The feed opens with `server.connected`, so every event the submission causes comes after it.
-      const connected = yield* take(turn.subscription)
-      if (connected.type !== "server.connected")
-        return yield* Effect.die(new Error(`expected server.connected, got ${connected.type}`))
+      // An adopted subscription is already connected, and the feed opens with `server.connected`, so every event
+      // the submission causes comes after it.
+      if (!turn.adopted) {
+        const connected = yield* take(turn.subscription)
+        if (connected.type !== "server.connected")
+          return yield* Effect.die(new Error(`expected server.connected, got ${connected.type}`))
+      }
       const events = yield* consume(turn).pipe(Effect.forkScoped)
       return yield* Effect.gen(function* () {
         yield* submit(attached, prompt)
@@ -302,12 +347,29 @@ export const make = Effect.fnUntraced(function* (input: {
     const state = yield* Ref.get(turn.state)
     if (state.openChildren.size === 0) return yield* close
     // Children outlive a cancelled turn, so their asks still reach the client.
-    const background = followChildren({
-      ...turn,
+    const entry: Background = {
+      subscription: turn.subscription,
       state: yield* Ref.make(state),
-      cancelled: yield* Deferred.make<void>(),
-      background: true,
-    }).pipe(Effect.ignore, Effect.ensuring(close), Effect.withSpan("cli.acp.turn.background"))
+      stop: yield* Deferred.make<void>(),
+      stopped: yield* Deferred.make<void>(),
+    }
+    const cancelled = yield* Deferred.make<void>()
+    const dispose = Effect.suspend(() => {
+      if (backgrounds.get(attached.id) !== entry) return Effect.void
+      backgrounds.delete(attached.id)
+      return close
+    })
+    const background = Effect.suspend(() => {
+      backgrounds.set(attached.id, entry)
+      return followSession({ ...turn, state: entry.state, cancelled, background: true })
+    }).pipe(
+      Effect.raceFirst(Deferred.await(entry.stop)),
+      Effect.ensuring(
+        Deferred.succeed(entry.stopped, undefined).pipe(Effect.andThen(() => dispose)),
+      ),
+      Effect.ignore,
+      Effect.withSpan("cli.acp.turn.background"),
+    )
     yield* input.sessions.fork(attached, background).pipe(Effect.catchTag("ACPSessionNotFoundError", () => close))
   })
 
