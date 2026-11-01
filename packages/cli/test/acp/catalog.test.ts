@@ -39,6 +39,34 @@ describe("acp catalog and config options over the wire", () => {
     expect(currentValue(await set("model", `${overlap}/low`), "effort")).toBe("low")
   })
 
+  test.each([
+    ["model", "test/second-model", "model"],
+    ["mode", "plan", "agent"],
+  ])("keeps the current selection when a %s switch fails", async (configId, value, endpoint) => {
+    let reject = true
+    await using acp = await startWire({
+      fetch: (request) => {
+        if (!reject || !request.path.endsWith(`/${endpoint}`) || request.method !== "POST") return
+        reject = false
+        return new Response("temporarily unavailable", { status: 503 })
+      },
+    })
+    await acp.initialize()
+    const sessionId = (await acp.newSession()).sessionId
+    const set = (configId: string, value: string) =>
+      acp.request("session/set_config_option", { sessionId, configId, value })
+
+    expect(await rpcError(set(configId, value))).toMatchObject({ code: -32603 })
+    const selected = await set("effort", "high")
+
+    expect([currentValue(selected, "model"), currentValue(selected, "effort"), currentValue(selected, "mode")]).toEqual(
+      ["test/test-model", "high", "build"],
+    )
+    expect(acp.server.selections).toEqual([
+      { sessionID: sessionId, model: { providerID: "test", id: "test-model", variant: "high" } },
+    ])
+  })
+
   test("answers the first session after a cold location activates its plugins (#52729, #52472)", async () => {
     await using acp = await startWire()
     const plugins = acp.server.catalog.plugins.splice(0)
