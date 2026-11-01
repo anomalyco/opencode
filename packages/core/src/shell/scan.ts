@@ -192,6 +192,8 @@ type BashState = {
   // Posix shells such as Dash read `&>` as `&` and `>`, so later words would start another command there.
   ampersandRedirectWords: number | undefined
   commandWordIndex: number
+  // Where the builtin lookup stopped in the current command's words, and what it saw in the operands after it.
+  builtin: BashBuiltin | undefined
   assignmentWord: boolean
   assignmentHeadUnsafe: boolean
   invalid: OpaqueReason | undefined
@@ -210,6 +212,18 @@ type BashState = {
 // A word's cooked text, the literal text it decodes to apart from its expansions, and the literal text of its
 // command substitutions' words, which stands in for their output.
 type BashText = { word: string; literal: string; output: string }
+
+// Words only grow within a command, so the builtin lookup resumes where it stopped and reads each operand once.
+type BashBuiltin = {
+  name: number
+  precommand: string | undefined
+  read: number
+  dash: boolean
+  arithmetic: boolean
+  setArray: boolean
+  printfVariable: boolean
+  printVariable: boolean
+}
 
 // Arithmetic text, a builtin operand that names or binds a variable now, or a value bound for later.
 type BashEvaluation = "arithmetic" | "binding" | "deferred"
@@ -319,16 +333,15 @@ function bashWordEvaluation(state: BashState): BashEvaluation | undefined {
   if (command === undefined) return undefined
   if (command === "let" || (state.context.dialect !== "bash" && ZSH_ARITHMETIC_BUILTINS.has(command)))
     return "arithmetic"
-  if (command === "set")
-    return state.words.slice(name + 1).some((word) => /^[-+][A-Za-z0-9]*A/.test(word)) ? "binding" : "deferred"
+  const options = bashBuiltinOperands(state)
+  if (command === "set") return options.setArray ? "binding" : "deferred"
   if (BASH_BINDING_BUILTINS.has(command)) {
-    const options = state.words.slice(name + 1)
-    if (options.some((word) => word.startsWith("-") && /[EFin]/.test(word))) return "arithmetic"
+    if (options.arithmetic) return "arithmetic"
     // A plain `name=value` declaration without options binds a scalar unless Bash re-parses an existing array.
     if (
       state.assignmentWord &&
       BASH_ASSIGNMENT_DECLARATIONS.has(command) &&
-      options.every((word) => !word.startsWith("-")) &&
+      !options.dash &&
       (command === "export" ||
         command === "readonly" ||
         state.context.dialect === "zsh" ||
@@ -338,9 +351,9 @@ function bashWordEvaluation(state: BashState): BashEvaluation | undefined {
     return "binding"
   }
   if (command === "printf" || command === "print") {
-    const options = [...state.words.slice(name + 1), state.word]
+    const variable = command === "print" ? options.printVariable : options.printfVariable
     const flag = command === "print" ? /^-[A-Za-z]*v/ : /^-v/
-    return options.some((word) => flag.test(word)) ? "binding" : undefined
+    return variable || flag.test(state.word) ? "binding" : undefined
   }
   if (command === "wait")
     return /^-[nf]*p/.test(state.word) || /^-[nf]*p$/.test(state.words.at(-1) ?? "") ? "binding" : undefined
@@ -353,18 +366,48 @@ function bashWordEvaluation(state: BashState): BashEvaluation | undefined {
 
 // Index of the word naming the builtin that runs, skipping precommand wrappers and their options.
 function bashBuiltinIndex(state: BashState) {
-  let name = state.commandWordIndex
-  while (
-    BASH_PRECOMMANDS.has(state.words[name] ?? "") ||
-    (state.context.dialect !== "bash" && ZSH_PRECOMMANDS.has(state.words[name] ?? ""))
-  ) {
-    const precommand = state.words[name++]
-    while (precommand !== "-" && state.words[name]?.startsWith("-")) {
-      if (precommand === "exec" && /^-[cl]*a$/.test(state.words[name])) name++
-      name++
+  const builtin = (state.builtin ??= {
+    name: state.commandWordIndex,
+    precommand: undefined,
+    read: state.commandWordIndex + 1,
+    dash: false,
+    arithmetic: false,
+    setArray: false,
+    printfVariable: false,
+    printVariable: false,
+  })
+  while (true) {
+    const precommand = builtin.precommand
+    if (precommand !== undefined) {
+      while (precommand !== "-" && state.words[builtin.name]?.startsWith("-")) {
+        if (precommand === "exec" && /^-[cl]*a$/.test(state.words[builtin.name])) builtin.name++
+        builtin.name++
+      }
+      // The precommand's options may continue in a later word.
+      if (state.words[builtin.name] === undefined) return builtin.name
+      builtin.precommand = undefined
     }
+    const word = state.words[builtin.name] ?? ""
+    if (!BASH_PRECOMMANDS.has(word) && (state.context.dialect === "bash" || !ZSH_PRECOMMANDS.has(word)))
+      return builtin.name
+    builtin.precommand = word
+    builtin.name++
   }
-  return name
+}
+
+// What the operands after the builtin name contain so far.
+function bashBuiltinOperands(state: BashState) {
+  const builtin = state.builtin!
+  if (builtin.read <= builtin.name) builtin.read = builtin.name + 1
+  for (; builtin.read < state.words.length; builtin.read++) {
+    const word = state.words[builtin.read]
+    builtin.dash ||= word.startsWith("-")
+    builtin.arithmetic ||= word.startsWith("-") && /[EFin]/.test(word)
+    builtin.setArray ||= /^[-+][A-Za-z0-9]*A/.test(word)
+    builtin.printfVariable ||= /^-v/.test(word)
+    builtin.printVariable ||= /^-[A-Za-z]*v/.test(word)
+  }
+  return builtin
 }
 
 function finishBashCommand(state: BashState, boundary = false, newline = false) {
@@ -478,6 +521,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   state.words.length = 0
   state.rawWords.length = 0
   state.commandWordIndex = -1
+  state.builtin = undefined
   state.commandStart = undefined
   state.dupRedirect = false
   state.hasRedirect = false
@@ -520,6 +564,7 @@ function scanBash(
     redirectPrefixEnd: undefined,
     ampersandRedirectWords: undefined,
     commandWordIndex: -1,
+    builtin: undefined,
     assignmentWord: false,
     assignmentHeadUnsafe: false,
     invalid: undefined,
