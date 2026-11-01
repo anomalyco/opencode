@@ -8,6 +8,6 @@
     "noUncheckedIndexedAccess": false,
     "tsBuildInfoFile": "node_modules/.ts-dist/tests.tsbuildinfo"
   },
-  "include": ["drizzle.config.ts", "script", "test"],
+  "include": ["drizzle.config.ts", "script", "test", "perf"],
   "references": [{ "path": "./tsconfig.json" }]
 }

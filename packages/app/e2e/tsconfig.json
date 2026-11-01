@@ -7,5 +7,5 @@
     "rootDir": "../..",
     "types": ["node", "bun"]
   },
-  "include": ["./**/*.ts", "./**/*.tsx", "../component-tests/**/*.ts", "../perf/fixtures/**/*.ts", "../src/types.ts"]
+  "include": ["./**/*.ts", "./**/*.tsx", "../component-tests/**/*.ts", "../perf/**/*.ts", "../src/types.ts"]
 }
