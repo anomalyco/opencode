@@ -480,6 +480,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
     })
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
+    const fallback = {
+      ...assistant,
+      contextTokens: 41_200,
+      tokens: { input: 94_700, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [{ ...fallback, content: [tool] }] })).toBe(42_200)
     expect(yield* due(grown)).toBe(true)
     // A step estimates its prompt once and passes it; compaction decides on that instead of estimating again.
     expect(yield* due(grown, { measured: 0, estimated: 0 })).toBe(false)

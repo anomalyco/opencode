@@ -38,6 +38,7 @@ export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info)
 
 export type Recorded = {
   readonly tokens: TokenUsage.Info
+  readonly contextTokens?: number
   readonly cost: Money.USD
 }
 
@@ -45,6 +46,7 @@ export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Rec
   const normalized = tokens(usage)
   return {
     tokens: normalized,
+    contextTokens: usage?.contextTokens === undefined ? undefined : safe(usage.contextTokens),
     // What an endpoint says it charged beats the catalog, which can't see its peak pricing, subscriptions or routing.
     // A reported zero is authoritative.
     cost: usage?.cost === undefined ? calculateCost(costs, normalized) : Money.USD.make(usage.cost),
