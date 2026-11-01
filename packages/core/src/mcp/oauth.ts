@@ -253,7 +253,7 @@ export const toCredential = (input: {
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
-      ...(input.tokens.scope ? { scope: input.tokens.scope } : {}),
+      ...(input.tokens.scope !== undefined ? { scope: input.tokens.scope } : {}),
       ...(input.tokens.issuer ? { issuer: input.tokens.issuer } : {}),
       ...(input.client ? { client: input.client } : {}),
     },
@@ -308,7 +308,8 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
         const value = toCredential({
           methodID,
           serverUrl: input.config.url,
-          tokens,
+          // RFC 6749 §5.1: an omitted scope leaves the granted scope unchanged on refresh.
+          tokens: { ...tokens, scope: tokens.scope ?? (previous ? toTokens(previous).scope : undefined) },
           client: previous ? clientFromCredential(previous) : undefined,
         })
         presented = value.refresh
@@ -474,7 +475,13 @@ export const authorize = (input: {
         hasRefreshToken: Boolean(tokens.refresh_token),
         expiresIn: tokens.expires_in,
       })
-      return toCredential({ methodID: input.methodID, serverUrl: input.config.url, tokens, client })
+      return toCredential({
+        methodID: input.methodID,
+        serverUrl: input.config.url,
+        // Use the actual request: the SDK may select discovered scopes or add offline_access.
+        tokens: { ...tokens, scope: tokens.scope ?? authorizationUrl?.searchParams.get("scope") ?? undefined },
+        client,
+      })
     })
 
     yield* Effect.tryPromise({
