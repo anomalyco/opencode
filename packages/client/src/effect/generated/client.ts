@@ -1593,7 +1593,7 @@ const EndpointExperimentalScheduleCreate =
           if: input["if"],
           until: input["until"],
           ends: input["ends"],
-          prompt: input["prompt"],
+          action: input["action"],
         },
       }).pipe(
         Effect.mapError(mapClientError),

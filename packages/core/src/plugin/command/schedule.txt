@@ -1,11 +1,19 @@
-Manage scheduled prompts for this session.
+Manage scheduled automations for this session.
 
 Request: $ARGUMENTS
 
 Use the schedule tools in the `opencode` namespace. They only see this session's schedules.
 
-- To schedule something, call `schedule_create`. Choose `when` (`{ in: "20 minutes" }`, `{ at: "2026-10-27T09:00" }`, `{ every: "1 hour" }` or `{ cron: "0 9 * * 1-5" }`, optional with `until` which defaults to every 30s). Add `until` (wake once then stop, 24h default timeout; matches immediately if already true) or `if` (gate each recurring slot with no model call; baselines `state` at creation without waking) using either `{ run: "..." }` for a shell check or `{ code: "..." }` for a Code Mode JavaScript check calling `tools.<path>(...)` statically (no `fetch`, 30s / 20 calls / 32 KB caps) and returning a boolean or `{ wake, state?, message? }`. Code checks run once at creation with `state = null` and fail `schedule_create` if they throw. To stop a repeating schedule, add `ends`: `{ after: "8 hours" }`, `{ at: "..." }` or `{ times: 3 }`. Write `prompt` as the instruction you will receive when it wakes, with enough context to act on it without this conversation.
+- To schedule something, call `schedule_create`:
+  - `when`: `{ type: "in", in: "20 minutes" }`, `{ type: "at", at: "2026-10-27T09:00" }`, `{ type: "every", every: "1 hour" }` or `{ type: "cron", cron: "0 9 * * 1-5" }` (optional with `until`, which defaults to every 30s).
+  - Optional gate (`if` or `until`): `{ type: "shell", run: "..." }` for a zero-token shell check or `{ type: "code", code: "..." }` for a Code Mode JavaScript check calling `tools.<path>(...)` statically (no `fetch`, 30s / 20 calls / 32 KB caps) and returning a boolean or `{ wake, state?, message? }`.
+  - `action` (required tagged union):
+    - `{ type: "prompt", prompt, target? }`: run a model prompt in this session by default, or in an isolated child session via `target: { type: "subagent", agent?, notify? }`.
+    - `{ type: "command", name, arguments?, target? }`: run a slash command such as `"morning-brief"` in this session by default, or in a child session via `target: { type: "subagent", agent?, notify? }`.
+    - `{ type: "shell", run, notify? }`: execute a deterministic shell command in the session's directory with no model call.
+    - `{ type: "code", code, notify? }`: execute a deterministic Code Mode JavaScript script with no model call.
+  - Background runs (`target: { type: "subagent" }`, `shell`, `code`) post non-quiet output back to this session by default (`notify: true`); pass `notify: false` to stay silent, and cap repeating runs with `ends` (`{ after }`, `{ at }`, `{ times }`).
 - To pause, resume or delete one, find its id with `schedule_list`, then call `schedule_pause`, `schedule_resume` or `schedule_delete`.
-- If the request is empty, call `schedule_list` and show this session's schedules: name, when, status and next run.
+- If the request is empty, call `schedule_list` and show this session's schedules: name, action, when, status and next run.
 
 Reply in one line: what changed and when it next fires.
