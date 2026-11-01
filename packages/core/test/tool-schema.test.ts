@@ -359,7 +359,15 @@ test("legacy Zod schemas with JSON Schema overrides still convert", () => {
 
 test("legacy Zod schemas cloned from an overridden parent still convert", () => {
   const base = z.string().describe("Base")
-  base._zod.toJSONSchema = () => ({ type: "string", description: "Base" })
+  const baseParent = base._zod.parent
+  let parentDuringOverride: unknown
+  base._zod.toJSONSchema = () => {
+    // The converter must hide the stranded parent before running the override. Older Zod
+    // implementations do not crash on the shape, so this also guards the behavior where the
+    // runtime is too old to reproduce the `seen.ref` failure.
+    parentDuringOverride = base._zod.parent
+    return { type: "string", description: "Base" }
+  }
   // `describe()` clones point at the overridden schema without carrying the override themselves.
   const path = base.describe("File path")
   const input = z.object({ args: z.object({ path }) })
@@ -385,6 +393,9 @@ test("legacy Zod schemas cloned from an overridden parent still convert", () => 
     },
     required: ["args"],
   })
+  expect(parentDuringOverride).toBeUndefined()
+  expect(base._zod.parent).toBe(baseParent)
+  expect(path._zod.parent).toBe(base)
 })
 
 test("portable schema failures become tool failures", async () => {
