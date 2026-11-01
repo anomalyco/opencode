@@ -1,4 +1,5 @@
 import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
+import { ClientError } from "@opencode/client/promise"
 import { sessionNotFoundError } from "@/runtime/server/errors"
 
 type SessionStore<T> = {
@@ -77,7 +78,10 @@ export function createSessionResolution<T>(
           if (!stale) setStatus({ id, store, state: "settled" })
         })
         .catch((failure) => {
-          if (!stale) setStatus({ id, store, state: "failed", failure })
+          // The native reconnect transition retries metadata as well as the transcript. A transient
+          // transport error must not dispose this resolver through the route's error boundary.
+          if (stale || (failure instanceof ClientError && failure.reason === "Transport")) return
+          setStatus({ id, store, state: "failed", failure })
         })
     }),
   )
