@@ -172,10 +172,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const legacyLoop =
     loop !== undefined && message.content.some((item) => item.type === "text" && loop.feed(item.text) !== -1)
   // A marker or loop failure can follow a genuinely executed SDK tool. Replay
-  // its completed result so a resume remembers the actual effect.
+  // its completed result so a resume remembers the actual effect. The AI SDK
+  // path records the guard as `unknown`; the native path records it as
+  // `provider.unknown`.
   const dsmlFailure =
     legacyLoop ||
-    (message.error?.type === "unknown" &&
+    ((message.error?.type === "unknown" || message.error?.type === "provider.unknown") &&
       (message.error.message === DSML_GUARD_MESSAGE || message.error.message === EMPTY_VETTING_LOOP_MESSAGE))
   const replay = dsmlFailure
     ? message.content.filter((item) => item.type === "tool" && item.state.status === "completed")

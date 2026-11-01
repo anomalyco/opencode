@@ -40,7 +40,13 @@ import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
 import { notifyDSMLBuffering } from "./provider/dsml-recovery-audit.js"
 import { RequestDiagnostic, REQUEST_DIAGNOSTIC_HEADER } from "./provider/request-diagnostic.js"
-import { guardDSMLStream, isDSV4Scope, recoverDSMLStream, recoveryStatus } from "./session/llm/dsml-recovery.js"
+import {
+  guardDSMLStream,
+  guardStatus,
+  isDSV4Scope,
+  recoverDSMLStream,
+  recoveryStatus,
+} from "./session/llm/dsml-recovery.js"
 import { State } from "./state.js"
 import { stringify } from "./tool/runtime.js"
 
@@ -761,7 +767,8 @@ function recoverStream(
 ) {
   if (!recovery || !isDSV4Scope(language.provider, language.modelId)) return result.stream
   const onError = (message: string) => {
-    if (recovery.diagnosticToken) RequestDiagnostic.trigger(recovery.diagnosticToken, { type: "provider-error", message })
+    if (recovery.diagnosticToken)
+      RequestDiagnostic.trigger(recovery.diagnosticToken, { type: "provider-error", message })
   }
   const stream =
     recoveryStatus() === "enabled"
@@ -773,7 +780,9 @@ function recoverStream(
           onSuspect: () => notifyDSMLBuffering(recovery.sessionID),
           onError,
         })
-      : guardDSMLStream(result.stream, onError)
+      : guardStatus() === "enabled"
+        ? guardDSMLStream(result.stream, onError)
+        : result.stream
   if (!recovery.diagnosticToken) return stream
   return closeOnEnd(stream, recovery.diagnosticToken)
 }

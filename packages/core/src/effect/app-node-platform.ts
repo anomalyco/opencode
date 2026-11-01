@@ -4,6 +4,7 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Socket } from "effect/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { DSMLGuard } from "../session/llm/dsml-guard.js"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
 // Bun's fetch ends a request after five quiet minutes, before provider routes' own header and chunk timeouts.
@@ -24,7 +25,11 @@ export const requestExecutor = makeGlobalNode({
   deps: [httpClient],
 })
 
-export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLMClient.layer, deps: [requestExecutor] })
+export const llmClient = makeGlobalNode({
+  service: LLMClient.Service,
+  layer: DSMLGuard.layer.pipe(Layer.provide(LLMClient.layer)),
+  deps: [requestExecutor],
+})
 
 export const webSocketConstructor = makeGlobalNode({
   service: Socket.WebSocketConstructor,

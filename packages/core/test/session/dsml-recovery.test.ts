@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import type { JSONSchema7, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { DSMLRecoveryAuditInput } from "../../src/provider/dsml-recovery-audit.js"
-import { isDSV4Scope, recoverDSMLStream, recoveryStatus } from "../../src/session/llm/dsml-recovery.js"
+import { guardStatus, isDSV4Scope, recoverDSMLStream, recoveryStatus } from "../../src/session/llm/dsml-recovery.js"
 
 const schema: JSONSchema7 = {
   type: "object",
@@ -69,10 +69,26 @@ test("exact scope and fixed default disabled status", () => {
     expect(isDSV4Scope(p, m)).toBe(false)
   const previous = process.env.OPENCODE_DSV4_RECOVERY_ENABLED
   try {
-    for (const [value, expected] of [[undefined, "disabled"], ["0", "disabled"], ["true", "disabled"], ["1", "enabled"]] as const) {
+    for (const [value, expected] of [
+      [undefined, "disabled"],
+      ["0", "disabled"],
+      ["true", "disabled"],
+      ["1", "enabled"],
+    ] as const) {
       if (value === undefined) delete process.env.OPENCODE_DSV4_RECOVERY_ENABLED
       else process.env.OPENCODE_DSV4_RECOVERY_ENABLED = value
       expect(recoveryStatus()).toBe(expected)
+    }
+    // The strict guard is the default; only an explicit `0` turns it off.
+    for (const [value, expected] of [
+      [undefined, "enabled"],
+      ["0", "disabled"],
+      ["true", "enabled"],
+      ["1", "enabled"],
+    ] as const) {
+      if (value === undefined) delete process.env.OPENCODE_DSV4_RECOVERY_ENABLED
+      else process.env.OPENCODE_DSV4_RECOVERY_ENABLED = value
+      expect(guardStatus()).toBe(expected)
     }
   } finally {
     if (previous === undefined) delete process.env.OPENCODE_DSV4_RECOVERY_ENABLED
@@ -85,13 +101,19 @@ for (const size of [1, 7, 9999]) {
     ["quoted mixed", 'Example: "' + call + '"\n<｜DSML｜tool_calls></｜DSML｜tool_calls>'],
     ["fenced mixed", "```xml\n" + call + "\n```\n</｜DSML｜tool_calls>"],
     ["commented invoke", "<!-- " + call + " -->"],
-  ]) test(`native-only ${label} chunk ${size} never dispatches prose`, async () => {
-    const parts = deltas(text, size)
-    const result = await read(parts)
-    expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
-    expect(result.filter((p) => p.type === "error")).toHaveLength(1)
-    expect(result.filter((p) => p.type === "text-delta").map((p) => p.delta).join("")).toBe(text)
-  })
+  ])
+    test(`native-only ${label} chunk ${size} never dispatches prose`, async () => {
+      const parts = deltas(text, size)
+      const result = await read(parts)
+      expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
+      expect(result.filter((p) => p.type === "error")).toHaveLength(1)
+      expect(
+        result
+          .filter((p) => p.type === "text-delta")
+          .map((p) => p.delta)
+          .join(""),
+      ).toBe(text)
+    })
 }
 test("note plus genuine native call stays visible and is emitted once", async () => {
   const parts = deltas('<｜DSML｜parameter name="note">advisory</｜DSML｜parameter>')
@@ -157,22 +179,36 @@ test("eight active suspect streams bound handles; ninth refuses and release rest
   const controllers: ReadableStreamDefaultController<LanguageModelV3StreamPart>[] = []
   let notices = 0
   const tasks = Array.from({ length: 9 }, () => {
-    const upstream = new ReadableStream<LanguageModelV3StreamPart>({ start(c) {
-      controllers.push(c)
-      c.enqueue({ type: "text-delta", id: "text", delta: call })
-      c.enqueue({ type: "tool-call", toolCallId: "native", toolName: "bash", input: '{"command":"fixture"}' })
-    } })
-    const reader = recoverDSMLStream(upstream, { ...options, onSuspect: () => { notices++ } }).getReader()
+    const upstream = new ReadableStream<LanguageModelV3StreamPart>({
+      start(c) {
+        controllers.push(c)
+        c.enqueue({ type: "text-delta", id: "text", delta: call })
+        c.enqueue({ type: "tool-call", toolCallId: "native", toolName: "bash", input: '{"command":"fixture"}' })
+      },
+    })
+    const reader = recoverDSMLStream(upstream, {
+      ...options,
+      onSuspect: () => {
+        notices++
+      },
+    }).getReader()
     return (async () => {
       const parts: LanguageModelV3StreamPart[] = []
-      while (true) { const next = await reader.read(); if (next.done) return parts; parts.push(next.value) }
+      while (true) {
+        const next = await reader.read()
+        if (next.done) return parts
+        parts.push(next.value)
+      }
     })()
   })
   const ninth = await tasks[8]
   expect(notices).toBe(9)
   expect(ninth.filter((p) => p.type === "error")).toHaveLength(1)
   expect(ninth.filter((p) => p.type === "tool-call")).toHaveLength(0)
-  for (const controller of controllers.slice(0, 8)) { controller.enqueue(end); controller.close() }
+  for (const controller of controllers.slice(0, 8)) {
+    controller.enqueue(end)
+    controller.close()
+  }
   const valid = await Promise.all(tasks.slice(0, 8))
   expect(valid.every((parts) => parts.filter((p) => p.type === "tool-call").length === 1)).toBe(true)
   const again = await read(nativeParts(call, 7))
@@ -196,7 +232,9 @@ test("native before note is not replayed; undeclared prior native cannot justify
 test("response overflow is fixed rejection and audits once", async () => {
   const audits: DSMLRecoveryAuditInput[] = []
   const result = await read(deltas('<｜DSML｜invoke name="bash">' + "x".repeat(2 * 1024 * 1024)), {
-    audit: (value) => { audits.push(value) },
+    audit: (value) => {
+      audits.push(value)
+    },
   })
   expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
   expect(audits).toHaveLength(1)
@@ -262,9 +300,13 @@ test("ordinary upstream rejection before suspicion preserves original error and 
   expect(audits).toHaveLength(0)
 })
 
-const malformedNativeText = 'Before.\n<vetting>\n<parameter name="host">synthetic</｜DSML｜parameter>\n</vetting>\nAfter.'
+const malformedNativeText =
+  'Before.\n<vetting>\n<parameter name="host">synthetic</｜DSML｜parameter>\n</vetting>\nAfter.'
 const genuineNative: LanguageModelV3StreamPart = {
-  type: "tool-call", toolCallId: "api-native", toolName: "bash", input: '{"command":"harmless fixture"}',
+  type: "tool-call",
+  toolCallId: "api-native",
+  toolName: "bash",
+  input: '{"command":"harmless fixture"}',
 }
 const nativeEnd: LanguageModelV3StreamPart = { ...end, finishReason: { unified: "tool-calls", raw: "tool_calls" } }
 function nativeParts(value: string, size: number) {
@@ -276,11 +318,21 @@ for (const size of [9999, 1, 7]) {
     const parts = nativeParts(malformedNativeText, size)
     const result = await read(parts, { audit: (input) => audits.push(input) })
     expect(result.filter((p) => p.type === "tool-call")).toEqual([genuineNative])
-    expect(result.filter((p) => p.type === "text-delta").map((p) => p.delta).join("")).toBe(malformedNativeText)
+    expect(
+      result
+        .filter((p) => p.type === "text-delta")
+        .map((p) => p.delta)
+        .join(""),
+    ).toBe(malformedNativeText)
     expect(result.find((p) => p.type === "finish")).toEqual(nativeEnd)
     expect(result.some((p) => p.type === "error")).toBe(false)
     expect(audits).toHaveLength(1)
-    expect(audits[0]).toMatchObject({ disposition: "rejected", reason: "native_preserved", recoveredCount: 0, nativeCount: 1 })
+    expect(audits[0]).toMatchObject({
+      disposition: "rejected",
+      reason: "native_preserved",
+      recoveredCount: 0,
+      nativeCount: 1,
+    })
   })
 }
 test("native calls before and after textual invoke are never replayed or promoted", async () => {
@@ -295,17 +347,34 @@ test("quoted native companion text stays ordinary with no protocol audit", async
   const audits: DSMLRecoveryAuditInput[] = []
   const result = await read(nativeParts(value, 1), { audit: (input) => audits.push(input) })
   expect(result.filter((p) => p.type === "tool-call")).toEqual([genuineNative])
-  expect(result.filter((p) => p.type === "text-delta").map((p) => p.delta).join("")).toBe(value)
+  expect(
+    result
+      .filter((p) => p.type === "text-delta")
+      .map((p) => p.delta)
+      .join(""),
+  ).toBe(value)
   expect(audits).toHaveLength(0)
 })
 test("missing invalid undeclared partial or truncated native evidence never executes target", async () => {
   const variants: LanguageModelV3StreamPart[][] = [
     deltas(malformedNativeText),
     [...deltas(malformedNativeText).slice(0, -1), { ...genuineNative, toolName: "unknown" }, nativeEnd],
-    [...deltas(malformedNativeText).slice(0, -1), { type: "tool-input-start", id: "partial", toolName: "bash" }, nativeEnd],
-    [...nativeParts(malformedNativeText, 7).slice(0, -1), { ...nativeEnd, finishReason: { unified: "length", raw: "length" } }],
+    [
+      ...deltas(malformedNativeText).slice(0, -1),
+      { type: "tool-input-start", id: "partial", toolName: "bash" },
+      nativeEnd,
+    ],
+    [
+      ...nativeParts(malformedNativeText, 7).slice(0, -1),
+      { ...nativeEnd, finishReason: { unified: "length", raw: "length" } },
+    ],
     nativeParts(malformedNativeText, 7).slice(0, -1),
-    [...deltas(malformedNativeText).slice(0, -1), genuineNative, { type: "tool-input-start", id: "unfinished-other", toolName: "bash" }, nativeEnd],
+    [
+      ...deltas(malformedNativeText).slice(0, -1),
+      genuineNative,
+      { type: "tool-input-start", id: "unfinished-other", toolName: "bash" },
+      nativeEnd,
+    ],
     [...deltas(malformedNativeText).slice(0, -1), genuineNative, { type: "error", error: new Error("fixture") }],
   ]
   for (const parts of variants) {
@@ -313,7 +382,9 @@ test("missing invalid undeclared partial or truncated native evidence never exec
     expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
     expect(result.some((p) => p.type === "error")).toBe(true)
   }
-  const result = await read(nativeParts(malformedNativeText, 7), { params: { ...params, toolChoice: { type: "none" } } })
+  const result = await read(nativeParts(malformedNativeText, 7), {
+    params: { ...params, toolChoice: { type: "none" } },
+  })
   expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
   expect(result.some((p) => p.type === "error")).toBe(true)
 })
@@ -342,7 +413,11 @@ test("prior released native remains exactly once; held native remains zero", asy
   expect(held.some((p) => p.type === "error")).toBe(true)
 })
 test("quoted loop examples preserve text and native execution", async () => {
-  for (const text of ["'" + emptyLoop.replaceAll("\n", "") + "'", "````xml\n```\n" + emptyLoop.replaceAll("\n", "") + "````\n", "> " + emptyLoop.replaceAll("\n", "\n> ")]) {
+  for (const text of [
+    "'" + emptyLoop.replaceAll("\n", "") + "'",
+    "````xml\n```\n" + emptyLoop.replaceAll("\n", "") + "````\n",
+    "> " + emptyLoop.replaceAll("\n", "\n> "),
+  ]) {
     const result = await read(nativeParts(text, 1))
     expect(result.filter((p) => p.type === "tool-call")).toHaveLength(1)
     expect(result.some((p) => p.type === "error")).toBe(false)
@@ -351,17 +426,37 @@ test("quoted loop examples preserve text and native execution", async () => {
 test("empty loop cancels upstream promptly and emits fixed metadata without tool promotion", async () => {
   let cancelled = false
   const records: DSMLRecoveryAuditInput[] = []
-  const upstream = new ReadableStream<LanguageModelV3StreamPart>({ start(controller) { controller.enqueue({ type: "text-start", id: "loop" }); controller.enqueue({ type: "text-delta", id: "loop", delta: emptyLoop }); }, cancel() { cancelled = true } })
+  const upstream = new ReadableStream<LanguageModelV3StreamPart>({
+    start(controller) {
+      controller.enqueue({ type: "text-start", id: "loop" })
+      controller.enqueue({ type: "text-delta", id: "loop", delta: emptyLoop })
+    },
+    cancel() {
+      cancelled = true
+    },
+  })
   const reader = recoverDSMLStream(upstream, { ...options, audit: (record) => records.push(record) }).getReader()
   const parts: LanguageModelV3StreamPart[] = []
-  while (true) { const next = await reader.read(); if (next.done) break; parts.push(next.value) }
+  while (true) {
+    const next = await reader.read()
+    if (next.done) break
+    parts.push(next.value)
+  }
   expect(cancelled).toBe(true)
   expect(parts.filter((part) => part.type === "tool-call")).toHaveLength(0)
   expect(parts.filter((part) => part.type === "error")).toHaveLength(1)
-  expect(records).toMatchObject([{ reason: "empty_vetting_loop", disposition: "rejected", nativeCount: 0, recoveredCount: 0 }])
+  expect(records).toMatchObject([
+    { reason: "empty_vetting_loop", disposition: "rejected", nativeCount: 0, recoveredCount: 0 },
+  ])
 })
 test("assignment and attribute quoted loops preserve native calls once", async () => {
-  for (const text of ['example="' + emptyLoop.replaceAll("\n", "") + '"', "example='" + emptyLoop.replaceAll("\n", "") + "'", '<sample value="' + emptyLoop.replaceAll("\n", "") + '">', 'punctuation,"' + emptyLoop.replaceAll("\n", "") + '"', "<sample value='" + emptyLoop.replaceAll("\n", "") + "'>"]) {
+  for (const text of [
+    'example="' + emptyLoop.replaceAll("\n", "") + '"',
+    "example='" + emptyLoop.replaceAll("\n", "") + "'",
+    '<sample value="' + emptyLoop.replaceAll("\n", "") + '">',
+    'punctuation,"' + emptyLoop.replaceAll("\n", "") + '"',
+    "<sample value='" + emptyLoop.replaceAll("\n", "") + "'>",
+  ]) {
     for (const size of [1, 7, text.length]) {
       const result = await read(nativeParts(text, size))
       expect(result.filter((p) => p.type === "tool-call")).toHaveLength(1)
@@ -402,7 +497,11 @@ test("name and tool-choice restrictions hold without inspecting argument schemas
 test("duplicate held native IDs and quoted text with incomplete native input refuse", async () => {
   for (const parts of [
     [...nativeParts(malformedNativeText, 7).slice(0, -1), genuineNative, nativeEnd],
-    [...deltas('Example: `' + call + '`').slice(0, -1), { type: "tool-input-start", id: "partial", toolName: "bash" } as LanguageModelV3StreamPart, nativeEnd],
+    [
+      ...deltas("Example: `" + call + "`").slice(0, -1),
+      { type: "tool-input-start", id: "partial", toolName: "bash" } as LanguageModelV3StreamPart,
+      nativeEnd,
+    ],
   ]) {
     const result = await read(parts)
     expect(result.filter((p) => p.type === "tool-call")).toHaveLength(0)
@@ -413,8 +512,14 @@ test("suspicion emits an immediate notice once and terminal audit once despite c
   let notices = 0
   const audits: DSMLRecoveryAuditInput[] = []
   const result = await read(nativeParts(malformedNativeText + call, 1), {
-    onSuspect: () => { notices++; throw new Error("synthetic notice failure") },
-    audit: (input) => { audits.push(input); throw new Error("synthetic audit failure") },
+    onSuspect: () => {
+      notices++
+      throw new Error("synthetic notice failure")
+    },
+    audit: (input) => {
+      audits.push(input)
+      throw new Error("synthetic audit failure")
+    },
   })
   expect(notices).toBe(1)
   expect(audits).toHaveLength(1)
@@ -423,16 +528,28 @@ test("suspicion emits an immediate notice once and terminal audit once despite c
   expect(result.some((p) => p.type === "error")).toBe(false)
 })
 test("suspect progress notice precedes finish and cancellation releases its slot", async () => {
-  let notice = 0, cancelled = false
+  let notice = 0,
+    cancelled = false
   const abort = new AbortController()
   let sawNotice!: () => void
-  const noticed = new Promise<void>((resolve) => { sawNotice = resolve })
+  const noticed = new Promise<void>((resolve) => {
+    sawNotice = resolve
+  })
   const upstream = new ReadableStream<LanguageModelV3StreamPart>({
-    start(c) { c.enqueue({ type: "text-delta", id: "text", delta: call }) },
-    cancel() { cancelled = true },
+    start(c) {
+      c.enqueue({ type: "text-delta", id: "text", delta: call })
+    },
+    cancel() {
+      cancelled = true
+    },
   })
   const reader = recoverDSMLStream(upstream, {
-    ...options, abort: abort.signal, onSuspect: () => { notice++; sawNotice() },
+    ...options,
+    abort: abort.signal,
+    onSuspect: () => {
+      notice++
+      sawNotice()
+    },
   }).getReader()
   const waiting = reader.read()
   await noticed

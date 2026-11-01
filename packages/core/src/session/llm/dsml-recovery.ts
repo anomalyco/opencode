@@ -12,8 +12,17 @@ export function isDSV4Scope(providerID: string, modelID: string) {
   return providerID === "llmgw" && modelID === "dsv4"
 }
 
+/**
+ * `1` promotes textual invocations back into tool calls; unset keeps the strict
+ * guard only; `0` turns the middleware off entirely.
+ */
 export function recoveryStatus() {
   return process.env.OPENCODE_DSV4_RECOVERY_ENABLED === "1" ? "enabled" : "disabled"
+}
+
+/** The strict guard runs by default and is disabled only by an explicit `0`. */
+export function guardStatus() {
+  return process.env.OPENCODE_DSV4_RECOVERY_ENABLED === "0" ? "disabled" : "enabled"
 }
 
 type Options = {
@@ -107,10 +116,7 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
       proseAmbiguous = false
     }
   }
-  const audit = (
-    disposition: DSMLRecoveryAuditInput["disposition"],
-    reason: string,
-  ) => {
+  const audit = (disposition: DSMLRecoveryAuditInput["disposition"], reason: string) => {
     if (audited || (!suspect && !loopDetected)) return
     audited = true
     try {
@@ -158,7 +164,11 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
   }
   const startSuspicion = () => {
     suspect = true
-    try { options.onSuspect?.() } catch { /* visibility must not block the stream */ }
+    try {
+      options.onSuspect?.()
+    } catch {
+      /* visibility must not block the stream */
+    }
     if (handles >= 8) throw new Rejected("global_limit")
     handles++
     counted = true
@@ -188,7 +198,9 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
             const protocolMarkers = [...protectedText.matchAll(/<\/?｜DSML｜/g)].filter(
               (m) => m.index >= protectionPrefix.length,
             )
-            const quotedOnly = !proseAmbiguous && protocolMarkers.length > 0 &&
+            const quotedOnly =
+              !proseAmbiguous &&
+              protocolMarkers.length > 0 &&
               protocolMarkers.every((m) => quoted(protectedText, m.index))
             if (held.some((part) => part.type === "tool-input-start" && !native.has(part.id)))
               throw new Rejected("invalid_arguments")
@@ -211,7 +223,7 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
             const stop = loop.feed(part.delta)
             if (stop !== -1) {
               loopDetected = true
-              text = (suspect ? text : pending?.delta ?? "") + part.delta.slice(0, stop)
+              text = (suspect ? text : (pending?.delta ?? "")) + part.delta.slice(0, stop)
               pending = { ...part, delta: "" }
               throw new Rejected("empty_vetting_loop")
             }
@@ -302,9 +314,14 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
         }
         const reason = error instanceof Rejected ? error.reason : "upstream_error"
         audit(reason.endsWith("limit") ? "overflow" : "rejected", reason)
-        if ((suspect || loopDetected) && text) ctrl.enqueue({ type: "text-delta", id: pending?.id ?? "dsml-recovery", delta: text })
+        if ((suspect || loopDetected) && text)
+          ctrl.enqueue({ type: "text-delta", id: pending?.id ?? "dsml-recovery", delta: text })
         const message = loopDetected ? EMPTY_VETTING_LOOP_MESSAGE : DSML_GUARD_MESSAGE
-        try { options.onError?.(message) } catch { /* diagnostics must not mask the stream result */ }
+        try {
+          options.onError?.(message)
+        } catch {
+          /* diagnostics must not mask the stream result */
+        }
         ctrl.enqueue({ type: "error", error: new Error(message) })
         cancel()
         release()
@@ -320,12 +337,14 @@ export function recoverDSMLStream(stream: ReadableStream<LanguageModelV3StreamPa
   return output
 }
 
-
 const DSML_CLOSING_MARKER = "</｜DSML｜"
 
 // Stricter DSML-only guard used when recovery is disabled. It never promotes
 // textual invocations; it only refuses a response that emits the closing marker.
-export function guardDSMLStream(stream: ReadableStream<LanguageModelV3StreamPart>, onError?: (message: string) => void) {
+export function guardDSMLStream(
+  stream: ReadableStream<LanguageModelV3StreamPart>,
+  onError?: (message: string) => void,
+) {
   const reader = stream.getReader()
   let tail = ""
   let failed = false
@@ -349,7 +368,11 @@ export function guardDSMLStream(stream: ReadableStream<LanguageModelV3StreamPart
           if (malformed) failed = true
           ctrl.enqueue(part)
           if (malformed) {
-            try { onError?.(DSML_GUARD_MESSAGE) } catch { /* diagnostics must not mask the stream result */ }
+            try {
+              onError?.(DSML_GUARD_MESSAGE)
+            } catch {
+              /* diagnostics must not mask the stream result */
+            }
             ctrl.enqueue({ type: "error", error: new Error(DSML_GUARD_MESSAGE) })
             ctrl.close()
             void reader.cancel().catch(() => {})
@@ -358,7 +381,11 @@ export function guardDSMLStream(stream: ReadableStream<LanguageModelV3StreamPart
           return
         }
         if (part.type === "finish" && failed) {
-          try { onError?.(DSML_GUARD_MESSAGE) } catch { /* diagnostics must not mask the stream result */ }
+          try {
+            onError?.(DSML_GUARD_MESSAGE)
+          } catch {
+            /* diagnostics must not mask the stream result */
+          }
           ctrl.enqueue({ type: "error", error: new Error(DSML_GUARD_MESSAGE) })
           ctrl.close()
           return
