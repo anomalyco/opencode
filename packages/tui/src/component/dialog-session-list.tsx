@@ -161,7 +161,7 @@ export function DialogSessionList() {
           : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
-      const attention = sessionTabs.status(session.id).attention
+      const status = sessionTabs.status(session.id, session)
       return {
         title: deleting
           ? `Press ${shortcuts.get("session.delete")} again to confirm`
@@ -173,11 +173,12 @@ export function DialogSessionList() {
         fg: deleting ? theme.text.action.destructive.focused : undefined,
         gutter: sessionStatusGutter(
           theme,
-          attention,
-          !attention &&
+          status.attention,
+          !status.attention &&
             (data.session.status(session.id) === "running" ||
               data.session.family(session.id).some((id) => data.session.status(id) === "running")),
           slot === undefined ? undefined : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
+          status.unread,
         ),
       }
     }
@@ -309,6 +310,7 @@ export function sessionStatusGutter(
   attention: "permission" | "question" | false,
   running: boolean,
   fallback?: () => JSX.Element,
+  unread?: "activity" | "error",
 ) {
   if (attention) {
     return (color: RGBA) => (
@@ -321,5 +323,19 @@ export function sessionStatusGutter(
     )
   }
   if (running) return (color: RGBA) => <Spinner color={color} />
+  if (unread)
+    return (color: RGBA) => (
+      <text
+        fg={
+          color === theme.text.action.primary.focused
+            ? color
+            : unread === "error"
+              ? theme.text.feedback.error.base
+              : theme.text.feedback.success.base
+        }
+      >
+        •
+      </text>
+    )
   return fallback
 }
