@@ -8,6 +8,7 @@ import { Job } from "./job.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { Pty } from "./pty.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
@@ -67,6 +68,21 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
             Effect.scoped,
           )
 
+      // A terminal whose client detached is not retained but still runs; the Pty finalizer would kill it
+      // with the graph. contextEffectOption never boots a location, and a graph that failed to build owns none.
+      const terminals = (ref: Location.Ref) =>
+        Effect.gen(function* () {
+          const context = yield* locations.contextEffectOption(ref)
+          if (Option.isNone(context)) return false
+          const pty = Context.getOption(context.value, Pty.Service)
+          if (Option.isNone(pty)) return false
+          const infos = yield* pty.value.list()
+          return infos.some((info) => info.status === "running")
+        }).pipe(
+          Effect.scoped,
+          Effect.orElseSucceed(() => false),
+        )
+
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event) || !event.location) return Effect.void
         const location = LocationServiceMap.canonical(event.location)
@@ -106,7 +122,8 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
-              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref))) return yield* touch(entry.ref)
+              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref)) || (yield* terminals(entry.ref)))
+                return yield* touch(entry.ref)
               entries.delete(key(entry.ref))
               yield* Effect.logInfo("location services evicted", {
                 directory: entry.ref.directory,
