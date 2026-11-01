@@ -3118,3 +3118,38 @@ for (const source of ["config", "organization"] as const) {
       }),
   )
 }
+
+// Non-compliant but real-world: HTTP 404 carrying a valid JSON-RPC "method not found" error.
+const methodNotFound = async (request: Request) => {
+  if (request.method !== "POST") return undefined
+  const body: unknown = await request.clone().json()
+  if (typeof body !== "object" || body === null || !("method" in body)) return undefined
+  if (body.method !== "resources/templates/list") return undefined
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: (body as { id?: unknown }).id,
+      error: { code: -32601, message: "Method not found" },
+    }),
+    { status: 404, headers: { "content-type": "application/json" } },
+  )
+}
+
+test("does not treat a 404 method-not-found from templates/list as session expiry", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ respond: methodNotFound })
+        const connection = yield* connect(
+          "resources",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          import.meta.dir,
+        )
+
+        const error = yield* connection.resourceTemplates().pipe(Effect.flip)
+        expect("_tag" in error ? error._tag : undefined).not.toBe("MCP.SessionExpiredError")
+        expect(server.state.initializations).toBe(1)
+      }),
+    ),
+  )
+})
