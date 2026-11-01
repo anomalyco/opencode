@@ -398,3 +398,9 @@ export function useClientMcpExperiment() {
   const config = useConfig()
   return () => config.data.experimental?.["client-mcp"] === true
 }
+
+/** Reactive accessor for the temporary "cost-estimate" experiment. */
+export function useCostEstimate() {
+  const config = useConfig()
+  return () => config.data.experimental?.["cost-estimate"] === true
+}
