@@ -12,21 +12,23 @@ Press `Ctrl+P`, then select **Open settings** to change common settings from the
 
 ## Configuration file
 
-OpenCode stores CLI settings in one global file:
+OpenCode reads CLI settings from a single global file, `cli.jsonc` or `cli.json`:
 
 ```text
-~/.config/opencode/cli.json
+~/.config/opencode/cli.jsonc
 ```
 
 When `$XDG_CONFIG_HOME` is set, OpenCode uses:
 
 ```text
-$XDG_CONFIG_HOME/opencode/cli.json
+$XDG_CONFIG_HOME/opencode/cli.jsonc
 ```
 
-There is no project-local CLI settings file. Add the published JSON Schema for validation and autocomplete:
+There is no project-local CLI settings file. Both filenames support comments, `cli.jsonc` takes precedence when both
+exist, and OpenCode creates `cli.json` when neither is present. Add the published JSON Schema for validation and
+autocomplete:
 
-```json title="cli.json"
+```json title="cli.jsonc"
 {
   "$schema": "https://opencode.ai/v2/cli.json"
 }
