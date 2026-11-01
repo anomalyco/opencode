@@ -1243,40 +1243,45 @@ it.effect("automatic compaction keeps the last completed exchange beside pending
   }),
 )
 
-it.effect("compaction replay uses the session model boundary when a different model wrote the summary", () =>
-  Effect.gen(function* () {
-    const session = yield* insertSession(Session.ID.create(), { model: resolved.ref })
-    const old = textUser("Input already covered by a native checkpoint")
-    const pending = textUser("Only this request is pending")
-    yield* storeMessages(session.id, [
-      old,
-      SessionMessage.CompactionCompleted.make({
-        ...completedSummary(""),
-        model: resolved.ref,
-        native: { messages: [Message.user("Native context")] },
-      }),
-      pending,
-    ])
-    const bus = yield* Bus.Service
-    yield* bus.replay({
-      id: Event.ID.create(),
-      type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1),
-      aggregateID: session.id,
-      seq: 4,
-      created: 0,
-      data: {
+for (const preserve of [false, true]) {
+  it.effect(
+    `compaction replay preserves explicit exclusions without reinterpreting old summaries (preserve=${preserve})`,
+    () =>
+      Effect.gen(function* () {
+        const session = yield* insertSession(Session.ID.create(), { model: resolved.ref })
+        const old = textUser("Input already covered by a native checkpoint")
+        const pending = textUser("Only this request is pending")
+        yield* storeMessages(session.id, [
+          old,
+          SessionMessage.CompactionCompleted.make({
+            ...completedSummary(""),
+            model: resolved.ref,
+            native: { messages: [Message.user("Native context")] },
+          }),
+          pending,
+        ])
+      const bus = yield* Bus.Service
+      const data = {
         sessionID: session.id,
         reason: "auto",
         model: { id: "other-model", providerID: "other" },
         text: "## Objective\n- Compacted history",
-      },
-    })
-    const store = yield* SessionStore.Service
-    const history = yield* store.context(session.id)
-    expect(history[0].metadata?.pendingUserIDs).toEqual([pending.id])
-    expect(history.slice(1)).toEqual([pending])
-  }),
-)
+      }
+      yield* bus.replay({
+          id: Event.ID.create(),
+          type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1),
+          aggregateID: session.id,
+          seq: 4,
+          created: 0,
+        data: preserve ? { ...data, pendingUserIDs: [pending.id] } : data,
+        })
+        const store = yield* SessionStore.Service
+        const history = yield* store.context(session.id)
+        expect(history[0].metadata?.pendingUserIDs).toEqual(preserve ? [pending.id] : undefined)
+        expect(history.slice(1)).toEqual(preserve ? [pending] : [])
+      }),
+  )
+}
 
 it.effect("background compaction does not repeat the same prefix after its pending tail outgrows the limit", () =>
   Effect.gen(function* () {

@@ -871,36 +871,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
-        // Derive replay references from the ordered history so rebuilding the projection retains pending input too.
-        const derive = event.data.reason !== "manual" && event.metadata?.pendingUserIDs === undefined
-        const session = derive
-          ? yield* db
-              .select({ model: SessionTable.model })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, event.data.sessionID))
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
-        const pending = derive
-          ? SessionHistory.pendingUsers(
-              yield* SessionHistory.load(
-                db,
-                event.data.sessionID,
-                (event.data.native
-                  ? event.data.model
-                  : session?.model && Schema.decodeUnknownSync(Model.Ref)(session.model)) ?? "latest",
-              ).pipe(Effect.orDie),
-            )
-          : undefined
-        yield* run(
-          db,
-          pending
-            ? {
-                ...event,
-                metadata: { ...event.metadata, pendingUserIDs: pending.map((message) => message.id) },
-              }
-            : event,
-        )
+        yield* run(db, event)
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )

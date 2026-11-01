@@ -946,6 +946,13 @@ export const layer = Layer.effect(
         return { status: "failed", error: outcome.error }
       }
 
+      const metadata =
+        trigger.reason === "manual"
+          ? outcome.metadata
+          : {
+              pendingUserIDs: SessionHistory.pendingUsers(context.messages).map((message) => message.id),
+              ...outcome.metadata,
+            }
       yield* bus.publish(
         SessionEvent.Compaction.Ended,
         {
@@ -954,16 +961,12 @@ export const layer = Layer.effect(
           model: context.model.ref,
           native: outcome.native,
           text: outcome.text,
+          pendingUserIDs:
+            trigger.reason === "manual" ? undefined : SessionHistory.pendingUserIDs({ type: "compaction", metadata }),
           ...usage,
         },
         {
-          metadata:
-            trigger.reason === "manual"
-              ? outcome.metadata
-              : {
-                  pendingUserIDs: SessionHistory.pendingUsers(context.messages).map((message) => message.id),
-                  ...outcome.metadata,
-                },
+          metadata: outcome.metadata,
         },
       )
       return { status: "completed" }
