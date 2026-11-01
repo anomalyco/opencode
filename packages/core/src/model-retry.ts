@@ -50,7 +50,11 @@ export const policy = Effect.gen(function* () {
       if (!next) return undefined
       const [, duration] = next
       attempt++
-      if (input.cause.reason._tag === "Transport" && input.cause.reason.code === "Timeout") timeouts++
+      if (
+        input.cause.reason._tag === "Transport" &&
+        (input.cause.reason.code === "Timeout" || input.cause.reason.code === "idle-timeout")
+      )
+        timeouts++
       return {
         attempt,
         delay: Math.ceil(Duration.toMillis(duration)),
