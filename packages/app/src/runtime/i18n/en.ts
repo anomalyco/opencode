@@ -599,6 +599,7 @@ export const dict = {
   "session.tab.recentHint": "Hold {{key}} for recently closed",
   "session.tab.showMore": "Show more",
   "session.tab.new": "New tab",
+  "session.tab.newOnServer": "New session on {{server}}",
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.panel.bottom": "Bottom panel",

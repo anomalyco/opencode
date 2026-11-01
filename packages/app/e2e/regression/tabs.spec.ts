@@ -877,6 +877,14 @@ test("vertical tabs group by server and keep each server's tab order", async ({ 
     `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
   ])
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer", "127.0.0.1:4097"])
+
+  await page.locator(`[data-action="tab-server-group-add"][data-server="${SERVER}"]`).click()
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(sessionA.id)}`,
+    `${SERVER}\n${sessionHref(sessionA2.id)}`,
+    expect.stringMatching(/^draft:/),
+    `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
+  ])
 })
 
 test("vertical tabs stay flat when only one server has open tabs", async ({ page }) => {

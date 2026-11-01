@@ -21,6 +21,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { orderTabsByServer, serverGroupHeaders } from "./tab-groups"
 import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
@@ -392,6 +393,7 @@ export function TitlebarTabStrip(props: {
 }) {
   const global = useGlobal()
   const servers = useServers()
+  const tabs = useTabs()
   const language = useLanguage()
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
@@ -528,6 +530,33 @@ export function TitlebarTabStrip(props: {
     const next = props.tabs.find((tab) => tabKey(tab) === key)
 
     if (next) props.onNavigate(next)
+  }
+
+  // Starts a draft on the group's server, in the directory its open tabs already use.
+  function newSessionInGroup(server: ServerConnection.Key) {
+    const conn = servers.list.find((item) => ServerConnection.key(item) === server)
+
+    if (!conn) return
+
+    const ctx = global.ensureServerCtx(conn)
+    const group = props.tabs.filter((tab) => tab.server === server)
+
+    const directory =
+      group.find((tab) => tab.type === "draft")?.directory ??
+      group
+        .flatMap((tab) =>
+          tab.type === "session"
+            ? [tabs.info[tabKey(tab)]?.directory ?? ctx.data.session.get(tab.sessionId)?.location.directory]
+            : [],
+        )
+        .find(Boolean) ??
+      ctx.projects.last()?.worktree ??
+      ctx.projects.used()[0]?.worktree
+
+    if (!directory) return
+
+    ctx.projects.touch(directory)
+    void tabs.newDraft({ server, directory })
   }
 
   return (
@@ -674,9 +703,20 @@ export function TitlebarTabStrip(props: {
                         <div
                           data-slot="tab-server-group"
                           data-server={tab.server}
-                          class="mt-2 flex h-6 w-full shrink-0 items-center overflow-hidden px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted"
+                          class="mt-2 flex h-6 w-full shrink-0 items-center gap-1 overflow-hidden px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted"
                         >
-                          <bdi class="truncate">{title()}</bdi>
+                          <bdi class="min-w-0 truncate">{title()}</bdi>
+                          <button
+                            type="button"
+                            data-action="tab-server-group-add"
+                            data-server={tab.server}
+                            aria-label={language.t("session.tab.newOnServer", { server: title() })}
+                            title={language.t("session.tab.newOnServer", { server: title() })}
+                            class="ms-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+                            onClick={() => newSessionInGroup(tab.server)}
+                          >
+                            <Icon name="plus" size="small" />
+                          </button>
                         </div>
                       )}
                     </Show>
