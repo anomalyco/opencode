@@ -1,7 +1,7 @@
 import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
-import { Effect, Option, Redacted } from "effect"
+import { Effect, FileSystem, Option, Redacted } from "effect"
 import { Server as ServerFlag, Standalone as StandaloneFlag } from "../commands/commands"
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
@@ -38,10 +38,7 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       try: () => client.server.info({ signal: AbortSignal.timeout(5_000) }),
       catch: (cause) => connectError(endpoint, cause),
     })
-    if (health.version !== OPENCODE_VERSION)
-      process.stderr.write(
-        `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${OPENCODE_VERSION}. Continuing anyway.\n`,
-      )
+    if (health.version !== OPENCODE_VERSION) warnVersionMismatch(endpoint.url, health.version)
     return { endpoint } satisfies Resolved
   }
   if (standalone || (yield* ServiceConfig.read()).disabled === true) {
@@ -56,48 +53,116 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
   } satisfies Resolved
 })
 
+function warnVersionMismatch(url: string, version: string) {
+  process.stderr.write(
+    `Warning: Server at ${url} has version ${version}; this client is ${OPENCODE_VERSION}. Continuing anyway.\n`,
+  )
+}
+
 function managedService(options: EnsureOptions) {
-  const reconnectOptions = { ...options, version: undefined }
+  // Reconnects run under a live UI, so they find the server the same way as the first connection but stay quiet
+  // about version mismatches.
+  const reconnect = () => resolveManaged({ ...options, version: undefined }, "ignore", () => {})
   return {
-    reconnect: () => Service.ensure(reconnectOptions),
+    reconnect,
     restart: () =>
       Effect.gen(function* () {
+        const unowned = yield* unownedServer(options)
+        if (unowned !== undefined)
+          return yield* Effect.fail(
+            new Error(`The server at ${unowned.url} wasn't started by OpenCode, so it can't be restarted from here`),
+          )
         yield* Service.stop({ file: options.file, pty: "handoff" })
-        yield* Service.ensure(reconnectOptions)
+        yield* reconnect()
       }),
   }
 }
 
+// A configured server with no registration was started outside OpenCode, so stopping it is not ours to do.
+const unownedServer = Effect.fnUntraced(function* (options: EnsureOptions) {
+  if (options.file === undefined) return undefined
+  const fs = yield* FileSystem.FileSystem
+  if (yield* fs.exists(options.file).pipe(Effect.orElseSucceed(() => false))) return undefined
+  return (yield* ServiceConfig.discover(options.file))?.endpoint
+})
+
 export const shutdownPersistentPty = Effect.fn("cli.server-connection.shutdown-persistent-pty")(function* (
   options: EnsureOptions,
 ) {
-  const endpoint = yield* Service.discover({ ...options, version: undefined })
+  const endpoint =
+    (yield* Service.discover({ ...options, version: undefined })) ??
+    (yield* ServiceConfig.discover(options.file))?.endpoint
   if (!endpoint) return
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   yield* Effect.tryPromise(() => client.experimental.persistentPty.shutdown())
 })
 
-const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
-  if (mismatch === "replace") return yield* Service.ensure(options)
-  if (mismatch === "ignore") return yield* Service.ensure({ ...options, version: undefined })
+const resolveManaged = Effect.fnUntraced(function* (
+  options: EnsureOptions,
+  mismatch: NonNullable<Args["mismatch"]>,
+  warn: (url: string, version: string) => void = warnVersionMismatch,
+) {
+  if (mismatch === "ignore") {
+    const registered = yield* Service.reuse({ ...options, version: undefined })
+    if (registered !== undefined) {
+      const version = yield* ServiceConfig.registeredVersion(options.file)
+      if (version !== undefined && version !== OPENCODE_VERSION) warn(registered.url, version)
+      return registered
+    }
+    const configured = yield* ServiceConfig.probeConfigured({ file: options.file })
+    if (configured?.state === "ready") {
+      if (configured.version !== OPENCODE_VERSION) warn(configured.endpoint.url, configured.version)
+      return configured.endpoint
+    }
+    if (configured?.state === "unauthorized") return yield* Effect.fail(unauthorizedError(configured.endpoint))
+    if (configured?.state === "incompatible")
+      return yield* Effect.fail(
+        new Error(`Server at ${configured.endpoint.url} did not provide a compatible V2 health response`),
+      )
+    return yield* Service.ensure({ ...options, version: undefined })
+  }
 
-  const compatible = yield* Service.discover(options)
-  if (compatible !== undefined) return compatible
+  const compatible = yield* Service.reuse(options)
+  if (compatible !== undefined) {
+    if (options.version === undefined) {
+      const version = yield* ServiceConfig.registeredVersion(options.file)
+      if (version !== undefined && version !== OPENCODE_VERSION) warn(compatible.url, version)
+    }
+    return compatible
+  }
   const existing = yield* Service.discover({ ...options, version: undefined })
-  if (existing !== undefined)
-    return yield* Effect.fail(new Error("Background server version does not match this client"))
+  if (existing !== undefined) {
+    if (mismatch === "error")
+      return yield* Effect.fail(new Error("Background server version does not match this client"))
+    return yield* Service.ensure(options)
+  }
+
+  const configured = yield* ServiceConfig.probeConfigured({ file: options.file })
+  if (configured?.state === "ready") {
+    if (mismatch === "error" && configured.version !== OPENCODE_VERSION)
+      return yield* Effect.fail(new Error("Background server version does not match this client"))
+    if (configured.version !== OPENCODE_VERSION) warn(configured.endpoint.url, configured.version)
+    return configured.endpoint
+  }
+  if (configured?.state === "unauthorized") return yield* Effect.fail(unauthorizedError(configured.endpoint))
+  if (configured?.state === "incompatible")
+    return yield* Effect.fail(
+      new Error(`Server at ${configured.endpoint.url} did not provide a compatible V2 health response`),
+    )
   return yield* Service.ensure(options)
 })
 
+function unauthorizedError(endpoint: Endpoint, cause?: unknown) {
+  return new Error(
+    endpoint.auth === undefined
+      ? `Server at ${endpoint.url} requires a password; set OPENCODE_PASSWORD`
+      : `Server at ${endpoint.url} rejected the password`,
+    cause === undefined ? undefined : { cause },
+  )
+}
+
 function connectError(endpoint: Endpoint, cause: unknown) {
-  if (isUnauthorizedError(cause)) {
-    return new Error(
-      endpoint.auth === undefined
-        ? `Server at ${endpoint.url} requires a password; set OPENCODE_PASSWORD`
-        : `Server at ${endpoint.url} rejected the password`,
-      { cause },
-    )
-  }
+  if (isUnauthorizedError(cause)) return unauthorizedError(endpoint, cause)
   if (cause instanceof ClientError && cause.reason === "Transport")
     return new Error(`Could not reach server at ${endpoint.url}: ${errorMessage(cause.cause ?? cause)}`, { cause })
   return new Error(
