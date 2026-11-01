@@ -41,6 +41,10 @@ export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect
   )
 }
 
+/** Run a step's tool calls concurrently, with results in call order. */
+export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<ToolCallPart>) =>
+  Effect.forEach(calls, (call) => dispatch(tools, call), { concurrency: "unbounded" })
+
 const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
