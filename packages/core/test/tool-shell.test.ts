@@ -1325,6 +1325,37 @@ describe("ShellTool", () => {
     ),
   )
 
+  if (isWindows) {
+    // Without UTF-8, PowerShell holds a program's output and a BOM-less file in the console's legacy code page:
+    // the comparison prints False even though echoing the captured value looks right.
+    it.live("keeps non-ASCII text from programs and files intact in PowerShell", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          const file = path.join(tmp.path, "utf8.txt")
+          const command = [
+            "$expected = [string][char]0x2212 + [char]0x2026 + [char]0x2190",
+            `$text = & '${process.execPath}' -e "process.stdout.write('\\u2212\\u2026\\u2190')"`,
+            `[Console]::Out.Write("$($text -ceq $expected) $text $(Get-Content -Raw -LiteralPath '${file}')")`,
+          ].join("\n")
+          return Effect.promise(() => Bun.write(file, "\u2212\u2026\u2190")).pipe(
+            Effect.andThen(withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-utf8")))),
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.content?.[0]).toEqual({
+                  type: "text",
+                  text: "True \u2212\u2026\u2190 \u2212\u2026\u2190",
+                })
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    )
+  }
+
   it.live(
     "truncates the model view and points at the saved output file when output overflows",
     () =>
