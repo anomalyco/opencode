@@ -46,7 +46,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description:
-            "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+            "Read the contents of a file or directory. Supports text files, images, PDFs, audio, and video. Images, PDFs, audio, and video are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
           input: Input,
           output: Output,
           execute: (input, context) => {
@@ -263,7 +263,7 @@ function parseSkillUri(value: string) {
 export const toModelContent = (path: string, offset: number | undefined, output: typeof Output.Type) => {
   if (output.type === "file" && output.encoding === "base64")
     return [
-      { type: "text", text: output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully" },
+      { type: "text", text: `${mediaLabel(output.mime)} read successfully` },
       {
         type: "file",
         uri: `data:${output.mime};base64,${output.content}`,
@@ -296,4 +296,11 @@ export const toModelContent = (path: string, offset: number | undefined, output:
   if (output.type === "text-page" && output.truncated && output.next !== undefined)
     content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
   return content.join("\n")
+}
+
+const mediaLabel = (mime: string) => {
+  if (mime === "application/pdf") return "PDF"
+  if (mime.startsWith("audio/")) return "Audio"
+  if (mime.startsWith("video/")) return "Video"
+  return "Image"
 }

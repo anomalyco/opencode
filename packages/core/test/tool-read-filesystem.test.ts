@@ -395,4 +395,126 @@ describe("ReadToolFileSystem", () => {
       })
     }),
   )
+
+  it.effect("reads images as bounded media", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "pixel.png")
+      const content = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "pixel.png")
+
+      expect(result).toMatchObject({
+        type: "file",
+        content: Buffer.from(content).toString("base64"),
+        encoding: "base64",
+        mime: "image/png",
+      })
+    }),
+  )
+
+  it.effect("reads audio files as bounded media instead of rejecting them as binary", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "sound.mp3")
+      const content = Uint8Array.of(0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "sound.mp3")
+
+      expect(result).toMatchObject({
+        type: "file",
+        content: Buffer.from(content).toString("base64"),
+        encoding: "base64",
+        mime: "audio/mpeg",
+      })
+    }),
+  )
+
+  it.effect("reads video files as bounded media instead of rejecting them as binary", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "clip.mp4")
+      const content = Uint8Array.of(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "clip.mp4")
+
+      expect(result).toMatchObject({
+        type: "file",
+        content: Buffer.from(content).toString("base64"),
+        encoding: "base64",
+        mime: "video/mp4",
+      })
+    }),
+  )
+
+  it.effect("enforces the media ingestion limit for audio", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "oversized.mp3")
+      yield* files.writeFile(file, Uint8Array.of(0x49, 0x44, 0x33))
+      yield* files.truncate(file, ReadToolFileSystem.MAX_MEDIA_INGEST_BYTES + 1)
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "oversized.mp3").pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.MediaIngestLimitError)
+    }),
+  )
+
+  it.effect("labels audio and video media in model content", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const audio = path.join(directory, "sound.mp3")
+      const video = path.join(directory, "clip.mp4")
+      yield* files.writeFile(audio, Uint8Array.of(0x49, 0x44, 0x33))
+      yield* files.writeFile(
+        video,
+        Uint8Array.of(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d),
+      )
+
+      const audioResult = yield* ReadToolFileSystem.read(environment, absolute(audio), "sound.mp3")
+      const videoResult = yield* ReadToolFileSystem.read(environment, absolute(video), "clip.mp4")
+
+      expect(ReadTool.toModelContent("sound.mp3", undefined, audioResult)).toMatchObject([
+        { type: "text", text: "Audio read successfully" },
+        { type: "file", mime: "audio/mpeg" },
+      ])
+      expect(ReadTool.toModelContent("clip.mp4", undefined, videoResult)).toMatchObject([
+        { type: "text", text: "Video read successfully" },
+        { type: "file", mime: "video/mp4" },
+      ])
+    }),
+  )
+
+  it.effect("reads an audio-only MP4 as audio, not video", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "sound.m4a")
+      const content = Uint8Array.of(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "sound.m4a")
+
+      expect(result).toMatchObject({
+        type: "file",
+        content: Buffer.from(content).toString("base64"),
+        encoding: "base64",
+        mime: "audio/mp4",
+      })
+    }),
+  )
+
+  it.effect("does not treat a UTF-16LE text file as audio", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "note.txt")
+      yield* files.writeFile(file, Uint8Array.of(0xff, 0xfe, 0x68, 0x00, 0x69, 0x00))
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "note.txt").pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
 })
