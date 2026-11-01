@@ -501,7 +501,7 @@ describe("AI promise client", () => {
       input: Schema.Struct({ path: Schema.String }),
       execute: async () => "hello",
     })
-    const model = openai.chat("gpt-4o-mini")
+    const model = openaiProvider.chat("gpt-4o-mini")
 
     const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: [read_file] }))
     expect(looped.text).toBe("Hello world")

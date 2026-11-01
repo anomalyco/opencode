@@ -69,10 +69,10 @@ Video.start({
   aspect: "1280:720",
   providerOptions: { contentModeration: { publicFigureThreshold: "low" }, outputFormat: "future-format" },
 })
-// @ts-expect-error Known Runway nested options retain their value kind.
 Video.start({
   model: runwayModel,
   prompt: "Kite",
+  // @ts-expect-error Known Runway nested options retain their value kind.
   providerOptions: { contentModeration: { publicFigureThreshold: 1 } },
 })
 

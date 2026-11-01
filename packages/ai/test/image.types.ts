@@ -161,10 +161,10 @@ void explicitAsset
 ai.image.generate({ model: openaiModel, prompt: "A lighthouse", images: ["AQID"] })
 // @ts-expect-error Plain source objects must be lifted into `Media.Asset` first.
 ai.image.generate({ model: openaiModel, prompt: "A lighthouse", images: [{ type: "bytes", data: new Uint8Array() }] })
-// @ts-expect-error Masks are media assets, not strings.
 ai.image.generate({
   model: openaiModel,
   prompt: "A lighthouse",
+  // @ts-expect-error Masks are media assets, not strings.
   providerOptions: { mask: "https://example.com/mask.png" },
 })
 
