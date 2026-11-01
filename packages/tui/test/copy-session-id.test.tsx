@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import { createTestRenderer } from "@opentui/core/testing"
+import { createTestRenderer, setRendererCapabilities } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
@@ -11,7 +11,8 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
   const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
   await setup.renderer.setupTerminal()
   setup.renderer.start()
-  Object.defineProperty(setup.renderer, "capabilities", { get: () => null })
+  // Force the terminal-only route so the toast does not depend on the host clipboard.
+  setRendererCapabilities(setup.renderer, { remote: true, osc52_support: "supported" })
   const copy = spyOn(setup.renderer, "copyToClipboardOSC52").mockReturnValue(mode === "success")
   const sessionID = "ses_copy_id"
   const events = createEventStream()
@@ -60,10 +61,13 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
     await setup.waitForFrame((frame) => /Copy session ID\s+Session/.test(frame))
     setup.mockInput.pressEnter()
     const frame = await setup.waitForFrame((frame) =>
-      frame.includes(mode === "success" ? "Session ID copied to clipboard!" : "Failed to copy session ID"),
+      mode === "success"
+        ? frame.includes("Session ID copied to clipboard!")
+        : frame.includes("Failed to copy session ID"),
     )
     expect(copy).toHaveBeenCalledTimes(1)
     expect(copy.mock.calls[0]?.[0]).toBe(sessionID)
+    expect(frame).not.toContain("Copied — delivery not confirmed")
     expect(frame).not.toContain("Copy session ID")
     await setup.waitFor(
       () =>

@@ -13,7 +13,7 @@ import { openUrl } from "@opencode/util/open"
 import { useTheme } from "../../context/theme"
 import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
-import { useClipboard } from "../../context/clipboard"
+import { clipboardWriteToast, useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
@@ -488,9 +488,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     if (!current) return
     void clipboard
       .write(current.url)
-      .then(() => {
+      .then((result) => {
         setStore("externalReady", { ...store.externalReady, [current.key]: true })
-        toast.show({ message: "Copied URL to clipboard", variant: "info" })
+        toast.show(clipboardWriteToast(result, "Copied URL to clipboard"))
       })
       .catch(toast.error)
   }
