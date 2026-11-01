@@ -140,3 +140,45 @@ test("rejects only when no clipboard route accepted the write", async () => {
   expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
   expect(writes).toEqual([["hello", { destination: "all-available", selection: "clipboard" }]])
 })
+
+test.each([
+  { selections: undefined, failed: "primary", writes: ["clipboard"], rejects: false },
+  { selections: ["clipboard", "primary"], failed: "primary", writes: ["clipboard", "primary"], rejects: false },
+  { selections: ["clipboard", "primary"], failed: "clipboard", writes: ["clipboard", "primary"], rejects: true },
+  { selections: ["primary"], failed: "clipboard", writes: ["primary"], rejects: false },
+  { selections: ["primary"], failed: "primary", writes: ["primary"], rejects: true },
+] as const)("the first selection decides the write: %o", async (input) => {
+  const writes: string[] = []
+  const failure = new Error("selection failed")
+  const clipboard = createClipboardAdapter(
+    createClipboard({
+      host: {
+        maxWriteBytes: 8 * 1024 * 1024,
+        async read() {
+          return { status: "empty" }
+        },
+        async writeText(_text, options) {
+          writes.push(options?.selection ?? "clipboard")
+          return options?.selection === input.failed ? { status: "failed", error: failure } : { status: "written" }
+        },
+        async clear() {
+          return { status: "cleared" }
+        },
+        async dispose() {},
+      },
+      terminal: {
+        remote: false,
+        writeText() {
+          return { status: "not-attempted", capability: "unsupported" }
+        },
+        clear() {
+          return { status: "not-attempted", capability: "unsupported" }
+        },
+      },
+    }),
+  )
+
+  const result = await clipboard.write("text", input.selections).then(undefined, (error) => error)
+  expect(result).toBe(input.rejects ? failure : undefined)
+  expect(writes).toEqual([...input.writes])
+})
