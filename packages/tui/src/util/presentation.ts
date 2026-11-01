@@ -26,11 +26,16 @@ function wordmark(pad = "") {
 export type SessionEpilogue = { readonly title: string; readonly sessionID?: string }
 
 // Printed after the TUI closes.
-export function epilogue(input: { readonly session?: SessionEpilogue; readonly updatedVersion?: string }) {
+export function epilogue(input: {
+  readonly session?: SessionEpilogue
+  readonly updatedVersion?: string
+  readonly tty?: boolean
+}) {
   if (!input.session && !input.updatedVersion) return
   const row = (label: string, value: string) => `  ${dim}${label.padEnd(10, " ")}${reset}${bold}${value}${reset}`
   return [
-    ...wordmark("  "),
+    // Log viewers such as GitHub Actions use a line height taller than the glyphs, which splits the block art apart.
+    ...(input.tty ? wordmark("  ") : [`  ${dim}open${reset}${bold}code${reset}`]),
     "",
     ...(input.updatedVersion
       ? [`  ${dim}Run ${reset}${bold}opencode${reset}${dim} to use ${reset}${bold}${input.updatedVersion}${reset}`, ""]
