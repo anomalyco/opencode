@@ -93,16 +93,17 @@ export function visibleTimelineMessages(
 
   if (tail?.type === "idle" && tail.outcome === "failed") {
     const start = visible.slice(0, -1).findLastIndex((message) => message.type === "idle") + 1
+    const segment = visible.slice(start, -1)
 
     if (
-      visible.slice(start, -1).some((message) => inputs.has(message.id)) &&
-      !visible.slice(start, -1).some((message) => message.type === "assistant")
+      segment.some((message) => inputs.has(message.id)) &&
+      !segment.some((message) => message.type === "assistant")
     ) {
-      const rest = visible.slice(0, -1)
-
+      // Only the active failure's segment moves: an earlier failure stays next to the input that caused it.
       return [
-        ...rest.filter((message) => !inputs.has(message.id)),
-        ...rest.filter((message) => inputs.has(message.id)),
+        ...visible.slice(0, start),
+        ...segment.filter((message) => !inputs.has(message.id)),
+        ...segment.filter((message) => inputs.has(message.id)),
         tail,
       ]
     }
