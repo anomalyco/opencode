@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
+import { MockWorktreeError } from "../utils/mock-api"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
 import { recordNotifications } from "../utils/notifications"
@@ -1046,6 +1047,69 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText("13 worktrees", { exact: true })).toBeVisible()
   await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
+})
+
+test("bulk delete offers force for worktrees git refuses to remove", async ({ page }) => {
+  const submodule = `${directory}/submodule-workspace`
+  const clean = `${directory}/clean-workspace`
+
+  const inventory: WorktreeDirectory[] = [
+    { directory },
+    { directory: submodule, strategy: "git" },
+    { directory: clean, strategy: "git" },
+  ]
+
+  const view = await open(page, {
+    project: { sandboxes: [submodule, clean] },
+    sessions: [],
+    worktrees: () => inventory,
+    onWorktreeRemoveFailure: (input) =>
+      input.directory === submodule && !input.force
+        ? new MockWorktreeError({
+            name: "WorktreeError",
+            data: {
+              message: "fatal: working trees containing submodules cannot be moved or removed",
+              forceRequired: true,
+            },
+          })
+        : undefined,
+    onWorktreeRemove: (input) => {
+      inventory.splice(
+        inventory.findIndex((item) => item.directory === input.directory),
+        1,
+      )
+    },
+  })
+
+  const settings = view.settings
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await settings.getByRole("button", { name: "More options", exact: true }).click()
+
+  const deleteWithoutSessions = page.getByRole("menuitem", {
+    name: "Delete worktrees without sessions",
+    exact: true,
+  })
+
+  await expect(deleteWithoutSessions).toBeVisible()
+  await deleteWithoutSessions.click()
+
+  const confirmation = page.getByRole("dialog", { name: "Delete worktrees without sessions", exact: true })
+  await confirmation.getByRole("button", { name: "Delete worktrees", exact: true }).click()
+
+  const force = page.getByRole("dialog", { name: "Force delete worktrees?", exact: true })
+  await expect(force).toContainText("Git refused to remove 1 worktree without force.")
+
+  const forced = page.waitForRequest((request) => {
+    if (new URL(request.url()).pathname !== "/api/worktree" || request.method() !== "DELETE") return false
+
+    const body = request.postDataJSON()
+
+    return body.directory === submodule && body.force === true
+  })
+
+  await force.getByRole("button", { name: "Force delete", exact: true }).click()
+  await forced
+  await expect(settings.getByLabel(submodule, { exact: true })).toHaveCount(0)
 })
 
 test.describe("worktrees prefetch", () => {

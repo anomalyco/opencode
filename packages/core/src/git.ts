@@ -1417,7 +1417,15 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make(gitExecutable(), args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(
+          ChildProcess.make(gitExecutable(), args, {
+            cwd,
+            // Git localizes diagnostics, and `git worktree` has no machine-readable output.
+            env: { LC_ALL: "C" },
+            extendEnv: true,
+            stdin: "ignore",
+          }),
+        )
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -1429,7 +1437,9 @@ const layer = Layer.effect(
         operation,
         directory: worktreeDirectory,
         message,
-        forceRequired: operation === "remove" && /contains modified or untracked files|is dirty/i.test(message),
+        forceRequired:
+          operation === "remove" &&
+          /contains modified or untracked files|is dirty|containing submodules/i.test(message),
       })
     })
 
