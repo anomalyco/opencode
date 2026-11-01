@@ -13,6 +13,12 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
+const lockKeys = new WeakMap<DatabaseShape, object>()
+
+/** Coordination identity shared by connections to the same file; otherwise per database. */
+export function lockKey(db: DatabaseShape): object {
+  return lockKeys.get(db) ?? db
+}
 
 export interface Interface {
   db: DatabaseShape
@@ -47,6 +53,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      lockKeys.set(db, semaphore)
 
       return { db }
     }).pipe(Effect.orDie),

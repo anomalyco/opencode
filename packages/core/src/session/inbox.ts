@@ -66,9 +66,9 @@ const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
 const encodeCompaction = Schema.encodeSync(CompactionPayload)
 const decodeMove = Schema.decodeUnknownSync(MovePayload)
 const encodeMove = Schema.encodeSync(MovePayload)
-// Location graphs sharing a database must share inbox locks. Separate databases
-// can reuse Session IDs, including Durable Objects that share one isolate.
-const inboxLocks = new WeakMap<DatabaseService, KeyedMutex.KeyedMutex<SessionSchema.ID>>()
+// Location graphs and file connections sharing a database must share inbox locks.
+// Separate databases can reuse Session IDs, including Durable Objects in one isolate.
+const inboxLocks = new WeakMap<object, KeyedMutex.KeyedMutex<SessionSchema.ID>>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
 export const serialized = <A, E, R>(
@@ -76,8 +76,9 @@ export const serialized = <A, E, R>(
   sessionID: SessionSchema.ID,
   effect: Effect.Effect<A, E, R>,
 ) => {
-  const locks = inboxLocks.get(db) ?? KeyedMutex.makeUnsafe<SessionSchema.ID>()
-  inboxLocks.set(db, locks)
+  const key = Database.lockKey(db)
+  const locks = inboxLocks.get(key) ?? KeyedMutex.makeUnsafe<SessionSchema.ID>()
+  inboxLocks.set(key, locks)
   return locks.withLock(sessionID)(effect)
 }
 

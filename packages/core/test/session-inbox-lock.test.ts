@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
@@ -14,6 +15,7 @@ import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionTable } from "@opencode/core/session/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { it } from "./lib/effect"
+import { tmpdirScoped } from "./fixture/tmpdir"
 
 const sessionID = SessionSchema.ID.make("ses_inbox_lock")
 
@@ -50,6 +52,39 @@ const fixture = Effect.gen(function* () {
 })
 
 describe("SessionInbox locks", () => {
+  it.live("serializes the same session across connections to one database file", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const layer = AppNodeBuilder.build(Database.configured({ path: path.join(tmp.path, "inbox.sqlite") }))
+      const first = Context.get(yield* Layer.build(layer), Database.Service).db
+      const second = Context.get(yield* Layer.build(layer), Database.Service).db
+      expect(first).not.toBe(second)
+
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const attempted = yield* Deferred.make<void>()
+      const entered = yield* Deferred.make<void>()
+      const holder = yield* SessionInbox.serialized(
+        first,
+        sessionID,
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const waiter = yield* Deferred.succeed(attempted, undefined).pipe(
+        Effect.andThen(SessionInbox.serialized(second, sessionID, Deferred.succeed(entered, undefined))),
+        Effect.forkChild,
+      )
+      yield* Deferred.await(attempted)
+      yield* Effect.yieldNow
+      yield* Effect.sync(() => expect(Deferred.isDoneUnsafe(entered)).toBe(false)).pipe(
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+      )
+      yield* Fiber.join(holder)
+      yield* Fiber.join(waiter)
+      expect(Deferred.isDoneUnsafe(entered)).toBe(true)
+    }),
+  )
+
   it.live("promotes the same session ID independently in different databases", () =>
     Effect.gen(function* () {
       const first = yield* fixture
