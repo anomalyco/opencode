@@ -13,9 +13,14 @@ export const storageHandlers = StorageRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return StorageRpcs.of({
-      StorageItems: ({ name }) => Effect.sync(() => storage.state.items(name)),
+      StorageItems: ({ name }) =>
+        Effect.gen(function* () {
+          yield* storage.ready
+          return storage.state.items(name)
+        }),
       StorageUpdate: ({ name, insert, remove }, context) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          yield* storage.ready
           const revision = storage.state.update(name, insert, remove)
           // Other windows hold their own copy of this namespace; tell them what moved.
           const origin = sender(handoff, context)
@@ -27,7 +32,11 @@ export const storageHandlers = StorageRpcs.toLayer(
 
           return revision
         }),
-      StorageClear: ({ name }) => Effect.sync(() => storage.state.clear(name)),
+      StorageClear: ({ name }) =>
+        Effect.gen(function* () {
+          yield* storage.ready
+          storage.state.clear(name)
+        }),
       DraftsGet: ({ key }) => Effect.sync(() => storage.drafts.get(key)),
       DraftsSet: ({ key, value, strict }) => Effect.sync(() => storage.drafts.set(key, value, strict)),
       DraftsDelete: ({ key }) => Effect.sync(() => void storage.drafts.set(key, null)),
