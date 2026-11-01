@@ -44,7 +44,7 @@ export default function Download() {
       <Meta name="description" content={i18n.t("download.meta.description")} />
       <SocialMeta title={i18n.t("download.title")} description={i18n.t("download.meta.description")} path="/download" />
       <div data-component="container">
-        <Header hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="download-section">

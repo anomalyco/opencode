@@ -10,6 +10,8 @@ export const dict = {
   "nav.models": "Models",
   "nav.teams": "Teams",
   "nav.go": "Go",
+  "nav.subscription": "Subscription",
+  "nav.console": "Console",
   "nav.login": "Login",
   "nav.free": "Download",
   "nav.home": "Home",
