@@ -26,7 +26,7 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
-import { loopNudgeParts, loopNudgeText, reasoningLoopDetector } from "../llm/reasoning-loop.js"
+import { loopNudgeParts, loopNudgeText, reasoningLoopDetector, LOOP_STEP_ABORT_MESSAGE } from "../llm/reasoning-loop.js"
 import { TOOL_LOOP_NUDGE, TOOL_LOOP_NUDGE_TEXT } from "../llm/tool-loop.js"
 import { SessionRunnerLoopState } from "./loop-state.js"
 import { isRecord } from "@opencode/util/record"
@@ -134,7 +134,12 @@ export const make = Effect.gen(function* () {
               return
             }
           }
-          if (event.type !== "tool-call" || event.providerExecuted || event.name === "invalid" || !isRecord(event.input))
+          if (
+            event.type !== "tool-call" ||
+            event.providerExecuted ||
+            event.name === "invalid" ||
+            !isRecord(event.input)
+          )
             return
           // The call is already durable, so a dropped repeat is settled rather than removed.
           if (yield* loopState.recordToolCall(input.sessionID, event.name, event.input)) {
@@ -182,6 +187,21 @@ export const make = Effect.gen(function* () {
             message: "Tool execution interrupted by loop detection",
           })
           yield* publisher.failIncompleteTools()
+          // The stream was cut before its finish event, so settle the step here:
+          // without a terminal event the assistant message stays open and the
+          // step's file changes and usage are never recorded.
+          yield* publisher.failAssistant({ type: "aborted", message: LOOP_STEP_ABORT_MESSAGE })
+          const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
+          const snapshot = yield* snapshots.capture()
+          const files =
+            startSnapshot && snapshot
+              ? startSnapshot === snapshot
+                ? []
+                : yield* snapshots
+                    .files({ from: startSnapshot, to: snapshot })
+                    .pipe(Effect.orElseSucceed(() => undefined))
+              : undefined
+          yield* publisher.publishStepFailure({ snapshot, files })
           return Outcome.LoopNudge({ text: loopNudge.text })
         }
         if (streamInterrupted) yield* interruptTools

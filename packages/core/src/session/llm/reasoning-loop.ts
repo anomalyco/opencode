@@ -51,6 +51,14 @@ export const LOOP_NUDGE_CAP = 2
 export const LOOP_ABORT_MESSAGE =
   "loop_abort: the model kept repeating itself after 2 loop nudges this turn, so the turn was ended. Send a new message to continue."
 
+/**
+ * Recorded on the assistant message of a step that loop detection cut short.
+ * The turn continues with a nudge, so this is a step settlement, not a turn
+ * failure; replay treats the aborted step's looped tail as non-history.
+ */
+export const LOOP_STEP_ABORT_MESSAGE =
+  "loop_nudge: this step repeated itself and was stopped so the turn could continue with a wrap-up nudge."
+
 export type ReasoningLoopRule = "repeat" | "tight" | "period" | "line"
 
 export type ReasoningLoopMetrics = {
@@ -595,7 +603,13 @@ export function loopNudgeText(work: { preLoop: string }, max = LOOP_NUDGE_MAX_CH
   const pre = elide(work.preLoop.trim() ? work.preLoop : "", max, LOOP_NUDGE_HEAD)
   const lines = [REASONING_LOOP_NUDGE]
   if (pre.text) {
-    lines.push("Here is the work you produced before the loop started:", "", "<work-before-loop>", pre.text, "</work-before-loop>")
+    lines.push(
+      "Here is the work you produced before the loop started:",
+      "",
+      "<work-before-loop>",
+      pre.text,
+      "</work-before-loop>",
+    )
   } else lines.push("You produced no work before the loop started.")
   lines.push(
     "",

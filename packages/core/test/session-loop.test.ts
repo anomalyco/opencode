@@ -136,6 +136,21 @@ it.effect("does not fire when the tool input changes", () =>
   }),
 )
 
+it.effect("settles the loop-nudged step so its assistant message closes", () =>
+  Effect.gen(function* () {
+    const s = yield* setup
+    yield* s.attempt(toolCall("call-1"))
+    yield* s.attempt(toolCall("call-2"))
+    const third = yield* s.attempt(toolCall("call-3"))
+    expect(third._tag).toBe("LoopNudge")
+    const types = (yield* s.events()).map((event) => event.type)
+    // Without a terminal step event the assistant message stays open and the
+    // step's file changes are never recorded.
+    expect(types.filter((type) => type.startsWith("session.step.failed"))).toHaveLength(1)
+    expect(types.filter((type) => type.startsWith("session.step.ended"))).toHaveLength(2)
+  }),
+)
+
 it.effect("kill switch: OPENCODE_TOOL_LOOP_DETECT=0 disables the cross-step rule", () =>
   Effect.gen(function* () {
     const previous = process.env.OPENCODE_TOOL_LOOP_DETECT
