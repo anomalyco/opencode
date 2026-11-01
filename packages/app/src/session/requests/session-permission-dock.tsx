@@ -54,6 +54,15 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
+      <Show when={props.request.message}>
+        {(message) => (
+          <div data-slot="permission-row">
+            <span data-slot="permission-spacer" aria-hidden="true" />
+            <div data-slot="permission-hint">{message()}</div>
+          </div>
+        )}
+      </Show>
+
       <Show when={toolDescription()}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
