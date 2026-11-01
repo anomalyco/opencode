@@ -27,6 +27,7 @@ import { verbosityPreset } from "./verbosity"
 import type {
   LocalReplayRow,
   MiniHost,
+  MiniSettingChange,
   MiniSettings,
   RunInput,
   RunPrompt,
@@ -194,9 +195,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const start = input.host.startup.now()
   const log = input.host.diagnostics.trace
   const config = input.config
+  let shellFromConfig = ""
   const configState: { current: MiniSettings } = { current: resolveMiniSettings() }
   const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform).then((tuiConfig) => {
-    configState.current = resolveMiniSettings(tuiConfig)
+    configState.current = resolveMiniSettings({ mini: tuiConfig.mini, shell: shellFromConfig })
     return tuiConfig
   })
   const ctx = await input.boot()
@@ -222,6 +224,17 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     agent: ctx.agent,
     location: ctx.location,
   }
+  // Read the default shell and the list of available shells from the core config (server), mirroring the app's shell controller.
+  const [entries, shells] = await Promise.all([
+    ctx.sdk.config.get().catch(() => []),
+    ctx.sdk.config.shells().catch(() => []),
+  ])
+  const boundary = entries.findIndex((entry) => entry.type === "directory")
+  const global = boundary === -1 ? entries : entries.slice(0, boundary)
+  shellFromConfig =
+    global.flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : [])).at(-1) ??
+    ""
+  configState.current = { ...configState.current, shell: shellFromConfig }
   const settleForm = async (sessionID: string, formID: string) => {
     if (!state.stream) return
     const stream = await state.stream
@@ -250,8 +263,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: state.model,
     variant: state.activeVariant,
     tuiConfig: tuiConfigTask,
+    shell: shellFromConfig,
+    shells: shells.map((item) => item.path),
     onMiniSettingChange: config
-      ? async (change) => {
+      ? async (change: MiniSettingChange) => {
+          if (change.key === "shell") {
+            await state.sdk.config.update({ shell: change.value || null })
+            configState.current = { ...configState.current, shell: change.value }
+            return configState.current
+          }
           const info = await config.update((draft) => {
             if (!draft.mini || typeof draft.mini !== "object") draft.mini = {}
             if (change.key === "verbosity") {
@@ -260,7 +280,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             }
             draft.mini[change.key] = change.value
           })
-          configState.current = resolveMiniSettings(info)
+          configState.current = resolveMiniSettings({ mini: info.mini, shell: configState.current.shell })
           return configState.current
         }
       : undefined,

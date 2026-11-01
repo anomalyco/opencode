@@ -1,10 +1,11 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, createResource } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useThemes } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { DialogSelect, DialogSelectChoice } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
 import { DialogThemeList } from "./dialog-theme-list"
+import { useClient } from "../context/client"
 
 type Setting = {
   title: string
@@ -360,6 +361,14 @@ export const settings: Setting[] = [
     keywords: ["selection", "clipboard"],
   },
   {
+    title: "Shell",
+    category: "Terminal",
+    path: ["shell"],
+    description: "Shell used for running commands",
+    default: "",
+    keywords: ["shell terminal command executor"],
+  },
+  {
     title: "Developer tools",
     category: "Debug",
     path: ["debug", "devtools"],
@@ -381,6 +390,7 @@ export function DialogConfig(props: { current?: string }) {
   const dialog = useDialog()
   const toast = useToast()
   const themes = useThemes()
+  const client = useClient()
   const current = Math.max(
     0,
     settings.findIndex((setting) => settingID(setting) === props.current),
@@ -388,7 +398,31 @@ export function DialogConfig(props: { current?: string }) {
   const [selected, setSelected] = createSignal(current)
   const [saving, setSaving] = createSignal(false)
 
+  // Load shell options and current shell from core config
+  const [shellData, { refetch: refetchShell }] = createResource(async () => {
+    try {
+      const [entries, shellsRes] = await Promise.all([
+        client.api.config.get().catch(() => [] as any[]),
+        client.api.config.shells().catch(() => [] as any[]),
+      ])
+      const boundary = entries.findIndex((e) => e.type === "directory")
+      const global = boundary === -1 ? entries : entries.slice(0, boundary)
+      const shell =
+        global.flatMap((e) => e.type === "document" && e.info?.shell !== undefined ? [e.info.shell] : []).at(-1) ?? ""
+      return {
+        current: shell,
+        options: ["", ...shellsRes.map((s) => s.path)],
+      }
+    } catch {
+      return {
+        current: "",
+        options: [""],
+      }
+    }
+  })
+
   const value = (setting: Setting) => {
+    if (setting.title === "Shell") return shellData()?.current ?? ""
     const current = setting.path.reduce<unknown>((result, key) => {
       if (!result || typeof result !== "object") return undefined
       return (result as Record<string, unknown>)[key]
@@ -397,12 +431,15 @@ export function DialogConfig(props: { current?: string }) {
     return current ?? setting.default
   }
   const values = (setting: Setting) =>
-    setting.path.join(".") === "theme.name"
+    setting.title === "Shell"
+      ? shellData()?.options ?? [""]
+      : setting.path.join(".") === "theme.name"
       ? Object.keys(themes.all()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
       : setting.values
   const display = (setting: Setting) => {
     const current = value(setting)
     if (setting.format) return setting.format(current)
+    if (setting.title === "Shell") return current ? String(current) : "default"
     const index = setting.values?.indexOf(current)
     return index === undefined || index < 0 ? String(current) : (setting.labels?.[index] ?? String(current))
   }
@@ -432,16 +469,24 @@ export function DialogConfig(props: { current?: string }) {
       : Math.min(setting.max!, Math.max(setting.min!, Number(current) + direction * setting.step!))
     if (next === current) return
     setSaving(true)
-    await config
-      .update((draft) => {
-        const parent = setting.path.slice(0, -1).reduce<Record<string, unknown>>((result, key) => {
-          if (!result[key] || typeof result[key] !== "object") result[key] = {}
-          return result[key] as Record<string, unknown>
-        }, draft)
-        parent[setting.path.at(-1)!] = next
-      })
-      .catch(toast.error)
-      .finally(() => setSaving(false))
+    try {
+      if (setting.title === "Shell") {
+        await client.api.config.update({ shell: (next as string) === "" ? null : next as string })
+        await refetchShell()
+      } else {
+        await config.update((draft) => {
+          const parent = setting.path.slice(0, -1).reduce<Record<string, unknown>>((result, key) => {
+            if (!result[key] || typeof result[key] !== "object") result[key] = {}
+            return result[key] as Record<string, unknown>
+          }, draft)
+          parent[setting.path.at(-1)!] = next
+        })
+      }
+    } catch (e) {
+      toast.error(e)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
