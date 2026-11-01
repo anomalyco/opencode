@@ -4,9 +4,11 @@ import { asc, eq, or } from "drizzle-orm"
 import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
+import { ImageNotice } from "./image/notice.js"
 import { JobTable } from "./job/sql.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
+import { ShellResult } from "./shell/result.js"
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -43,6 +45,63 @@ export type Status = Background["status"]
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
 const COMPLETED_LIMIT = 25
+
+export type Notice = {
+  readonly id?: SessionMessage.ID
+  readonly description?: string
+  readonly text: string
+  readonly metadata?: Record<string, unknown>
+  readonly resume?: boolean
+}
+
+export function formatNotice(
+  input: Pick<Background, "id" | "status" | "output" | "error"> & { readonly value?: unknown },
+  recovery: Exclude<Recovery, { kind: "subagent" }>,
+  options?: { readonly restarted?: boolean },
+): Omit<Notice, "id" | "resume"> {
+  const restarted = options?.restarted === true
+  const state = input.status === "running" ? "cancelled" : input.status
+  if (recovery.kind === "shell") {
+    const text =
+      input.status === "running"
+        ? "Command cancelled because the server restarted"
+        : state === "completed"
+          ? (input.output ?? "Command completed")
+          : state === "error"
+            ? (input.error ?? "Command failed")
+            : !restarted && input.output
+              ? `${input.output}\n\nCancelled`
+              : restarted
+                ? "Command cancelled"
+                : "Cancelled"
+    return {
+      description: recovery.command,
+      ...ShellResult.notification({
+        jobID: input.id,
+        shellID: recovery.shellID,
+        command: recovery.command,
+        state,
+        text,
+        ...(input.value !== undefined
+          ? { output: input.value as Parameters<typeof ShellResult.notification>[0]["output"] }
+          : {}),
+      }),
+    }
+  }
+  const body =
+    input.status === "running"
+      ? `Image request for ${recovery.path} was cancelled because the server restarted.`
+      : state === "completed"
+        ? (input.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
+        : state === "error"
+          ? (input.error ?? `Image request failed for ${recovery.path}.`)
+          : `Image request for ${recovery.path} was cancelled.`
+  return {
+    description: "Image generation",
+    text: ImageNotice.text({ id: input.id, state, body }),
+    metadata: { source: "experimental_image_generate", jobID: input.id, state, path: recovery.path },
+  }
+}
 
 export type Info = {
   id: string

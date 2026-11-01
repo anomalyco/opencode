@@ -9,8 +9,6 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
-import { ImageNotice } from "../../image/notice.js"
-import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
@@ -99,51 +97,6 @@ export const layer = (options?: Options) =>
         return true
       })
 
-      const restartMessage = (
-        background: Job.Background,
-        recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
-      ) => {
-        const state = background.status === "running" ? "cancelled" : background.status
-        if (recovery.kind === "shell") {
-          const text =
-            background.status === "running"
-              ? "Command cancelled because the server restarted"
-              : state === "completed"
-                ? (background.output ?? "Command completed")
-                : state === "error"
-                  ? (background.error ?? "Command failed")
-                  : "Command cancelled"
-          return {
-            description: recovery.command,
-            ...ShellResult.notification({
-              jobID: background.id,
-              shellID: recovery.shellID,
-              command: recovery.command,
-              state,
-              text,
-            }),
-          }
-        }
-        const body =
-          background.status === "running"
-            ? `Image request for ${recovery.path} was cancelled because the server restarted.`
-            : state === "completed"
-              ? (background.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
-              : state === "error"
-                ? (background.error ?? `Image request failed for ${recovery.path}.`)
-                : `Image request for ${recovery.path} was cancelled.`
-        return {
-          description: "Image generation",
-          text: ImageNotice.text({ id: background.id, state, body }),
-          metadata: {
-            source: "experimental_image_generate",
-            jobID: background.id,
-            state,
-            path: recovery.path,
-          },
-        }
-      }
-
       const recoverToolJob = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
@@ -152,7 +105,7 @@ export const layer = (options?: Options) =>
           .synthetic({
             id: background.notificationID,
             sessionID: recovery.sessionID,
-            ...restartMessage(background, recovery),
+            ...Job.formatNotice(background, recovery, { restarted: true }),
             // Restart notices must not revive idle owners of long-lived background tools.
             // Interrupted executions resume separately after their notices are admitted.
             resume: false,
