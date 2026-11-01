@@ -273,12 +273,26 @@ export const layer = (options?: Options) =>
         return { name, entry }
       })
 
-      const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
+      const connectProvider = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
-          Effect.provideService(Credential.Service, credentials),
-        )
+        const scope = entry.scope
+        // Connect reports a rejected sign-in itself; a live connection needs to be taken to needs_auth.
+        const onRejected = () =>
+          callbacks(
+            Effect.gen(function* () {
+              // A failed connect already cleared the scope and reported needs_auth.
+              if (entry.scope !== scope) return
+              entry.status = { status: "needs_auth", error: `MCP server "${name}" requires a new sign-in` }
+              yield* stopServer(name, entry)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }).pipe(locks.withLock(name)),
+          )
+        return yield* McpOAuth.connectProvider({
+          config: entry.config,
+          integrationID: entry.integrationID,
+          onRejected,
+        }).pipe(Effect.provideService(Credential.Service, credentials))
       })
 
       const elicitation = {
@@ -488,7 +502,7 @@ export const layer = (options?: Options) =>
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
           const scope = yield* Scope.fork(servers)
           entry.scope = scope
-          const authProvider = yield* connectProvider(entry)
+          const authProvider = yield* connectProvider(name, entry)
           const { McpClient } = yield* Effect.promise(() => import("./client.js"))
           // List tools as part of connect so a failure here marks the server failed rather than
           // leaving it connected with a silently empty tool list and no path to recover.
