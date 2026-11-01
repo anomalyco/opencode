@@ -66,6 +66,13 @@
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
+    "#undici-fetch": {
+      "types": "./src/util/undici-fetch.node.ts",
+      "workerd": "./src/util/undici-fetch.noop.ts",
+      "bun": "./src/util/undici-fetch.noop.ts",
+      "node": "./src/util/undici-fetch.node.ts",
+      "default": "./src/util/undici-fetch.noop.ts"
+    },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",
       "bun": "./src/database/v1-migration.bun.ts",
@@ -130,6 +137,7 @@
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
     "which": "6.0.1",
+    "undici": "8.12.3",
     "zod": "catalog:"
   },
   "peerDependencies": {
