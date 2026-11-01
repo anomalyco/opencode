@@ -16,6 +16,13 @@
     "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
+  "imports": {
+    "#hidden-console": {
+      "bun": "./src/services/hidden-console.bun.ts",
+      "node": "./src/services/hidden-console.node.ts",
+      "default": "./src/services/hidden-console.bun.ts"
+    }
+  },
   "scripts": {
     "build": "bun run script/build.ts",
     "build:node": "bun run script/build-node.ts",
