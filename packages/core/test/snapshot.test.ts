@@ -127,6 +127,29 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("captures a Location opened through a symlinked path", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "real", "project")
+          const linked = path.join(tmp.path, "linked")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+            await fs.symlink(path.dirname(project), linked, process.platform === "win32" ? "junction" : "dir")
+          })
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeDefined()
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, path.join(linked, "project"))))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("recovers from a corrupt index and ignores a stale index lock", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
