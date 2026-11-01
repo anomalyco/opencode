@@ -275,6 +275,8 @@ Configure terminal integration:
 
 </div>
 
+While a session runs, output a native library or child process sends to the terminal's stderr is captured to `log/tui-stderr.log` in the data directory instead of painting over the interface. When the session ends and something was captured, the file's path is printed on the terminal. Set `OPENCODE_TUI_STDERR=inherit` to keep process stderr on the terminal.
+
 ## Mini
 
 The `mini` group controls [`opencode mini`](/cli#mini), the minimal interactive interface:

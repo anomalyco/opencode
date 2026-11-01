@@ -32,6 +32,11 @@
       "node": "./src/attention-sounds.node.ts",
       "default": "./src/attention-sounds.bun.ts"
     },
+    "#stderr-capture": {
+      "bun": "./src/stderr-capture.bun.ts",
+      "node": "./src/stderr-capture.node.ts",
+      "default": "./src/stderr-capture.bun.ts"
+    },
     "#string-width": {
       "bun": "./src/util/string-width.bun.ts",
       "node": "./src/util/string-width.node.ts",
