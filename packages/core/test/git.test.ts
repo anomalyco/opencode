@@ -75,6 +75,34 @@ describe("Git", () => {
       }),
     ),
   )
+
+  it.live("replaces a stale store directory that has no HEAD", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const project = path.join(root.path, "project")
+      const storage = AbsolutePath.make(path.join(root.path, "storage"))
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, "a.txt"), "a\n")
+        await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+        // An interrupted create leaves a non-empty store directory without HEAD.
+        await fs.mkdir(path.join(storage, "objects"), { recursive: true })
+        await Bun.write(path.join(storage, "partial"), "partial\n")
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(project))
+      if (!source) throw new Error("Repository not found")
+
+      yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+
+      expect(yield* Effect.promise(() => Bun.file(path.join(storage, "HEAD")).exists())).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(path.join(storage, "partial")).exists())).toBe(false)
+    }),
+  )
 })
 
 describe("Git worktrees", () => {

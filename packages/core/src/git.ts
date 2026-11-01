@@ -479,11 +479,29 @@ const layer = Layer.effect(
         yield* initRepository({ ...input, directory: temporaryDirectory })
         const renamed = yield* fs.rename(temporaryDirectory, input.gitDirectory).pipe(Effect.exit)
         if (Exit.isSuccess(renamed) || (yield* fs.existsSafe(path.join(input.gitDirectory, "HEAD")))) return
+        // A create that died between `git init` and the rename can leave a
+        // non-empty directory without HEAD. It is not a store this code wrote,
+        // and it would make the rename fail forever, so discard it and retry
+        // once. A concurrent creator that finished in the meantime has HEAD and
+        // returned above.
+        yield* fs.remove(input.gitDirectory, { recursive: true, force: true }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OperationError({
+                operation: "create",
+                directory: input.gitDirectory,
+                message: "Failed to remove stale Git storage",
+                cause,
+              }),
+          ),
+        )
+        const retried = yield* fs.rename(temporaryDirectory, input.gitDirectory).pipe(Effect.exit)
+        if (Exit.isSuccess(retried) || (yield* fs.existsSafe(path.join(input.gitDirectory, "HEAD")))) return
         return yield* new OperationError({
           operation: "create",
           directory: input.gitDirectory,
           message: "Failed to move Git storage into place",
-          cause: Cause.squash(renamed.cause),
+          cause: Cause.squash(retried.cause),
         })
       }).pipe(Effect.ensuring(fs.remove(temporaryDirectory, { recursive: true, force: true }).pipe(Effect.ignore)))
       return repository
