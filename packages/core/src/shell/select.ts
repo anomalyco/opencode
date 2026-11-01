@@ -164,9 +164,17 @@ function info(file: string, options?: Options, bin?: string): Item {
 export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", POWERSHELL_UTF8 + command]
   return ["-c", command]
 }
+
+// PowerShell decodes other programs' output in the console's legacy code page (IBM437 on en-US Windows), and
+// Windows PowerShell also reads files without a BOM as ANSI, while opencode reads the shell's output as UTF-8.
+// A value captured from `gh` or `git` then holds the wrong characters even though echoing it looks right.
+// The encoding setter throws in ConstrainedLanguage mode or without a console; the command then runs as before.
+const POWERSHELL_UTF8 =
+  "$PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'\n" +
+  "try { [Console]::OutputEncoding = $OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}\n"
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
 export function environment(bin?: string, filter?: { compatible?: boolean }) {
