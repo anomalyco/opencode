@@ -3,6 +3,7 @@ import { Money } from "@opencode/schema/money"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
 import { Config } from "@opencode/core/config"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Integration } from "@opencode/core/integration"
@@ -33,6 +34,23 @@ function required<T>(value: T | undefined): T {
 }
 
 const decode = Schema.decodeUnknownSync(Info)
+
+const seededVariants = [{ id: Model.VariantID.make("high"), settings: { effort: "high" } }]
+
+const seedAnthropic = Effect.fn(function* (ids: readonly string[]) {
+  const providers = yield* Provider.Service
+  yield* providers.transform((editor) => {
+    editor.update(Provider.ID.anthropic, (provider) => {
+      provider.package = "aisdk:@ai-sdk/anthropic"
+    })
+    for (const id of ids)
+      editor.models.update(Provider.ID.anthropic, Model.ID.make(id), (model) => {
+        model.name = `Anthropic ${id}`
+        model.package = "@opencode/ai/providers/anthropic"
+        model.variants = structuredClone(seededVariants)
+      })
+  })
+})
 
 describe("ConfigProviderPlugin.Plugin", () => {
   it.effect("inherits the provider compaction setting with model overrides and rejects unsupported routes", () =>
@@ -781,6 +799,83 @@ describe("ConfigProviderPlugin.Plugin", () => {
         models.get(providerID, Model.ID.make(id)).pipe(Effect.map((model) => required(model).settings?.baseURL))
       expect(yield* baseURL("chat")).toBe("http://127.0.0.1:17322")
       expect(yield* baseURL("pinned")).toBe("http://127.0.0.1:9000")
+    }),
+  )
+
+  it.effect("offers every model of the canonical provider, with listed models as overrides", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("proxy")
+      yield* seedAnthropic(["sonnet", "opus", "haiku"])
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              proxy: {
+                canonical: "anthropic",
+                settings: { baseURL: "https://llm-proxy.example.com/anthropic" },
+                models: { opus: { name: "Proxy Opus" }, haiku: { disabled: true } },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = (id: string) => models.get(providerID, Model.ID.make(id)).pipe(Effect.map(required))
+      const sonnet = yield* model("sonnet")
+      expect(sonnet).toMatchObject({ providerID, canonical: Provider.ID.anthropic, name: "Anthropic sonnet" })
+      expect(sonnet.settings?.baseURL).toBe("https://llm-proxy.example.com/anthropic")
+      expect((yield* model("opus")).name).toBe("Proxy Opus")
+      expect((yield* model("haiku")).enabled).toBe(false)
+      expect(required(yield* providers.get(Provider.ID.anthropic)).settings?.baseURL).toBeUndefined()
+    }),
+  )
+
+  it.effect("respells the variants of every inherited model when a canonical provider changes package", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("proxy")
+      yield* seedAnthropic(["listed", "unlisted"])
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              proxy: { canonical: "anthropic", package: "aisdk:@ai-sdk/openai", models: { listed: {} } },
+            },
+          }),
+        }),
+      ])
+
+      const variants = (id: string) =>
+        models.get(providerID, Model.ID.make(id)).pipe(Effect.map((model) => required(model).variants))
+      const listed = yield* variants("listed")
+      expect(listed).not.toEqual(seededVariants)
+      expect(yield* variants("unlisted")).toEqual(listed)
+    }),
+  )
+
+  it.effect("keeps an integration document's canonical provider to the models it lists", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const listed: string[] = []
+      yield* seedAnthropic(["sonnet", "opus"])
+      yield* providers.transform((editor) => {
+        ConfigProviderPlugin.integrate(
+          editor,
+          new ConfigIntegration.Document({
+            type: "document",
+            integrationID: Integration.ID.make("opencode"),
+            connection: { type: "env", name: "OPENCODE_API_KEY" },
+            info: decode({ providers: { "console-anthropic": { canonical: "anthropic", models: { sonnet: {} } } } }),
+          }),
+        )
+        listed.push(...(editor.get(Provider.ID.make("console-anthropic"))?.models.keys() ?? []))
+      })
+
+      expect(listed).toEqual(["sonnet"])
     }),
   )
 
