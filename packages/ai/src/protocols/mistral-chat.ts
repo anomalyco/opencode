@@ -55,6 +55,7 @@ const isMistralThinkingContent = Schema.is(MistralThinkingContent)
 
 const MistralUserContent = Schema.Union([
   MistralTextContent,
+  Schema.Struct({ type: Schema.Literal("input_audio"), input_audio: Schema.String }),
   Schema.Struct({ type: Schema.Literal("image_url"), image_url: Schema.String }),
   Schema.Struct({ type: Schema.Literal("document_url"), document_url: Schema.String }),
 ])
@@ -218,6 +219,11 @@ type MistralEvent = Schema.Schema.Type<typeof MistralEvent>
 const MistralStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(MistralEvent)])
 
 const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
+  if (part.media.kind === "audio")
+    return {
+      type: "input_audio" as const,
+      input_audio: (yield* ProviderShared.requireInlineMedia("Mistral Chat", part.media)).base64,
+    }
   const mime = part.media.mediaType.toLowerCase()
   const url =
     ProviderShared.mediaUrl(part.media) ??
