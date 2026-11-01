@@ -12,6 +12,7 @@ import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
+import { SubagentJob } from "../subagent-job.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -72,6 +73,7 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
+      const subagents = yield* SubagentJob.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -99,10 +101,7 @@ export const layer = (options?: Options) =>
         return true
       })
 
-      const restartMessage = (
-        background: Job.Background,
-        recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
-      ) => {
+      const restartMessage = (background: Job.Background, recovery: Exclude<Job.Recovery, { kind: "subagent" }>) => {
         const state = background.status === "running" ? "cancelled" : background.status
         if (recovery.kind === "shell") {
           const text =
@@ -172,50 +171,40 @@ export const layer = (options?: Options) =>
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
           yield* jobs.completeBackground(background.notificationID)
+          yield* subagents.sync(recovery.childSessionID)
           return
         }
-
-        const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
+        if (background.status === "cancelled") {
           yield* SubagentCompletion.deliver(sessions, jobs, {
-            ...result,
+            status: "cancelled",
             recovery,
             notificationID: background.notificationID,
             resume: suspended.has(recovery.parentSessionID) ? false : undefined,
           }).pipe(Effect.orDie)
-        })
-
+          return
+        }
         if (background.status !== "running") {
-          yield* notify(background)
+          yield* subagents.sync(recovery.childSessionID)
+          yield* jobs.completeBackground(background.notificationID)
           return
         }
         if (yield* execution.isActive(recovery.childSessionID)) return
         if (!(yield* prepareResume(recovery.childSessionID))) {
-          yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
+          yield* subagents.sync(recovery.childSessionID)
+          yield* jobs.completeBackground(background.notificationID)
           return
         }
 
-        yield* jobs.start({
+        const job = yield* jobs.start({
           id: background.id,
           type: "subagent",
           title: recovery.description,
           notificationID: background.notificationID,
           recovery,
-          run: execution.resume(recovery.childSessionID).pipe(
-            Effect.andThen(store.context(recovery.childSessionID)),
-            Effect.map((messages) => {
-              const assistant = messages.findLast(
-                (message) =>
-                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-              )
-              return SubagentCompletion.text(assistant)
-            }),
-          ),
+          run: execution.resume(recovery.childSessionID).pipe(Effect.as("")),
         })
         yield* jobs.background(background.id)
-        yield* jobs.wait({ id: background.id }).pipe(
-          Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
-          Effect.forkIn(scope),
-        )
+        yield* subagents.notify(recovery, job.started_at)
       })
 
       return Service.of({
@@ -232,17 +221,24 @@ export const layer = (options?: Options) =>
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
           yield* store.releaseChildClaims(children)
-          yield* Effect.forEach(
-            // Admit shell outcomes before a recovered child can start its first model request.
-            pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
-            Effect.fnUntraced(function* (background) {
-              if ((yield* jobs.get(background.id))?.status === "running") return
-              const recovery = background.recovery
-              if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
-              yield* recoverSubagent(background, recovery, suspended)
-            }),
-            { discard: true },
-          )
+          yield* subagents
+            .recover(
+              suspended,
+              Effect.forEach(
+                // Admit shell outcomes before a recovered child can start its first model request.
+                pending.toSorted(
+                  (a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent"),
+                ),
+                Effect.fnUntraced(function* (background) {
+                  if ((yield* jobs.get(background.id))?.status === "running") return
+                  const recovery = background.recovery
+                  if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
+                  yield* recoverSubagent(background, recovery, suspended)
+                }),
+                { discard: true },
+              ),
+            )
+            .pipe(Effect.orDie)
 
           // Background completion can wake a parent, so inspect local ownership only after recovery.
           const resumed = yield* execution.active
@@ -264,5 +260,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, SubagentJob.node],
 })

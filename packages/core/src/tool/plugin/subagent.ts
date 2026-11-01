@@ -6,7 +6,6 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Predicate, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
-import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
@@ -65,7 +64,6 @@ export const Plugin = {
   id: "opencode.tool.subagent",
   effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
-    const jobs = yield* Job.Service
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
@@ -206,23 +204,6 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
-              yield* sessions
-                .prompt({
-                  sessionID: child.id,
-                  text:
-                    existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
-                      : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
-                  ),
-                )
-
               const recovery = {
                 kind: "subagent" as const,
                 parentSessionID: context.sessionID,
@@ -230,24 +211,35 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              yield* subagents.start(recovery)
+              yield* subagents.track(recovery)
+
+              // Standard prompt admission outside the job: Job.start joining a running child skips
+              // its run effect, and the default wake starts an idle child or steers a running one.
+              const admitPrompt = sessions
+                .prompt({
+                  sessionID: child.id,
+                  metadata: { source: "subagent" },
+                  text:
+                    existing === undefined
+                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                      : input.prompt,
+                  ...(existing === undefined ? { resume: false } : {}),
+                })
+                .pipe(
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
+                  ),
+                )
 
               if (background) {
+                yield* admitPrompt
+                yield* subagents.start(recovery)
                 yield* subagents.background(recovery)
                 return backgroundResult(child.id)
               }
 
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
-              )
-              if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
-                return backgroundResult(child.id)
-              }
+              const result = yield* subagents.block(recovery, admitPrompt)
+              if (result?.type === "backgrounded") return backgroundResult(child.id)
               // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
                 return yield* new ToolFailure({

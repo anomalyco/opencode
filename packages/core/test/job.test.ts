@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Database } from "@opencode/core/database/database"
 import jobMigration from "@opencode/core/database/migration/20261030054400_job"
+import jobSubagentMigration from "@opencode/core/database/migration/20261030204714_job_subagent"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
 import { KVTable } from "@opencode/core/kv/sql"
@@ -519,7 +520,12 @@ describe("Job", () => {
         })
         .run()
 
-      yield* db.transaction((tx) => jobMigration.up(tx))
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* jobMigration.up(tx)
+          yield* jobSubagentMigration.up(tx)
+        }),
+      )
 
       expect(yield* db.select().from(KVTable).where(like(KVTable.key, "job.background/%")).all()).toEqual([])
       expect(yield* jobs.pendingBackground).toMatchObject([

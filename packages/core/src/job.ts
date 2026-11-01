@@ -1,6 +1,6 @@
 export * as Job from "./job.js"
 
-import { asc, eq, or } from "drizzle-orm"
+import { and, asc, eq, ne, or } from "drizzle-orm"
 import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
@@ -235,21 +235,17 @@ export const make = Effect.gen(function* () {
       output: job.info.output ?? null,
       error: job.info.error ?? null,
       recovery: job.recovery,
+      pending: true,
       time_created: job.info.started_at,
       time_updated: now,
     }
+    const { time_created: _, ...update } = values
     yield* db
       .insert(JobTable)
       .values(values)
       .onConflictDoUpdate({
-        target: JobTable.notification_id,
-        set: {
-          status: values.status,
-          output: values.output,
-          error: values.error,
-          recovery: values.recovery,
-          time_updated: now,
-        },
+        target: job.recovery.kind === "subagent" ? JobTable.child_session_id : JobTable.notification_id,
+        set: update,
       })
       .run()
       .pipe(Effect.orDie)
@@ -512,6 +508,7 @@ export const make = Effect.gen(function* () {
     const rows = yield* db
       .select()
       .from(JobTable)
+      .where(eq(JobTable.pending, true))
       .orderBy(asc(JobTable.time_created), asc(JobTable.notification_id))
       .all()
       .pipe(Effect.orDie)
@@ -539,7 +536,17 @@ export const make = Effect.gen(function* () {
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
     SynchronizedRef.updateEffect(state.jobs, (jobs) =>
       Effect.gen(function* () {
-        yield* db.delete(JobTable).where(eq(JobTable.notification_id, notificationID)).run().pipe(Effect.orDie)
+        yield* db
+          .delete(JobTable)
+          .where(and(eq(JobTable.notification_id, notificationID), ne(JobTable.kind, "subagent")))
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(JobTable)
+          .set({ pending: false })
+          .where(and(eq(JobTable.notification_id, notificationID), eq(JobTable.kind, "subagent")))
+          .run()
+          .pipe(Effect.orDie)
         const entry = [...jobs].find(([, job]) => job.info.notificationID === notificationID)
         if (!entry || entry[1].info.status === "running") return jobs
         const next = new Map(jobs)
