@@ -1079,6 +1079,16 @@ describe("ReadTool", () => {
               },
             ),
           )
+          yield* skills.transform((editor) =>
+            editor.add(
+              Skill.Info.make({
+                id: Skill.ID.make("disk"),
+                name: Skill.Name.make("Disk"),
+                path: AbsolutePath.make("/somewhere/disk/SKILL.md"),
+                content: "Disk",
+              }),
+            ),
+          )
 
           const file = yield* executeTool(registry, {
             sessionID,
@@ -1110,7 +1120,13 @@ describe("ReadTool", () => {
             ],
           })
 
-          for (const bad of ["skill://", "skill://guide/../SKILL.md", "skill://guide/missing.md", "skill://unknown"]) {
+          for (const bad of [
+            "skill://",
+            "skill://guide/../SKILL.md",
+            "skill://guide/missing.md",
+            "skill://unknown",
+            "skill://disk/SKILL.md",
+          ]) {
             expect(
               yield* executeTool(registry, {
                 sessionID,
@@ -1127,7 +1143,7 @@ describe("ReadTool", () => {
             { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
             { sessionID, action: "read", resources: ["skill://guide/references/style.md"], save: ["*"] },
             { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
-            { sessionID, action: "read", resources: ["skill://guide/"], save: ["*"] },
+            { sessionID, action: "read", resources: ["skill://guide"], save: ["*"] },
             { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
             { sessionID, action: "read", resources: ["skill://guide/missing.md"], save: ["*"] },
           ])
@@ -1148,18 +1164,15 @@ describe("ReadTool", () => {
           ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: skill" } })
 
           deniedResource = "skill://guide/SKILL.md"
-          expect(
-            yield* executeTool(registry, {
-              sessionID,
-              ...toolIdentity,
-              call: {
-                type: "tool-call",
-                id: "call-skill-read-denied",
-                name: "read",
-                input: { path: "skill://guide/SKILL.md" },
-              },
-            }),
-          ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
+          for (const path of ["skill://guide/SKILL.md", "skill://guide/SKILL.md/"]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-skill-read-denied-${path}`, name: "read", input: { path } },
+              }),
+            ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
+          }
         }),
       )
     }),

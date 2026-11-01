@@ -56,7 +56,8 @@ export const Plugin = {
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const id = Skill.ID.make(parsed.id)
                 const skill = yield* skills.get(id)
-                if (!skill) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
+                if (!skill || !Skill.isUri(skill.path))
+                  return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const extra = yield* skills.files(id)
                 const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
                 yield* permission.assert({
@@ -69,7 +70,7 @@ export const Plugin = {
                 })
                 yield* permission.assert({
                   action: "read",
-                  resources: [input.path],
+                  resources: [parsed.uri],
                   save: ["*"],
                   sessionID: context.sessionID,
                   agent: context.agent,
@@ -255,7 +256,8 @@ function parseSkillUri(value: string) {
   const rest = slash === -1 ? "" : trimmed.slice(slash + 1)
   if (!SkillDiscovery.isSafeSegment(id)) return undefined
   if (rest !== "" && !rest.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
-  return { id, target: rest === "" ? "/" : `/${rest}` }
+  // Permission checks use the canonical URI, so `skill://id/file/` can't slip past a rule for `skill://id/file`.
+  return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
 export const toModelContent = (path: string, offset: number | undefined, output: typeof Output.Type) => {

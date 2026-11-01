@@ -18,6 +18,9 @@ export const workspaceFileUrl = (root: string, path: string) =>
 
 export function resolveOpenInAppPath(root: string, path: string) {
   if (!path) return root
+
+  if (path.startsWith("skill://")) return path
+
   const windowsRoot = root.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(root)
 
   if (path.startsWith("/") || (windowsRoot && path.startsWith("\\")) || /^[A-Za-z]:[\\/]/.test(path)) return path
