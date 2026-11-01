@@ -112,9 +112,12 @@ export interface Interface {
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: (method?: Method) => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
-  readonly removal: (
-    method: Method,
-  ) => { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> } | undefined
+  readonly removal: (method: Method) =>
+    | {
+        readonly command: ReadonlyArray<string>
+        readonly run: Effect.Effect<{ readonly retainedDirectory?: string }, Error>
+      }
+    | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
@@ -372,9 +375,11 @@ const make = Effect.gen(function* () {
 
   // On Windows the installer must delete or replace the running binary, which only works
   // while another link to it exists (see RetainedImage). Upgrades keep that link in the
-  // cache; uninstall has already removed the cache, so it uses the temporary directory.
-  const retaining = <A, E, R>(method: Method, effect: Effect.Effect<A, E, R>, directory = global.cache) => {
-    if (process.platform !== "win32" || method === "brew") return effect
+  // cache, with a same-volume fallback for package installs. Uninstall has already
+  // removed the cache, so it uses the temporary directory.
+  const retaining = <E, R>(method: Method, effect: Effect.Effect<void, E, R>, directory = global.cache) => {
+    if (process.platform !== "win32" || method === "brew")
+      return effect.pipe(Effect.as({ retainedDirectory: undefined }))
     // Only the installed binary is at stake; source checkouts run inside bun or node.
     const owned =
       method === "curl"
@@ -382,10 +387,26 @@ const make = Effect.gen(function* () {
         : method === "winget"
           ? installedWinget
           : installedPackage !== undefined
-    if (!owned) return effect
-    return Effect.scoped(RetainedImage.retain(directory, "upgrade").pipe(Effect.andThen(effect))).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-    )
+    if (!owned) return effect.pipe(Effect.as({ retainedDirectory: undefined }))
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const link = yield* RetainedImage.retain(directory, "upgrade")
+        if (!link)
+          return yield* Effect.fail(
+            new UpgradeError({
+              title: "Could not protect the running OpenCode binary",
+              detail:
+                "A retained hard link to the running executable could not be created. Replacement or removal was not started.",
+              retry:
+                method === "curl"
+                  ? "Close all OpenCode processes, then rerun the OpenCode installer from a separate terminal."
+                  : "Close all OpenCode processes, then run the package-manager command from a separate terminal.",
+            }),
+          )
+        yield* effect
+        return { retainedDirectory: yield* RetainedImage.remaining(executable) }
+      }),
+    ).pipe(Effect.provideService(FileSystem.FileSystem, fs))
   }
 
   const runUpgrade = (input: {
