@@ -1,9 +1,11 @@
 import { Agent } from "@opencode/core/agent"
+import { Artifact } from "@opencode/core/artifact"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
+import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
@@ -11,9 +13,11 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
+import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -23,6 +27,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { SharedCache } from "@opencode/core/shared-cache"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -41,6 +46,7 @@ import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
+import { offlineModels } from "../fixture/models"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
@@ -71,6 +77,7 @@ const permissionLayer = Layer.succeed(
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
     assertNotDenied: () => Effect.void,
+    allows: () => Effect.succeed(false),
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
@@ -78,7 +85,7 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer) =>
+export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
   AppNodeBuilder.build(
     LayerNode.group([
       AppProcess.node,
@@ -89,21 +96,26 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Credential.node,
       Config.node,
       Database.node,
+      Environment.node,
       FileAccess.node,
+      Global.node,
       Bus.node,
       Form.node,
       Generate.node,
       LayerNodePlatform.httpClient,
       Plugin.node,
       Agent.node,
+      Artifact.node,
       AISDK.node,
       Provider.node,
       Model.node,
       Command.node,
       Integration.node,
+      Job.node,
       KV.node,
       Mcp.node,
       Session.node,
+      SharedCache.node,
       InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
@@ -125,8 +137,9 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Npm.node.replace(npmLayer),
       Config.node.replace(configLayer),
       Mcp.node.replace(emptyMcpLayer),
-      Generate.node.replace(generateLayer),
+      Generate.node.replace(generate),
       Permission.node.replace(permission),
+      offlineModels,
     ],
   ).pipe(Layer.provideMerge(configLayer))
 

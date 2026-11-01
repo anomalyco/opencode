@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
 import { OpenAI, Azure, XAI } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
@@ -32,7 +32,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} compaction survives generation, serialization, and a second request`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model,
         prompt: "hello",
         providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
@@ -43,16 +43,13 @@ for (const model of [
       expect(first.text).toBe("")
       const codec = Schema.fromJsonString(Message)
       const message = Schema.decodeSync(codec)(Schema.encodeSync(codec)(first.message))
-      yield* LLMClient.generate(
-        LLMRequest.update(request, { messages: [...request.messages, message, Message.user("continue")] }),
-      )
-      const rejected = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
-          providerOptions: {},
-          messages: [message],
-        }),
-      ).pipe(Effect.flip)
+      yield* LLMClient.generate({ ...request, messages: [...request.messages, message, Message.user("continue")] })
+      const rejected = yield* LLMClient.generate({
+        ...request,
+        model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+        providerOptions: {},
+        messages: [message],
+      }).pipe(Effect.flip)
       expect(rejected.reason._tag).toBe("InvalidRequest")
     }),
   )
@@ -63,7 +60,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.completed", response: { out
   () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+        ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
       )
       expect(result.message.content).toHaveLength(1)
       expect(result.message.content[0]?.type).toBe("compaction")
@@ -75,7 +72,7 @@ testEffect(
 ).effect("rejects incomplete compaction payloads without publishing a checkpoint", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
     ).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("cmp_bad")
@@ -103,7 +100,10 @@ for (const completed of [false, true]) {
     ),
   ).effect(completed ? "keeps streamed checkpoints before later text" : "rejects order-unsafe terminal recovery", () =>
     Effect.gen(function* () {
-      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      const request = ai.request({
+        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        prompt: "hello",
+      })
       if (completed) {
         const response = yield* LLMClient.generate(request)
         expect(response.message.content.map((part) => part.type)).toEqual(["compaction", "text"])
@@ -128,7 +128,7 @@ testEffect(
 ).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
     )
     const part = response.message.content[0]
     expect(part?.type).toBe("compaction")

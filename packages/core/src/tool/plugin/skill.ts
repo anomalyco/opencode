@@ -56,7 +56,8 @@ export const Plugin = {
                   agent: context.agent,
                   source: { type: "tool", messageID: context.messageID, id: context.id },
                 })
-                return { name: skill.name, ...(yield* Skill.prepare(fs, skill)) }
+                const files = yield* skills.files(skill.id)
+                return { name: skill.name, ...(yield* Skill.prepare(fs, skill, files)) }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
             }).pipe(
               Effect.map((output) => ({

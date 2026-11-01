@@ -175,24 +175,6 @@ export function SettingsScreen() {
 
         surface.back()
       }}
-      onWheel={(event) => {
-        if (!root || event.ctrlKey || !event.deltaY || !(event.target instanceof Element)) return
-
-        // The page scrolls inside its panel, so a wheel over the gutters or sidebar would otherwise do nothing.
-        if (event.target.closest(".settings-content") || scrollsNatively(event.target, root, event.deltaY)) return
-        const panel = root.querySelector<HTMLElement>(".settings-content > .settings-panel")
-
-        if (!panel) return
-
-        const unit =
-          event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? panel.clientHeight
-            : event.deltaMode === WheelEvent.DOM_DELTA_LINE
-              ? 16
-              : 1
-
-        panel.scrollBy({ top: event.deltaY * unit })
-      }}
     >
       <Switch>
         <Match when={surface.view().type === "root"}>
@@ -208,16 +190,6 @@ export function SettingsScreen() {
       </Switch>
     </div>
   )
-}
-
-function scrollsNatively(target: Element, root: Element, deltaY: number) {
-  for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
-    if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue
-
-    if (deltaY < 0 ? node.scrollTop > 0 : node.scrollHeight - node.clientHeight - node.scrollTop > 1) return true
-  }
-
-  return false
 }
 
 function RootSettings() {

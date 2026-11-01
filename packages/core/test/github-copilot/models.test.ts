@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test"
 import { CopilotModels } from "@opencode/core/github-copilot/models"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+
+const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
+  Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
 
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({
@@ -93,7 +98,7 @@ test("defensively syncs advertised Copilot models", async () => {
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
       modelID: Model.ID.make("stale"),
     })
-    const models = await CopilotModels.get(server.url.origin, {}, [existing, stale])
+    const models = await run((http) => CopilotModels.get(http, server.url.origin, {}, [existing, stale]))
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
@@ -147,9 +152,17 @@ test("prices cache reads from either token price spelling", async () => {
   })
 
   try {
-    const models = await CopilotModels.get(server.url.origin, {}, [])
-    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
-    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
+    const models = await run((http) => CopilotModels.get(http, server.url.origin, {}, []))
+    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
+    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
     expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0 } })
   } finally {
     await server.stop(true)

@@ -1,7 +1,8 @@
 import { Schema } from "effect"
 import { NonNegativeInt } from "@opencode/schema"
 import { Tool } from "@opencode/schema/tool"
-import { ModelID, ProviderID, RouteID } from "./ids.js"
+import { ProviderID, RouteID } from "./ids.js"
+import type { LLMResponse } from "./events.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
@@ -62,13 +63,6 @@ export class ProviderConfigurationError extends Schema.TaggedError<ProviderConfi
 )("ProviderConfiguration", {
   provider: ProviderID,
   message: Schema.String,
-}) {}
-
-export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoRoute")("NoRoute", {
-  ...ReasonFields,
-  route: RouteID,
-  provider: ProviderID,
-  model: ModelID,
 }) {}
 
 export class AuthenticationError extends Schema.TaggedError<AuthenticationError>("AI.Error.Authentication")(
@@ -146,7 +140,6 @@ export class TimeoutError extends Schema.TaggedError<TimeoutError>("AI.Error.Tim
 export const AIErrorReason = Schema.Union([
   InvalidRequestError,
   UnsupportedOperationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
@@ -163,17 +156,27 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   reason: AIErrorReason,
 }) {
   override readonly cause = this.reason
+  /** Output that arrived before `generate` (including its `schema` decode) or a `loop` step failed. Not in the schema, so encoding omits it. */
+  readonly partial?: LLMResponse
+
+  constructor(props: Pick<AIError, "reason" | "partial">) {
+    super({ reason: props.reason })
+    this.partial = props.partial
+  }
 
   override get message(): string {
     return this.reason.message
   }
 }
 
+/** Return `error` with `partial` attached, or unchanged when there is no partial output. */
+export const withPartial = (error: AIError, partial: LLMResponse | undefined) =>
+  partial === undefined ? error : new AIError({ reason: error.reason, partial })
+
 /**
  * Failure type for tool execute handlers. Handlers must map their internal
  * errors to this shape; the runtime catches `ToolFailure`s and surfaces them
- * as `tool-error` events plus a `tool-result` of `type: "error"` so the model
- * can self-correct.
+ * as a `tool-result` of `type: "error"` so the model can self-correct.
  *
  * Anything thrown or yielded by a handler that is not a `ToolFailure` is
  * treated as a defect and fails the stream.

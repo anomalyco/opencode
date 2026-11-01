@@ -1,10 +1,11 @@
 import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { describe, expect } from "bun:test"
-import { Effect, Schedule, Schema } from "effect"
+import { Clock, Effect, Schedule, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
-import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -135,11 +136,12 @@ const fakeAzureCli = Effect.fn(function* (respond: (args: readonly string[]) => 
     ...processes,
     run: (command) => {
       if (command._tag !== "StandardCommand") return processes.run(command)
-      commands.push([...command.args])
-      const value = respond(command.args)
+      const args = command.args.map(String)
+      commands.push(args)
+      const value = respond(args)
       if (value instanceof Error) return Effect.fail(new AppProcess.AppProcessError({ command: "az", cause: value }))
       return Effect.succeed({
-        command: `az ${command.args.join(" ")}`,
+        command: `az ${args.join(" ")}`,
         exitCode: 0,
         stdout: Buffer.from(JSON.stringify(value)),
         stderr: Buffer.alloc(0),
@@ -167,12 +169,6 @@ const keyCredential = (key = "secret", resourceName = "test-resource") =>
 const connect = Effect.fn(function* (value: Credential.Value) {
   const credentials = yield* Credential.Service
   return yield* credentials.create({ integrationID: azureID, value })
-})
-
-// Republishing a switch reruns discovery for the connection that is already active.
-const announceSwitch = Effect.fn(function* (credentialID: Credential.ID) {
-  const bus = yield* Bus.Service
-  yield* bus.publish(Credential.Event.Switched, { integrationID: azureID, credentialID }, { global: true })
 })
 
 const seedProvider = (settings?: Provider.Settings) =>
@@ -221,6 +217,19 @@ const eventually = <A, R>(effect: Effect.Effect<A, never, R>, predicate: (value:
     Effect.filterOrFail(predicate, () => new Error("Timed out waiting for value")),
     Effect.retry({ times: 3000, schedule: Schedule.spaced("1 millis") }),
   )
+
+// Lets real Azure answers arrive between TestClock steps, so retries and the 10 minute refresh need no real waiting.
+const eventuallyOnClock = <A, R>(effect: Effect.Effect<A, never, R>, predicate: (value: A) => boolean) =>
+  Effect.gen(function* () {
+    const deadline = performance.now() + 15_000
+    while (performance.now() < deadline) {
+      const value = yield* effect
+      if (predicate(value)) return value
+      yield* TestClock.withLive(Effect.sleep("1 millis"))
+      yield* TestClock.adjust("500 millis")
+    }
+    return yield* Effect.die(new Error("Timed out waiting for value"))
+  })
 
 // Lets a discovery that has received its last answer finish publishing before asserting that nothing changed.
 const settle = Effect.promise(() => Bun.sleep(25))
@@ -276,7 +285,6 @@ describe("AzurePlugin connecting", () => {
       ])
     }),
   )
-
 })
 
 describe("AzurePlugin startup", () => {
@@ -424,16 +432,11 @@ describe("AzurePlugin discovery", () => {
     }),
   )
 
-  it.live("keeps the last complete list when a later page fails", () =>
+  it.effect("keeps the last complete list when a later page fails", () =>
     Effect.gen(function* () {
       const cli = yield* fakeAzureCli()
       const state = { paged: false }
-      const fellBack = Promise.withResolvers<void>()
       const azure = yield* fakeAzure({
-        resource: () => {
-          fellBack.resolve()
-          return notFound()
-        },
         management: (request) => {
           if (request.path.startsWith("/page-2")) return new Response("Unavailable", { status: 503 })
           if (state.paged) return managementPage([managed("nano", "gpt-5-nano")], `${request.origin}/page-2`)
@@ -441,15 +444,40 @@ describe("AzurePlugin discovery", () => {
         },
       })
       yield* seedCatalog
-      const credential = yield* connect(cliCredential())
+      yield* connect(cliCredential())
       yield* addPlugin(azure.endpoints).pipe(cli.provide)
-      yield* eventually(azureModelIDs, (ids) => ids.length === 1)
+      yield* eventuallyOnClock(azureModelIDs, (ids) => ids.length === 1)
 
       state.paged = true
-      yield* announceSwitch(credential.id)
-      yield* Effect.promise(() => fellBack.promise)
-      yield* settle
+      yield* TestClock.adjust("10 minutes")
+      const pages = Effect.sync(() => azure.requests.filter((request) => request.path.startsWith("/page-2")).length)
+      yield* eventuallyOnClock(pages, (count) => count === 4)
+      yield* Effect.repeat(
+        TestClock.withLive(Effect.sleep("1 millis")).pipe(Effect.andThen(TestClock.adjust("500 millis"))),
+        { times: 3 },
+      )
       expect(yield* azureModelIDs).toEqual(["mini"])
+    }),
+  )
+
+  it.effect("reports the management API error when the resource's own list fails too", () =>
+    Effect.gen(function* () {
+      const cli = yield* fakeAzureCli()
+      const state = { failures: 1 }
+      const azure = yield* fakeAzure({
+        management: () =>
+          state.failures-- > 0
+            ? new Response("Unavailable", { status: 503 })
+            : managementPage([managed("mini", "gpt-5-mini")]),
+      })
+      yield* seedCatalog
+      yield* connect(cliCredential())
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+
+      // The resource's 404 would wait for the next refresh; the management API's 503 is retried within seconds.
+      expect(yield* eventuallyOnClock(azureModelIDs, (ids) => ids.length === 1)).toEqual(["mini"])
+      expect(yield* Clock.currentTimeMillis).toBeLessThan(60_000)
+      expect(azure.requests.filter((request) => request.path.startsWith("/openai/deployments"))).toHaveLength(1)
     }),
   )
 
@@ -507,28 +535,46 @@ describe("AzurePlugin discovery", () => {
 })
 
 describe("AzurePlugin switching accounts", () => {
-  it.live("shows the new account without waiting for the previous account's discovery", () =>
+  it.live("loads again when the API key changes in place", () =>
     Effect.gen(function* () {
-      const stuck = Promise.withResolvers<Response>()
-      const calls = { count: 0 }
       const azure = yield* fakeAzure({
-        resource: (request) => {
-          calls.count++
-          if (calls.count === 2) return stuck.promise
-          return resourceList(listed(request.key === "secret" ? "production-a" : "production-b", "gpt-5-mini"))
-        },
+        resource: (request) =>
+          resourceList(listed(request.key === "secret" ? "production-a" : "production-b", "gpt-5-mini")),
       })
       yield* seedCatalog
-      const first = yield* connect(keyCredential())
+      const credential = yield* connect(keyCredential())
       yield* addPlugin(azure.endpoints)
       yield* eventually(azureModelIDs, (ids) => ids.includes("production-a"))
 
-      // Start a discovery for the first account that Azure never answers.
-      yield* announceSwitch(first.id)
-      yield* eventually(
-        Effect.sync(() => calls.count),
-        (count) => count === 2,
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      yield* credentials.update(credential.id, { value: keyCredential("rotated-key") })
+      yield* bus.publish(
+        Credential.Event.Switched,
+        { integrationID: Integration.ID.make("azure"), credentialID: credential.id },
+        { global: true },
       )
+      yield* eventually(azureModelIDs, (ids) => ids.includes("production-b"))
+    }),
+  )
+
+  it.live("shows the new account without waiting for the previous account's discovery", () =>
+    Effect.gen(function* () {
+      const stuck = Promise.withResolvers<Response>()
+      const asked = Promise.withResolvers<void>()
+      const azure = yield* fakeAzure({
+        resource: (request) => {
+          if (request.key !== "secret") return resourceList(listed("production-b", "gpt-5-mini"))
+          asked.resolve()
+          return stuck.promise
+        },
+      })
+      yield* seedCatalog
+      yield* connect(keyCredential())
+      yield* addPlugin(azure.endpoints)
+
+      // Start a discovery for the first account that Azure never answers.
+      yield* Effect.promise(() => asked.promise)
       yield* connect(keyCredential("other-key", "other-resource"))
 
       const deployed = yield* eventually(azureModels, (list) => list.length === 1 && list[0]?.id === "production-b")

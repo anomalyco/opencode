@@ -23,7 +23,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     inset: number
     refs: {
       scroller: HTMLDivElement | undefined
-      content: HTMLDivElement | undefined
       dock: HTMLDivElement | undefined
       visible: HTMLDivElement | undefined
     }
@@ -41,7 +40,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     inset: 0,
     refs: {
       scroller: undefined,
-      content: undefined,
       dock: undefined,
       visible: undefined,
     },
@@ -67,6 +65,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   let revealPart = (_target: string) => false
 
   let scrollToEnd = (_behavior?: ScrollBehavior) => {}
+
+  let page = (_direction: 1 | -1) => {}
 
   let scrollMark = 0
   let messageMark = 0
@@ -176,10 +176,20 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     consumePendingMessage: (key) => layout.pendingMessage.consume(key),
   })
 
+  let resumeFrame: (() => void) | undefined
+
   const resume = (behavior?: ScrollBehavior) => {
     setState("messageID", undefined)
     pin()
-    scrollToEnd(behavior)
+    // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
+    // DOM, where reading the scroll range would force a layout that the frame then repeats.
+    resumeFrame?.()
+    resumeFrame = frameLoop.add(() => {
+      resumeFrame = undefined
+      scrollToEnd(behavior)
+
+      return false
+    })
     clearMessageHash()
 
     if (scroller) scheduleScrollState(scroller)
@@ -350,13 +360,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     ),
   )
   createResizeObserver(
-    () => state.refs.content,
-    () => {
-      if (scroller) scheduleScrollState(scroller)
-      fill()
-    },
-  )
-  createResizeObserver(
     () => state.refs.dock,
     (_rect, _element, entry) => {
       // The activity pill floats above the region out of flow, so only the docks, queue and composer count here.
@@ -382,6 +385,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   onCleanup(() => {
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
 
+    resumeFrame?.()
+
     scrollStateFrame?.()
 
     fillFrame?.()
@@ -390,6 +395,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   return {
     actions: {
       navigateMessage,
+      page: (direction: 1 | -1) => page(direction),
       revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
       revealPart: (target: string) => revealPart(target),
       resume,
@@ -411,10 +417,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       pinned,
       selectionInteraction,
       scheduleScrollState,
-      setContentRef: (element: HTMLDivElement | undefined) => {
-        setState("refs", "content", element)
-
+      contentResized: () => {
         if (scroller) scheduleScrollState(scroller)
+        fill()
       },
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
@@ -438,6 +443,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setScrollRef,
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
         scrollToEnd = scroll
+      },
+      setPage: (scroll: (direction: 1 | -1) => void) => {
+        page = scroll
       },
       unpin,
     },

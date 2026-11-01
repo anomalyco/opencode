@@ -799,6 +799,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "正在迁移数据 {{current}}/{{total}}",
   "home.workspaceTip": "在新工作区中开始下一个会话以保持更改独立",
   "session.tab.add": "添加标签页",
+  "session.tab.closeOthers": "关闭其他标签页",
   "session.queue.attachments.one": "添加 {{count}} 个附件",
   "session.queue.attachments.other": "添加 {{count}} 个附件",
   "settings.backToSettings": "返回设置",

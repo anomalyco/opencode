@@ -23,7 +23,7 @@ import {
   measureSidebarToggles,
   paintCollapsedSlots,
 } from "@/shell/sidebar-toggle"
-import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
+import { createPanelMotion, guardClosingFocus, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
 
@@ -282,6 +282,7 @@ export default function Layout(props: ParentProps) {
                 min={136}
                 max={640}
                 onResize={(width) => setState("tabsWidth", width)}
+                onDraggingChange={setPanelResizing}
               />
             </Show>
           </aside>

@@ -39,7 +39,7 @@ import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option, Tracer } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -167,7 +167,15 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       SessionExecution.node.replace(execution(llmClient)),
     ],
   )
-const it = testEffect(testLayer(client))
+const spans: Tracer.NativeSpan[] = []
+const tracer = Tracer.make({
+  span(options) {
+    const span = new Tracer.NativeSpan(options)
+    spans.push(span)
+    return span
+  },
+})
+const it = testEffect(testLayer(client).pipe(Layer.provide(Layer.succeed(Tracer.Tracer, tracer))))
 const sessionID = Session.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
@@ -243,6 +251,24 @@ describe("SessionRunnerLLM recorded", () => {
         "session.step.streamed.1",
         "session.step.ended.1",
       ])
-    }),
+
+      // The turn is its own trace, every span in it names the session, and the attempt names the model and tokens.
+      const drain = spans.find((span) => span.name === "SessionRunner.drain")
+      expect(drain).toBeDefined()
+      expect(Option.isNone(drain!.parent)).toBe(true)
+      const turn = spans.filter((span) => span.traceId === drain!.traceId)
+      expect(turn.filter((span) => span.attributes.get("session.id") !== sessionID).map((span) => span.name)).toEqual(
+        [],
+      )
+      const attempt = turn.find((span) => span.name === "SessionStep.attempt")
+      expect(Object.fromEntries(attempt?.attributes ?? [])).toMatchObject({
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": "gpt-4o-mini",
+        "gen_ai.response.finish_reasons": ["stop"],
+        "gen_ai.usage.input_tokens": 465,
+        "gen_ai.usage.output_tokens": 2,
+      })
+      expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
+    }).pipe(Effect.withSpan("fixture.request")),
   )
 })

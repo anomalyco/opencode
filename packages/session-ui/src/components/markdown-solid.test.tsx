@@ -6,8 +6,15 @@ beforeAll(() => GlobalRegistrator.register())
 
 afterAll(() => GlobalRegistrator.unregister())
 
+function parse(html: string, words: boolean, animate?: boolean) {
+  const template = document.createElement("template")
+  template.innerHTML = html
+
+  return parseMarkdownNodes(template.content, words, animate)
+}
+
 test("assigns stable paths to elements and individual words", () => {
-  expect(parseMarkdownNodes('<p class="lead">Hello <strong>streaming</strong> world</p>', true)).toEqual([
+  expect(parse('<p class="lead">Hello <strong>streaming</strong> world</p>', true)).toEqual([
     {
       key: "0",
       type: "element",
@@ -31,7 +38,7 @@ test("assigns stable paths to elements and individual words", () => {
 })
 
 test("keeps completed block text compact", () => {
-  expect(parseMarkdownNodes("<p>Hello world</p>", false)).toEqual([
+  expect(parse("<p>Hello world</p>", false)).toEqual([
     {
       key: "0",
       type: "element",
@@ -43,7 +50,7 @@ test("keeps completed block text compact", () => {
 })
 
 test("marks streamed inline code for animation", () => {
-  expect(parseMarkdownNodes("<p><code>file.ts:29-43</code></p>", true, true)).toEqual([
+  expect(parse("<p><code>file.ts:29-43</code></p>", true, true)).toEqual([
     {
       key: "0",
       type: "element",
@@ -69,17 +76,13 @@ test("marks streamed inline code for animation", () => {
 })
 
 test("marks words for animation only when requested", () => {
-  expect(
-    parseMarkdownNodes("<p>Hello</p>", true).flatMap((node) => (node.type === "element" ? node.children : [node]))[0],
-  ).toEqual({
+  expect(parse("<p>Hello</p>", true).flatMap((node) => (node.type === "element" ? node.children : [node]))[0]).toEqual({
     key: "0.0:0",
     type: "word",
     text: "Hello",
   })
   expect(
-    parseMarkdownNodes("<p>Hello</p>", true, true).flatMap((node) =>
-      node.type === "element" ? node.children : [node],
-    )[0],
+    parse("<p>Hello</p>", true, true).flatMap((node) => (node.type === "element" ? node.children : [node]))[0],
   ).toEqual({
     key: "0.0:0",
     type: "word",

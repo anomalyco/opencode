@@ -7,7 +7,7 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  LLMRequest,
+  type LLMRequest,
   Message,
   ToolDefinition,
   type ContentPart,
@@ -202,10 +202,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fnUntraced(function* (
-  route: string,
-  message: LLMRequest["messages"][number],
-) {
+export const systemUpdateText = Effect.fnUntraced(function* (route: string, message: LLMRequest["messages"][number]) {
   const content: TextPart[] = []
   for (const part of message.content) {
     if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
@@ -363,7 +360,7 @@ export const flattenToolRequest = (request: LLMRequest) => {
     tools: flattenTools(request.tools),
     request: messages.every((message, index) => message === request.messages[index])
       ? request
-      : LLMRequest.update(request, { messages }),
+      : { ...request, messages },
   }
 }
 

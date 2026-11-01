@@ -48,11 +48,23 @@ export interface AskResult {
 
 export { Event } from "@opencode/schema/permission"
 
+/**
+ * Rules that settle a request which would otherwise ask, for work nobody is present to answer, such as a schedule's
+ * check. A request they do not allow is denied. Configured denies still win, as they are evaluated first.
+ */
+export const Unattended = Context.Reference<Permission.Ruleset | undefined>("@opencode/Permission/Unattended", {
+  defaultValue: () => undefined,
+})
+
 export class DeclinedError extends Schema.TaggedError<DeclinedError>()("Permission.DeclinedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedError<CorrectedError>()("Permission.CorrectedError", {
   feedback: Schema.String,
-}) {}
+}) {
+  override get message() {
+    return this.feedback
+  }
+}
 
 export class BlockedError extends Schema.TaggedError<BlockedError>()("Permission.BlockedError", {
   rules: Permission.Ruleset,
@@ -93,6 +105,8 @@ export interface Interface {
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   /** Fails only when the rules deny the request; never asks the user. */
   readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
+  /** True only when the rules already allow the request; never asks the user. */
+  readonly allows: (input: AssertInput) => Effect.Effect<boolean, SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
@@ -174,7 +188,17 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
-      return { effect: event.effect, message: event.message, rules: all }
+      const unattended = yield* Unattended
+      if (event.effect !== "ask" || unattended === undefined)
+        return { effect: event.effect, message: event.message, rules: all }
+      const settled = [...all, ...unattended]
+      const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
+      if (allowed) return { effect: "allow" as const, rules: all }
+      return {
+        effect: "deny" as const,
+        message: `Permission ${input.action} needs approval, and nobody is present to give it`,
+        rules: all,
+      }
     })
 
     function request(input: AssertInput, message?: string): Request {
@@ -266,6 +290,11 @@ const layer = Layer.effect(
       })
     })
 
+    const allows = Effect.fn("Permission.allows")(function* (input: AssertInput) {
+      if (closed) return false
+      return (yield* evaluateInput(input)).effect === "allow"
+    })
+
     const reply = Effect.fn("Permission.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
@@ -340,7 +369,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, reply, get, forSession, list, close })
+    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
   }),
 )
 

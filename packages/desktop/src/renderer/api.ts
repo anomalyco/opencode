@@ -94,6 +94,8 @@ export const api: ElectronAPI = {
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
+  getSpellcheckEnabled: () => invoke("AppGetSpellcheckEnabled"),
+  setSpellcheckEnabled: (enabled) => invoke("AppSetSpellcheckEnabled", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
 }
