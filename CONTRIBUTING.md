@@ -73,6 +73,17 @@ Follow package-specific instructions in nearby `AGENTS.md` files. After changing
 
 Follow the repository [style guide](./AGENTS.md).
 
+### Nix packaging
+
+Nix builds use dependency versions and checksums from `bun.lock` (text formats 1–3).
+
+```bash
+nix build .#opencode .#opencode-desktop
+nix flake check
+```
+
+[GitHub archive recompression](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives#stability-of-source-code-archives) can invalidate Bun's recorded checksum. Nix rejects changed archive bytes.
+
 ## Pull Requests
 
 ### Link Issues When Required
