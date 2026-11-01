@@ -13,6 +13,7 @@ OpenCode is an open source AI coding agent. It’s available as a terminal-based
   tabs={[
     { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
     { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "winget", code: "winget install --id Anomaly.OpenCode -e" },
     { label: "npm", code: "npm install -g @opencode/cli" },
     { label: "bun", code: "bun install -g --trust @opencode/cli" },
     { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
@@ -26,8 +27,6 @@ OpenCode is an open source AI coding agent. It’s available as a terminal-based
 The npm package uses a postinstall script to select the native `opencode` binary for your platform. The Bun and pnpm commands
 explicitly allow the required script; Vite+ requires no additional flag. The mise command requires mise 2026.10.9 or later;
 older versions install OpenCode 1.
-
-Windows package managers are not supported.
 
 
 Download a standalone CLI binary for your platform.
@@ -46,6 +45,12 @@ Download the latest OpenCode Desktop build for your platform.
 - **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
 - **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
 - **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+On Windows, you can also install it with WinGet.
+
+```powershell
+winget install --id Anomaly.OpenCode.Desktop -e
+```
 
 
 ## Web
