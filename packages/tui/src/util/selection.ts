@@ -11,6 +11,10 @@ type FocusableSelectionTarget = {
   getClipboardText?: (text: string) => string
 }
 
+type EditorSelectionTarget = FocusableSelectionTarget & {
+  deleteSelection: () => boolean
+}
+
 type Renderer = {
   getSelection: () => {
     getSelectedText: () => string
@@ -20,11 +24,12 @@ type Renderer = {
   } | null
   clearSelection: () => void
   currentFocusedRenderable?: FocusableSelectionTarget | null
-  currentFocusedEditor?: FocusableSelectionTarget | null
+  currentFocusedEditor?: EditorSelectionTarget | null
 }
 
 type SelectionKeyEvent = {
   ctrl?: boolean
+  super?: boolean
   baseCode?: number
   name: string
   preventDefault: () => void
@@ -41,7 +46,12 @@ export function copyOnSelectRelease(
   return copy(renderer, toast, clipboard)
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
+export function copy(
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+  message = "Copied to clipboard",
+): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
   if (selection.isStart && selection.behavior === "cell") return false
@@ -55,7 +65,7 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
 
   clipboard
     .write(clipboardText)
-    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+    .then(() => toast.show({ message, variant: "info" }))
     .catch(toast.error)
 
   // Copy never clears selection, including empty releases: clearing also resets multi-click history.
@@ -81,6 +91,15 @@ export function handleSelectionKey(
       return
     }
 
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+
+  // Terminals have no native cut, so Cmd+X reaches the app as super+x.
+  if (focus && editing && event.super && event.name === "x") {
+    copy(renderer, toast, clipboard, "Cut to clipboard")
+    focus.deleteSelection()
     event.preventDefault()
     event.stopPropagation()
     return
