@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { ai, LLMClient, Message } from "@opencode/ai/effect"
-import { OpenAI } from "@opencode/ai/providers"
+import { openai } from "@opencode/ai/providers"
 import { RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
@@ -84,7 +84,7 @@ for (const recovery of ["reconnect", "http-fallback", "ambiguous-send"] as const
           const channels = yield* SessionModelTransport.Service
           const options = { webSocket: channels.bind(Session.ID.make(`ses_compaction_${recovery}`)) }
           const first = ai.request({
-            model: OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("fixture"),
+            model: openai.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("fixture"),
             prompt: "first",
             providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
           })
