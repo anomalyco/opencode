@@ -94,12 +94,16 @@ type Result = {
 
 type Failure = {
   readonly error: SessionError.Error
+  readonly kind: "unknown" | "window-limited" | "output-limited"
 }
+
+const fail = (error: SessionError.Error, kind: Failure["kind"] = "unknown") => ({ error, kind })
 
 type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compaction"]>>
 
 type Streamed = {
   readonly text: string
+  readonly usage?: Usage
 }
 
 /** A summary run off the critical path: it covers only `messages`, streams no deltas, and bills into `usage`. */
@@ -122,9 +126,12 @@ type Precomputed = {
   readonly fiber: Fiber.Fiber<Result, Failure>
 }
 
-const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
+const NOTHING_TO_COMPACT = fail({ type: "compaction.unavailable", message: "Nothing to compact yet" })
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.85, 0.7, 0.5, 0.35]
+/** A truncating provider can report a token or two short of the full window, so usage counts as filled within this share. */
+const WINDOW_REACH_SHARE = 0.995
+const isShrinkableFailure = (failure: Failure) => failure.kind === "window-limited"
 // The least of the window kept free for the last reply before compaction and for the summary itself.
 const RESERVE_MIN = 16_000
 /**
@@ -476,31 +483,41 @@ export const layer = Layer.effect(
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
+      // Compare the window room for the request's own estimate, not the cap: the cap also reflects budget cuts.
+      const windowSized = (request: LLMRequest, size?: Estimate) =>
+        request.generation?.maxTokens !== undefined &&
+        SessionModelRequest.outputLimit(
+          context.model.limit,
+          size ?? { measured: 0, estimated: estimateRequest(request) },
+        ) < SessionModelRequest.outputLimit(context.model.limit)
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
+          const promptedSize = size && { ...size, estimated: size.estimated + Token.estimate(prompt) }
           const prompted = fitOutput(
             { ...request, messages: [...request.messages, Message.user(prompt)] },
             context.model.limit,
-            size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
+            promptedSize,
           )
-          const reply = yield* stream(context, prompted, prepared.options, background)
+          const reply = yield* stream(context, prompted, prepared.options, background, windowSized(prompted, promptedSize))
           if (filled(reply.text)) return reply
 
+          const nudgedSize = size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) }
           const nudged = fitOutput(
             { ...prompted, messages: [...prompted.messages, Message.user(NUDGE)] },
             context.model.limit,
-            size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
+            nudgedSize,
           )
-          const retry = yield* stream(context, nudged, prepared.options, background)
+          const retry = yield* stream(context, nudged, prepared.options, background, windowSized(nudged, nudgedSize))
           if (filled(retry.text)) return retry
-          return yield* Effect.fail<Failure>({
-            error: {
-              type: "compaction.failed",
-              message: retry.text.trim()
-                ? "Compaction summary did not match the required template"
-                : "Compaction produced no summary",
-            },
-          })
+          const blank = retry.text.trim() === ""
+          return yield* Effect.fail(
+            blank
+              ? fail(
+                  { type: "compaction.failed", message: "Compaction produced no summary" },
+                  limitKind(retry.usage, context.model.limit, nudged.generation?.maxTokens, windowSized(nudged, nudgedSize)),
+                )
+              : fail({ type: "compaction.failed", message: "Compaction summary did not match the required template" }),
+          )
         })
 
       const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
@@ -551,8 +568,7 @@ export const layer = Layer.effect(
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
       if (!context.messages.some(SessionRecentText.messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
-      const unsupported = (message: string) =>
-        Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
+      const unsupported = (message: string) => Effect.fail(fail({ type: "provider.unsupported-operation", message }))
       const prepared = yield* prepare(context, context.messages, budget, "session")
 
       const toResult = (window: ReadonlyArray<Message>, usage: Usage | undefined) =>
@@ -594,8 +610,8 @@ export const layer = Layer.effect(
      * each shortening the transcript again from scratch, and a rejection after those gives up. A "payload too large"
      * rejection is about bytes, which inline media almost always accounts for, so one on the unchanged request resends
      * it as text, which carries no media, without counting; one on text counts as "too long". Other provider errors
-     * resend the same request under the session's retry policy. A `Failure` from `send` is a reply that cannot be
-     * used, and is never retried.
+     * resend the same request under the session's retry policy. A `window-limited` reply shrinks the next input,
+     * which leaves the summary more room; other `Failure`s from `send` are never retried.
      */
     const deliver = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -622,6 +638,17 @@ export const layer = Layer.effect(
       let asText = shrink.text ?? false
       let fit = shrink.fit
 
+      const shrinkNext = (request: LLMRequest, size?: Estimate): boolean => {
+        const step = SHRINK_STEPS[rejections]
+        if (step === undefined) return false
+        rejected ??= size ? total(size) : estimateRequest(request)
+        if (size) asText = true
+        target = Math.floor(rejected * step)
+        fit = target
+        rejections++
+        return true
+      }
+
       while (true) {
         const measured = rejections === 0 ? shrink.measured : undefined
         const unchanged = asText
@@ -640,20 +667,23 @@ export const layer = Layer.effect(
               ? flattenAndDropOldest(shrink.history, context, Number.POSITIVE_INFINITY)
               : shrink.history)
         if (!request) {
-          return yield* Effect.fail<Failure>({
-            error: {
+          return yield* Effect.fail(
+            fail({
               type: "compaction.failed",
               message:
                 "The compaction request cannot be reduced further without losing the latest exchange or checkpoint",
-            },
-          })
+            }),
+          )
         }
 
         const size = request === prepared.request ? measured : undefined
         const attempt = yield* Effect.result(send(request, size))
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
-        if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
+        if (!(cause instanceof AIError)) {
+          if (isShrinkableFailure(cause) && shrinkNext(request, size)) continue
+          return yield* Effect.fail(cause)
+        }
         const error = toSessionError(cause)
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
@@ -663,14 +693,7 @@ export const layer = Layer.effect(
         }
 
         if (tooLarge || isContextOverflowFailure(cause)) {
-          const step = SHRINK_STEPS[rejections]
-          if (step === undefined) return yield* Effect.fail<Failure>({ error })
-          rejected ??= size ? total(size) : estimateRequest(request)
-          // The characters can still say the rejected request fits, so it only goes out again as text.
-          if (size) asText = true
-          target = Math.floor(rejected * step)
-          fit = target
-          rejections++
+          if (!shrinkNext(request, size)) return yield* Effect.fail(fail(error))
           continue
         }
 
@@ -682,7 +705,7 @@ export const layer = Layer.effect(
           hook: prepared.retry,
           retry: SessionRunnerRetry.isRetryable(cause),
         })
-        if (!decision.retry) return yield* Effect.fail<Failure>({ error })
+        if (!decision.retry) return yield* Effect.fail(fail(error))
         yield* Effect.sleep(decision.delay)
       }
     })
@@ -774,9 +797,10 @@ export const layer = Layer.effect(
       request: LLMRequest,
       options: StreamOptions,
       background?: Background,
+      windowSized = false,
     ) => {
       const sessionID = context.session.id
-      const unusable = (error: SessionError.Error) => Effect.fail<Failure>({ error })
+      const unusable = (error: SessionError.Error) => Effect.fail(fail(error))
 
       return llm.stream(request, options).pipe(
         Stream.runFoldEffect(
@@ -790,7 +814,7 @@ export const layer = Layer.effect(
 
             if (LLMEvent.is.stepFinish(event)) {
               return spend(sessionID, SessionUsage.record(event.usage, context.model.cost), background?.usage).pipe(
-                Effect.as(streamed),
+                Effect.as({ ...streamed, usage: event.usage }),
               )
             }
 
@@ -810,10 +834,12 @@ export const layer = Layer.effect(
                   new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
                 )
               case "length":
-                return unusable({
-                  type: "compaction.failed",
-                  message: "Compaction summary reached the output token limit",
-                })
+                return Effect.fail(
+                  fail(
+                    { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
+                    limitKind(streamed.usage, context.model.limit, request.generation?.maxTokens, windowSized),
+                  ),
+                )
               case "content-filter":
                 return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
@@ -931,7 +957,7 @@ export const layer = Layer.effect(
           Effect.onInterrupt(() =>
             trigger.reason === "manual"
               ? Effect.void
-              : publish(trigger, { error: { type: "compaction.interrupted", message: "Compaction was interrupted" } }),
+              : publish(trigger, fail({ type: "compaction.interrupted", message: "Compaction was interrupted" })),
           ),
           Effect.ensuring(Effect.sync(() => spent.delete(trigger.context.session.id))),
         ),
@@ -1179,6 +1205,24 @@ const measuredPrompt = (context: SessionContext.Loaded) => {
   )
     return undefined
   return estimatePrompt(context)
+}
+
+const limitKind = (
+  usage: Usage | undefined,
+  limit: SessionContext.Loaded["model"]["limit"],
+  requested: number | undefined,
+  windowSized: boolean,
+): Failure["kind"] => {
+  if (!usage) return windowSized ? "window-limited" : "unknown"
+  const window = inputWindow(limit)
+  if (Number.isFinite(window) && window > 0) {
+    const input = usage.inputTokens ?? 0
+    const output = usage.outputTokens ?? 0
+    if (input + output >= Math.floor(window * WINDOW_REACH_SHARE) && (requested === undefined || output < requested))
+      return "window-limited"
+    if (requested !== undefined && output >= requested) return windowSized ? "window-limited" : "output-limited"
+  }
+  return windowSized ? "window-limited" : "unknown"
 }
 
 /**
