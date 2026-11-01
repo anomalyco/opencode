@@ -57,6 +57,7 @@ export interface FindInput {
   readonly exclude?: readonly string[]
   readonly hidden?: boolean
   readonly follow?: boolean
+  readonly maxDepth?: number
   readonly signal?: AbortSignal
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
 }
@@ -201,6 +202,7 @@ const layer = Layer.effect(
             "--files",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
+            ...(input.maxDepth === undefined ? [] : [`--max-depth=${input.maxDepth}`]),
             ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
             ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
             "--glob=!**/.git/**",
