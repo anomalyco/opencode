@@ -47,6 +47,12 @@ export interface Interface {
     void,
     NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
   >
+  /**
+   * Moves an idle session whose directory no longer exists (a removed worktree, say) so it stays
+   * usable: to the destination of a move it already has queued, else to its project's main
+   * checkout. Does nothing when the directory exists or can't be read, or neither place exists.
+   */
+  readonly revive: (sessionID: Session.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionMove") {}
@@ -71,23 +77,22 @@ const layer = Layer.effect(
       return session
     })
 
-    const resolveDestination = Effect.fn("SessionMove.resolveDestination")(function* (
-      session: Session.Info,
-      input: Parameters<Interface["move"]>[0],
-    ) {
-      const value = input.directory.trim()
-      const expanded =
-        value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
-      const directory = AbsolutePath.make(path.resolve(session.location.directory, expanded))
+    // Where a directory sits: the project that resolves it and the session placement for it.
+    const place = Effect.fnUntraced(function* (directory: AbsolutePath, workspaceID?: Location.Ref["workspaceID"]) {
       const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
       if (!info) return yield* new DestinationNotFoundError({ directory })
       if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
       const project = yield* projects.resolve(directory)
       const destination: SessionInbox.MovePayload = {
-        location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
+        location: Location.Ref.make({ directory, workspaceID }),
         projectID: project.id,
         subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
       }
+      return { project, destination }
+    })
+
+    const ensureAvailable = Effect.fnUntraced(function* (destination: SessionInbox.MovePayload) {
+      const directory = destination.location.directory
       yield* locations.contextEffect(destination.location).pipe(
         Effect.scoped,
         Effect.catchCause((cause) => {
@@ -98,6 +103,18 @@ const layer = Layer.effect(
           )
         }),
       )
+    })
+
+    const resolveDestination = Effect.fn("SessionMove.resolveDestination")(function* (
+      session: Session.Info,
+      input: Parameters<Interface["move"]>[0],
+    ) {
+      const value = input.directory.trim()
+      const expanded =
+        value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
+      const directory = AbsolutePath.make(path.resolve(session.location.directory, expanded))
+      const { destination } = yield* place(directory, input.workspaceID)
+      yield* ensureAvailable(destination)
       return destination
     })
 
@@ -115,7 +132,83 @@ const layer = Layer.effect(
       )
     })
 
+    // Applies a move at once, dropping pending moves; callers hold the session's inbox lock.
+    const relocate = Effect.fnUntraced(function* (sessionID: Session.ID, destination: SessionInbox.MovePayload) {
+      const cancellations = (yield* SessionInbox.moves(database.db, sessionID)).map(
+        (item) => [SessionEvent.InboxCancelled, { sessionID, inboxID: item.id }] as const,
+      )
+      const moved = [SessionEvent.Moved, { sessionID, ...destination }] as const
+      const first = cancellations[0]
+      if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
+      return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
+    })
+
+    const samePlacement = (a: Session.Info, b: Session.Info) =>
+      a.location.directory === b.location.directory && a.location.workspaceID === b.location.workspaceID
+
+    const gone = (directory: AbsolutePath) =>
+      fs.stat(directory).pipe(
+        Effect.as(false),
+        Effect.catch((error) => Effect.succeed(error.reason._tag === "NotFound")),
+      )
+
+    // The session's project's main checkout, at the session's subdirectory when that is still part of
+    // the same checkout there. Anything that resolves to another repository or checkout is refused.
+    const mainCheckout = Effect.fnUntraced(function* (session: Session.Info) {
+      if (session.projectID === Project.ID.global) return undefined
+      const project = (yield* projects.list({ archived: true })).find((item) => item.id === session.projectID)
+      if (!project?.vcs || project.canonical === session.location.directory) return undefined
+      const root = yield* fs.resolve(project.canonical)
+      const candidates = [project.canonical]
+      if (session.subpath) {
+        const nested = AbsolutePath.make(path.join(project.canonical, session.subpath))
+        if (nested !== project.canonical && FSUtil.contains(project.canonical, nested)) candidates.unshift(nested)
+      }
+      for (const directory of candidates) {
+        const placed = yield* place(directory).pipe(Effect.option)
+        if (placed._tag === "None") continue
+        const { project: resolved, destination } = placed.value
+        if (resolved.id !== session.projectID || (yield* fs.resolve(resolved.directory)) !== root) continue
+        return destination
+      }
+      return undefined
+    })
+
+    const revive = Effect.fn("SessionMove.revive")(function* (sessionID: Session.ID) {
+      if (yield* execution.isActive(sessionID)) return
+      const session = yield* store.get(sessionID)
+      // Workspace placements can be remote; their directories aren't ours to probe.
+      if (!session || session.location.workspaceID) return
+      if (!(yield* gone(session.location.directory))) return
+      const checkout = yield* mainCheckout(session)
+      const destination = checkout
+        ? yield* ensureAvailable(checkout).pipe(
+            Effect.as(checkout),
+            Effect.orElseSucceed(() => undefined),
+          )
+        : undefined
+      const revived = yield* SessionInbox.serialized(
+        sessionID,
+        Effect.gen(function* () {
+          const latest = yield* store.get(sessionID)
+          if (!latest || !samePlacement(latest, session) || (yield* execution.isActive(sessionID))) return undefined
+          // A move the user already asked for wins over the main checkout, as long as it can still land.
+          const pending = (yield* SessionInbox.moves(database.db, sessionID)).at(-1)?.payload
+          if (pending) {
+            if (pending.location.workspaceID || !(yield* fs.isDir(pending.location.directory))) return undefined
+            yield* relocate(sessionID, pending)
+            return "pending move" as const
+          }
+          if (!destination) return undefined
+          yield* relocate(sessionID, destination)
+          return "main checkout" as const
+        }),
+      )
+      if (revived) yield* Effect.logInfo("session with a missing directory moved", { sessionID, to: revived })
+    })
+
     return Service.of({
+      revive,
       move: Effect.fn("SessionMove.move")(function* (input) {
         const session = yield* get(input.sessionID)
         const destination = yield* resolveDestination(session, input)
@@ -131,20 +224,8 @@ const layer = Layer.effect(
           Effect.gen(function* () {
             const latest = yield* get(input.sessionID)
             // Only recover the placement we probed; active runners retain their step-boundary handoff.
-            if (
-              unavailable &&
-              latest.location.directory === session.location.directory &&
-              latest.location.workspaceID === session.location.workspaceID &&
-              !(yield* execution.isActive(input.sessionID))
-            ) {
-              const cancellations = (yield* SessionInbox.moveIDs(database.db, input.sessionID)).map(
-                (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
-              )
-              const moved = [SessionEvent.Moved, { sessionID: input.sessionID, ...destination }] as const
-              const first = cancellations[0]
-              if (!first) return yield* bus.publish(...moved).pipe(Effect.asVoid)
-              return yield* bus.publishAll([first, ...cancellations.slice(1), moved])
-            }
+            if (unavailable && samePlacement(latest, session) && !(yield* execution.isActive(input.sessionID)))
+              return yield* relocate(input.sessionID, destination)
             yield* admission
               .admit({
                 id: SessionMessage.ID.create(),
