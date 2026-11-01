@@ -7,8 +7,114 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 import { readFile } from "node:fs/promises"
+import type { PullRequest } from "@opencode/schema/pull-request"
+import { pullRequest } from "../utils/pull-request"
 
 test.use({ viewport: { width: 1440, height: 900 } })
+
+test("pull request snapshots distinguish older evidence and refresh only on demand", async ({ page }) => {
+  const requests: string[] = []
+  const current = { value: pullRequest({ checksCommit: "b".repeat(40), incomplete: true }), failed: false }
+
+  const workspace = await openSession(page, {
+    name: "PullRequestReadiness",
+    vcs: { current: "parser", default: "dev" },
+    pullRequest: (directory) => {
+      requests.push(directory)
+
+      if (current.failed) throw new Error("Unavailable")
+
+      return current.value
+    },
+  })
+
+  expect(requests).toEqual([])
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  const panel = page.getByRole("region", { name: "Pull request", exact: true })
+  await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeInViewport({ ratio: 1 })
+  expect(requests).toEqual([workspace.directory])
+  await expect(panel.getByText("Earlier commit", { exact: true })).toBeVisible()
+  await expect(panel.getByText("No reviews of this commit are shown.", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Checks aren't available for the pull request commit.", { exact: false })).toBeVisible()
+  await expect(
+    panel.getByRole("region", { name: "Checks", exact: true }).getByText("Passed", { exact: true }),
+  ).toHaveCount(0)
+  await expect(panel.getByText("Some checks, reviews, or threads are missing", { exact: false })).toBeVisible()
+  await expect(panel.getByRole("link", { name: "src/parser.ts:8" })).toHaveAttribute("href", /#discussion-1$/)
+
+  current.value = pullRequest({
+    localHead: "a".repeat(40),
+    reviews: [
+      {
+        author: "reviewer",
+        state: "APPROVED",
+        commit: "a".repeat(40),
+        url: "https://github.com/example/project/pull/12#review-2",
+      },
+    ],
+  })
+  await panel.getByRole("button", { name: "Refresh pull request", exact: true }).click()
+  await expect(panel.getByText("Current commit", { exact: true })).toBeVisible()
+  await expect(
+    panel.getByRole("region", { name: "Checks", exact: true }).getByText("Passed", { exact: true }),
+  ).toBeVisible()
+  await expect(panel.getByText("Earlier commit", { exact: true })).toHaveCount(0)
+  expect(requests).toEqual([workspace.directory, workspace.directory])
+
+  current.failed = true
+  await panel.getByRole("button", { name: "Refresh pull request", exact: true }).click()
+  await expect(panel.getByRole("alert")).toContainText("These details may be out of date")
+  await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeVisible()
+  expect(requests).toEqual([workspace.directory, workspace.directory, workspace.directory])
+
+  current.failed = false
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole("tab", { name: "Session", exact: true }).click()
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeInViewport({ ratio: 1 })
+  const thread = panel.getByRole("link", { name: "src/parser.ts:8" })
+  await thread.scrollIntoViewIfNeeded()
+  await expect(thread).toBeInViewport({ ratio: 1 })
+})
+
+test("a late pull request response cannot replace another checkout's snapshot", async ({ page }) => {
+  const directory = "C:/OpenCode/PullRequestOwnership"
+  const other = "C:/OpenCode/PullRequestOwnership-other"
+  const pending = Promise.withResolvers<PullRequest.Snapshot>()
+  const calls: string[] = []
+  const returned = { value: false }
+  await openSession(page, {
+    name: "PullRequestOwnership",
+    directory,
+    project: { sandboxes: [other] },
+    sessions: [
+      { id: "ses_pr_alpha", title: "Alpha" },
+      { id: "ses_pr_beta", title: "Beta", directory: other },
+    ],
+    vcs: (value) => ({ current: value === other ? "beta" : "parser", default: "dev" }),
+    pullRequest: async (directory) => {
+      calls.push(directory)
+
+      if (directory === other) return pullRequest({ number: 99, title: "Beta change", branch: "beta" })
+      const value = await pending.promise
+      returned.value = true
+
+      return value
+    },
+  })
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await expect.poll(() => calls).toEqual([directory])
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Beta" }).click()
+  await expectSessionTitle(page, "Beta")
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  const panel = page.getByRole("region", { name: "Pull request", exact: true })
+  await expect(panel.getByRole("heading", { name: "#99 Beta change" })).toBeVisible()
+  pending.resolve(pullRequest({ title: "Late Alpha change" }))
+  await expect.poll(() => returned.value).toBe(true)
+  await expect(panel.getByRole("heading", { name: "#99 Beta change" })).toBeVisible()
+  await expect(page.getByText("Late Alpha change", { exact: false })).toHaveCount(0)
+  expect(calls).toEqual([directory, other])
+})
 
 test("review toggle shows its tooltip with the side panel open or closed", async ({ page }) => {
   await openSession(page, {
@@ -980,7 +1086,9 @@ test("Markdown and DOCX sheets stay aligned when switching at wide and narrow pr
     await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
     await expect.poll(() => edges(markdown)).toEqual(reference)
     await expect.poll(() => toolbar.boundingBox()).toEqual(header)
-    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(true)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(
+      true,
+    )
     await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
     await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
     await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
