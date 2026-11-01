@@ -31,12 +31,12 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
     "test:service-worker": "bun run build && playwright test --config e2e/service-worker/playwright.config.ts",
-    "test:stability": "bun test ./e2e/stability/oracle.test.ts ./e2e/stability/fixture.test.ts && playwright test --config e2e/stability/playwright.config.ts",
-    "bench:devex": "bun test ./e2e/devex/desktop-startup.test.ts && playwright test --config e2e/devex/playwright.config.ts"
+    "test:stability": "bun test ./e2e/stability/oracle.test.ts ./e2e/stability/fixture.test.ts && playwright test --config e2e/stability/playwright.config.ts"
   },
   "license": "MIT",
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
+    "@hona/strobe-bench": "catalog:",
     "@playwright/test": "catalog:",
     "@sentry/vite-plugin": "catalog:",
     "@tailwindcss/vite": "4.3.3",

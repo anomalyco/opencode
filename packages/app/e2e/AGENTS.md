@@ -22,4 +22,4 @@
 - Files in `utils/` must not end in `.spec.ts` or `.test.ts`, or Playwright runs them as tests.
 - Assert what the user sees and can do. Assert exact pixels or CSS values only when that measurement is the contract, and then only once, in the owning keeper.
 - Benchmarks live in `packages/app/perf` and run with strobe; CI does not run them. Never prove correctness with a benchmark, and never copy benchmark code into a regression spec; a fixture both need belongs in `utils/`.
-- `stability/` (layout continuity under CPU stress, `bun run test:stability`) and `devex/` (desktop dev startup, `bun run bench:devex`) have their own configs and stay out of CI.
+- `stability/` (layout continuity under CPU stress, `bun run test:stability`) has its own config and stays out of CI. Desktop startup, packaged and `bun dev:desktop`, is a strobe benchmark: `packages/desktop/perf/startup.bench.ts`.
