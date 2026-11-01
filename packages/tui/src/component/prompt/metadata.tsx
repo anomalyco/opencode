@@ -1,6 +1,6 @@
-import { RGBA, TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes, type BoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "../../util/locale"
 import { stringWidth } from "../../util/string-width"
@@ -22,10 +22,18 @@ export function PromptMetadataRow(props: {
 }) {
   const theme = useTheme()
   const dimensions = useTerminalDimensions()
+  // The prompt is narrower than the terminal (the home screen caps it at 75 columns), so lay
+  // out against the measured row instead of the terminal width or long labels get clipped.
+  const [measured, setMeasured] = createSignal(0)
+  const width = createMemo(() => {
+    if (measured() > 0) return measured()
+    const terminal = dimensions().width
+    return Math.max(0, terminal - (terminal < 44 ? 9 : 13))
+  })
   const layout = createMemo(() => {
     if (props.mode === "shell") return { agent: props.agent ?? "Shell", model: "" }
     return promptMetadataLayout({
-      width: Math.max(0, dimensions().width - (dimensions().width < 44 ? 9 : 13)),
+      width: width(),
       terminalWidth: dimensions().width,
       agent: props.agent ?? "",
       auto: props.auto,
@@ -37,7 +45,16 @@ export function PromptMetadataRow(props: {
   })
 
   return (
-    <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
+    <box
+      flexDirection="row"
+      gap={1}
+      flexGrow={1}
+      flexShrink={1}
+      minWidth={0}
+      onSizeChange={function (this: BoxRenderable) {
+        if (this.width !== measured()) setMeasured(this.width)
+      }}
+    >
       <Show
         when={(props.mode === "shell" || props.agent) && (layout().agent || layout().model)}
         fallback={<box height={1} />}
