@@ -16,6 +16,7 @@ const ISOLATION_ENV = {
   ENABLE_TOOL_SEARCH: "false",
   CLAUDE_CODE_DISABLE_ADVISOR_TOOL: "1",
   CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: "1",
+  CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1",
   // Raised so opencode's own truncation applies instead
   MAX_MCP_OUTPUT_TOKENS: "200000",
   // Skips OAuth, so the subscription would not be used
