@@ -15,6 +15,17 @@ describe("file path helpers", () => {
     expect(createPathHelpers(() => root).normalize(input)).toBe(expected)
   })
 
+  test.each(["notes#1.txt", "notes?1.txt", "notes%20one.txt"])(
+    "keeps the literal characters in the raw path %p",
+    (input) => {
+      expect(createPathHelpers(() => "/repo").normalize(input)).toBe(input)
+    },
+  )
+
+  test("decodes escapes in a file URL", () => {
+    expect(createPathHelpers(() => "/repo").normalize("file:///repo/notes%231.txt")).toBe("notes#1.txt")
+  })
+
   test("keeps files outside the workspace absolute", () => {
     const posix = createPathHelpers(() => "/repo")
     expect(posix.normalize("/tmp/out/report.pdf")).toBe("/tmp/out/report.pdf")

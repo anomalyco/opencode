@@ -15,13 +15,22 @@ export type FileLinkTarget =
 /**
  * Extracts a normalized file path and optional 1-based line range from a markdown link or inline-code token.
  * Supports `:line`, `:line:col`, `:start-end`, `#Lstart`, and `#Lstart-Lend`.
+ *
+ * Inline code names a raw path, so its characters stay literal. A Markdown link is a URL: pass `link` to strip its
+ * query and fragment (except a line range) and decode percent escapes. `file://` inputs always use URL semantics.
  */
-export function parseFileLink(href: string): ParsedFileLink {
+export function parseFileLink(href: string, options?: { readonly link?: boolean }): ParsedFileLink {
   const raw = href.trim().replaceAll("\\", "/")
   const isFileUrl = /^file:\/\//i.test(raw)
-  const extracted = extractLineSelection(raw, isFileUrl)
+  const isUrl = isFileUrl || !!options?.link
 
-  return { path: normalizeRelativeSegments(extracted.path, isFileUrl), selection: extracted.selection }
+  const extracted = isFileUrl
+    ? extractLineSelection(raw, true)
+    : options?.link
+      ? extractLinkSelection(raw)
+      : extractLineSelection(raw, false)
+
+  return { path: normalizeRelativeSegments(extracted.path, isUrl), selection: extracted.selection }
 }
 
 export function isAbsoluteLink(path: string) {
@@ -61,15 +70,31 @@ export async function checkFileLinkExists(input: {
   readonly href: string
   readonly signal: AbortSignal
 }): Promise<boolean> {
+  // Markdown links reach this as a URL, inline code as a raw path. Try the literal path first so a name that really
+  // contains `#`, `?` or `%` keeps working, then fall back to the URL form.
   const parsed = parseFileLink(input.href)
+  const link = parseFileLink(input.href, { link: true })
 
-  // `~` is the server's home folder, which the app cannot expand. A network share (`//host/share`) would make the
-  // server connect to the host just to answer.
-  if (!parsed.path || parsed.path.startsWith("~") || parsed.path.startsWith("//")) return false
+  if (await exists(parsed)) return true
 
-  if (isAbsoluteLink(parsed.path)) return input.files.exists(input.files.resolve(parsed.path))
+  return link.path !== parsed.path && (await exists(link))
 
-  return !!(await findFileLink({ files: input.files, path: parsed.path, signal: input.signal }))
+  async function exists(target: ParsedFileLink) {
+    // `~` is the server's home folder, which the app cannot expand. A network share (`//host/share`) would make the
+    // server connect to the host just to answer.
+    if (!target.path || target.path.startsWith("~") || target.path.startsWith("//")) return false
+
+    if (isAbsoluteLink(target.path)) return input.files.exists(input.files.resolve(target.path))
+
+    return !!(await findFileLink({ files: input.files, path: target.path, signal: input.signal }))
+  }
+}
+
+/** A Markdown link's target: its query and fragment are URL syntax, but a line range stays a selection. */
+function extractLinkSelection(input: string) {
+  const parsed = parsePathLineSuffix(input)
+
+  return { path: parsed.path.split(/[?#]/, 1)[0] ?? "", selection: parsed.selection }
 }
 
 function extractLineSelection(input: string, isFileUrl: boolean) {

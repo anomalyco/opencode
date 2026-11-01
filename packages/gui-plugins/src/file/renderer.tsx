@@ -575,16 +575,20 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
         // A link in a previewed document opens relative to it, so only that path counts.
         const path = parseFileLink(link.href).path
+        const linkPath = parseFileLink(link.href, { link: true }).path
 
-        const direct =
-          link.base === undefined || path.startsWith("//") || path.startsWith("~")
+        const direct = (value: string) =>
+          link.base === undefined || value.startsWith("//") || value.startsWith("~")
             ? undefined
-            : resolve(files, path, link.base)
+            : resolve(files, value, link.base)
+
+        const target = direct(path)
+        const fallback = linkPath === path ? undefined : direct(linkPath)
 
         const exists = await (link.base === undefined
           ? checkFileLinkExists({ files, href: link.href, signal: ctx.signal })
-          : direct
-            ? files.exists(direct)
+          : target
+            ? (await files.exists(target)) || (fallback ? await files.exists(fallback) : false)
             : false)
 
         if (!current()) return false
@@ -646,10 +650,14 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
       }
 
-      const openResolvedFile = (targetPath: string, selection?: LineRange) => {
+      const openResolvedFile = (
+        targetPath: string,
+        selection?: LineRange,
+        options?: { readonly silent?: boolean },
+      ): Promise<boolean> => {
         const routed = stillCurrent()
 
-        if (!routed) return Promise.resolve()
+        if (!routed) return Promise.resolve(false)
 
         // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
         const pane = ctx.use(Browser)()
@@ -657,26 +665,31 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         if (artifactKind(targetPath) === "html" && pane.status === "active" && pane.value.canOpen(routed, targetPath)) {
           pane.value.open(routed, workspaceFileUrl(files.root, targetPath))
 
-          return Promise.resolve()
+          return Promise.resolve(true)
         }
 
         // Confirm the file exists before a tab appears for it; a file deleted since its link rendered shows the load
         // error. Always reread: a cached copy can be stale.
-        return files.sync(targetPath, { force: true }).then(() => {
-          const latest = stillCurrent()
+        return files
+          .sync(targetPath, { force: true, silent: options?.silent })
+          .then(() => {
+            const latest = stillCurrent()
 
-          if (!latest || !files.get(targetPath)?.loaded) return
+            if (!latest || !files.get(targetPath)?.loaded) return false
 
-          batch(() => {
-            applySelection(latest, files, targetPath, selection)
-            layout.open(key(files, targetPath), latest, { background: link.background })
+            batch(() => {
+              applySelection(latest, files, targetPath, selection)
+              layout.open(key(files, targetPath), latest, { background: link.background })
 
-            // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
-            if (layout.narrow() && !layout.side.opened(latest)) layout.side.toggle(latest)
+              // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
+              if (layout.narrow() && !layout.side.opened(latest)) layout.side.toggle(latest)
+            })
+            // After the batch, as in `open`: the mobile tab strip registers the tab before it leaves the browser.
+            updateFilter(latest.key, { browsing: false })
+
+            return true
           })
-          // After the batch, as in `open`: the mobile tab strip registers the tab before it leaves the browser.
-          updateFilter(latest.key, { browsing: false })
-        })
+          .catch(() => false)
       }
 
       void (async () => {
@@ -685,30 +698,52 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         if (!stillCurrent()) return
 
         const parsed = parseFileLink(link.href)
-        const direct = resolve(files, parsed.path, link.base)
+        const alternate = parseFileLink(link.href, { link: true })
+        // Inline code is a literal path; a Markdown link is a URL. Try both readings when they differ, literal first.
+        const candidates = alternate.path === parsed.path ? [parsed] : [parsed, alternate]
+        const direct = candidates.map((candidate) => resolve(files, candidate.path, link.base)).find(Boolean)
 
         if (!direct) return
 
         // Absolute paths, links written relative to a document, and agent previews name one exact file.
         if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background) {
-          await openResolvedFile(direct, parsed.selection)
+          for (const [index, candidate] of candidates.entries()) {
+            const path = resolve(files, candidate.path, link.base)
+
+            // A failed attempt only shows its load error when no reading opens the file.
+            if (path && (await openResolvedFile(path, candidate.selection, { silent: index < candidates.length - 1 }))) {
+              return
+            }
+          }
 
           return
         }
 
-        const target = await findFileLink({ files, path: parsed.path, signal })
+        let resolved: Awaited<ReturnType<typeof findFileLink>> = undefined
+        let matched = candidates[0]!
+
+        for (const candidate of candidates) {
+          resolved = await findFileLink({ files, path: candidate.path, signal })
+
+          if (resolved) {
+            matched = candidate
+
+            break
+          }
+        }
+
         const latest = stillCurrent()
 
         if (!latest) return
 
-        if (target?.kind === "picker") {
-          openPicker(latest, target.query)
+        if (resolved?.kind === "picker") {
+          openPicker(latest, resolved.query)
 
           return
         }
 
         // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-        await openResolvedFile(target?.path ?? direct, parsed.selection)
+        await openResolvedFile(resolved?.path ?? direct, matched.selection)
       })()
     },
   })
