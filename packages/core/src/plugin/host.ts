@@ -623,6 +623,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
           yield* sessions.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
         if (input.permissions !== undefined)
           yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
+        if (input.archived !== undefined)
+          yield* (input.archived ? sessions.archive : sessions.unarchive)(input.sessionID)
       }),
       move: sessions.move,
       synthetic: sessions.synthetic,
