@@ -36,6 +36,7 @@ export const DIRECTORY = "shell"
 type Info = Shell.Info
 type CreateInput = Shell.CreateInput & {
   shell?: string
+  prune?: boolean
 }
 
 type Active = {
@@ -285,7 +286,9 @@ const layer = () =>
         if (before) yield* before(invocation)
 
         const id = Shell.ID.ascending()
-        const args = ShellSelect.args(invocation.shell, invocation.command)
+        const shouldPrune =
+          input.prune === true && process.env.OPENCODE_NO_SHELL_PRUNE !== "1" && process.env.OPENCODE_NO_PRUNE !== "1"
+        const args = ShellSelect.args(invocation.shell, invocation.command, { prune: shouldPrune })
         const file = path.join(outputDir, `${id}.out`)
 
         const info: Info = {
