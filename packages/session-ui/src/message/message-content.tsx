@@ -24,6 +24,8 @@ import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
 import type { TurnSources } from "../sources/sources"
+import { linkPreviewsExperiment } from "../link-previews/experiment"
+import { LinkPreviews } from "../link-previews/link-previews"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
@@ -1210,6 +1212,9 @@ export function AssistantTextContent(props: {
         <div data-slot="text-part-body">
           <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>
+        <Show when={props.showCopy && linkPreviewsExperiment.enabled}>
+          <LinkPreviews text={props.text} />
+        </Show>
         <Show when={sources()} fallback={<Show when={props.showCopy}>{copyFooter()}</Show>}>
           {(value) => (
             <div data-slot="text-part-footer">
