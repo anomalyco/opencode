@@ -12,8 +12,11 @@ import { RemoteTunnel } from "./remote-tunnel"
 // points the client package's service operations at this CLI: which
 // registration file (by channel), which version, and how to spawn opencode.
 
+const Command = Schema.Array(Schema.NonEmptyString).check(Schema.isMinLength(1))
+
 export const Info = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
+  command: Schema.optional(Command),
   // Present when remote access is on. The route is generated, never user-set: the secret subdomain the service is
   // served on.
   remote: Schema.optional(Schema.Struct({ route: Schema.String })),
@@ -28,7 +31,7 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
-const keys = ["disabled", "remote", "hostname", "port", "password", "cors", "env"] as const
+const keys = ["disabled", "command", "remote", "hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -102,6 +105,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 function configKey(key: string): Key {
   if (
     key === "disabled" ||
+    key === "command" ||
     key === "remote" ||
     key === "hostname" ||
     key === "port" ||
@@ -143,23 +147,24 @@ export function processEnv(env: Info["env"]) {
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
+  const config = yield* read()
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: processEnv((yield* read()).env),
-    command: [...selfCommand(), "serve", "--service"],
+    env: processEnv(config.env),
+    command: config.command ?? [...selfCommand(), "serve", "--service"],
   }
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
-  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
-  if (Option.isNone(text)) return {} as Info
-  const info = yield* decodeInfo(text.value).pipe(Effect.option)
+  if (!(yield* fs.exists(configFile))) return {} as Info
+  const text = yield* fs.readFileString(configFile)
+  const info = yield* decodeInfo(text).pipe(Effect.option)
   if (Option.isSome(info)) return info.value
-  const legacy = decodeLegacy(text.value)
-  if (Option.isNone(legacy)) return {} as Info
+  const legacy = decodeLegacy(text)
+  if (Option.isNone(legacy)) return yield* Effect.fail(new Error("Invalid service configuration"))
   // Repair the file in place so every reader sees the same route.
   const { remote: enabled, ...rest } = legacy.value
   const repaired: Info = enabled ? { ...rest, remote: { route: route() } } : rest
@@ -220,6 +225,9 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
   switch (selected) {
+    case "command": {
+      return JSON.stringify((yield* read()).command ?? [])
+    }
     case "disabled": {
       return String((yield* read()).disabled ?? false)
     }
@@ -252,6 +260,12 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   if (selected !== "env" && nestedValue !== undefined)
     throw new Error(`Usage: opencode service set ${selected} <value>`)
   switch (selected) {
+    case "command": {
+      const command = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Command))(value)
+      // Startup policy changes must not interrupt the service or its active sessions.
+      yield* write({ ...(yield* read()), command })
+      return
+    }
     case "disabled": {
       if (value !== "true" && value !== "false") throw new Error("Disabled must be true or false")
       if (value === "true") yield* Service.stop(yield* options())
@@ -314,6 +328,11 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
   switch (selected) {
+    case "command": {
+      const { command: _command, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
     case "disabled": {
       const { disabled: _disabled, ...next } = yield* read()
       yield* write(next)

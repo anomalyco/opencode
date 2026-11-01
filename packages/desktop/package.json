@@ -38,6 +38,7 @@
     "@opencode/client": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/ui": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@sentry/solid": "catalog:",
     "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
