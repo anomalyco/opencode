@@ -803,6 +803,90 @@ const conversationScenarios = {
   links: UserMessageLinks,
 }
 
+/**
+ * A stack of three prompts arriving, a prompt sent with another model that stands alone, then two steers waiting behind
+ * the running turn. Send next adds the next prompt; Deliver next delivers the oldest steer.
+ */
+export const PromptRuns = {
+  render: () => {
+    const start = Date.now() - 10 * 60_000
+
+    const prompt = (id: string, text: string, minute: number, variant?: string) => ({
+      id,
+      type: "user" as const,
+      text,
+      time: { created: start + minute * 60_000 },
+      metadata: {
+        agent: "build",
+        model: { providerID: "anthropic", id: "claude-opus-5-5", variant: variant ?? "high" },
+      },
+    })
+
+    const prompts = [
+      prompt("msg_end_0", "You don't need to update the tests yet", 0),
+      prompt("msg_end_1", "just play this back against the old fixture first", 1),
+      prompt("msg_end_2", "So that we can see what actually changed", 2),
+      prompt("msg_end_3", "Now try it with max effort", 5, "max"),
+      prompt("msg_end_4", "Also check the retry path", 7, "max"),
+      prompt("msg_end_5", "And rebase on beta first", 8, "max"),
+    ]
+
+    const steers = ["msg_end_4", "msg_end_5"]
+
+    const [state, setState] = createStore<{ count: number; delivered: string[]; removed: string[] }>({
+      count: 1,
+      delivered: [],
+      removed: [],
+    })
+
+    const session = createMemo(
+      (): SessionDocument => ({
+        sessionID: CURRENT_SESSION_ID,
+        messages: prompts.slice(0, state.count).filter((message) => !state.removed.includes(message.id)),
+        status: { type: "busy" },
+        diffs: [],
+      }),
+    )
+
+    const take = async (input: { messageID: string }) => setState("removed", (ids) => [...ids, input.messageID])
+
+    const actions = {
+      revert: () => {},
+      fork: () => {},
+      pending: {
+        status: (messageID: string) =>
+          steers.includes(messageID) && !state.delivered.includes(messageID) ? ("steering" as const) : undefined,
+        queue: take,
+        remove: take,
+      },
+    }
+
+    const deliverNext = () => {
+      const next = steers.find((id) => !state.delivered.includes(id) && !state.removed.includes(id))
+
+      if (next) setState("delivered", (ids) => [...ids, next])
+    }
+
+    return (
+      <section class="mx-auto flex w-full max-w-[760px] flex-col gap-4 p-6 pb-0">
+        <div class="flex gap-2">
+          <button type="button" onClick={() => setState("count", (value) => Math.min(value + 1, prompts.length))}>
+            Send next
+          </button>
+          <button type="button" onClick={deliverNext}>
+            Deliver next
+          </button>
+        </div>
+        {/* Room above, as in a real session, so menus open upward. */}
+        <div class="h-56" />
+        <CurrentSessionProviders document={session()}>
+          <SessionTimeline document={session()} actions={actions} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}
+
 export const Conversation = {
   args: { scenario: "notices", mode: "compact", reasoning: "heading", tool: false, text: "" },
   argTypes: {

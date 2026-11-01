@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { reviewTabs } from "../utils/side-panel"
+import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -676,7 +677,6 @@ test.describe("revert", () => {
       if (step) settles.push(step)
     })
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
 
     const response = page.waitForResponse(
       (response) =>
@@ -684,7 +684,8 @@ test.describe("revert", () => {
         new URL(response.url()).pathname === `/api/session/${session.id}/revert/stage`,
     )
 
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    // The newest prompt's revert undoes the last turn.
+    await chooseUserMessageAction(page, message, "Undo")
     expect((await response).ok()).toBe(true)
 
     await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
@@ -693,15 +694,14 @@ test.describe("revert", () => {
     expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
   })
 
-  test("Undo on the Rewound toast clears the revert and puts the draft back before the staged event arrives", async ({
+  test("Undo on the Reverted toast clears the revert and puts the draft back before the staged event arrives", async ({
     page,
   }) => {
     const { session, editor } = await openSession(page, workspace)
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Unsent draft")
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("Second prompt")
 
     const cleared = page.waitForRequest(
@@ -733,9 +733,9 @@ test.describe("revert", () => {
     })
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Draft in source")
+    // The session is already reverted to msg_second, so msg_first is the newest prompt left.
     const message = page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_first"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("First prompt")
 
     await tabs(page).filter({ hasText: "Rewind other" }).click()
@@ -795,8 +795,7 @@ test.describe("revert", () => {
     })
     await page.goto(sessionHref("ses_child"))
     await expectSessionTitle(page, "Session message revert")
-    const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await expect(message.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
+    const menu = await openUserMessageMenu(page, page.locator('[data-message-id="msg_second"]'))
+    await expect(menu.getByRole("menuitem", { name: /^(Revert to here|Undo)$/ })).toHaveCount(0)
   })
 })

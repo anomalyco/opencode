@@ -750,9 +750,9 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await expect(first.locator('[data-slot="user-message-copy-wrapper"]')).toBeHidden()
   await expect(last.locator('[data-slot="user-message-copy-wrapper"]')).toBeVisible()
 
-  // The first message keeps its own actions, shown beside its bubble on hover.
+  // The first message keeps its own actions, in a chevron its bubble shows on hover.
   await bubble(first).hover()
-  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
+  await expect(first.locator('[data-slot="user-message-menu"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "More actions" })).toHaveCount(1)
 })
 

@@ -8,7 +8,7 @@ story.describe("touch timeline", () => {
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
     for (const action of [
-      { slot: "user-message-copy-wrapper", name: "More actions" },
+      { slot: "user-message-menu", name: "More actions" },
       { slot: "text-part-copy-wrapper", name: "Copy response" },
     ]) {
       const actions = timeline.locator(`[data-slot="${action.slot}"]`)
@@ -61,7 +61,7 @@ story("desktop message actions still appear on hover and keyboard focus", async 
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
   for (const action of [
-    { slot: "user-message-copy-wrapper", name: "More actions" },
+    { slot: "user-message-menu", name: "More actions" },
     { slot: "text-part-copy-wrapper", name: "Copy response" },
   ]) {
     const actions = timeline.locator(`[data-slot="${action.slot}"]`)
