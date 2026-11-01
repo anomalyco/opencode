@@ -388,5 +388,6 @@ function paletteTokens(theme: Theme) {
       imageText: color("markdownImageText"),
       codeBlock: color("markdownCodeBlock"),
     },
+    ...(theme.thinkingOpacity === 0.6 ? {} : { thinkingOpacity: theme.thinkingOpacity }),
   } satisfies Partial<ThemeDefinition>
 }

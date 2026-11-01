@@ -12,4 +12,10 @@ test.each(["light", "dark"] as const)("resolves %s themes without status tokens"
   expect("status" in theme.text).toBeFalse()
   expect(theme.hue.accent[800]).toBeDefined()
   expect(theme.hue.interactive[800]).toBeDefined()
+  expect(theme.thinkingOpacity).toBe(0.6)
+})
+
+test("migrates custom V1 thinkingOpacity into resolved V2 themes", () => {
+  const custom = resolveThemeDocument(migrateV1({ ...source, theme: { ...source.theme, thinkingOpacity: 1 } }), "dark")
+  expect(custom.thinkingOpacity).toBe(1)
 })

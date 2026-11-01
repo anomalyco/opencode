@@ -10,7 +10,7 @@ import {
   type ResolvedTheme,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import { getOpenCode2Theme, getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
 const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
@@ -352,6 +352,40 @@ test("dialog footer overrides layer on the dialog surface", () => {
   expect(theme.surface("dialog").text.muted.toInts()).not.toEqual([102, 102, 102, 255])
   const plain = resolveTheme(light)
   expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
+})
+
+test("resolves thinkingOpacity defaults, overrides, and bounds", () => {
+  for (const mode of ["light", "dark"] as const) {
+    expect(resolveThemeDocument(getOpenCodeTheme(), mode).thinkingOpacity).toBe(0.6)
+    expect(resolveThemeDocument(getOpenCode2Theme(), mode).thinkingOpacity).toBe(0.6)
+  }
+
+  const inherited = resolveSource(
+    {
+      base: { ...(complete("dark").base as Record<string, unknown>), thinkingOpacity: 1 },
+      light: { hue: light.hue },
+      dark: { hue: dark.hue, thinkingOpacity: 0.25, "@dialog": { background: { base: "$background.raised.base" } } },
+    },
+    "dark",
+  )
+  expect(inherited.thinkingOpacity).toBe(0.25)
+  expect(inherited.surface("dialog").thinkingOpacity).toBe(0.25)
+
+  const lightResolved = resolveSource(
+    {
+      base: { ...(complete("light").base as Record<string, unknown>), thinkingOpacity: 1 },
+      light: { hue: light.hue, "@dialog": { thinkingOpacity: 0.4 } },
+    },
+    "light",
+  )
+  expect(lightResolved.thinkingOpacity).toBe(1)
+  expect(lightResolved.surface("dialog").thinkingOpacity).toBe(0.4)
+
+  expect(() => resolveSource(complete("dark", { thinkingOpacity: -0.1 }))).toThrow("Invalid theme")
+  expect(() => resolveSource(complete("dark", { thinkingOpacity: 1.1 }))).toThrow("Invalid theme")
+  expect(() => resolveTheme(override(light, { thinkingOpacity: 0.5, text: { base: "$thinkingOpacity" } }))).toThrow(
+    'Theme reference "$thinkingOpacity" at "theme.text.base" is not a color',
+  )
 })
 
 test("rejects missing and circular references", () => {

@@ -25,6 +25,7 @@ const Mode = Schema.Literals(["light", "dark"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
 const HexColor = Schema.String.check(Schema.isPattern(/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i))
+const ThinkingOpacity = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
 
 const ColorValue = Schema.Union([
   HexColor,
@@ -198,6 +199,7 @@ const ThemeTokensDefinition = Schema.Struct({
   diff: Schema.optional(DiffDefinition),
   syntax: Schema.optional(SyntaxDefinition),
   markdown: Schema.optional(MarkdownDefinition),
+  thinkingOpacity: Schema.optional(ThinkingOpacity),
 })
 export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinition>
 
@@ -264,6 +266,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
   }),
   syntax: Schema.Record(SyntaxToken, HueColorValue),
   markdown: Schema.Record(MarkdownToken, HueColorValue),
+  thinkingOpacity: Schema.optional(ThinkingOpacity),
 })
 
 const ThemeDefinitionFields = Schema.Struct({
