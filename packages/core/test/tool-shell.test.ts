@@ -36,6 +36,9 @@ import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
+import { Sandbox } from "@opencode/core/sandbox"
+import { MacSandbox } from "@opencode/core/sandbox/macos"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
@@ -138,6 +141,7 @@ const shellPluginSupervisor = makeLocationNode({
     Session.node,
     Job.node,
     Shell.node,
+    Sandbox.node,
     ShellSelect.node,
     Tool.node,
   ],
@@ -170,6 +174,137 @@ const permissionIt = testEffect(
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
     offlineModels,
+  ]),
+)
+
+const sandboxPermissionIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    SessionExecution.node.replace(executionNode),
+    Global.node.replace(tempGlobalLayer),
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured({ enabled: true })),
+    offlineModels,
+  ]),
+)
+const seatbelt =
+  process.platform === "darwin" &&
+  Bun.spawnSync([MacSandbox.executable, "-p", "(version 1)(allow default)", "/usr/bin/true"]).exitCode === 0
+
+const kernelApproval = seatbelt ? sandboxPermissionIt.live : sandboxPermissionIt.live.skip
+kernelApproval(
+  "session prefix escapes reuse final-hook approvals while default commands remain confined and denies still win",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped("opencode-prefix-escape-")
+      const workspace = path.join(tmp.path, "workspace")
+      yield* Effect.promise(() => fs.mkdir(workspace))
+      yield* withSession(workspace, (registry) =>
+        Effect.gen(function* () {
+          const definition = (yield* toolDefinitions(registry)).find((tool) => tool.name === "shell")
+          expect(definition?.inputSchema).toHaveProperty("properties.sandbox_permissions")
+          expect(definition?.inputSchema).toHaveProperty("properties.justification")
+          const permission = yield* Permission.Service
+          const bus = yield* Bus.Service
+          const hooks = yield* PluginHooks.Service
+          const agents = yield* Agent.Service
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
+              agent.permissions = []
+            }),
+          )
+          const requests = yield* Queue.unbounded<Permission.Request>()
+          yield* bus.subscribe(Permission.Event.Asked).pipe(
+            Stream.runForEach((event) => Queue.offer(requests, event.data)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          // The final shell hook, rather than model text, determines the approvable prefix.
+          yield* hooks.register("shell", "create.before", (invocation) =>
+            Effect.sync(() => {
+              if (invocation.command === "model-original") invocation.command = `/usr/bin/touch ${tmp.path}/first`
+            }),
+          )
+          const first = yield* executeTool(
+            registry,
+            call({
+              command: "model-original",
+              sandbox_permissions: "require_escalated",
+              justification: "Create an outside test file",
+            }),
+          ).pipe(Effect.forkScoped)
+          const request = yield* Queue.take(requests)
+          expect(request.resources).toEqual([`/usr/bin/touch ${tmp.path}/first`])
+          expect(request.save).toEqual(["/usr/bin/touch"])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "first")).exists())).toBe(false)
+          yield* permission.reply({ requestID: request.id, reply: "always", saveSandboxPrefix: true })
+          expect((yield* Fiber.join(first)).status).toBe("completed")
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "first")).exists())).toBe(true)
+          const command = `/usr/bin/touch ${tmp.path}/second`
+          yield* executeTool(registry, call({ command }, "default-remains-confined"))
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "second")).exists())).toBe(false)
+          expect(
+            (yield* executeTool(
+              registry,
+              call(
+                { command, sandbox_permissions: "require_escalated", justification: "Same approved prefix" },
+                "reuse-prefix",
+              ),
+            )).status,
+          ).toBe("completed")
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "second")).exists())).toBe(true)
+          expect(yield* Queue.size(requests)).toBe(0)
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
+              agent.permissions = [{ action: "shell", resource: "/usr/bin/touch *", effect: "deny" }]
+            }),
+          )
+          expect(
+            (yield* executeTool(
+              registry,
+              call(
+                {
+                  command: `/usr/bin/touch ${tmp.path}/denied`,
+                  sandbox_permissions: "require_escalated",
+                  justification: "Explicit deny must win",
+                },
+                "deny-prefix",
+              ),
+            )).status,
+          ).toBe("error")
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "denied")).exists())).toBe(false)
+        }),
+      )
+    }).pipe(Effect.timeout("10 seconds")),
+)
+
+// Exercise the real shell/job lifecycle with a backend that reports the final launch.
+// Kernel confinement is covered separately by sandbox-macos.test.ts on a capable host.
+const sandboxIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.node.replace(
+      Layer.succeed(
+        Sandbox.Service,
+        Sandbox.Service.of({
+          status: () => {
+            throw new Error("Sandbox status is not used by this fixture")
+          },
+          enabled: true,
+          checkLocation: () => Effect.void,
+          approval: "on-request",
+          fullDiskRead: false,
+          files: Effect.die("File helper is not used by shell tools"),
+          search: () => Effect.die("Search is not used by shell tools"),
+          command: () => Effect.die("Formatter commands are not used by shell tools"),
+          prepare: (invocation, escalated) =>
+            Effect.succeed({
+              command: process.execPath,
+              args: ["-e", `console.log(${JSON.stringify(JSON.stringify({ command: "final launch", escalated }))})`],
+              env: invocation.env,
+            }),
+        }),
+      ),
+    ),
   ]),
 )
 
@@ -803,6 +938,96 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
+  sandboxIt.live("background execution retains its own launch authority", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(
+            registry,
+            call({
+              command: helloCommand,
+              background: true,
+              sandbox_permissions: "require_escalated",
+              justification: "Run the background job with network access.",
+            }),
+          )
+          expect(result).toMatchObject({ status: "completed", output: { status: "running" } })
+          const shell = yield* Shell.Service
+          const info = yield* shell.get(ID.make(result.output.shellID))
+          expect(yield* shell.result(info)).toMatchObject({
+            capture: { output: '{"command":"final launch","escalated":true}\n' },
+          })
+          const next = yield* executeTool(registry, call({ command: helloCommand }, "call-next"))
+          expect(next).toMatchObject({
+            status: "completed",
+            content: [{ type: "text", text: '{"command":"final launch","escalated":false}\n' }],
+          })
+          expect(assertions.filter((item) => item.action === "sandbox.exec")).toHaveLength(1)
+        }),
+      )
+      reset()
+    }),
+  )
+
+  sandboxIt.live("uses the sandbox launch and retains shell output and job metadata", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(registry, call({ command: helloCommand }))
+          expect(result).toMatchObject({
+            status: "completed",
+            metadata: { exit: 0 },
+            content: [{ type: "text", text: '{"command":"final launch","escalated":false}\n' }],
+          })
+          expect(assertions.filter((item) => item.action === "shell")).toMatchObject([{ prompt: "skip" }])
+          expect(assertions.some((item) => item.action === "sandbox.exec")).toBe(false)
+        }),
+      )
+    }),
+  )
+
+  sandboxIt.live("checks ordinary denies and a separate one-command escalation before launch", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const input = {
+            command: helloCommand,
+            sandbox_permissions: "require_escalated" as const,
+            justification: "Reach the package registry.",
+          }
+          const result = yield* executeTool(registry, call(input))
+          expect(result).toMatchObject({
+            status: "completed",
+            content: [{ type: "text", text: '{"command":"final launch","escalated":true}\n' }],
+          })
+          expect(assertions.find((item) => item.action === "sandbox.exec")).toMatchObject({
+            prompt: "force",
+            resources: [helloCommand],
+            metadata: { command: helloCommand, cwd: tmp.path, justification: input.justification },
+            source: { type: "tool", messageID: toolIdentity.messageID, id: "call-shell" },
+          })
+          reset()
+          denyAction = "shell"
+          expect((yield* executeTool(registry, call(input))).status).toBe("error")
+          expect(assertions.some((item) => item.action === "sandbox.exec")).toBe(false)
+          reset()
+          denyAction = "sandbox.exec"
+          expect((yield* executeTool(registry, call(input))).status).toBe("error")
+          reset()
+          expect((yield* executeTool(registry, call({ ...input, justification: " " }))).status).toBe("error")
+          expect(assertions).toEqual([])
+        }),
+      )
+      reset()
+    }),
+  )
+
   it.live("returns both parallel CodeMode shell results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -852,6 +1077,8 @@ describe("ShellTool", () => {
               const definition = definitions.find((tool) => tool.name === "shell")
               expect(definition?.description).toStartWith("Execute a shell command and return its output.")
               expect(definition?.inputSchema).not.toHaveProperty("properties.timeout.maximum")
+              expect(definition?.inputSchema).not.toHaveProperty("properties.sandbox_permissions")
+              expect(definition?.inputSchema).not.toHaveProperty("properties.justification")
               // Code Mode receives the declared output schema, including the command output text.
               expect(definition?.outputSchema).toHaveProperty("properties.output")
               expect(
@@ -1226,6 +1453,7 @@ describe("ShellTool", () => {
             Session.node,
             Job.node,
             Shell.node,
+            Sandbox.node,
             ShellSelect.node,
             Tool.node,
           ],

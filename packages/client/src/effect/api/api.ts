@@ -1946,6 +1946,9 @@ export type PermissionReplyInput = {
   readonly requestID: Permission.ID
   readonly decision: Permission.Reply
   readonly message?: string | undefined
+  readonly experimental?:
+    | { readonly acknowledgeSandbox?: boolean | undefined; readonly saveSandboxPrefix?: boolean | undefined }
+    | undefined
 }
 export type PermissionReplyOutput = void
 export type PermissionReplyOperation<E = never> = (
@@ -2696,6 +2699,24 @@ export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
+export type ExperimentalSandboxStatusInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalSandboxStatusOutput = {
+  readonly active: boolean
+  readonly reads: "unrestricted" | "restricted" | "broad"
+  readonly escalation: "on-request" | "never" | "disabled"
+  readonly writableRoots: ReadonlyArray<string>
+  readonly readableRoots: ReadonlyArray<string>
+}
+export type ExperimentalSandboxStatusOperation<E = never> = (
+  input?: ExperimentalSandboxStatusInput,
+) => Effect.Effect<ExperimentalSandboxStatusOutput, E>
+
+export interface ExperimentalSandboxApi<E = never> {
+  readonly status: ExperimentalSandboxStatusOperation<E>
+}
+
 export type ExperimentalMigrationV1StatusOutput =
   | { readonly status: "required" | "completed" }
   | {
@@ -2977,6 +2998,15 @@ export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
 /** @deprecated Use `ExperimentalFileUnwatchOperation`. Removed in the next minor. */
 export type FileUnwatchOperation<E = never> = ExperimentalFileUnwatchOperation<E>
 
+/** @deprecated Use `ExperimentalSandboxStatusInput`. Removed in the next minor. */
+export type SandboxStatusInput = ExperimentalSandboxStatusInput
+
+/** @deprecated Use `ExperimentalSandboxStatusOutput`. Removed in the next minor. */
+export type SandboxStatusOutput = ExperimentalSandboxStatusOutput
+
+/** @deprecated Use `ExperimentalSandboxStatusOperation`. Removed in the next minor. */
+export type SandboxStatusOperation<E = never> = ExperimentalSandboxStatusOperation<E>
+
 /** @deprecated Use `ExperimentalMigrationV1StatusOutput`. Removed in the next minor. */
 export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
 
@@ -3007,6 +3037,9 @@ export type GenerateApi<E = never> = ExperimentalGenerateApi<E>
 /** @deprecated Use `ExperimentalVoiceApi`. Removed in the next minor. */
 export type VoiceApi<E = never> = ExperimentalVoiceApi<E>
 
+/** @deprecated Use `ExperimentalSandboxApi`. Removed in the next minor. */
+export type SandboxApi<E = never> = ExperimentalSandboxApi<E>
+
 /** @deprecated Use `ExperimentalMigrationApi`. Removed in the next minor. */
 export type MigrationApi<E = never> = ExperimentalMigrationApi<E>
 
@@ -3026,6 +3059,7 @@ export interface AppApi<E = never> {
     readonly integration: ExperimentalIntegrationApi<E>
     readonly mcp: ExperimentalMcpApi<E>
     readonly file: ExperimentalFileApi<E>
+    readonly sandbox: ExperimentalSandboxApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
     readonly config: ExperimentalConfigApi<E>
@@ -3072,6 +3106,12 @@ export interface AppApi<E = never> {
 
     /** @deprecated Use `client.experimental.voice.session`. Removed in the next minor. */
     readonly session: ExperimentalVoiceSessionOperation<E>
+  }
+
+  /** @deprecated Use `client.experimental.sandbox`. Removed in the next minor. */
+  readonly sandbox: {
+    /** @deprecated Use `client.experimental.sandbox.status`. Removed in the next minor. */
+    readonly status: ExperimentalSandboxStatusOperation<E>
   }
 
   /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */

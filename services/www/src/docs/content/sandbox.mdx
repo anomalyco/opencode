@@ -1,0 +1,61 @@
+---
+title: "Sandbox"
+---
+
+The experimental execution sandbox confines built-in agent commands, file operations, searches, image file access, and automatic formatters using macOS Seatbelt. It is disabled by default and currently supports local macOS execution only.
+
+## Enable the sandbox
+
+Add the settings to your global `~/.config/opencode/opencode.jsonc`:
+
+```jsonc
+{
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "readable_roots": ["/opt/my-toolchain"],
+    },
+  },
+}
+```
+
+The additional readable root is optional. Settings apply when the server starts. Restart an existing background service with `opencode service restart` to apply changes; `opencode --standalone /path/to/project` starts a separate server with the same global settings. Project configuration cannot enable or change the sandbox.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Set to `true` to enable. |
+| `approval` | `on-request` | Set to `never` to prohibit requests for sandbox escapes and workspace changes. |
+| `full_disk_read` | `false` | Allow broad disk reads, subject to [read exclusions](#read-exclusions). |
+| `readable_roots` | `[]` | Additional existing absolute paths that may be read. |
+| `writable_roots` | `[]` | Additional existing absolute paths that may be written. |
+
+The embedded server accepts equivalent `sandbox` startup options. Unsupported hosts and remote locations are refused when enforcement is enabled.
+
+## Behavior
+
+Commands and their descendants can write to the workspace, sandbox scratch, and configured writable roots, except protected metadata and credentials. Reads are restricted to those roots, configured readable roots, and system/runtime paths. The default runtime grants include `/private/etc`, `/Library/Preferences`, and selected Homebrew installation directories under `/opt/homebrew`; they can contain configuration readable by your account. Broad reads expose more of the account's files, so opt in only when appropriate. Command network access is blocked.
+
+Existing explicit `deny` rules continue to apply. Shell commands that would otherwise be allowed or require an ordinary approval can run without that approval inside the sandbox. When a command needs host access, the agent can request a separate approval showing the command, reason, and scope. You can approve an invocation once, or, for eligible commands, approve the offered literal command prefix for the current session, working directory, and shell until the server restarts. An approved escape runs with your account's filesystem and network access. Rejection or a missing approval does not run the escaped command. The sandbox does not automatically retry failed commands; a failure may have partial effects.
+
+Automatic formatters and their discovery commands run inside the sandbox. Formatter failures do not undo an edit. [Snapshots and file undo](/snapshots) are unavailable while sandboxing is enabled. Model-facing worktree creation and removal and the bundled browser plugin are also unavailable. Specify a workspace path for generated images you want to retain; the default sandboxed output is temporary.
+
+## Read exclusions
+
+Even with `full_disk_read` enabled, sandboxed operations cannot read these paths or their descendants:
+
+- OpenCode's global configuration, data, and state directories, including custom locations used by the server.
+- `.aws` and `.ssh` directly under the user's home directory.
+- `.aws` and `.ssh` directly under each writable root, including the workspace, sandbox scratch, and configured writable roots.
+- Existing symlink targets of those excluded paths.
+
+This list describes the current implementation and may not be authoritative; exclusions can change between OpenCode versions. Consult the sandbox policy in the source for the version you are using for the authoritative list. These exclusions do not cover every possible credential or sensitive file. Other write-protected paths are not necessarily excluded from reads.
+
+## Inspect and troubleshoot
+
+Run `opencode debug sandbox --standalone`, or `opencode debug sandbox --server <url>` to inspect a running server. The TUI Status view reports the connected server's effective policy. When disconnected or connected to an older server, enforcement is unknown.
+
+Configured roots must be existing absolute paths. Startup fails if Seatbelt cannot apply the policy or the sandbox file runtime cannot start. For a program that cannot load its libraries, grant the necessary installation path as a readable root or opt into broad reads. A permission-denial hint on a failed command is advisory: the cause can be the sandbox or ordinary account permissions.
+
+## Scope and limitations
+
+The sandbox is a boundary around the covered agent operations, not the entire OpenCode server. Configured providers, web and Code Mode HTTP, MCP services, trusted executable plugins, and human-operated terminals and host APIs retain their own authority. Approved escapes intentionally run outside the sandbox. CPU, memory, and process-count quotas are not provided. See the repository's [authority audit](https://github.com/anomalyco/opencode/blob/dev/SANDBOX_AUDIT.md) for implementation details.

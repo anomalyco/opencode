@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Environment } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
@@ -25,12 +26,28 @@ import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 const globToolNode = makeLocationNode({
   name: "test/glob-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GlobTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
+  deps: [
+    AgentFiles.node,
+    Tool.node,
+    Environment.node,
+    Ripgrep.agentNode,
+    Location.node,
+    FileAccess.node,
+    Permission.node,
+  ],
 })
 const grepToolNode = makeLocationNode({
   name: "test/grep-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
+  deps: [
+    AgentFiles.node,
+    Tool.node,
+    Environment.node,
+    Ripgrep.agentNode,
+    Location.node,
+    FileAccess.node,
+    Permission.node,
+  ],
 })
 const sessionID = Session.ID.make("ses_search_tool_test")
 

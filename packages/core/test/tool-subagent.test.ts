@@ -36,6 +36,8 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Permission } from "@opencode/core/permission"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
+import { Sandbox } from "@opencode/core/sandbox"
+import { MacSandbox } from "@opencode/core/sandbox/macos"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
@@ -122,6 +124,7 @@ const subagentPluginSupervisor = makeLocationNode({
     }),
   ),
   deps: [
+    Sandbox.node,
     Agent.node,
     Config.node,
     Model.node,
@@ -150,6 +153,13 @@ const replacements = [
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
+)
+const sandboxIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    Sandbox.node.replace(Sandbox.configured({ enabled: true })),
+    PluginSupervisor.node.replace(subagentPluginSupervisor),
+  ]),
 )
 const completionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
@@ -214,7 +224,81 @@ const withSubagent = (location: Location.Ref) =>
     ).pipe(Effect.provide(locations.get(location)))
   })
 
+const sandboxProbe =
+  process.platform === "darwin"
+    ? Bun.spawnSync([MacSandbox.executable, "-p", "(version 1)(allow default)", "/usr/bin/true"])
+    : undefined
+const sandboxTest = sandboxProbe?.exitCode === 0 ? sandboxIt.live : sandboxIt.live.skip
+
 describe("SubagentTool", () => {
+  sandboxTest("subagents inherit sandbox policy and cannot resume a child in a different Location", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const locations = yield* LocationServiceMap.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const call = (sessionID?: Session.ID) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "sandbox-child",
+                name: "subagent",
+                input: {
+                  agent: "reviewer",
+                  description: "sandbox child",
+                  prompt: "review",
+                  ...(sessionID ? { sessionID } : {}),
+                },
+              },
+            })
+          const result = yield* call()
+          expect(result.status).toBe("completed")
+          const childID = outputSessionID(result.output)
+          const child = yield* sessions.get(childID)
+          expect(child.location).toEqual(parent.location)
+          const childSandbox = yield* Sandbox.Service.pipe(Effect.provide(locations.get(child.location)))
+          expect(childSandbox.enabled).toBe(true)
+          expect(childSandbox.approval).toBe("on-request")
+          expect((yield* call(childID)).status).toBe("completed")
+
+          // A trusted human move is allowed; the model cannot use continuation to acquire that new Location.
+          const outside = yield* Effect.acquireRelease(
+            Effect.promise(() => tmpdir()),
+            (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+          )
+          const bus = yield* Bus.Service
+          yield* bus.publish(SessionEvent.Moved, {
+            sessionID: childID,
+            location: Location.Ref.make({ directory: AbsolutePath.make(outside.path) }),
+            projectID: parent.projectID,
+            subpath: parent.subpath,
+          })
+          const blocked = yield* call(childID)
+          expect(blocked.status).toBe("error")
+          expect(blocked.error?.message).toContain("Subagents must use the caller's sandbox workspace")
+
+          // A stale captured executor cannot spawn children from a parent whose placement has changed either.
+          yield* bus.publish(SessionEvent.Moved, {
+            sessionID: parent.id,
+            location: Location.Ref.make({ directory: AbsolutePath.make(outside.path) }),
+            projectID: parent.projectID,
+            subpath: parent.subpath,
+          })
+          expect((yield* call()).status).toBe("error")
+        }),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ),
+  )
+
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

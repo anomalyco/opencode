@@ -634,6 +634,16 @@ All experimental settings live under the `experimental` key:
 }
 ```
 
+### Sandbox
+
+Configure the experimental [sandbox](/sandbox) in global config. Project-level sandbox settings are ignored.
+
+```jsonc
+{
+  "experimental": { "sandbox": { "enabled": true } },
+}
+```
+
 ### Todos
 
 Set `todo` to `true` to give agents a `todowrite` tool for tracking multi-step work. Defaults to `false`.

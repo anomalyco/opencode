@@ -12,6 +12,7 @@ import { SessionStore } from "./session/store.js"
 import { Wildcard } from "./util/wildcard.js"
 import { PermissionSaved } from "./permission/saved.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { SandboxApproval } from "./sandbox/approval.js"
 
 const PermissionEffect = Permission.Effect
 export { PermissionEffect as Effect }
@@ -33,12 +34,17 @@ export type Reply = typeof Reply.Type
 export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
+  /** Internal execution policy. Forced prompts ignore saved and wildcard allows. */
+  readonly prompt?: "skip" | "force"
+  /** Final shell invocation, supplied only by the execution leaf. Never accepted from the API. */
+  readonly sandboxCommand?: SandboxApproval.Command
 }
 
 export interface ReplyInput {
   readonly requestID: ID
   readonly reply: Reply
   readonly message?: string
+  readonly saveSandboxPrefix?: boolean
 }
 
 export interface AskResult {
@@ -81,6 +87,10 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
   requestID: ID,
 }) {}
 
+export class InvalidReplyError extends Schema.TaggedError<InvalidReplyError>()("Permission.InvalidReplyError", {
+  message: Schema.String,
+}) {}
+
 export type Error = BlockedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
@@ -107,7 +117,7 @@ export interface Interface {
   readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
   /** True only when the rules already allow the request; never asks the user. */
   readonly allows: (input: AssertInput) => Effect.Effect<boolean, SessionErrors.NotFoundError>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError | InvalidReplyError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
@@ -118,6 +128,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pe
 interface Pending {
   readonly request: Request
   readonly agent?: Agent.ID
+  readonly prompt?: AssertInput["prompt"]
+  readonly sandboxCommand?: SandboxApproval.Command
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
@@ -130,6 +142,7 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
+    const approvals = yield* SandboxApproval.Service
     const pending = new Map<ID, Pending>()
     let closed = false
 
@@ -177,8 +190,21 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
+      const remembered =
+        input.action === "sandbox.exec" && input.prompt === "force" && input.sandboxCommand !== undefined
+          ? yield* approvals.allows(input.sessionID, input.sandboxCommand)
+          : false
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
+      const effect: Permission.Effect =
+        input.prompt === "force"
+          ? remembered
+            ? "allow"
+            : "ask"
+          : input.prompt === "skip"
+            ? "allow"
+            : effects.includes("ask")
+              ? "ask"
+              : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -188,11 +214,14 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
+      const requested = input.prompt === "force" && !remembered && event.effect === "allow" ? "ask" : event.effect
       const unattended = yield* Unattended
-      if (event.effect !== "ask" || unattended === undefined)
-        return { effect: event.effect, message: event.message, rules: all }
+      if (requested !== "ask" || unattended === undefined)
+        return { effect: requested, message: event.message, rules: all }
       const settled = [...all, ...unattended]
-      const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
+      const allowed =
+        input.prompt !== "force" &&
+        input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
       if (allowed) return { effect: "allow" as const, rules: all }
       return {
         effect: "deny" as const,
@@ -207,7 +236,12 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
+        save:
+          input.prompt === "force"
+            ? input.action === "sandbox.exec" && input.sandboxCommand
+              ? [input.sandboxCommand.prefix.join(" ")]
+              : undefined
+            : input.save,
         // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
         // fail the HttpApi response encoder when clients list pending requests.
         metadata:
@@ -218,11 +252,16 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: Agent.ID) =>
+    const create = (
+      request: Request,
+      agent?: Agent.ID,
+      prompt?: AssertInput["prompt"],
+      sandboxCommand?: SandboxApproval.Command,
+    ) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
-          const item = { request, agent, deferred }
+          const item = { request, agent, prompt, sandboxCommand, deferred }
           if (closed) {
             yield* Deferred.fail(deferred, new DeclinedError())
             return item
@@ -241,7 +280,7 @@ const layer = Layer.effect(
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
       const value = request(input, result.message)
-      if (result.effect === "ask") yield* create(value, input.agent)
+      if (result.effect === "ask") yield* create(value, input.agent, input.prompt, input.sandboxCommand)
       return { id: value.id, effect: result.effect }
     })
 
@@ -260,7 +299,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result.message), input.agent, input.prompt, input.sandboxCommand)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
@@ -300,6 +339,18 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+          const sandbox = existing.request.action === "sandbox.exec" || existing.request.action === "sandbox.workspace"
+          const sessionGrant =
+            sandbox &&
+            input.reply === "always" &&
+            input.saveSandboxPrefix === true &&
+            existing.request.action === "sandbox.exec" &&
+            existing.prompt === "force" &&
+            existing.sandboxCommand !== undefined
+          if ((sandbox && input.reply === "always" && !sessionGrant) || (input.saveSandboxPrefix && !sessionGrant))
+            return yield* new InvalidReplyError({
+              message: "This request cannot save a sandbox command prefix for the session.",
+            })
           yield* bus.publish(Permission.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
@@ -329,7 +380,9 @@ const layer = Layer.effect(
             return
           }
 
-          if (input.reply === "always" && existing.request.save?.length) {
+          if (sessionGrant && existing.sandboxCommand) {
+            yield* approvals.remember(existing.request.sessionID, existing.sandboxCommand)
+          } else if (input.reply === "always" && existing.request.save?.length) {
             yield* saved.add({
               projectID: location.project.id,
               action: existing.request.action,
@@ -338,12 +391,15 @@ const layer = Layer.effect(
           }
           yield* Deferred.succeed(existing.deferred, undefined)
           pending.delete(input.requestID)
-          if (input.reply !== "always" || !existing.request.save?.length) return
+          if (input.reply !== "always" || (!sessionGrant && !existing.request.save?.length)) return
 
           for (const [id, item] of pending) {
-            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
-              Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
-            )
+            const result = yield* evaluateInput({
+              ...item.request,
+              agent: item.agent,
+              prompt: item.prompt,
+              sandboxCommand: item.sandboxCommand,
+            }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
             if (result?.effect !== "allow") continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
@@ -376,5 +432,13 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Location.node, Agent.node, SessionStore.node, PermissionSaved.node, PluginHooks.node],
+  deps: [
+    Bus.node,
+    Location.node,
+    Agent.node,
+    SessionStore.node,
+    PermissionSaved.node,
+    PluginHooks.node,
+    SandboxApproval.node,
+  ],
 })

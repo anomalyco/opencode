@@ -19,6 +19,7 @@ import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { SessionInstructions } from "@opencode/core/session/instructions"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Environment } from "@opencode/core/environment/index"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -28,6 +29,7 @@ const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
+    AgentFiles.node,
     Tool.node,
     ReadToolFileSystem.node,
     FileAccess.node,

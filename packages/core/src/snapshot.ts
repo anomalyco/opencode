@@ -5,6 +5,7 @@ import path from "path"
 import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Sandbox } from "./sandbox.js"
 import { Git } from "./git.js"
 import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
@@ -76,6 +77,7 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
+    const sandbox = yield* Sandbox.Service
     const lifetime = yield* Scope.Scope
     const state = State.create<{ enabled: boolean }, Editor>({
       name: "snapshot",
@@ -111,7 +113,9 @@ const layer = Layer.effect(
       return RelativePath.make(path.relative(worktree, location.directory).replaceAll("\\", "/") || ".")
     })
 
-    const enabled = () => location.vcs?.type === "git" && state.get().enabled
+    // Capture and restore can execute Git filters on agent-modified files.
+    // Disable both while sandboxed; existing snapshot comparisons remain available.
+    const enabled = () => !sandbox.enabled && location.vcs?.type === "git" && state.get().enabled
 
     // `objects.pack` takes a cross-process lock, so a run that outlasts the interval never overlaps the next.
     let lastPackCheck = Number.NEGATIVE_INFINITY
@@ -218,7 +222,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [FSUtil.node, Git.node, Global.node, Location.node, Sandbox.node],
 })
 
 export const noopLayer = Layer.succeed(

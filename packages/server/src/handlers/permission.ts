@@ -77,9 +77,32 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         "session.permission.reply",
         Effect.fn(function* (ctx) {
           const owned = yield* requireOwnedRequest(ctx.params.sessionID, ctx.params.requestID)
+          if (
+            (owned.request.action === "sandbox.exec" || owned.request.action === "sandbox.workspace") &&
+            ctx.payload.decision !== "reject" &&
+            (ctx.payload.experimental?.acknowledgeSandbox !== true ||
+              (ctx.payload.decision !== "once" &&
+                !(
+                  owned.request.action === "sandbox.exec" &&
+                  ctx.payload.decision === "always" &&
+                  ctx.payload.experimental?.saveSandboxPrefix === true
+                )))
+          )
+            return yield* new ConflictError({
+              message:
+                "Present and acknowledge the sandbox scope. Session prefix approvals additionally require an eligible command and saveSandboxPrefix=true; workspace changes require decision=once.",
+            })
           yield* owned.permission
-            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.decision, message: ctx.payload.message })
-            .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
+            .reply({
+              requestID: ctx.params.requestID,
+              reply: ctx.payload.decision,
+              message: ctx.payload.message,
+              saveSandboxPrefix: ctx.payload.experimental?.saveSandboxPrefix,
+            })
+            .pipe(
+              Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)),
+              Effect.catchTag("Permission.InvalidReplyError", (error) => new ConflictError({ message: error.message })),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

@@ -42,13 +42,14 @@ function buttons(
   onHover: (option: PermissionOption) => void,
   onSelect: (option: PermissionOption) => void,
   mono: boolean,
+  action: string,
 ) {
   return (
     <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
       <For each={list}>
         {(option) => (
           <box
-            width={stringWidth(permissionLabel(option)) + 2}
+            width={stringWidth(permissionLabel(option, action)) + 2}
             height={1}
             flexShrink={0}
             paddingLeft={1}
@@ -66,7 +67,7 @@ function buttons(
               fg={option === selected ? theme.actionFocusedText : theme.actionSecondaryText}
               attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
             >
-              {permissionLabel(option)}
+              {permissionLabel(option, action)}
             </text>
           </box>
         )}
@@ -168,7 +169,8 @@ export function RunPermissionBody(props: {
     permissionOptions(stage()).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
   const busy = createMemo(() => state().submitting)
-  const controlsWidth = () => opts().reduce((total, option) => total + stringWidth(permissionLabel(option)) + 3, -1)
+  const controlsWidth = () =>
+    opts().reduce((total, option) => total + stringWidth(permissionLabel(option, props.request.action)) + 3, -1)
   const hint = () =>
     compact() && width() < 56
       ? "pgup/pgdn scroll"
@@ -212,7 +214,12 @@ export function RunPermissionBody(props: {
     }))
 
     try {
-      await props.onReply(next)
+      await props.onReply({
+        ...next,
+        ...(props.request.action === "sandbox.exec" || props.request.action === "sandbox.workspace"
+          ? { experimental: { acknowledgeSandbox: true, ...(props.request.action === "sandbox.exec" && next.decision === "always" ? { saveSandboxPrefix: true } : {}) } }
+          : {}),
+      })
     } catch {
       setState((prev) => ({
         ...prev,
@@ -529,6 +536,7 @@ export function RunPermissionBody(props: {
               },
               run,
               props.mono ?? false,
+              props.request.action,
             )}
           </box>
           <Show

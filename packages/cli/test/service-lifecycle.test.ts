@@ -15,6 +15,47 @@ import { isolatedEnv } from "./fixture/environment"
 
 const entry = path.join(import.meta.dir, "../src/index.ts")
 const serviceTest = process.platform === "win32" ? test.skip : test
+const sandboxAvailable =
+  process.platform === "darwin" &&
+  Bun.spawnSync(["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)", "/usr/bin/true"]).exitCode === 0
+
+test.skipIf(!sandboxAvailable)("service and standalone startup report the active sandbox policy", async () => {
+  await using home = await serviceHome()
+  const directory = path.join(home.root, "project")
+  await fs.mkdir(directory)
+  await fs.writeFile(
+    path.join(home.root, "config", "service-local.json"),
+    JSON.stringify({
+      port: home.port,
+      env: {},
+    }),
+  )
+  await fs.writeFile(path.join(home.root, "config", "opencode.jsonc"), JSON.stringify({ experimental: { sandbox: { enabled: true, approval: "never" } } }))
+  await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ experimental: { sandbox: { enabled: false, full_disk_read: true } } }))
+  await ensure(home)
+  const info = await settled(home)
+  const response = await fetch(`${info.url}/api/experimental/sandbox/status?location[directory]=${encodeURIComponent(directory)}`, {
+    headers: { authorization: `Basic ${btoa(`opencode:${info.password}`)}` },
+  })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({ active: true, escalation: "never" })
+  await stopped(home)
+  const standalone = JSON.parse(await cli(home, "debug", "sandbox", "--standalone"))
+  expect(standalone).toMatchObject({
+    active: true,
+    reads: "restricted",
+    escalation: "never",
+  })
+  await fs.writeFile(path.join(home.root, "config", "opencode.jsonc"), JSON.stringify({ experimental: { sandbox: { enabled: false } } }))
+  await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ experimental: { sandbox: { enabled: true } } }))
+  await ensure(home)
+  const disabled = await settled(home)
+  const projectStatus = await fetch(`${disabled.url}/api/experimental/sandbox/status?location[directory]=${encodeURIComponent(directory)}`, {
+    headers: { authorization: `Basic ${btoa(`opencode:${disabled.password}`)}` },
+  })
+  expect(await projectStatus.json()).toMatchObject({ active: false })
+  await stopped(home)
+})
 
 serviceTest(
   "concurrent CLI and client starts converge on one server",

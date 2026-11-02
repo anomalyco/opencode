@@ -25,6 +25,23 @@ test("accepts durable event persistence configuration", () => {
   expect(Option.getOrThrow(decode({ events: { persist: true } })).events).toEqual({ persist: true })
 })
 
+test("validates host-owned shell sandbox settings", () => {
+  const sandbox = {
+    enabled: true,
+    approval: "never",
+    fullDiskRead: true,
+    readableRoots: ["/opt/toolchain"],
+    writableRoots: [],
+  } satisfies NonNullable<ServerOptions["sandbox"]>
+  expect(Option.getOrThrow(decode({ sandbox })).sandbox).toEqual(sandbox)
+  expect(Option.isNone(decode({ sandbox: { enabled: "unsupported" } }))).toBe(true)
+  expect(Option.isNone(decode({ sandbox: { approval: "always" } }))).toBe(true)
+  expect(Option.isNone(decode({ sandbox: { readableRoots: "/opt/toolchain" } }))).toBe(true)
+  expect(Option.isNone(decode({ sandbox: { fullDiskRead: "true" } }))).toBe(true)
+  expect(Option.getOrThrow(decode({ sandbox: {} })).sandbox?.fullDiskRead).toBeUndefined()
+  expect(Option.getOrThrow(decode({ sandbox: { fullDiskRead: false } })).sandbox?.fullDiskRead).toBe(false)
+})
+
 test("accepts an optional CORS allowlist", () => {
   expect(Option.getOrThrow(decode({})).cors).toBeUndefined()
   expect(Option.getOrThrow(decode({ cors: [] })).cors).toEqual([])

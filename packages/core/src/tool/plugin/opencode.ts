@@ -10,6 +10,7 @@ import { Effect, Schema } from "effect"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
+import { Sandbox } from "../../sandbox.js"
 import { Worktree } from "../../worktree.js"
 
 export const RenameInput = Schema.Struct({
@@ -96,11 +97,14 @@ export const Plugin = {
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const sandbox = yield* Sandbox.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
         event.system.push(
           SystemPart.make(
-            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+            sandbox.enabled
+              ? "Model-facing worktree creation/removal is unavailable while sandboxing is enabled because it runs host Git and hooks. Worktree listing reads stored metadata only. Use an explicitly approved shell invocation for Git worktree commands. Changing a session's workspace requires a separate sandbox.workspace approval."
+              : "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
           ),
         )
       })
@@ -144,14 +148,38 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
+              const directory = yield* Effect.gen(function* () {
+                if (!sandbox.enabled) return input.directory
+                if (sandbox.approval === "never")
+                  return yield* new Sandbox.UnavailableError({
+                    message: "Sandbox workspace changes require approval, which is disabled on this server.",
+                  })
+                const session = yield* ctx.session.get({ sessionID })
+                const { realpath } = yield* Effect.promise(() => import("node:fs/promises"))
+                const target = AbsolutePath.make(
+                  yield* Effect.tryPromise(() =>
+                    realpath(FileAccess.resolvePath(session.location.directory, input.directory)),
+                  ),
+                )
+                yield* permission.assert({
+                  action: "sandbox.workspace",
+                  resources: [target],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
+                  metadata: { directory: target, targetSessionID: sessionID },
+                  prompt: "force",
+                })
+                return target
+              })
               yield* ctx.session.move({
                 sessionID,
-                directory: input.directory,
+                directory,
                 delivery: "steer",
               })
               return {
-                output: { sessionID, directory: input.directory },
-                content: `Moved session ${sessionID} to ${input.directory}.`,
+                output: { sessionID, directory },
+                content: `Moved session ${sessionID} to ${directory}.`,
               }
             }).pipe(
               Effect.mapError(
@@ -166,12 +194,19 @@ export const Plugin = {
           output: Worktree.Info,
           options: { namespace: "opencode", codemode: true, pinned: true },
           execute: (input) =>
-            ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
-              Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to create worktree ${input.name}`, error }),
-              ),
-            ),
+            sandbox.enabled
+              ? Effect.fail(
+                  new ToolFailure({
+                    message:
+                      "Worktree creation is unavailable while sandboxing is enabled. Use the shell tool with sandbox_permissions=require_escalated and a justification.",
+                  }),
+                )
+              : ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
+                  Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
+                  Effect.mapError(
+                    (error) => new ToolFailure({ message: `Unable to create worktree ${input.name}`, error }),
+                  ),
+                ),
         })
         draft.add({
           name: "worktree_list",
@@ -194,6 +229,11 @@ export const Plugin = {
           options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
           execute: (input, context) =>
             Effect.gen(function* () {
+              if (sandbox.enabled)
+                return yield* new ToolFailure({
+                  message:
+                    "Worktree removal is unavailable while sandboxing is enabled. Use the shell tool with sandbox_permissions=require_escalated and a justification.",
+                })
               // Removing a worktree deletes files, so it requires the same approval as editing them.
               const target = yield* access.resolve({ path: input.directory, kind: "directory" })
               yield* permission.assert({

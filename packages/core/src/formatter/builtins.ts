@@ -1,10 +1,13 @@
 import { Effect } from "effect"
-import { ChildProcess } from "effect/process"
 import { isRecord } from "@opencode/util/record"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Npm } from "@opencode/util/npm"
 import { AppProcess } from "@opencode/util/process"
 import { which } from "../util/which.js"
+import type { EnvironmentFiles } from "../environment/files.js"
+import type { Sandbox } from "../sandbox.js"
+import { FormatterDiscovery } from "./discovery.js"
+import { FormatterProcess } from "./process.js"
 
 export interface Info {
   readonly name: string
@@ -16,25 +19,38 @@ export interface Info {
 export function make(input: {
   readonly directory: string
   readonly worktree: string
-  readonly fs: FSUtil.Interface
-  readonly npm: Npm.Interface
+  readonly fs: Pick<FSUtil.Interface, "findUp" | "readFileString" | "readJson">
+  readonly npm: Pick<Npm.Interface, "which">
   readonly processes: AppProcess.Interface
   readonly bin: string
+  readonly sandbox: Sandbox.Interface
+  readonly files: EnvironmentFiles.Files
 }) {
   const disabled = false as const
-  const findExecutable = (name: string) => which(name, undefined, input.bin)
-  const findUp = (target: string) => input.fs.findUp(target, input.directory, input.worktree)
-  const readText = (file: string) => input.fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))
+  const discovery = input.sandbox.enabled
+    ? FormatterDiscovery.confined(input.files, input.directory, input.bin)
+    : undefined
+  const findExecutable = (name: string) =>
+    discovery ? discovery.findExecutable(name) : Effect.sync(() => which(name, undefined, input.bin))
+  const findUp = (target: string) =>
+    discovery ? discovery.findUp(target) : input.fs.findUp(target, input.directory, input.worktree)
+  const readJson = Effect.fnUntraced(function* (file: string) {
+    return discovery ? yield* discovery.readJson(file) : yield* input.fs.readJson(file)
+  })
+  const packageBinary = (pkg: string) => (discovery ? discovery.packageBinary(pkg) : input.npm.which(pkg))
+  const readText = Effect.fnUntraced(
+    function* (file: string) {
+      return discovery ? yield* discovery.readFileString(file) : yield* input.fs.readFileString(file)
+    },
+    Effect.orElseSucceed(() => ""),
+  )
   const commandOutput = (command: string[]) =>
-    input.processes
-      .run(
-        ChildProcess.make(command[0], command.slice(1), {
-          cwd: input.directory,
-          extendEnv: true,
-          stdin: "ignore",
-        }),
-      )
-      .pipe(Effect.option)
+    FormatterProcess.run({
+      processes: input.processes,
+      sandbox: input.sandbox,
+      directory: input.directory,
+      command,
+    }).pipe(Effect.option)
 
   const gofmt = executable("gofmt", [".go"], ["-w", "$FILE"], findExecutable)
 
@@ -78,8 +94,8 @@ export function make(input: {
     ],
     enabled: Effect.gen(function* () {
       for (const file of yield* findUp("package.json")) {
-        if (!hasDependency(yield* input.fs.readJson(file), "prettier")) continue
-        const bin = yield* input.npm.which("prettier")
+        if (!hasDependency(yield* readJson(file), "prettier")) continue
+        const bin = yield* packageBinary("prettier")
         if (bin) return [bin, "--write", "$FILE"]
       }
       return disabled
@@ -92,8 +108,8 @@ export function make(input: {
     extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
     enabled: Effect.gen(function* () {
       for (const file of yield* findUp("package.json")) {
-        if (!hasDependency(yield* input.fs.readJson(file), "oxfmt")) continue
-        const bin = yield* input.npm.which("oxfmt")
+        if (!hasDependency(yield* readJson(file), "oxfmt")) continue
+        const bin = yield* packageBinary("oxfmt")
         if (bin) return [bin, "$FILE"]
       }
       return disabled
@@ -134,7 +150,7 @@ export function make(input: {
     enabled: Effect.gen(function* () {
       const found = yield* Effect.forEach(["biome.json", "biome.jsonc"], findUp, { concurrency: "unbounded" })
       if (!found.some((items) => items.length > 0)) return disabled
-      const bin = yield* input.npm.which("@biomejs/biome")
+      const bin = yield* packageBinary("@biomejs/biome")
       return bin ? [bin, "format", "--write", "$FILE"] : disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
@@ -146,7 +162,7 @@ export function make(input: {
     extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
     enabled: Effect.gen(function* () {
       if (!(yield* findUp(".clang-format")).length) return disabled
-      const match = findExecutable("clang-format")
+      const match = yield* findExecutable("clang-format")
       return match ? [match, "-i", "$FILE"] : disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
@@ -157,7 +173,7 @@ export function make(input: {
     name: "ruff",
     extensions: [".py", ".pyi"],
     enabled: Effect.gen(function* () {
-      const bin = findExecutable("ruff")
+      const bin = yield* findExecutable("ruff")
       if (!bin) return disabled
       for (const config of ["pyproject.toml", "ruff.toml", ".ruff.toml"]) {
         const found = yield* findUp(config)
@@ -178,7 +194,7 @@ export function make(input: {
     name: "air",
     extensions: [".R"],
     enabled: Effect.gen(function* () {
-      const bin = findExecutable("air")
+      const bin = yield* findExecutable("air")
       if (!bin) return disabled
       const output = yield* commandOutput([bin, "--help"])
       if (output._tag === "None" || output.value.exitCode !== 0) return disabled
@@ -191,7 +207,7 @@ export function make(input: {
     name: "uv",
     extensions: [".py", ".pyi"],
     enabled: Effect.gen(function* () {
-      const bin = findExecutable("uv")
+      const bin = yield* findExecutable("uv")
       if (!bin) return disabled
       const output = yield* commandOutput([bin, "format", "--help"])
       return output._tag === "Some" && output.value.exitCode === 0 ? [bin, "format", "--", "$FILE"] : disabled
@@ -208,7 +224,7 @@ export function make(input: {
     extensions: [".ml", ".mli"],
     enabled: Effect.gen(function* () {
       if (!(yield* findUp(".ocamlformat")).length) return disabled
-      const match = findExecutable("ocamlformat")
+      const match = yield* findExecutable("ocamlformat")
       return match ? [match, "-i", "$FILE"] : disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
@@ -225,7 +241,7 @@ export function make(input: {
     extensions: [".php"],
     enabled: Effect.gen(function* () {
       for (const file of yield* findUp("composer.json")) {
-        const json = yield* input.fs.readJson(file)
+        const json = yield* readJson(file)
         if (hasRecordKey(json, "require", "laravel/pint") || hasRecordKey(json, "require-dev", "laravel/pint")) {
           return ["./vendor/bin/pint", "$FILE"]
         }
@@ -272,13 +288,13 @@ function executable(
   name: string,
   extensions: readonly string[],
   args: string[],
-  findExecutable: (name: string) => string | null,
+  findExecutable: (name: string) => Effect.Effect<string | null>,
 ): Info {
   return {
     name,
     extensions,
-    enabled: Effect.sync(() => {
-      const match = findExecutable(name)
+    enabled: Effect.gen(function* () {
+      const match = yield* findExecutable(name)
       return match ? [match, ...args] : false
     }),
   }

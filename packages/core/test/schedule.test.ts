@@ -22,6 +22,7 @@ import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Schedule } from "@opencode/core/schedule"
+import { Sandbox } from "@opencode/core/sandbox"
 import { ScheduleTable } from "@opencode/core/schedule/sql"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -111,6 +112,9 @@ const shellState = {
   hangMs: 0,
   runs: [] as string[],
   missingNow: false,
+  sandboxed: false,
+  launches: [] as string[],
+  executables: [] as string[],
 }
 const slack = { replies: 0, reads: 0, exports: 0, failing: false }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
@@ -126,6 +130,7 @@ const testEnvironment = Layer.effect(
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
         const script = command._tag === "StandardCommand" ? (command.args.at(-1) ?? command.command) : "pipeline"
+        shellState.executables.push(command._tag === "StandardCommand" ? command.command : "pipeline")
         shellState.runs.push(script)
         if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
         const outBytes = new TextEncoder().encode(shellState.stdout)
@@ -261,6 +266,19 @@ const locations = makeGlobalNode({
               ),
             ),
             Layer.mock(McpTool.Service, { flush: Effect.void }),
+            Layer.mock(Sandbox.Service, {
+              enabled: shellState.sandboxed,
+              approval: "on-request",
+              fullDiskRead: false,
+              status: () => {
+                throw new Error("Sandbox status is not used by this fixture")
+              },
+              command: (input) =>
+                Effect.sync(() => {
+                  shellState.launches.push(input.command)
+                  return { command: "/usr/bin/sandbox-exec", args: ["--", input.command, ...input.args], env: {} }
+                }),
+            }),
             Layer.succeed(
               ShellSelect.Service,
               ShellSelect.Service.of({
@@ -326,6 +344,9 @@ const setup = (directory = enabledDirectory) =>
     shellState.hangMs = 0
     shellState.runs = []
     shellState.missingNow = false
+    shellState.sandboxed = false
+    shellState.launches = []
+    shellState.executables = []
     slack.replies = 0
     slack.reads = 0
     slack.exports = 0
@@ -685,16 +706,20 @@ describe("Schedule", () => {
   it.effect("run sleeps until the next schedule is due", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
-      const fiber = yield* Effect.forkChild(schedules.run)
       const schedule = yield* schedules.create({
         sessionID,
         when: { type: "in", in: "10 seconds" },
         action: { type: "prompt", prompt: "soon" },
       })
+      const fiber = yield* Effect.forkChild(schedules.run, { startImmediately: true })
       yield* TestClock.adjust("9 seconds")
       expect(yield* pending).toEqual([])
       yield* TestClock.adjust("1 second")
-      yield* Effect.yieldNow
+      yield* TestClock.withLive(
+        Effect.gen(function* () {
+          while (!(yield* pending).includes(messageID(schedule, 1))) yield* Effect.sleep("1 millis")
+        }).pipe(Effect.timeout("1 second")),
+      )
       expect(yield* pending).toEqual([messageID(schedule, 1)])
       yield* Fiber.interrupt(fiber)
     }),
@@ -892,6 +917,21 @@ describe("Schedule", () => {
   )
 
   describe("shell checks", () => {
+    it.effect("runs scheduled shell checks through the sandbox when enabled", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.sandboxed = true
+        yield* schedules.create({
+          sessionID,
+          until: { type: "shell", run: "printf ready" },
+          action: { type: "prompt", prompt: "Ready." },
+        })
+        expect(shellState.launches).toEqual(["/bin/bash"])
+        expect(shellState.executables).toEqual(["/usr/bin/sandbox-exec"])
+        expect(shellState.runs).toEqual(["printf ready"])
+      }),
+    )
+
     it.effect("returns done immediately without queuing a prompt when an until check already passes at creation", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
@@ -1511,7 +1551,11 @@ describe("Schedule", () => {
 
         // Bounded MAX_SLEEP (30s) wakes the idle loop, claims leadership, and fires the row.
         yield* TestClock.adjust("30 seconds")
-        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        yield* TestClock.withLive(
+          Effect.gen(function* () {
+            while ((yield* primary.get(externalID)).status !== "done") yield* Effect.sleep("1 millis")
+          }).pipe(Effect.timeout("1 second")),
+        )
         yield* Fiber.interrupt(runner)
 
         expect(yield* primary.get(externalID)).toMatchObject({

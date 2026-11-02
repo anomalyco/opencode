@@ -12,9 +12,11 @@ submit one that will be an automatic ban from the project.
 
 OpenCode is an AI-powered coding assistant that runs locally on your machine. It provides an agent system with access to powerful tools including shell execution, file operations, and web access.
 
-### No Sandbox
+### Sandboxing
 
-OpenCode does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
+By default, OpenCode does not sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking; it is not designed to provide security isolation.
+
+An experimental, opt-in macOS sandbox confines covered agent commands, file operations, searches, and formatters. It does not isolate the entire server or trusted plugins, providers, MCP services, web access, and human-operated APIs. Approved escapes run with host authority. See the [sandbox documentation](./services/www/src/docs/content/sandbox.mdx) and [authority audit](./SANDBOX_AUDIT.md) for the boundary and limitations.
 
 If you need true isolation, run OpenCode inside a Docker container or VM.
 
@@ -27,7 +29,7 @@ Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to requ
 | Category                        | Rationale                                                               |
 | ------------------------------- | ----------------------------------------------------------------------- |
 | **Server access when opted-in** | If you enable server mode, API access is expected behavior              |
-| **Sandbox escapes**             | The permission system is not a sandbox (see above)                      |
+| **Permission system bypasses**   | The permission system is not a sandbox (see above)                      |
 | **LLM provider data handling**  | Data sent to your configured LLM provider is governed by their policies |
 | **MCP server behavior**         | External MCP servers you configure are outside our trust boundary       |
 | **Malicious config files**      | Users control their own config; modifying it is not an attack vector    |

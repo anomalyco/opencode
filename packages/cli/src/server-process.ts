@@ -14,6 +14,7 @@ import { NetAddress } from "effect/net"
 import { Env } from "./env"
 import { PortOwner } from "./services/port-owner"
 import { ServiceConfig } from "./services/service-config"
+import { SandboxConfig } from "./services/sandbox-config"
 import { RetainedImage } from "./services/retained-image"
 import { ServiceRegistration } from "./services/service-registration"
 import { RemoteTunnel } from "./services/remote-tunnel"
@@ -82,6 +83,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (options.mode === "service" && process.platform === "win32" && RetainedImage.installed(global.home))
         yield* RetainedImage.retain(global.cache, "service")
       const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
+      const { ServerOptions } = yield* Effect.promise(() => import("@opencode/server/options"))
+      const configured = yield* SandboxConfig.read(global.config)
+      const sandbox = yield* Schema.decodeUnknownEffect(ServerOptions.fields.sandbox)({
+        enabled: configured.enabled,
+        approval: configured.approval,
+        fullDiskRead: configured.full_disk_read,
+        readableRoots: configured.readable_roots,
+        writableRoots: configured.writable_roots,
+      })
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
@@ -110,6 +120,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           cors: options.cors ?? config.cors,
           password,
           pty: { handoff },
+          sandbox,
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
             path: databasePath(global.data),

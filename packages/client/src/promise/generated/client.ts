@@ -306,6 +306,8 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  ExperimentalSandboxStatusInput,
+  ExperimentalSandboxStatusOutput,
   ExperimentalMigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1681,6 +1683,20 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      sandbox: {
+        status: (input?: ExperimentalSandboxStatusInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSandboxStatusOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/sandbox/status`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       migration: {
         v1: {
           status: (requestOptions?: RequestOptions) =>
@@ -2167,9 +2183,9 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
-            body: { decision: input["decision"], message: input["message"] },
+            body: { decision: input["decision"], message: input["message"], experimental: input["experimental"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 409],
             empty: true,
           },
           requestOptions,
@@ -2745,6 +2761,11 @@ export function make(options: ClientOptions) {
       watch: client.experimental.file.watch,
       /** @deprecated Use `client.experimental.file.unwatch`. Removed in the next minor. */
       unwatch: client.experimental.file.unwatch,
+    },
+    /** @deprecated Use `client.experimental.sandbox`. Removed in the next minor. */
+    sandbox: {
+      /** @deprecated Use `client.experimental.sandbox.status`. Removed in the next minor. */
+      status: client.experimental.sandbox.status,
     },
     /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */
     migration: {

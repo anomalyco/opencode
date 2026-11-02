@@ -6,6 +6,7 @@ import { FileMutation } from "@opencode/core/file-mutation"
 import { Formatter } from "@opencode/core/formatter"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
@@ -25,7 +26,15 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, FileAccess.node, FileMutation.node, Environment.node, Formatter.node, Permission.node],
+  deps: [
+    AgentFiles.node,
+    Tool.node,
+    FileAccess.node,
+    FileMutation.node,
+    Environment.node,
+    Formatter.node,
+    Permission.node,
+  ],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")

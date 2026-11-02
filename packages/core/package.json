@@ -25,6 +25,7 @@
     "pack": "bun run script/pack.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
+    "test:sandbox": "bun run script/test-sandbox.ts",
     "typecheck": "bun check --no-script -b -p tsconfig.tests.json",
     "typecheck:tsc": "tsc -b tsconfig.json tsconfig.tests.json"
   },

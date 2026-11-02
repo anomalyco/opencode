@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
+import { AgentFiles } from "./agent-files.js"
 import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { Permission } from "./permission.js"
@@ -87,7 +88,8 @@ const invocation = (context: Invocation) => ({
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { files } = yield* Environment.Service
+    const agentFiles = yield* AgentFiles.Service
+    const files = agentFiles.files
     const exists = (file: string) => Environment.exists(files, file)
     const location = yield* Location.Service
     const permission = yield* Permission.Service
@@ -117,7 +119,12 @@ const layer = Layer.effect(
           action: "external_directory",
           directory,
           resource: slash(path.join(directory, "*")),
-          save: slash(path.join((yield* Project.root({ exists }, directory)) ?? directory, "*")),
+          save: slash(
+            path.join(
+              (agentFiles.sandboxed ? undefined : yield* Project.root({ exists }, directory)) ?? directory,
+              "*",
+            ),
+          ),
         },
       } satisfies Target
     })
@@ -134,6 +141,7 @@ const layer = Layer.effect(
       if (external.length === 0) return
       yield* permission.assert({
         action: "external_directory",
+        prompt: agentFiles.sandboxed ? "skip" : undefined,
         resources: external.map((item) => item.resource),
         save: external.map((item) => item.save),
         ...(metadata === undefined ? {} : { metadata }),
@@ -153,6 +161,7 @@ const layer = Layer.effect(
       if (!sibling) yield* authorizeExternal([target], context)
       yield* permission.assert({
         action: "read",
+        prompt: agentFiles.sandboxed ? "skip" : undefined,
         resources: [target.resource],
         save: ["*"],
         ...invocation(context),
@@ -167,5 +176,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Location.node, Permission.node],
+  deps: [AgentFiles.node, Location.node, Permission.node],
 })

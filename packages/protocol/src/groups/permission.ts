@@ -144,9 +144,19 @@ export const makePermissionGroup = <
         payload: Schema.Struct({
           decision: Permission.Reply,
           message: Schema.String.pipe(Schema.optional),
+          experimental: Schema.Struct({
+            acknowledgeSandbox: Schema.Boolean.pipe(Schema.optional).annotate({
+              description:
+                "Set only after presenting the sandbox-specific command/workspace scope. Required for sandbox approvals; rejection does not require it.",
+            }),
+            saveSandboxPrefix: Schema.Boolean.pipe(Schema.optional).annotate({
+              description:
+                "With decision=always and acknowledgeSandbox=true, approve the server-offered command prefix for this session until server restart. Valid only for eligible sandbox.exec requests; never saves a project permission.",
+            }),
+          }).pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, PermissionNotFoundError],
+        error: [SessionNotFoundError, PermissionNotFoundError, ConflictError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

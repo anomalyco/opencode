@@ -10,6 +10,7 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
@@ -144,20 +145,117 @@ it.effect("groups available models by provider with paging", () =>
   }),
 )
 
-const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false }
+const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false, denyWorkspace: false }
 const worktreeIt = testEffect(
   makePluginTestLayer(
     permissionLayer({
       assert: (input) =>
-        Effect.sync(() => approvals.assertions.push(input)).pipe(
-          Effect.andThen(
-            approvals.rejectEdit && input.action === "edit"
-              ? Effect.fail(new Permission.CorrectedError({ feedback: "Keep this worktree" }))
-              : Effect.void,
-          ),
-        ),
+        Effect.gen(function* () {
+          approvals.assertions.push(input)
+          if (approvals.rejectEdit && input.action === "edit")
+            return yield* new Permission.CorrectedError({ feedback: "Keep this worktree" })
+          if (approvals.denyWorkspace && input.action === "sandbox.workspace")
+            return yield* new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            })
+        }),
     }),
   ),
+)
+
+worktreeIt.live("agent session moves cannot expand the sandbox without workspace approval", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const location = yield* Location.Service
+    const sandbox = yield* Sandbox.Service
+    const registry = yield* Tool.Service
+    const target = yield* tmpdirScoped()
+    const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
+    approvals.assertions.length = 0
+    approvals.denyWorkspace = true
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        approvals.denyWorkspace = false
+      }),
+    )
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins)).pipe(
+      Effect.provideService(Sandbox.Service, { ...sandbox, enabled: true }),
+    )
+    const result = yield* executeTool(registry, {
+      sessionID: session.id,
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "move-sandbox",
+        name: "execute",
+        input: { code: `return await tools.opencode.session_move(${JSON.stringify({ directory: target.path })})` },
+      },
+    })
+    expect(result).toMatchObject({ metadata: { error: true } })
+    expect(approvals.assertions).toMatchObject([
+      {
+        action: "sandbox.workspace",
+        resources: [target.path],
+        prompt: "force",
+        metadata: { directory: target.path, targetSessionID: session.id },
+      },
+    ])
+    expect((yield* sessions.get(session.id)).location.directory).toBe(location.directory)
+  }),
+)
+
+worktreeIt.live("sandboxed worktree mutations cannot reach host services directly or through Code Mode", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sandbox = yield* Sandbox.Service
+    const registry = yield* Tool.Service
+    const sessions = yield* Session.Service
+    const location = yield* Location.Service
+    const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
+    const host = yield* PluginHost.make(plugins)
+    yield* OpenCodeTools.Plugin.effect({
+      ...host,
+      worktree: {
+        ...host.worktree,
+        create: () => Effect.die("Sandboxed tool reached host worktree creation"),
+        remove: () => Effect.die("Sandboxed tool reached host worktree removal"),
+      },
+    }).pipe(Effect.provideService(Sandbox.Service, { ...sandbox, enabled: true }))
+    for (const [name, input] of [
+      ["worktree_create", { name: "blocked" }],
+      ["worktree_remove", { directory: location.directory, force: true }],
+    ] as const) {
+      // Disabling Code Mode exposes the same registered leaf as a direct tool.
+      const direct = yield* registry.snapshot([{ action: "execute", resource: "*", effect: "deny" }]).pipe(
+        Effect.flatMap((snapshot) =>
+          snapshot.execute({
+            sessionID: session.id,
+            ...toolIdentity,
+            call: { type: "tool-call", id: `direct-${name}`, name: `opencode_${name}`, input },
+          }),
+        ),
+        Effect.flip,
+      )
+      expect(direct.message).toContain("unavailable while sandboxing is enabled")
+      const code = yield* executeTool(registry, {
+        sessionID: session.id,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: `code-${name}`,
+          name: "execute",
+          input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+        },
+      })
+      expect(code.metadata).toMatchObject({ error: true })
+      expect(code.content?.[0]).toMatchObject({
+        text: expect.stringContaining("unavailable while sandboxing is enabled"),
+      })
+    }
+  }),
 )
 
 worktreeIt.live("creates, lists, and removes worktrees for the plugin's project", () =>

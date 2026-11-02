@@ -166,8 +166,10 @@ export async function runNonInteractivePrompt(input: Input) {
   }) => {
     // Nobody can approve here. Outside V1 compatibility, reject with feedback so the tool fails
     // as ordinary model-visible output and the model continues without the action.
-    const continuing = !input.auto && input.compatibility !== "v1"
-    if (!input.auto) {
+    // Routine auto-approval must never grant authority outside the OS sandbox.
+    const auto = input.auto && !request.action.startsWith("sandbox.")
+    const continuing = !auto && input.compatibility !== "v1"
+    if (!auto) {
       if (!continuing) permissionRejected = true
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
@@ -179,11 +181,11 @@ export async function runNonInteractivePrompt(input: Input) {
       .reply({
         sessionID: request.sessionID,
         requestID: request.id,
-        decision: input.auto ? "once" : "reject",
+        decision: auto ? "once" : "reject",
         ...(continuing ? { message: PERMISSION_REJECTED_FEEDBACK } : {}),
       })
       .catch(() => {})
-    if (!input.auto && !continuing) {
+    if (!auto && !continuing) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
     }
   }

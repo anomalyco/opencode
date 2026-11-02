@@ -37,6 +37,7 @@ import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { AgentFiles } from "../agent-files.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { Formatter } from "../formatter.js"
@@ -112,6 +113,7 @@ import { VcsGitPlugin } from "./vcs/git.js"
 import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { Sandbox } from "../sandbox.js"
 
 const services = [
   Agent.Service,
@@ -124,6 +126,7 @@ const services = [
   Credential.Service,
   Bus.Service,
   Environment.Service,
+  AgentFiles.Service,
   FileAccess.Service,
   FileMutation.Service,
   Formatter.Service,
@@ -150,11 +153,13 @@ const services = [
   WebSearch.Service,
   Ripgrep.Service,
   Schedule.Service,
+  Ripgrep.AgentService,
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
   SubagentJob.Service,
   Shell.Service,
+  Sandbox.Service,
   ShellSelect.Service,
   Snapshot.Service,
   Skill.Service,
@@ -180,6 +185,7 @@ export const requirements = LayerNode.group([
   Credential.node,
   Bus.node,
   Environment.node,
+  AgentFiles.node,
   FileAccess.node,
   FileMutation.node,
   Formatter.node,
@@ -206,11 +212,13 @@ export const requirements = LayerNode.group([
   WebSearch.node,
   Ripgrep.node,
   Schedule.node,
+  Ripgrep.agentNode,
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
   SubagentJob.node,
   Shell.node,
+  Sandbox.node,
   ShellSelect.node,
   Snapshot.node,
   Skill.node,
@@ -295,13 +303,18 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const sandbox = Context.get(context, Sandbox.Service)
   const resolve = (plugins: readonly InternalPlugin[]) =>
-    plugins.map(
-      (plugin): Plugin => ({
-        id: plugin.id,
-        effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
-      }),
-    )
+    plugins
+      // The shipped browser can upload host files and operate outside this boundary.
+      // Do not register it in sandboxed Locations; explicit external plugins remain trusted.
+      .filter((plugin) => !sandbox.enabled || plugin.id !== BrowserPlugin.id)
+      .map(
+        (plugin): Plugin => ({
+          id: plugin.id,
+          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+        }),
+      )
   return {
     pre: resolve(pre),
     post: resolve(post),

@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Environment } from "@opencode/core/environment/index"
 import { Formatter } from "@opencode/core/formatter"
 import { FileMutation } from "@opencode/core/file-mutation"
@@ -40,6 +41,7 @@ const patchToolNode = makeLocationNode({
     }),
   ),
   deps: [
+    AgentFiles.node,
     Tool.node,
     FileAccess.node,
     FileMutation.node,
@@ -910,7 +912,7 @@ describe("PatchTool", () => {
           status: "error",
           error: {
             type: "tool.execution",
-            message: "Wrote new.txt but failed to remove old.txt: forced remove failure",
+            message: "Wrote new.txt but failed to remove old.txt; both paths may now exist: forced remove failure",
           },
         })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "old.txt"), "utf8"))).toBe("before\n")

@@ -1,8 +1,33 @@
 import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { InvalidRequestError, UnknownError } from "../errors.js"
+import { InvalidRequestError, UnknownError, ServiceUnavailableError, LocationNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
+
+export const SandboxGroup = HttpApiGroup.make("server.sandbox")
+  .add(
+    HttpApiEndpoint.get("sandbox.status", "/api/experimental/sandbox/status", {
+      query: LocationQuery,
+      success: Schema.Struct({
+        active: Schema.Boolean,
+        reads: Schema.Literals(["unrestricted", "restricted", "broad"]),
+        escalation: Schema.Literals(["on-request", "never", "disabled"]),
+        writableRoots: Schema.Array(Schema.String),
+        readableRoots: Schema.Array(Schema.String),
+      }),
+      error: [ServiceUnavailableError, LocationNotFoundError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.sandbox.status",
+          summary: "Inspect the effective sandbox policy",
+          description:
+            "Experimental: may change without compatibility guarantees. Report the connected server's checked policy for the requested Location, including writable roots, read mode and escalation. Client environment settings do not affect this response.",
+        }),
+      ),
+  )
+  .annotateMerge(OpenApi.annotations({ title: "sandbox" }))
 
 export const DebugGroup = HttpApiGroup.make("server.debug")
   .add(

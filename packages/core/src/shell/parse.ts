@@ -602,7 +602,7 @@ function environment(key: string) {
   return name ? process.env[name] : undefined
 }
 
-function prefix(tokens: string[]) {
+export function prefix(tokens: string[]) {
   for (let length = tokens.length; length > 0; length--) {
     const arity = ARITY[tokens.slice(0, length).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)

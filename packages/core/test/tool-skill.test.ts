@@ -11,6 +11,7 @@ import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Bus } from "@opencode/core/bus"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { Image } from "@opencode/core/image"
@@ -25,12 +26,61 @@ import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/poli
 const skillToolNode = makeLocationNode({
   name: "test/skill-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(SkillTool.Plugin)),
-  deps: [Tool.node, FSUtil.node, Skill.node, Permission.node],
+  deps: [Sandbox.node, Tool.node, FSUtil.node, Skill.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_skill_tool_test")
 
 describe("SkillTool", () => {
+  it.live("sandboxed skills return registered instructions without scanning host resources", () =>
+    Effect.gen(function* () {
+      const tools = yield* Tool.Service
+      const skills = yield* Skill.Service
+      const info = Skill.Info.make({
+        id: Skill.ID.make("configured"),
+        name: Skill.Name.make("Configured"),
+        path: AbsolutePath.make("/unreadable/global/SKILL.md"),
+        content: "Registered host instructions",
+      })
+      yield* skills.transform((editor) => editor.add(info))
+      const result = yield* executeTool(tools, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "configured-skill", name: "skill", input: { id: info.id } },
+      })
+      expect(result).toMatchObject({
+        status: "completed",
+        output: { directory: "/unreadable/global", output: Skill.toModelOutput(info, []) },
+      })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, Skill.node, skillToolNode]), [
+          Sandbox.node.replace(
+            Layer.mock(Sandbox.Service, {
+              enabled: true,
+              approval: "on-request",
+              fullDiskRead: false,
+              status: () => {
+                throw new Error("Sandbox status is not used by this fixture")
+              },
+            }),
+          ),
+          Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
+          FSUtil.node.replace(
+            Layer.effect(
+              FSUtil.Service,
+              FSUtil.Service.use((fs) =>
+                Effect.succeed(
+                  FSUtil.Service.of({ ...fs, scan: () => Effect.die("Sandboxed skill scanned host resources") }),
+                ),
+              ),
+            ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node))),
+          ),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("refuses a policy-blocked skill before authorization or content preparation", () =>
     Effect.gen(function* () {
       const skills = yield* Skill.Service
@@ -58,6 +108,16 @@ describe("SkillTool", () => {
     }).pipe(
       Effect.provide(
         AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node, Bus.node]), [
+          Sandbox.node.replace(
+            Layer.mock(Sandbox.Service, {
+              enabled: false,
+              approval: "on-request",
+              fullDiskRead: false,
+              status: () => {
+                throw new Error("Sandbox status is not used by this fixture")
+              },
+            }),
+          ),
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),
@@ -112,6 +172,16 @@ describe("SkillTool", () => {
             list: () => Effect.succeed(current),
           })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
+            Sandbox.node.replace(
+              Layer.mock(Sandbox.Service, {
+                enabled: false,
+                approval: "on-request",
+                fullDiskRead: false,
+                status: () => {
+                  throw new Error("Sandbox status is not used by this fixture")
+                },
+              }),
+            ),
             Permission.node.replace(permission),
             Skill.node.replace(skills),
             Image.node.replace(imagePassthrough),

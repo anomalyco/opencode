@@ -55,6 +55,8 @@ export namespace RipgrepBinary {
 
   interface Interface {
     readonly filepath: Effect.Effect<string, Error>
+    /** Pinned upstream executable, independent of package-manager library paths. */
+    readonly standalone: Effect.Effect<string, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/RipgrepBinary") {}
@@ -115,37 +117,42 @@ export namespace RipgrepBinary {
         if (process.platform !== "win32") yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
+      const standalone = yield* Effect.cached(
+        Effect.gen(function* () {
+          const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
+          if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+
+          const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
+          const config = PLATFORM[platformKey]
+          if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
+
+          const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
+          const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
+          const archive = path.join(global.bin, filename)
+
+          yield* Effect.logInfo("downloading ripgrep", { url })
+          yield* fs.ensureDir(global.bin).pipe(Effect.orDie)
+          const bytes = yield* HttpClientRequest.get(url).pipe(
+            http.execute,
+            Effect.flatMap((response) => response.arrayBuffer),
+            Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
+          )
+          if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
+          verify(new Uint8Array(bytes), filename, config.sha256)
+
+          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+          yield* extract(archive, config, target)
+          yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
+          return target
+        }),
+      )
       return Service.of({
+        standalone,
         filepath: yield* Effect.cached(
           Effect.gen(function* () {
             const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
             if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
-
-            const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
-            if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
-
-            const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
-            const config = PLATFORM[platformKey]
-            if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
-
-            const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
-            const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
-            const archive = path.join(global.bin, filename)
-
-            yield* Effect.logInfo("downloading ripgrep", { url })
-            yield* fs.ensureDir(global.bin).pipe(Effect.orDie)
-            const bytes = yield* HttpClientRequest.get(url).pipe(
-              http.execute,
-              Effect.flatMap((response) => response.arrayBuffer),
-              Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
-            )
-            if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
-            verify(new Uint8Array(bytes), filename, config.sha256)
-
-            yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
-            yield* extract(archive, config, target)
-            yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
-            return target
+            return yield* standalone
           }),
         ),
       })

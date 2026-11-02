@@ -45,6 +45,7 @@ import { SessionTitle } from "./session/title.js"
 import { SessionContext } from "./session/context.js"
 import { Skill } from "./skill.js"
 import { SkillInstructions } from "./skill/instructions.js"
+import { Sandbox } from "./sandbox.js"
 import { Snapshot } from "./snapshot.js"
 import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
@@ -109,6 +110,7 @@ const nodes = [
   SessionTitle.node,
   SessionContext.node,
   Snapshot.node,
+  Sandbox.node,
   SessionRunnerLLM.node,
   Vcs.node,
   // Start repository watches only after boot-critical filesystem and Git work.

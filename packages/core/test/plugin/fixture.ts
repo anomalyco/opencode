@@ -1,4 +1,5 @@
 import { Agent } from "@opencode/core/agent"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Artifact } from "@opencode/core/artifact"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
@@ -7,6 +8,8 @@ import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
+import { tempGlobalLayer } from "../fixture/global"
+import { Sandbox } from "@opencode/core/sandbox"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -23,6 +26,7 @@ import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
+import { PluginInternal } from "@opencode/core/plugin/internal"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
@@ -96,8 +100,10 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Config.node,
       Database.node,
       Environment.node,
+      AgentFiles.node,
       FileAccess.node,
       Global.node,
+      Sandbox.node,
       Bus.node,
       Form.node,
       Generate.node,
@@ -142,3 +148,14 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
   ).pipe(Layer.provideMerge(configLayer))
 
 export const PluginTestLayer = makePluginTestLayer()
+
+export const InternalPluginTestLayer = AppNodeBuilder.build(PluginInternal.requirements, [
+  Location.node.replace(tempLocationLayer),
+  Global.node.replace(tempGlobalLayer),
+  Npm.node.replace(npmLayer),
+  Config.node.replace(configLayer),
+  Mcp.node.replace(emptyMcpLayer),
+  Generate.node.replace(generateLayer),
+  Permission.node.replace(permissionLayer),
+  offlineModels,
+])

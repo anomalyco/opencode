@@ -6,6 +6,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
+import { AgentFiles } from "../../agent-files.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
@@ -67,7 +68,7 @@ type Prepared =
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
@@ -211,6 +212,29 @@ export const Plugin = {
                 )
               }
 
+              // Preflight all destinations, deletions, and source cleanup before the first mutation.
+              // This is not a transaction: external changes can still race the later kernel checks.
+              yield* environment.checkWrites(
+                prepared.flatMap((change) => [
+                  {
+                    path: change.target.absolute,
+                    bytes: change.type === "delete" ? undefined : Buffer.byteLength(change.content),
+                    operation:
+                      change.type === "delete" || (change.type === "update" && change.moveTarget)
+                        ? ("remove" as const)
+                        : ("write" as const),
+                  },
+                  ...(change.type === "update" && change.moveTarget
+                    ? [
+                        {
+                          path: change.moveTarget.absolute,
+                          operation: "write" as const,
+                          bytes: Buffer.byteLength(change.content),
+                        },
+                      ]
+                    : []),
+                ]),
+              )
               const patchFiles = prepared.map((change) => patchFile(change))
               const targets = prepared.flatMap((change) => [
                 change.target,
@@ -218,6 +242,7 @@ export const Plugin = {
               ])
               yield* permission.assert({
                 action: "edit",
+                prompt: environment.sandboxed ? "skip" : undefined,
                 resources: [...new Set(targets.map((target) => target.resource))],
                 save: ["*"],
                 metadata: {
@@ -254,7 +279,10 @@ export const Plugin = {
                         .remove(change.target.absolute)
                         .pipe(
                           Effect.mapError((error) =>
-                            fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
+                            fail(
+                              `Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}; both paths may now exist`,
+                              error,
+                            ),
                           ),
                         )
                       applied.push({
@@ -308,7 +336,12 @@ export const Plugin = {
                 metadata: { files: output.files },
               })),
               Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to apply patch", error }),
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({
+                      message: `Unable to apply patch${environment.sandboxed ? `. ${AgentFiles.guidance}` : ""}`,
+                      error,
+                    }),
               ),
             )
           },

@@ -2,6 +2,28 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { isolatedEnv } from "./fixture/environment"
+import { Effect } from "effect"
+import { it } from "../../core/test/lib/effect"
+import { Standalone } from "../src/services/standalone"
+
+it.live("standalone boot errors include the exit status and a bounded stderr tail", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      Standalone.start({
+        command: [
+          process.execPath,
+          "-e",
+          'console.error("discarded-prefix" + "x".repeat(20000)); console.error("sandbox-startup-canary"); process.exit(23)',
+          "--",
+        ],
+      }),
+    )
+    expect(error.message).toContain("exit 23")
+    expect(error.message).toContain("sandbox-startup-canary")
+    expect(error.message).not.toContain("discarded-prefix")
+    expect(error.message.length).toBeLessThan(17_000)
+  }),
+)
 
 test("standalone server exits when its owner is killed", async () => {
   // Windows can hold the server's files briefly after it exits; the fixture retries removal on EBUSY.

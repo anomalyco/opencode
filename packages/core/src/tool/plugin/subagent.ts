@@ -9,6 +9,7 @@ import { Config } from "../../config.js"
 import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
+import { Sandbox } from "../../sandbox.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
@@ -71,6 +72,7 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
+    const sandbox = yield* Sandbox.Service
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -120,6 +122,9 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
                 )
+              yield* sandbox
+                .checkLocation(parent.location)
+                .pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error })))
               let current = parent
               let depth = 0
               while (current.parentID) {
@@ -171,6 +176,10 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              if (existing)
+                yield* sandbox
+                  .checkLocation(existing.location)
+                  .pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error })))
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.

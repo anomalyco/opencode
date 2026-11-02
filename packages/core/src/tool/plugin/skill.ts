@@ -4,6 +4,8 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import path from "node:path"
+import { Sandbox } from "../../sandbox.js"
 import { Skill } from "../../skill.js"
 import { Permission } from "../../permission.js"
 
@@ -34,13 +36,16 @@ export const Plugin = {
   effect: Effect.fn("SkillTool.Plugin")(function* (ctx: Context) {
     const fs = yield* FSUtil.Service
     const skills = yield* Skill.Service
+    const sandbox = yield* Sandbox.Service
     const permission = yield* Permission.Service
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
           options: { codemode: false },
-          description,
+          description: sandbox.enabled
+            ? `${description}\n\nIn sandboxed sessions this returns registered instruction text without scanning host resources. Read referenced files with the read tool under the normal sandbox policy.`
+            : description,
           input: Input,
           output: Output,
           execute: (input, context) =>
@@ -56,7 +61,14 @@ export const Plugin = {
                   agent: context.agent,
                   source: { type: "tool", messageID: context.messageID, id: context.id },
                 })
-                return { name: skill.name, ...(yield* Skill.prepare(fs, skill)) }
+                // Registered text is trusted configuration, already loaded by the harness.
+                // Do not scan arbitrary resource directories on behalf of the model outside Seatbelt.
+                return {
+                  name: skill.name,
+                  ...(sandbox.enabled
+                    ? { directory: path.dirname(skill.path), output: Skill.toModelOutput(skill, []) }
+                    : yield* Skill.prepare(fs, skill)),
+                }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
             }).pipe(
               Effect.map((output) => ({

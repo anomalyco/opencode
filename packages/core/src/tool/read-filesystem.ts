@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { lookup } from "mime-types"
+import { AgentFiles } from "../agent-files.js"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
 import { FileSystem } from "../filesystem.js"
@@ -391,7 +392,7 @@ const nthNewline = (bytes: Uint8Array, count: number) => {
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
     return Service.of({
       list: environment.files.list,
       read: (path, resource, page) => read(environment.files, path, resource, page),
@@ -399,4 +400,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [AgentFiles.node] })

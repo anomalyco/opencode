@@ -113,6 +113,8 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
 export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const data = useData()
   const toast = useToast()
+  const config = useConfig().data
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
@@ -135,7 +137,15 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   function reply(value: PermissionReply, message?: string) {
     void data.session.permission
-      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, decision: value, message })
+      .reply({
+        sessionID: props.request.sessionID,
+        requestID: props.request.id,
+        decision: value,
+        message,
+        ...(props.request.action === "sandbox.exec" || props.request.action === "sandbox.workspace"
+          ? { experimental: { acknowledgeSandbox: true, ...(props.request.action === "sandbox.exec" && value === "always" ? { saveSandboxPrefix: true } : {}) } }
+          : {}),
+      })
       .catch((error: unknown) => toast.error(error))
   }
 
@@ -178,23 +188,41 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 </box>
               </Show>
             ) : (
-              <box paddingLeft={1}>
-                <For each={current.lines}>
-                  {(line) => (
-                    <text
-                      fg={
-                        props.request.action === "shell" ||
-                        props.request.action === "subagent" ||
-                        props.request.action === "task"
-                          ? theme.text.base
-                          : theme.text.muted
-                      }
-                    >
-                      {line}
-                    </text>
-                  )}
-                </For>
-              </box>
+              <scrollbox
+                id="session.permission.body"
+                width="100%"
+                flexGrow={1}
+                minHeight={0}
+                viewportOptions={{ paddingLeft: 1 }}
+                scrollAcceleration={scrollAcceleration()}
+                verticalScrollbarOptions={{
+                  trackOptions: {
+                    backgroundColor: theme.background.base,
+                    foregroundColor: theme.scrollbar.base,
+                  },
+                }}
+              >
+                <box width="100%" flexDirection="column" flexShrink={0}>
+                  <For each={current.lines}>
+                    {(line) => (
+                      <text
+                        width="100%"
+                        wrapMode="word"
+                        flexShrink={0}
+                        fg={
+                          props.request.action === "shell" ||
+                          props.request.action === "subagent" ||
+                          props.request.action === "task"
+                            ? theme.text.base
+                            : theme.text.muted
+                        }
+                      >
+                        {line}
+                      </text>
+                    )}
+                  </For>
+                </box>
+              </scrollbox>
             )
 
           const header = () => (
@@ -222,18 +250,36 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               header={header()}
               body={(option) => (
                 <Show when={option === "always"} fallback={presentationBody()}>
-                  <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
-                    </For>
-                  </box>
+                  <scrollbox
+                    id="session.permission.body"
+                    width="100%"
+                    flexGrow={1}
+                    minHeight={0}
+                    viewportOptions={{ paddingLeft: 1 }}
+                    scrollAcceleration={scrollAcceleration()}
+                  >
+                    <box width="100%" flexShrink={0} gap={props.request.action === "sandbox.exec" ? 0 : 1}>
+                      <For each={permissionAlwaysLines(props.request)}>
+                        {(line, index) => (
+                          <text
+                            width="100%"
+                            wrapMode="word"
+                            flexShrink={0}
+                            fg={index() === 0 ? theme.text.muted : theme.text.base}
+                          >
+                            {line}
+                          </text>
+                        )}
+                      </For>
+                    </box>
+                  </scrollbox>
                 </Show>
               )}
               options={
                 props.request.save?.length
                   ? {
                       once: permissionOptionLabel("once"),
-                      always: permissionOptionLabel("always"),
+                      always: permissionOptionLabel("always", props.request.action),
                       reject: permissionOptionLabel("reject"),
                     }
                   : { once: permissionOptionLabel("once"), reject: permissionOptionLabel("reject") }
@@ -558,6 +604,8 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             label: props.choicesLabel ?? "Permission choices",
           }))}
           flexDirection="row"
+          flexWrap="wrap"
+          maxWidth="100%"
           gap={1}
           flexShrink={0}
         >

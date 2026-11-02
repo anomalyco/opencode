@@ -10,7 +10,8 @@ import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Environment } from "../../environment/index.js"
+import { AgentFiles } from "../../agent-files.js"
+import { Sandbox } from "../../sandbox.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
 import { ImageNotice } from "../../image/notice.js"
@@ -75,7 +76,8 @@ export const Plugin = {
   id: "opencode.tool.image-generate",
   effect: Effect.fn("ImageGenerateTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
+    const sandbox = yield* Sandbox.Service
     const generate = yield* Generate.Service
     const global = yield* Global.Service
     const http = yield* HttpClient.HttpClient
@@ -266,7 +268,12 @@ export const Plugin = {
               // The extension the image is saved with follows its real format, whatever the requested path ends in.
               const stem = target
                 ? target.absolute.slice(0, target.absolute.length - path.extname(target.absolute).length)
-                : path.join(global.tmp, "images", context.sessionID, `image_${Identifier.create(false)}`)
+                : path.join(
+                    sandbox.scratch ?? global.tmp,
+                    "images",
+                    context.sessionID,
+                    `image_${Identifier.create(false)}`,
+                  )
 
               yield* permission.assert({
                 action: name,
@@ -344,6 +351,7 @@ export const Plugin = {
                   }
                   yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }
+                yield* environment.checkWrites([{ path: file, operation: "write", bytes: bytes.byteLength }])
                 yield* environment.files.write(file, bytes)
                 return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
               }).pipe(

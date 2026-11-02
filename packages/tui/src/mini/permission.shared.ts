@@ -70,8 +70,8 @@ export function permissionInfo(request: MiniPermissionRequest, directory?: strin
   }
 }
 
-export function permissionLabel(option: PermissionOption): string {
-  return permissionOptionLabel(option)
+export function permissionLabel(option: PermissionOption, action?: string): string {
+  return permissionOptionLabel(option, action)
 }
 
 export { permissionAlwaysLines }

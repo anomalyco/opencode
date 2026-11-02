@@ -11,7 +11,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
-import { Environment } from "../../environment/index.js"
+import { AgentFiles } from "../../agent-files.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
@@ -121,7 +121,9 @@ const withRegionEndings = (region: string, replacement: string, fallback: string
   const after = replacement.split("\n")
   const key = (line: string) => normalizeForMatch(line.trimEnd())
   const source = alignLines(before.map(key), after.map(key))
-  return after.map((line, index) => (index === after.length - 1 ? line : line + (endings[source[index]!] ?? fallback))).join("")
+  return after
+    .map((line, index) => (index === after.length - 1 ? line : line + (endings[source[index]!] ?? fallback)))
+    .join("")
 }
 
 /**
@@ -262,7 +264,7 @@ export const Plugin = {
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
@@ -296,6 +298,7 @@ export const Plugin = {
 
               const target = yield* access.resolve({ path: input.path, kind: "file" })
               yield* access.authorizeExternal([target], context)
+              yield* environment.checkWrites([{ path: target.absolute, operation: "write" }])
 
               const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
@@ -304,7 +307,12 @@ export const Plugin = {
                 Effect.catchTag("Environment.WrongKind", (error) =>
                   error.actual === "directory"
                     ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
-                    : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
+                    : Effect.fail(
+                        new ToolFailure({
+                          message: `Unable to edit ${input.path}${environment.sandboxed ? `. ${AgentFiles.guidance}` : ""}`,
+                          error,
+                        }),
+                      ),
                 ),
               )
               const source = original.text
@@ -327,6 +335,7 @@ export const Plugin = {
                   : undefined
               yield* permission.assert({
                 action: "edit",
+                prompt: environment.sandboxed ? "skip" : undefined,
                 resources: [target.resource],
                 save: ["*"],
                 metadata: preview ? { files: [preview] } : undefined,
@@ -384,7 +393,10 @@ export const Plugin = {
               Effect.mapError((error) =>
                 error instanceof ToolFailure
                   ? error
-                  : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+                  : new ToolFailure({
+                      message: `Unable to edit ${input.path}${environment.sandboxed ? `. ${AgentFiles.guidance}` : ""}`,
+                      error,
+                    }),
               ),
             )
           },

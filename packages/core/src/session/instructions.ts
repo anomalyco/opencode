@@ -21,6 +21,8 @@ export interface Interface {
   readonly load: (input: {
     readonly sessionID: SessionSchema.ID
     readonly paths: ReadonlyArray<string>
+    /** Agent-triggered discovery supplies confined bytes; trusted host callers retain the default. */
+    readonly read?: (path: string) => Effect.Effect<string | undefined>
   }) => Effect.Effect<void, MessageDecodeError | FSUtil.Error>
 }
 
@@ -61,9 +63,9 @@ const layer = Layer.effect(
         const files = yield* Effect.forEach(
           toInject,
           (path) =>
-            fs
-              .readFileStringSafe(path)
-              .pipe(Effect.map((content) => (content === undefined ? undefined : { path, content }))),
+            (input.read ? input.read(path) : fs.readFileStringSafe(path)).pipe(
+              Effect.map((content) => (content === undefined ? undefined : { path, content })),
+            ),
           { concurrency: "unbounded" },
         )
         const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)

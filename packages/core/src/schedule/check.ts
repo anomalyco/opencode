@@ -12,6 +12,7 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { Sandbox } from "../sandbox.js"
 import { Plugin } from "../plugin.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
@@ -410,6 +411,7 @@ const runShell = Effect.fnUntraced(function* (
   prevState: Schema.Json,
 ) {
   const environment = yield* Environment.Service
+  const sandbox = yield* Sandbox.Service
   const scannedExit = yield* Effect.result(scanShell(condition.run))
   if (Result.isFailure(scannedExit)) return { ok: false as const, error: scannedExit.failure } satisfies Outcome
   const scanned = scannedExit.success
@@ -425,13 +427,28 @@ const runShell = Effect.fnUntraced(function* (
 
   const executed = yield* Effect.scoped(
     Effect.gen(function* () {
-      const proc = ChildProcess.make(scanned.shell, ShellSelect.args(scanned.shell, condition.run), {
-        cwd: scanned.cwd,
-        ...(scanned.workspaceID === undefined ? { env: process.env } : {}),
-        stdin: "ignore",
-        detached: process.platform !== "win32",
-        forceKillAfter: Duration.seconds(3),
-      })
+      const launch = sandbox.enabled
+        ? yield* sandbox.command({
+            command: scanned.shell,
+            args: ShellSelect.args(scanned.shell, condition.run),
+            env: process.env,
+          })
+        : undefined
+      const proc = ChildProcess.make(
+        launch?.command ?? scanned.shell,
+        launch?.args ?? ShellSelect.args(scanned.shell, condition.run),
+        {
+          cwd: scanned.cwd,
+          ...(launch
+            ? { env: launch.env, extendEnv: false }
+            : scanned.workspaceID === undefined
+              ? { env: process.env }
+              : {}),
+          stdin: "ignore",
+          detached: process.platform !== "win32",
+          forceKillAfter: Duration.seconds(3),
+        },
+      )
       const handle = yield* environment.spawner.spawn(proc)
       const [stdout, stderr, exitCode] = yield* Effect.all(
         [

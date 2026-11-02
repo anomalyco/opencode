@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -83,6 +84,7 @@ const applicationServiceNodes = [
   Schedule.node,
   Workspace.node,
   FileWatch.node,
+  Sandbox.settingsNode,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -141,6 +143,7 @@ function makeRoutes<AuthError, AuthServices>(
     ),
     InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured(options.sandbox)),
     Mcp.node.replace(
       Mcp.configured({
         clientInfo: {

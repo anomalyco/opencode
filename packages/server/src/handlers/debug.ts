@@ -1,12 +1,13 @@
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
+import { Sandbox } from "@opencode/core/sandbox"
+import { InvalidRequestError, UnknownError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { HeapSnapshot } from "@opencode/util/heap-snapshot"
-import { Effect, Option, RcMap } from "effect"
+import { Cause, Effect, Option, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import path from "node:path"
 import { Api } from "../api"
-import { requestRef } from "../location"
+import { requestRef, locationErrors } from "../location"
 
 export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers) =>
   Effect.gen(function* () {
@@ -52,6 +53,27 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
           // middleware cached the services under.
           yield* locations.invalidate(requestRef(ctx.request))
         }),
+      )
+  }),
+)
+
+export const SandboxHandler = HttpApiBuilder.group(Api, "server.sandbox", (handlers) =>
+  Effect.gen(function* () {
+    const locations = yield* LocationServiceMap.Service
+    return handlers
+      .handle("sandbox.status", (ctx) =>
+        Effect.gen(function* () {
+          const sandbox = yield* Sandbox.Service
+          return sandbox.status()
+        }).pipe(
+          Effect.provide(locations.get(requestRef(ctx.request))),
+          locationErrors,
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+              : Effect.fail(new ServiceUnavailableError({ message: Cause.pretty(cause), service: "sandbox" })),
+          ),
+        ),
       )
   }),
 )

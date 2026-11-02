@@ -208,6 +208,7 @@ function successfulGrep(inboxID: string): V2Event[] {
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
   turn: (inboxID: string) => V2Event[]
+  auto?: boolean
   pendingForms?: FormInfo[]
   attached?: boolean
   format?: "default" | "json"
@@ -241,6 +242,7 @@ async function run(input: {
   })()
   spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.permission, "reply").mockImplementation(() => ok(undefined))
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
@@ -276,7 +278,7 @@ async function run(input: {
     files: [],
     thinking: false,
     format: input.format ?? "default",
-    auto: false,
+    auto: input.auto ?? false,
     attached: input.attached ?? false,
     compatibility: input.compatibility,
     renderTool: input.renderTool ?? (() => Promise.resolve()),
@@ -313,6 +315,21 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test.each(["shell", "sandbox.exec", "sandbox.workspace"])("headless auto handles %s without silently escalating", async (action) => {
+    const sdk = await run({
+      auto: true,
+      turn: (inboxID) => [
+        prompted(inboxID),
+        { id: "evt_permission", type: "permission.asked", created: 1, data: { id: "per_escalation", sessionID: "ses_1", action, resources: ["npm install"] } },
+        settled(),
+      ],
+    })
+    expect(sdk.permission.reply).toHaveBeenCalledWith(expect.objectContaining({
+      requestID: "per_escalation", decision: action === "shell" ? "once" : "reject",
+      ...(action !== "shell" ? { message: expect.stringContaining("cannot ask") } : {}),
+    }))
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout

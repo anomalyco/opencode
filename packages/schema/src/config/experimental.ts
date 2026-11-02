@@ -5,7 +5,28 @@ import { NonNegativeInt, optional } from "../schema.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
+export const Sandbox = Schema.Struct({
+  enabled: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable the sandbox. Defaults to false; supported on local macOS.",
+  }),
+  approval: Schema.Literals(["on-request", "never"]).pipe(optional).annotate({
+    description: "Allow sandbox escape requests or prohibit them. Defaults to on-request.",
+  }),
+  full_disk_read: Schema.Boolean.pipe(optional).annotate({
+    description: "Allow broad reads subject to protected-path exclusions. Defaults to false.",
+  }),
+  readable_roots: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Additional existing absolute paths the sandbox may read.",
+  }),
+  writable_roots: Schema.Array(Schema.String).pipe(optional).annotate({
+    description: "Additional existing absolute paths the sandbox may write.",
+  }),
+})
+
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
+  sandbox: Sandbox.pipe(optional).annotate({
+    description: "Server startup sandbox settings, read from global config only; project config is ignored.",
+  }),
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),

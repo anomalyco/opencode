@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Environment } from "@opencode/core/environment/index"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { Formatter } from "@opencode/core/formatter"
@@ -26,6 +27,7 @@ const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
   deps: [
+    AgentFiles.node,
     Tool.node,
     FileAccess.node,
     FileMutation.node,
@@ -701,7 +703,10 @@ describe("EditTool", () => {
       // A CRLF file with a block pasted in from an LF editor, edited with surrounding context.
       const target = path.join(tmp.path, "store.cs")
       return Effect.promise(() =>
-        fs.writeFile(target, "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n"),
+        fs.writeFile(
+          target,
+          "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n",
+        ),
       ).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
@@ -745,7 +750,10 @@ describe("EditTool", () => {
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect(
-                yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true }),
+                ),
               ).toMatchObject({ status: "completed", output: { replacements: 2 } })
               expect(
                 yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
@@ -785,7 +793,10 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               // The typography tier matches the curly quote, and the replacement writes the same bytes back.
               expect(
-                yield* executeTool(registry, call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" }),
+                ),
               ).toEqual({
                 status: "error",
                 error: {

@@ -16,6 +16,8 @@ import { Session } from "@opencode/core/session"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { ShellParse } from "@opencode/core/shell/parse"
+import { SandboxApproval } from "@opencode/core/sandbox/approval"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -26,7 +28,16 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      Permission.node,
+      PluginHooks.node,
+      SandboxApproval.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -98,6 +109,234 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("unattended rules cannot approve a sandbox escape or workspace move", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const permission = yield* Permission.Service
+      const unattended: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
+      for (const action of ["sandbox.exec", "sandbox.workspace"]) {
+        const result = yield* permission
+          .ask(assertion({ action, prompt: "force" }))
+          .pipe(Effect.provideService(Permission.Unattended, unattended))
+        expect(result.effect).toBe("deny")
+      }
+      expect(
+        (yield* permission.ask(assertion()).pipe(Effect.provideService(Permission.Unattended, unattended))).effect,
+      ).toBe("allow")
+      const command = { cwd: "/project", shell: "/bin/sh", tokens: ["git", "fetch"], prefix: ["git", "fetch"] }
+      const approvals = yield* SandboxApproval.Service
+      yield* approvals.remember(Session.ID.make("ses_test"), command)
+      expect(
+        (yield* permission
+          .ask(assertion({ action: "sandbox.exec", prompt: "force", sandboxCommand: command }))
+          .pipe(Effect.provideService(Permission.Unattended, unattended))).effect,
+      ).toBe("allow")
+      expect(yield* permission.list()).toEqual([])
+    }),
+  )
+
+  it.effect("session prefix memory survives permission teardown but not a fresh server layer", () =>
+    Effect.gen(function* () {
+      const approvals = yield* SandboxApproval.Service
+      const id = Session.ID.make("ses_prefix_lifetime")
+      const command = { cwd: "/project", shell: "/bin/sh", tokens: ["git", "fetch"], prefix: ["git", "fetch"] }
+      yield* approvals.remember(id, command)
+      expect(yield* approvals.allows(id, command)).toBe(true)
+      const permission = yield* Permission.Service
+      yield* permission.close
+      expect(yield* approvals.allows(id, command)).toBe(true)
+      expect(
+        yield* SandboxApproval.Service.use((fresh) => fresh.allows(id, command)).pipe(
+          Effect.provide(Layer.fresh(AppNodeBuilder.build(SandboxApproval.node))),
+        ),
+      ).toBe(false)
+    }),
+  )
+
+  it.effect(
+    "session escape grants are separate from project rules, apply at token boundaries and preserve explicit denies",
+    () =>
+      Effect.gen(function* () {
+        yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+        const command = {
+          cwd: "/project",
+          shell: "/bin/zsh",
+          tokens: ["npm", "install", "one"],
+          prefix: ["npm", "install"],
+        }
+        const first = yield* waitForRequest({ action: "sandbox.exec", prompt: "force", sandboxCommand: command })
+        expect(first.request.save).toEqual(["npm install"])
+        expect(
+          yield* first.service.reply({ requestID: first.request.id, reply: "always" }).pipe(Effect.flip),
+        ).toBeInstanceOf(Permission.InvalidReplyError)
+        expect(yield* first.service.get(first.request.id)).toBeDefined()
+        yield* first.service.reply({ requestID: first.request.id, reply: "always", saveSandboxPrefix: true })
+        yield* Fiber.join(first.fiber)
+        const check = (sandboxCommand: SandboxApproval.Command) =>
+          first.service.ask(
+            assertion({
+              id: Permission.ID.create(),
+              action: "sandbox.exec",
+              prompt: "force",
+              sandboxCommand,
+            }),
+          )
+        expect((yield* check({ ...command, tokens: ["npm", "install", "two", "--save-dev"] })).effect).toBe("allow")
+        for (const changed of [
+          { ...command, tokens: ["npm", "installation"] },
+          { ...command, tokens: ["npm", "uninstall", "one"] },
+          { ...command, cwd: "/other" },
+          { ...command, shell: "/bin/bash" },
+        ])
+          expect((yield* check(changed)).effect).toBe("ask")
+        expect(yield* PermissionSaved.Service.use((saved) => saved.list())).toEqual([])
+        const hooks = yield* PluginHooks.Service
+        const hook = yield* hooks.register("permission", "evaluate", (event) =>
+          Effect.sync(() => {
+            event.effect = "deny"
+          }),
+        )
+        expect((yield* check(command)).effect).toBe("deny")
+        yield* hook.dispose
+        yield* setRules([{ action: "sandbox.exec", resource: "*", effect: "deny" }])
+        expect((yield* check(command)).effect).toBe("deny")
+      }),
+  )
+
+  it.effect(
+    "a session grant releases matching concurrent requests but not other sessions, scopes or workspace moves",
+    () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const command = {
+          cwd: "/project",
+          shell: "/bin/zsh",
+          tokens: ["git", "fetch", "origin"],
+          prefix: ["git", "fetch"],
+        }
+        const first = yield* waitForRequest({ action: "sandbox.exec", prompt: "force", sandboxCommand: command })
+        const second = yield* waitForRequest({
+          id: Permission.ID.create(),
+          action: "sandbox.exec",
+          prompt: "force",
+          sandboxCommand: { ...command, tokens: ["git", "fetch", "upstream"] },
+        })
+        const otherID = Session.ID.make("ses_other_sandbox_grant")
+        yield* setup([], otherID)
+        const unrelated = yield* waitForRequest({
+          id: Permission.ID.create(),
+          sessionID: otherID,
+          action: "sandbox.exec",
+          prompt: "force",
+          sandboxCommand: command,
+        })
+        const workspace = yield* waitForRequest({
+          id: Permission.ID.create(),
+          action: "sandbox.workspace",
+          prompt: "force",
+        })
+        yield* first.service.reply({ requestID: first.request.id, reply: "always", saveSandboxPrefix: true })
+        yield* Fiber.join(first.fiber)
+        yield* Fiber.join(second.fiber)
+        expect((yield* first.service.list()).map((request) => request.id)).toEqual([
+          unrelated.request.id,
+          workspace.request.id,
+        ])
+        expect(
+          yield* first.service
+            .reply({ requestID: workspace.request.id, reply: "always", saveSandboxPrefix: true })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(Permission.InvalidReplyError)
+        yield* first.service.reply({ requestID: unrelated.request.id, reply: "once" })
+        yield* first.service.reply({ requestID: workspace.request.id, reply: "once" })
+        yield* Fiber.join(unrelated.fiber)
+        yield* Fiber.join(workspace.fiber)
+      }),
+  )
+
+  it.effect("ordinary API metadata and saved wildcard rules cannot fabricate a session escape grant", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const request = yield* waitForRequest({
+        action: "sandbox.exec",
+        prompt: "force",
+        save: ["npm *"],
+        metadata: { command: "npm install", prefix: ["npm", "install"] },
+      })
+      expect(request.request.save).toBeUndefined()
+      expect(
+        yield* request.service
+          .reply({ requestID: request.request.id, reply: "always", saveSandboxPrefix: true })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(Permission.InvalidReplyError)
+      yield* request.service.reply({ requestID: request.request.id, reply: "once" })
+      yield* Fiber.join(request.fiber)
+    }),
+  )
+
+  it.effect("sandbox execution skips routine prompts but preserves denies", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      yield* service.assert(assertion({ action: "shell", prompt: "skip" }))
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "shell", resource: "*", effect: "deny" }])
+      expect(yield* service.assert(assertion({ action: "shell", prompt: "skip" })).pipe(Effect.flip)).toBeInstanceOf(
+        Permission.BlockedError,
+      )
+    }),
+  )
+
+  it.effect("forced escalation requires a fresh approval despite wildcard and saved allows", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "sandbox.exec", resources: ["*"] })
+      const first = yield* waitForRequest({ action: "sandbox.exec", prompt: "force", save: ["*"] })
+      expect(first.request.save).toBeUndefined()
+      expect(
+        yield* first.service.reply({ requestID: first.request.id, reply: "always" }).pipe(Effect.flip),
+      ).toBeInstanceOf(Permission.InvalidReplyError)
+      yield* first.service.reply({ requestID: first.request.id, reply: "once" })
+      yield* Fiber.join(first.fiber)
+      const second = yield* waitForRequest({ action: "sandbox.exec", prompt: "force" })
+      expect(yield* second.service.list()).toHaveLength(1)
+      yield* second.service.reply({ requestID: second.request.id, reply: "once" })
+      yield* Fiber.join(second.fiber)
+    }),
+  )
+
+  it.effect("unrelated saved approvals cannot release a pending escalation", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "read", resource: "*", effect: "ask" },
+      ])
+      const escalation = yield* waitForRequest({ action: "sandbox.exec", prompt: "force" })
+      const read = yield* waitForRequest({ id: Permission.ID.create("per_read"), action: "read", save: ["*"] })
+      yield* read.service.reply({ requestID: read.request.id, reply: "always" })
+      yield* Fiber.join(read.fiber)
+      expect((yield* read.service.list()).map((item) => item.id)).toEqual([escalation.request.id])
+      yield* escalation.service.reply({
+        requestID: escalation.request.id,
+        reply: "reject",
+        message: "Stay in the workspace.",
+      })
+      expect(yield* Fiber.join(escalation.fiber).pipe(Effect.flip)).toBeInstanceOf(Permission.CorrectedError)
+    }),
+  )
+
+  it.effect("escalation force does not override an explicit deny", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "sandbox.exec", resource: "*", effect: "deny" }])
+      const service = yield* Permission.Service
+      expect(
+        yield* service.assert(assertion({ action: "sandbox.exec", prompt: "force" })).pipe(Effect.flip),
+      ).toBeInstanceOf(Permission.BlockedError)
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

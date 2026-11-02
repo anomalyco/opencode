@@ -8,12 +8,70 @@ import { Git } from "@opencode/core/git"
 import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { Sandbox } from "@opencode/core/sandbox"
+import { Project } from "@opencode/core/project"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Hash } from "@opencode/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 describe("Snapshot", () => {
+  testEffect(Layer.empty).live("sandboxing blocks Git capture and restore even when configured on", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+          yield* Effect.gen(function* () {
+            const snapshots = yield* Snapshot.Service
+            yield* snapshots.transform((editor) => editor.configure(true))
+            expect(yield* snapshots.capture()).toBeUndefined()
+            const restored = yield* snapshots
+              .restore({ files: new Map([[RelativePath.make("old.txt"), Snapshot.ID.make("0".repeat(40))]]) })
+              .pipe(Effect.flip)
+            expect(restored).toBeInstanceOf(Snapshot.Error)
+            expect(restored.message).toBe("Snapshots are disabled")
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Snapshot.node, [
+                Sandbox.node.replace(
+                  Layer.mock(Sandbox.Service, {
+                    enabled: true,
+                    approval: "on-request",
+                    fullDiskRead: false,
+                    status: () => {
+                      throw new Error("Sandbox status is not used by this fixture")
+                    },
+                  }),
+                ),
+                Location.node.replace(
+                  Layer.succeed(
+                    Location.Service,
+                    Location.Service.of({
+                      directory: AbsolutePath.make(tmp.path),
+                      vcs: { type: "git", store: AbsolutePath.make(path.join(tmp.path, ".git")) },
+                      project: {
+                        id: Project.ID.global,
+                        directory: AbsolutePath.make(tmp.path),
+                        canonical: AbsolutePath.make(tmp.path),
+                      },
+                    }),
+                  ),
+                ),
+                Git.node.replace(
+                  Layer.succeed(Git.Service, {
+                    ...git,
+                    repo: { ...git.repo, discover: () => Effect.die("Sandboxed snapshots reached host Git") },
+                  }),
+                ),
+              ]),
+            ),
+          )
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("keeps lazy repository discovery after the first caller is interrupted", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

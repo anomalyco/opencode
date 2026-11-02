@@ -1,6 +1,6 @@
 export * as ShellTool from "./shell.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
+import { SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
@@ -17,6 +17,9 @@ import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { Sandbox } from "../../sandbox.js"
+import { SandboxDiagnostics } from "../../sandbox/diagnostics.js"
+import { SandboxApproval } from "../../sandbox/approval.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -31,7 +34,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string) =>
+const description = (shell?: string, sandbox = false, fullDiskRead = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -41,10 +44,27 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands accept an optional timeout, background commands have no timeout by default.",
     "Background commands return immediately, and you will be notified when they complete.",
+    ...(sandbox
+      ? [
+          "Commands run in an OS sandbox: only the workspace and configured roots are writable, and network access is blocked.",
+          fullDiskRead
+            ? "Filesystem reads are allowed across the disk except for protected credentials and OpenCode state."
+            : "Filesystem reads are restricted to the workspace, system runtime, and configured readable roots.",
+          "Built-in read, write, edit, patch, glob, and grep also use this filesystem policy. Other host integrations have separate permissions.",
+          "If a command is blocked, inspect its output and request a new invocation with sandbox_permissions=require_escalated and a justification when necessary. It may have partially completed; do not blindly retry.",
+        ]
+      : []),
   ].join(" ")
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
+  sandbox_permissions: Schema.optionalKey(Schema.Literals(["use_default", "require_escalated"])).annotate({
+    description:
+      "Use the server's sandbox by default. Request require_escalated to ask the user to run this single command outside it.",
+  }),
+  justification: Schema.optionalKey(Schema.String).annotate({
+    description: "Required when requesting escalation: explain why this command needs to run outside the sandbox.",
+  }),
   workdir: Schema.optionalKey(Schema.String).annotate({
     description:
       "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
@@ -56,6 +76,13 @@ export const Input = Schema.Struct({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
   }),
+})
+
+const StockInput = Schema.Struct({
+  command: Input.fields.command,
+  workdir: Input.fields.workdir,
+  timeout: Input.fields.timeout,
+  background: Input.fields.background,
 })
 
 const StructuredOutput = Schema.Struct({
@@ -110,6 +137,7 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
+    const sandbox = yield* Sandbox.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const source = {
@@ -127,15 +155,31 @@ export const Plugin = {
           kind: "directory",
         }),
       )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
+      if (!sandbox.enabled) yield* access.authorizeExternal([target, ...directories], context)
+      if (sandbox.enabled) {
+        const resources = [target, ...directories].flatMap((item) =>
+          item.externalDirectory ? [item.externalDirectory.resource] : [],
+        )
+        if (resources.length > 0)
+          yield* permission.assert({
+            action: "external_directory",
+            resources,
+            sessionID: context.sessionID,
+            agent: context.agent,
+            source,
+            prompt: "skip",
+          })
+      }
+      if (parsed.commands.length > 0 || sandbox.enabled)
         yield* permission.assert({
           action: name,
-          resources: parsed.commands.map((command) => command.resource),
+          resources:
+            parsed.commands.length > 0 ? parsed.commands.map((command) => command.resource) : [invocation.command],
           save: parsed.commands.map((command) => command.save),
           sessionID: context.sessionID,
           agent: context.agent,
           source,
+          prompt: sandbox.enabled ? "skip" : undefined,
         })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
@@ -187,11 +231,18 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false },
-          description: description(),
-          input: Input,
+          description: description(undefined, sandbox.enabled, sandbox.fullDiskRead),
+          input: sandbox.enabled ? Input : StockInput,
           output: Output,
-          execute: (input, context) =>
+          execute: (input: typeof Input.Type, context) =>
             Effect.gen(function* () {
+              const escalated = input.sandbox_permissions === "require_escalated"
+              if (escalated && (!sandbox.enabled || sandbox.approval === "never"))
+                return yield* new Sandbox.UnavailableError({
+                  message: "Sandbox escalation is not enabled on this server.",
+                })
+              if (escalated && !input.justification?.trim())
+                return yield* Effect.fail(new Error("A non-empty justification is required for sandbox escalation."))
               const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
               const info = yield* shell.create(
@@ -209,6 +260,24 @@ export const Plugin = {
                     invocation.env.AI_AGENT ||= "opencode"
                     invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
+                    if (!sandbox.enabled) return
+                    if (escalated)
+                      yield* permission.assert({
+                        action: "sandbox.exec",
+                        resources: [invocation.command],
+                        sessionID: context.sessionID,
+                        agent: context.agent,
+                        source: { type: "tool", messageID: context.messageID, id: context.id },
+                        metadata: {
+                          command: invocation.command,
+                          cwd: invocation.cwd,
+                          justification: input.justification,
+                          sandbox: "disabled",
+                        },
+                        prompt: "force",
+                        sandboxCommand: yield* SandboxApproval.analyze(invocation),
+                      })
+                    return yield* sandbox.prepare(invocation, escalated)
                   }),
               )
               yield* context.progress({ shellID: info.id })
@@ -218,11 +287,21 @@ export const Plugin = {
                 const result = yield* shell.result(info)
                 if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
                 const output = ShellResult.output(result)
+                const hint =
+                  sandbox.enabled &&
+                  !escalated &&
+                  !output.timeout &&
+                  result.info.status !== "killed" &&
+                  (output.exit !== 0 || output.signal !== undefined)
+                    ? SandboxDiagnostics.hint(output.output)
+                    : undefined
                 return {
                   ...output,
                   output: output.timeout
                     ? `${output.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`
-                    : output.output,
+                    : hint
+                      ? `${output.output}\n\n${hint}`
+                      : output.output,
                   status: "completed" as const,
                 }
               }).pipe(
@@ -278,7 +357,20 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(ShellSelect.name(yield* compatibleShell))
+        tool.description = description(ShellSelect.name(yield* compatibleShell), sandbox.enabled, sandbox.fullDiskRead)
+        if (sandbox.enabled)
+          event.system.push(
+            SystemPart.make(
+              "Shell execution policy: the shell tool runs commands in an OS sandbox with restricted filesystem access and no network. " +
+                (sandbox.fullDiskRead
+                  ? "Disk reads are broadly allowed except for protected credentials and OpenCode state; writes remain limited to the workspace, scratch, and configured writable roots. "
+                  : "Reads are limited to the workspace, system runtime, and configured readable roots. ") +
+                "This policy takes precedence over generic environment descriptions. Scheduled shell checks, built-in file tools, searches, image file access and automatic formatters share this filesystem boundary; host integrations, web and MCP tools remain separate. Native file tools and automatic formatters cannot escalate; use an explicitly approved shell invocation when necessary. Worktree mutations and the shipped browser plugin are unavailable while sandboxed; Git snapshots are disabled. " +
+                (sandbox.approval === "never"
+                  ? "Escalation is disabled; continue within the sandbox."
+                  : "To run a command outside the sandbox, set sandbox_permissions=require_escalated and supply a justification. The user can approve one invocation or a suggested literal command prefix for this session; never assume a grant exists."),
+            ),
+          )
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

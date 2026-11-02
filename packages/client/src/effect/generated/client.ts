@@ -304,6 +304,8 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  ExperimentalSandboxStatusInput,
+  ExperimentalSandboxStatusOutput,
   ExperimentalMigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1336,7 +1338,7 @@ const EndpointPermissionReply = (raw: RawClient["server.permission"]) => (input:
   preserveEffect<PermissionReplyOutput>()(
     raw["session.permission.reply"]({
       params: { sessionID: input["sessionID"], requestID: input["requestID"] },
-      payload: { decision: input["decision"], message: input["message"] },
+      payload: { decision: input["decision"], message: input["message"], experimental: input["experimental"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -1885,6 +1887,16 @@ const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   location: { list: EndpointDebugLocationList(raw), evict: EndpointDebugLocationEvict(raw) },
 })
 
+const EndpointExperimentalSandboxStatus =
+  (raw: RawClient["server.sandbox"]) => (input?: ExperimentalSandboxStatusInput) =>
+    preserveEffect<ExperimentalSandboxStatusOutput>()(
+      raw["sandbox.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const adaptGroupExperimentalSandbox = (raw: RawClient["server.sandbox"]) => ({
+  status: EndpointExperimentalSandboxStatus(raw),
+})
+
 const EndpointExperimentalMigrationV1Status = (raw: RawClient["server.migration"]) => () =>
   preserveEffect<ExperimentalMigrationV1StatusOutput>()(
     raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)),
@@ -1958,6 +1970,7 @@ const adaptClient = (raw: RawClient) => {
       integration: adaptGroupExperimentalIntegration(raw["server.integration"]),
       mcp: adaptGroupExperimentalMcp(raw["server.mcp"]),
       file: adaptGroupExperimentalFile(raw["server.fs"]),
+      sandbox: adaptGroupExperimentalSandbox(raw["server.sandbox"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
@@ -2060,6 +2073,11 @@ const adaptClient = (raw: RawClient) => {
       watch: client.experimental.file.watch,
       /** @deprecated Use `client.experimental.file.unwatch`. Removed in the next minor. */
       unwatch: client.experimental.file.unwatch,
+    },
+    /** @deprecated Use `client.experimental.sandbox`. Removed in the next minor. */
+    sandbox: {
+      /** @deprecated Use `client.experimental.sandbox.status`. Removed in the next minor. */
+      status: client.experimental.sandbox.status,
     },
     /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */
     migration: {

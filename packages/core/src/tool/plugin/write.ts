@@ -10,7 +10,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
-import { Environment } from "../../environment/index.js"
+import { AgentFiles } from "../../agent-files.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { FileAccess } from "../../file-access.js"
@@ -48,7 +48,7 @@ export const Plugin = {
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
 
@@ -70,6 +70,7 @@ export const Plugin = {
               }
               const target = yield* access.resolve({ path: input.path, kind: "file" })
               yield* access.authorizeExternal([target], context)
+              yield* environment.checkWrites([{ path: target.absolute, operation: "write" }])
               const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               )
@@ -77,6 +78,7 @@ export const Plugin = {
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
               yield* permission.assert({
                 action: "edit",
+                prompt: environment.sandboxed ? "skip" : undefined,
                 resources: [target.resource],
                 save: ["*"],
                 metadata: { files: [preview] },
@@ -92,7 +94,13 @@ export const Plugin = {
               return result
             }).pipe(
               Effect.map((output) => ({ output, content: toModelContent(output) })),
-              Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
+              Effect.mapError(
+                (error) =>
+                  new ToolFailure({
+                    message: `Unable to write ${input.path}${environment.sandboxed ? `. ${AgentFiles.guidance}` : ""}`,
+                    error,
+                  }),
+              ),
             ),
         }),
       )

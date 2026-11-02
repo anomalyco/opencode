@@ -12,6 +12,8 @@ import { Config } from "../../config.js"
 import { Formatter } from "../../formatter.js"
 import { make, type Info } from "../../formatter/builtins.js"
 import { Location } from "../../location.js"
+import { AgentFiles } from "../../agent-files.js"
+import { Sandbox } from "../../sandbox.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
@@ -24,6 +26,8 @@ export const Plugin = define({
     const location = yield* Location.Service
     const npm = yield* Npm.Service
     const processes = yield* AppProcess.Service
+    const sandbox = yield* Sandbox.Service
+    const files = yield* AgentFiles.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, formatter.reload())
 
     yield* formatter.transform((editor) => {
@@ -36,6 +40,8 @@ export const Plugin = define({
         npm,
         processes,
         bin: global.bin,
+        sandbox,
+        files: files.files,
       })
       builtIns.forEach(editor.set)
       if (configured === true) return

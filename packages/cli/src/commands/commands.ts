@@ -127,6 +127,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       commands: [
         Spec.make("agents", { description: "List all agents", globalFlags: ServerFlags }),
         Spec.make("config", { description: "List configuration sources", globalFlags: ServerFlags }),
+        Spec.make("sandbox", {
+          description: "Show the connected server's effective sandbox policy",
+          globalFlags: ServerFlags,
+        }),
         Spec.make("heap-dump", {
           description: "Write a heap snapshot of the running server and print its path",
           globalFlags: [Server],

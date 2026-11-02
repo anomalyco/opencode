@@ -3,6 +3,8 @@ import fs from "fs/promises"
 import path from "path"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { AgentFiles } from "@opencode/core/agent-files"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Generate } from "@opencode/core/generate"
 import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
@@ -84,7 +86,7 @@ const imageModel = (providerID: string, id: string, update: (model: Model.Mutabl
     )
   })
 
-const setup = (providerID = "test") =>
+const setup = (providerID = "test", overrides?: { files: AgentFiles.Interface; sandbox: Sandbox.Interface }) =>
   Effect.gen(function* () {
     fixture.requests.length = 0
     fixture.assertions.length = 0
@@ -97,7 +99,13 @@ const setup = (providerID = "test") =>
     const sessions = yield* Session.Service
     const location = yield* Location.Service
     const host = yield* PluginHost.make(plugins)
-    yield* ImageGenerateTool.Plugin.effect(host)
+    const imagePlugin = ImageGenerateTool.Plugin.effect(host)
+    yield* overrides
+      ? imagePlugin.pipe(
+          Effect.provideService(AgentFiles.Service, overrides.files),
+          Effect.provideService(Sandbox.Service, overrides.sandbox),
+        )
+      : imagePlugin
     yield* OpenCodeTools.Plugin.effect(host)
     const session = yield* sessions.create({
       location: Location.Ref.make({ directory: location.directory }),
@@ -164,6 +172,48 @@ const text = (result: { readonly content?: ReadonlyArray<Tool.Content> }) =>
 const failure = (result: { readonly error?: { readonly message: string } }) => result.error?.message
 
 describe("experimental_image_generate", () => {
+  it.live("uses agent file access and sandbox scratch for image input and output", () =>
+    Effect.gen(function* () {
+      const original = yield* AgentFiles.Service
+      const sandbox = yield* Sandbox.Service
+      const location = yield* Location.Service
+      const scratch = path.join(location.directory, "sandbox-scratch")
+      const reads: string[] = []
+      const checks: string[] = []
+      yield* imageModel("test", "painter", (model) => {
+        model.capabilities.input = ["text", "image"]
+      })
+      const { run, notice, directory } = yield* setup("test", {
+        sandbox: { ...sandbox, enabled: true, scratch },
+        files: {
+          ...original,
+          sandboxed: true,
+          files: {
+            ...original.files,
+            read: (file, range) => {
+              reads.push(file)
+              return original.files.read(file, range)
+            },
+          },
+          checkWrites: (targets) =>
+            Effect.sync(() => {
+              checks.push(...targets.map((target) => target.path))
+            }),
+        },
+      })
+      yield* Effect.promise(() => fs.writeFile(path.join(directory, "in.png"), Buffer.from(PNG, "base64")))
+      const result = yield* run({ prompt: "edit", images: ["in.png"] })
+      expect(result.status).toBe("completed")
+      yield* notice(result)
+      expect(reads).toContain(path.join(directory, "in.png"))
+      expect(checks).toHaveLength(1)
+      const output = checks[0]
+      if (!output) throw new Error("Image output was not checked")
+      expect(output).toStartWith(path.join(scratch, "images") + path.sep)
+      expect((yield* Effect.promise(() => fs.readFile(output))).toString("base64")).toBe(PNG)
+    }),
+  )
+
   it.live("is registered only while an image model is available", () =>
     Effect.gen(function* () {
       yield* setup()

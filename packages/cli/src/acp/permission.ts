@@ -45,6 +45,9 @@ const options: PermissionOption[] = [
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))
 
 export const ask = Effect.fnUntraced(function* (input: Input) {
+  // This adapter's generic tool approval does not present sandbox escape/workspace scope.
+  if (input.event.data.action === "sandbox.exec" || input.event.data.action === "sandbox.workspace")
+    return "reject" as const
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = input.tool?.input ?? input.event.data.metadata ?? {}
   const previews = yield* permissionPreviews(toolName, toolInput, input.event.data.metadata, input.cwd).pipe(

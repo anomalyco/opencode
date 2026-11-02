@@ -1,6 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { randomBytes } from "node:crypto"
 import { selfCommand } from "../util/process"
@@ -26,7 +26,7 @@ function command(password: string, options: Options) {
     // The server treats EOF on this pipe as the end of its ownership lease.
     // The OS closes it even when the TUI is killed before Effect finalizers run.
     stdin: "pipe",
-    stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
+    stderr: "pipe",
     killSignal: "SIGTERM",
     forceKillAfter: "3 seconds",
   })
@@ -38,15 +38,48 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const proc = yield* spawner.spawn(command(password, options))
     const readyLine = yield* Deferred.make<string, Error>()
+    // Drain continuously, retain only a bounded tail, and surface it on failed boot.
+    // Readiness failures used to discard the only copy of the server's error.
+    let diagnostics = ""
+    const stderr = yield* proc.stderr.pipe(
+      Stream.decodeText(),
+      Stream.runForEach((chunk) =>
+        Effect.sync(() => {
+          diagnostics = (diagnostics + chunk).slice(-16_384)
+          if (process.env.OPENCODE_PRINT_LOGS === "1") process.stderr.write(chunk)
+        }),
+      ),
+      Effect.forkScoped,
+    )
     // Keep draining stdout after readiness so later server writes cannot hit EPIPE.
-    yield* proc.stdout.pipe(
+    const stdout = yield* proc.stdout.pipe(
       Stream.decodeText(),
       Stream.splitLines,
       Stream.runForEach((line) => Deferred.succeed(readyLine, line)),
-      Effect.ensuring(Deferred.fail(readyLine, new Error("Standalone server exited before reporting readiness"))),
       Effect.forkScoped,
     )
-    const output = yield* Deferred.await(readyLine)
+    yield* Effect.gen(function* () {
+      const code = yield* proc.exitCode.pipe(Effect.catch(() => Effect.succeed(undefined)))
+      yield* Fiber.join(stdout).pipe(Effect.ignore)
+      yield* Fiber.join(stderr).pipe(Effect.ignore)
+      yield* Deferred.fail(
+        readyLine,
+        new Error(
+          `Standalone server exited before reporting readiness${code === undefined ? "" : ` (exit ${code})`}${diagnostics.trim() ? `\n${diagnostics.trim()}` : ""}`,
+        ),
+      )
+    }).pipe(Effect.forkScoped)
+    const output = yield* Deferred.await(readyLine).pipe(
+      Effect.timeoutOrElse({
+        duration: "30 seconds",
+        orElse: () =>
+          Effect.fail(
+            new Error(
+              `Standalone server did not report readiness within 30 seconds${diagnostics.trim() ? `\n${diagnostics.trim()}` : ""}`,
+            ),
+          ),
+      }),
+    )
     const ready = yield* Effect.tryPromise(() => decodeReady(output))
     return {
       url: ready.url,

@@ -2498,6 +2498,13 @@ export type ConfigEntry =
           }
         }
         experimental?: {
+          sandbox?: {
+            enabled?: boolean
+            approval?: "on-request" | "never"
+            full_disk_read?: boolean
+            readable_roots?: Array<string>
+            writable_roots?: Array<string>
+          }
           portable_shell_scanner?: boolean
           todo?: boolean
           background_compaction?: boolean
@@ -4214,6 +4221,9 @@ export type PermissionReplyInput = {
   readonly requestID: string
   readonly decision: "once" | "always" | "reject"
   readonly message?: string | undefined
+  readonly experimental?:
+    | { readonly acknowledgeSandbox?: boolean | undefined; readonly saveSandboxPrefix?: boolean | undefined }
+    | undefined
 }
 
 export type PermissionReplyOutput = void
@@ -4760,6 +4770,18 @@ export type DebugLocationEvictInput = { readonly location?: { readonly directory
 
 export type DebugLocationEvictOutput = void
 
+export type ExperimentalSandboxStatusInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalSandboxStatusOutput = {
+  active: boolean
+  reads: "unrestricted" | "restricted" | "broad"
+  escalation: "on-request" | "never" | "disabled"
+  writableRoots: Array<string>
+  readableRoots: Array<string>
+}
+
 export type ExperimentalMigrationV1StatusOutput =
   | { status: "required" | "completed" }
   | { status: "running"; progress: { label: string; numerator?: number | undefined; denominator?: number | undefined } }
@@ -4930,6 +4952,12 @@ export type FileUnwatchInput = ExperimentalFileUnwatchInput
 
 /** @deprecated Use `ExperimentalFileUnwatchOutput`. Removed in the next minor. */
 export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
+
+/** @deprecated Use `ExperimentalSandboxStatusInput`. Removed in the next minor. */
+export type SandboxStatusInput = ExperimentalSandboxStatusInput
+
+/** @deprecated Use `ExperimentalSandboxStatusOutput`. Removed in the next minor. */
+export type SandboxStatusOutput = ExperimentalSandboxStatusOutput
 
 /** @deprecated Use `ExperimentalMigrationV1StatusOutput`. Removed in the next minor. */
 export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput

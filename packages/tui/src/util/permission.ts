@@ -29,6 +29,33 @@ export function permissionPresentation(
   const metadata = { ...dict(source.toolMetadata), ...dict(source.metadata) }
   const resources = source.resources.filter((item): item is string => typeof item === "string")
 
+  if (source.action === "sandbox.workspace") {
+    return {
+      icon: "→",
+      title: "Change sandbox workspace",
+      lines: [
+        `Directory: ${formatPath(text(metadata.directory) || resources[0] || "")}`,
+        `Session: ${text(metadata.targetSessionID)}`,
+        "This changes the filesystem boundary for future commands and built-in file tools in that session.",
+        "Changing it again requires another approval.",
+      ],
+    }
+  }
+
+  if (source.action === "sandbox.exec") {
+    return {
+      icon: "#",
+      title: "Run command outside the sandbox",
+      lines: [
+        `$ ${text(metadata.command) || text(input.command) || resources[0] || ""}`,
+        ...(text(metadata.cwd) ? [`Directory: ${formatPath(text(metadata.cwd))}`] : []),
+        ...(text(metadata.justification) ? [`Reason: ${text(metadata.justification)}`] : []),
+        "This command and its descendants will run with your account's filesystem and network access.",
+        "Approval applies to this invocation only.",
+      ],
+    }
+  }
+
   if (action === "edit") {
     const file = text(input.path) || resources[0] || ""
     const first = dict(Array.isArray(metadata.files) ? metadata.files[0] : undefined)
@@ -151,17 +178,31 @@ function wildcardDirectory(value: string) {
   return prefix.replace(/[\\/]+$/, "")
 }
 
-export function permissionAlwaysLines(input: { action: string; save?: ReadonlyArray<string> }): string[] {
+export function permissionAlwaysLines(input: {
+  action: string
+  save?: ReadonlyArray<string>
+  metadata?: unknown
+}): string[] {
   const save = input.save ?? []
+  if (input.action === "sandbox.exec") {
+    const metadata = dict(input.metadata)
+    return [
+      ...save.map((item) => `Session prefix: ${item}`),
+      `Directory: ${text(metadata.cwd)}`,
+      "Matching commands may run outside the sandbox for this session.",
+      "Only the same shell and directory match. Extra literal arguments and descendants run with your account's filesystem and network access.",
+      "Other sessions and subagents are not approved. The grant expires when the server restarts.",
+    ]
+  }
   if (save.length === 1 && save[0] === "*") {
     return [`This will always allow ${input.action} for this project.`]
   }
   return ["This will always allow the following patterns for this project.", ...save.map((item) => `- ${item}`)]
 }
 
-export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel") {
+export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel", action?: string) {
   if (option === "once") return "Allow once"
-  if (option === "always") return "Always allow"
+  if (option === "always") return action === "sandbox.exec" ? "Allow prefix for session" : "Always allow"
   if (option === "reject") return "Reject"
   if (option === "confirm") return "Confirm"
   return "Cancel"

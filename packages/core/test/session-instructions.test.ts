@@ -29,6 +29,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { AgentFiles } from "@opencode/core/agent-files"
 import { Tool } from "@opencode/core/tool"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -41,6 +42,7 @@ const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
+    AgentFiles.node,
     Tool.node,
     ReadToolFileSystem.node,
     FileAccess.node,
@@ -128,6 +130,33 @@ const seedSynthetic = (sessionID: Session.ID, paths: string[]) =>
   })
 
 describe("SessionInstructions", () => {
+  it.live("uses supplied confined bytes without reopening the host path and preserves deduplication", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const session = yield* Session.Service
+      const instructions = yield* SessionInstructions.Service
+      const target = path.join(location.directory, "AGENTS.md")
+      const blocked = path.join(location.directory, "blocked.md")
+      yield* writeAgents(target, "host bytes must not be reopened")
+      yield* writeAgents(blocked, "host fallback must not occur")
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: location.directory }) })).id
+      const reads: string[] = []
+      const read = (file: string) =>
+        Effect.sync(() => {
+          reads.push(file)
+          return file === target ? "confined bytes" : undefined
+        })
+      yield* instructions.load({ sessionID, paths: [target, blocked], read })
+      expect(reads).toEqual([target, blocked])
+      const injected = yield* synthetics(sessionID)
+      expect(injected).toHaveLength(1)
+      expect(injected[0]?.text).toBe(`Instructions from: ${target}\nconfined bytes`)
+      yield* instructions.load({ sessionID, paths: [target], read })
+      expect(reads).toEqual([target, blocked])
+      expect(yield* synthetics(sessionID)).toHaveLength(1)
+    }),
+  )
+
   it.live("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service

@@ -7,6 +7,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode/util/process"
 import { Environment } from "./environment/index.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
+import { Sandbox } from "./sandbox.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
 
 /**
@@ -100,8 +101,10 @@ const normalizePath = (value: string) =>
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
-const layer = Layer.effect(
-  Service,
+/** Separate agent adapter: UI/index searches retain their trusted host binding. */
+export class AgentService extends Context.Service<AgentService, Interface>()("@opencode/AgentRipgrep") {}
+
+const make = (sandbox?: Sandbox.Interface) =>
   Effect.gen(function* () {
     const environment = yield* Environment.Service
     const binary = yield* RipgrepBinary.Service
@@ -118,8 +121,17 @@ const layer = Layer.effect(
       const program = Effect.scoped(
         Effect.gen(function* () {
           // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
+          const executable = yield* sandbox?.enabled ? binary.standalone : binary.filepath
+          const launch = sandbox?.enabled ? yield* sandbox.search(executable) : undefined
           const handle = yield* environment.spawner.spawn(
-            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+            ChildProcess.make(launch?.command ?? executable, [...(launch?.args ?? []), ...input.args], {
+              cwd: input.cwd,
+              env: launch?.env,
+              extendEnv: !launch,
+              stdin: "ignore",
+              detached: Boolean(launch) && process.platform !== "win32",
+              ...(launch ? { forceKillAfter: "1 second" } : {}),
+            }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -146,7 +158,7 @@ const layer = Layer.effect(
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
-          if (code !== 0 && code !== 1 && code !== 2) {
+          if ((sandbox?.enabled && code === 2 && rows.length === 0) || (code !== 0 && code !== 1 && code !== 2)) {
             return yield* failure(stderr.trim() || `ripgrep failed with code ${code}`)
           }
           return code === 1 ? [] : rows
@@ -276,7 +288,18 @@ const layer = Layer.effect(
           ),
         ),
     })
-  }),
-)
+  })
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer: Layer.effect(Service, make()),
+  deps: [Environment.node, RipgrepBinary.node],
+})
+export const agentNode = makeLocationNode({
+  service: AgentService,
+  layer: Layer.effect(
+    AgentService,
+    Sandbox.Service.use((sandbox) => make(sandbox)),
+  ),
+  deps: [Environment.node, RipgrepBinary.node, Sandbox.node],
+})

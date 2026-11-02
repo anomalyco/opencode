@@ -4,6 +4,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
+import { AgentFiles } from "../../agent-files.js"
 import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
@@ -45,8 +46,8 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 export const Plugin = {
   id: "opencode.tool.glob",
   effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
-    const ripgrep = yield* Ripgrep.Service
+    const environment = yield* AgentFiles.Service
+    const ripgrep = yield* Ripgrep.AgentService
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
@@ -67,6 +68,7 @@ export const Plugin = {
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
+                prompt: environment.sandboxed ? "skip" : undefined,
                 resources: [input.pattern],
                 save: ["*"],
                 metadata: {
@@ -129,7 +131,10 @@ export const Plugin = {
               Effect.mapError((error) =>
                 error instanceof ToolFailure
                   ? error
-                  : new ToolFailure({ message: `Unable to find files matching ${input.pattern}`, error }),
+                  : new ToolFailure({
+                      message: `Unable to find files matching ${input.pattern}${environment.sandboxed ? `. ${AgentFiles.guidance}` : ""}`,
+                      error,
+                    }),
               ),
             ),
         }),

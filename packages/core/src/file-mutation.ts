@@ -5,6 +5,7 @@ import { Context, Effect, Layer } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
+import { AgentFiles } from "./agent-files.js"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
 import type { FileAccess } from "./file-access.js"
@@ -66,7 +67,7 @@ const transactionLocks = KeyedMutex.makeUnsafe<string>()
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const environment = yield* Environment.Service
+    const environment = yield* AgentFiles.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
       [...new Set(targets.map(FSUtil.resolve))]
@@ -121,7 +122,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [AgentFiles.node] })
 
 /**
  * Deferred until the corresponding integrations exist.

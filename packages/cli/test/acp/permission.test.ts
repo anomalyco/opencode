@@ -22,6 +22,27 @@ import {
 const allowOnce = () => ({ outcome: { outcome: "selected", optionId: "once" } }) as const
 
 describe("acp permissions over the wire", () => {
+  test("rejects sandbox approvals without presenting a misleading generic tool prompt", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          permissionAsked(sessionID, "perm_escape", { action: "sandbox.exec", metadata: { command: "echo escape" } }),
+          permissionAsked(sessionID, "perm_workspace", {
+            action: "sandbox.workspace",
+            metadata: { directory: "/outside" },
+          }),
+        ),
+      permission: allowOnce,
+    })
+    expect(await acp.prompt(acp.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
+    expect(decisions(acp)).toEqual([
+      ["perm_escape", "reject"],
+      ["perm_workspace", "reject"],
+    ])
+    expect(acp.permissions).toEqual([])
+  })
   test("forwards allow-once and allow-always selections to the server", async () => {
     const selections: Record<string, () => RequestPermissionResponse> = {
       call_once: allowOnce,
@@ -305,4 +326,3 @@ function question(sessionID: string, id: string) {
 function decisions(acp: Wire) {
   return acp.server.replies.map((reply) => [reply.requestID, reply.decision])
 }
-

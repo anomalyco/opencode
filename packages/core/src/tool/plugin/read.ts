@@ -6,6 +6,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
+import { AgentFiles } from "../../agent-files.js"
 import { FileAccess } from "../../file-access.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
@@ -31,6 +32,7 @@ export const Plugin = {
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
     const reader = yield* ReadToolFileSystem.Service
     const access = yield* FileAccess.Service
+    const agentFiles = yield* AgentFiles.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
@@ -86,6 +88,29 @@ export const Plugin = {
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
+                if (agentFiles.sandboxed) {
+                  const start =
+                    result.content.type === "list-page" ? result.target.absolute : dirname(result.target.absolute)
+                  const candidates: string[] = []
+                  for (
+                    let directory = start;
+                    directory !== location.directory && FSUtil.contains(location.directory, directory);
+                    directory = dirname(directory)
+                  ) {
+                    candidates.push(join(directory, FILENAME))
+                  }
+                  yield* sessionInstructions.load({
+                    sessionID: context.sessionID,
+                    paths: candidates,
+                    read: (file) =>
+                      access.authorizeRead(file, context).pipe(
+                        Effect.flatMap((target) => agentFiles.files.read(target.absolute)),
+                        Effect.map((result) => new TextDecoder().decode(result.bytes)),
+                        Effect.orElseSucceed(() => undefined),
+                      ),
+                  })
+                  return
+                }
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(location.directory)
                 // The Location and its ancestors are already supplied by initial instructions,
@@ -120,7 +145,7 @@ export const Plugin = {
                   error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
                   error instanceof ReadToolFileSystem.PathKindError
                     ? error.message
-                    : `Unable to read ${input.path}`
+                    : `Unable to read ${input.path}${agentFiles.sandboxed ? `. ${AgentFiles.guidance}` : ""}`
                 return new ToolFailure({ message, error })
               }),
             )

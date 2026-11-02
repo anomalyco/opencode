@@ -53,7 +53,7 @@ Each rule requires three string fields:
 | `deny`  | Block the operation                 |
 | `ask`   | Wait for a decision from the client |
 
-If no rule matches, OpenCode uses `ask`.
+If no rule matches, OpenCode uses `ask`. When the [sandbox](/sandbox) is enabled, eligible shell commands can run inside it without an ordinary shell approval; explicit denies still apply.
 
 ## Matching
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, type Scope } from "effect"
 import { Failed, NotFound, WrongKind, type Files } from "@opencode/core/environment/index"
 
 export interface EnvironmentHarness {
@@ -11,7 +11,7 @@ export interface EnvironmentHarness {
 
 export const environmentConformance = <E>(
   name: string,
-  makeHarness: () => Effect.Effect<EnvironmentHarness, E>,
+  makeHarness: () => Effect.Effect<EnvironmentHarness, E, Scope.Scope>,
   skip = false,
 ) => {
   const check = <A, E2>(title: string, body: (harness: EnvironmentHarness) => Effect.Effect<A, E2>) =>
