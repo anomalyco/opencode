@@ -73,7 +73,7 @@ describe("Project.list", () => {
     }),
   )
 
-  it.effect("skips rows whose stored worktree is not a valid absolute path", () =>
+  it.effect("lists rows whose stored worktree is a backslash Windows path, normalized", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const project = yield* Project.Service
@@ -81,14 +81,46 @@ describe("Project.list", () => {
         .insert(ProjectTable)
         .values({ id: Project.ID.make("valid"), worktree: abs("/valid"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 })
         .run()
-      // Inserted raw: drizzle encoding would reject the malformed value on write
+      // Inserted raw: drizzle encoding would reject the backslash value on write
       // just as it does on read, but such rows exist in real databases after a
       // cross-OS migration (e.g. a Windows path left over on Linux).
       yield* db.run(
-        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('malformed', ${"C:\\"}, '[]', 1, 1, 2)`,
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('migrated', ${"C:\\"}, '[]', 1, 1, 2)`,
+      )
+
+      const listed = yield* project.list()
+      expect(listed.map((item) => item.id)).toEqual([Project.ID.make("migrated"), Project.ID.make("valid")])
+      expect(listed[0]?.canonical).toEqual(abs("C:/"))
+    }),
+  )
+
+  it.effect("skips rows whose stored worktree is not an absolute path on any OS", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.make("valid"), worktree: abs("/valid"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 })
+        .run()
+      yield* db.run(
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('relative', ${"relative/path"}, '[]', 1, 1, 2)`,
       )
 
       expect((yield* project.list()).map((item) => item.id)).toEqual([Project.ID.make("valid")])
+    }),
+  )
+
+  it.effect("lists rows whose stored sandboxes hold a backslash Windows path, normalized", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db.run(
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('sandboxed', ${"/sandboxed"}, ${JSON.stringify(["C:\\sandbox"])}, 1, 1, 1)`,
+      )
+
+      const listed = yield* project.list()
+      expect(listed.map((item) => item.id)).toEqual([Project.ID.make("sandboxed")])
+      expect(listed[0]?.sandboxes).toEqual([abs("C:/sandbox")])
     }),
   )
 })

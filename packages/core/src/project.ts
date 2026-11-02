@@ -249,10 +249,10 @@ const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* (input?: ListInput) {
-      // Decoding a stored worktree that no longer parses as an absolute path
-      // (e.g. a Windows path left over after a cross-OS migration) throws for
-      // the whole result set, so read the raw values first and drop such rows
-      // instead of failing the entire listing.
+      // Decoding a stored worktree that parses as no absolute path on any OS
+      // throws for the whole result set, so read the raw values first and drop
+      // such rows instead of failing the entire listing. (Backslash Windows
+      // paths are normalized by storedAbsolutePath, not dropped.)
       const candidates = yield* db
         .select({ id: ProjectTable.id, worktree: sql<string>`${ProjectTable.worktree}` })
         .from(ProjectTable)
