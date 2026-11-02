@@ -254,14 +254,6 @@ export function SessionActivityChips(props: {
               data-view={panel.state.shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
-              onFocusIn={(event: FocusEvent) => {
-                if (!(event.target instanceof HTMLElement)) return
-                const row = event.target.closest<HTMLElement>('[data-component="menu-v2-item"]')
-
-                if (!row) return
-                // Kobalte's scroll adjustment ignores scroll-padding; native scrolling keeps the row clear of the edge.
-                queueMicrotask(() => row.scrollIntoView({ block: "nearest", inline: "nearest" }))
-              }}
             >
               <Show
                 when={panel.state.shell}

@@ -82,6 +82,42 @@ test("recently closed shows ten sessions and searches older closures in close or
   await expect(menu).toBeHidden()
 })
 
+test("recently closed keeps the keyboard-focused session in view when the menu overflows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 360 })
+
+  const sessions = Array.from({ length: 11 }, (_, index) => ({
+    id: `ses_overflow_${index}`,
+    title: `Overflow session ${index}`,
+  }))
+
+  await mockWorkspace(page, {
+    name: "ClosedOverflow",
+    sessions,
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(1).map((item, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: item.id },
+          index,
+          info: { title: item.title, directory: "C:/OpenCode/ClosedOverflow", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText("Overflow session 0")
+  await page.getByRole("button", { name: "New session", exact: true }).click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const last = menu.getByRole("menuitem", { name: "C Overflow session 1", exact: true })
+
+  await expect(menu.getByRole("menuitem")).toHaveCount(10)
+  await menu.getByRole("searchbox", { name: "Search recently closed" }).press("ArrowDown")
+  await page.keyboard.press("End")
+  await expect(last).toBeFocused()
+  await expect(last).toBeInViewport({ ratio: 1 })
+})
+
 test("recently closed fills remaining slots in Home order without open or duplicate sessions", async ({ page }) => {
   const sessions = Array.from({ length: 12 }, (_, index) => ({
     id: `ses_other_${index}`,

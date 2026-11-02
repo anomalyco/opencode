@@ -9,7 +9,7 @@ import "./menu-scroll.css"
  * high-contrast modes keep the native scrollbar.
  */
 export function MenuScroll(
-  props: Omit<ComponentProps<"div">, "ref" | "onScroll"> & {
+  props: Omit<ComponentProps<"div">, "ref" | "onScroll" | "onFocusIn"> & {
     viewportClass?: string
     viewportRef?: (element: HTMLDivElement) => void
     onScroll?: JSX.EventHandler<HTMLDivElement, Event>
@@ -75,6 +75,11 @@ export function MenuScroll(
           clearTimeout(idle)
           idle = setTimeout(() => setState("scrolling", false), 800)
           local.onScroll?.(event)
+        }}
+        // Kobalte menus focus items without scrolling and scroll their own content, which no longer overflows here.
+        onFocusIn={(event) => {
+          if (event.target !== viewport && event.target instanceof HTMLElement)
+            event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
         }}
       >
         <div ref={content} data-slot="menu-scroll-content">
