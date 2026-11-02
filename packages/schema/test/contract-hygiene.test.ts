@@ -15,6 +15,7 @@ import { Pty } from "../src/pty.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
 import { SessionInbox } from "../src/session-inbox.js"
+import { SessionEvent } from "../src/session-event.js"
 import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
@@ -114,6 +115,24 @@ describe("contract hygiene", () => {
       payload: { text: "hello" },
       delivery: "steer",
     })
+  })
+
+  test("keeps the admission execution intent on the queued event only", () => {
+    // Decoded as a wire record, like a stored event payload: the input is genuinely unknown.
+    const codec: Schema.Codec<unknown, unknown> = SessionEvent.InboxEnqueued.data
+    const legacy = {
+      sessionID: "ses_pending",
+      inboxID: "msg_pending",
+      item: { type: "synthetic", payload: { text: "hello" }, delivery: "steer" },
+    }
+    const roundTrip = (input: unknown) => Schema.encodeUnknownSync(codec)(Schema.decodeUnknownSync(codec)(input))
+
+    // A legacy event carries no intent and still decodes; an absent one is omitted when encoded.
+    expect(roundTrip(legacy)).toEqual(legacy)
+    expect(roundTrip({ ...legacy, resume: true })).toEqual({ ...legacy, resume: true })
+    // The intent stays internal: no public inbox variant carries it.
+    expect(Object.keys(SessionInbox.User.fields)).not.toContain("resume")
+    expect(Object.keys(SessionInbox.Synthetic.fields)).not.toContain("resume")
   })
 
   test("forms require at least one field", () => {
