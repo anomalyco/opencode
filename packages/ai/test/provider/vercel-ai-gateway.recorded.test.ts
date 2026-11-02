@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, LLMRequest } from "../../src/effect.js"
+import { ai, LLMClient, LLMEvent } from "../../src/effect.js"
 import { isRetryable } from "../../src/provider-error.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { recordedTests } from "../recorded-test.js"
@@ -61,17 +61,15 @@ for (const item of [
     `continues ${item.name} reasoning and tools`,
     () =>
       Effect.gen(function* () {
-        const events = yield* runWeatherToolLoop(
-          LLMRequest.update(
-            goldenWeatherToolLoopRequest({
-              id: item.name,
-              model: item.model,
-              maxTokens: 2048,
-              temperature: false,
-            }),
-            { providerOptions: item.options },
-          ),
-        )
+        const events = yield* runWeatherToolLoop({
+          ...goldenWeatherToolLoopRequest({
+            id: item.name,
+            model: item.model,
+            maxTokens: 2048,
+            temperature: false,
+          }),
+          providerOptions: item.options,
+        })
         expectWeatherToolLoop(events)
         expect(events.filter(LLMEvent.is.finish).every((event) => event.providerMetadata?.gateway !== undefined)).toBe(
           true,
@@ -87,7 +85,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
@@ -103,7 +101,7 @@ recorded.effect(
   "automatically caches distinct Claude system blocks",
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: gateway.messages("anthropic/claude-sonnet-5.5"),
         system: [
           {

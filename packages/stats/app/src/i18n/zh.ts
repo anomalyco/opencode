@@ -59,7 +59,7 @@ export const dict = {
   "modal.success": "你已订阅。",
   "modal.error": "订阅失败",
   "product.allUsers": "所有用户",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1 天",
   "range.1W": "1 周",

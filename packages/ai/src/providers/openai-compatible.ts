@@ -6,6 +6,7 @@ import type { RouteDefaultsInput } from "../route/client.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("openai-compatible")
 
@@ -18,7 +19,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL: string
     readonly provider?: string
   }
@@ -67,15 +68,8 @@ export const imageModel = (modelID: string, settings: Settings) => {
   return configure(input).image(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, body, headers, provider, ...providerOptions }: Settings) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    provider,
-    providerOptions,
-  }
+function config({ provider, ...settings }: Settings) {
+  return { ...toConfig(settings), provider }
 }
 
 export * as OpenAICompatible from "./openai-compatible.js"

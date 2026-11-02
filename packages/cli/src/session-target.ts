@@ -1,5 +1,6 @@
 import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
 import { Model } from "@opencode/schema/model"
+import path from "node:path"
 import { errorMessage } from "./util/error"
 
 const SESSION_PAGE_LIMIT = 50
@@ -129,6 +130,32 @@ async function selectSession(input: {
         })
       : selected,
   }
+}
+
+/** Create a new worktree of the location's project, keeping the caller's subfolder when the worktree has it. */
+export async function createWorktreeLocation(input: {
+  client: OpenCodeClient
+  location?: { directory?: string }
+  name?: string
+  signal?: AbortSignal
+}) {
+  const base = await resolveLocation(input.client, input.location, input.signal)
+  const created = await input.client.worktree
+    .create(
+      { projectID: base.project.id, from: base.project.directory, name: input.name },
+      ...requestOptions(input.signal),
+    )
+    .catch((error) => {
+      throw new SessionTargetMutationError(error)
+    })
+  const subfolder = path.relative(base.project.directory, base.directory)
+  if (!subfolder || subfolder.startsWith("..") || path.isAbsolute(subfolder))
+    return { root: created.directory, directory: created.directory }
+  const directory = path.join(created.directory, subfolder)
+  return resolveLocation(input.client, { directory }, input.signal).then(
+    () => ({ root: created.directory, directory }),
+    () => ({ root: created.directory, directory: created.directory }),
+  )
 }
 
 export function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {

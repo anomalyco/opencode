@@ -231,6 +231,35 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock)
+  const interrupts: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`)) interrupts.push(request.url())
+  })
+  const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
+
+  await expect(stop).toBeVisible()
+  await view.input.click()
+  await view.input.press("Enter")
+  await view.input.press("ControlOrMeta+Enter")
+  await view.input.pressSequentially("   ")
+  await view.input.press("Enter")
+
+  const interrupted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+  )
+
+  await stop.click()
+  await interrupted
+
+  expect(interrupts).toHaveLength(1)
+  expect(mock.prompts).toEqual([])
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {

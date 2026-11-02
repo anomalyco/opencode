@@ -26,10 +26,9 @@ export function rewrite<ID extends string>(
   input: Context & { readonly specifier: string | undefined },
 ) {
   if (input.specifier === undefined) return
-  const plain = resolve(input.specifier, input)
-  if (!plain) return
   const settings = decode(target.settings ?? {})
-  const replacement = resolve(input.specifier, { ...input, settings }) ?? plain
+  const replacement = resolve(input.specifier, { ...input, settings })
+  if (!replacement) return
   const translated = options(replacement, input.modelID, settings)
   if (target.package !== undefined || replacement !== input.specifier) target.package = replacement
   // Without `provider`, the native compatible package reports every AI SDK-mapped host as `openai-compatible`.

@@ -48,6 +48,7 @@ export function RecentlyClosedTabsMenu(props: {
   })
 
   const servers = createMemo(() => global.servers.list())
+
   const sessions = useQueries(() => ({
     queries: servers().map((conn) => {
       const ctx = global.serverCtx(ServerConnection.key(conn))
@@ -135,7 +136,7 @@ export function RecentlyClosedTabsMenu(props: {
             queueMicrotask(() => search?.focus())
           }}
         >
-          <div class="recently-closed-search mx-1 mb-1" data-empty={!state.query}>
+          <div class="recently-closed-search m-1" data-empty={!state.query}>
             <TextInput
               ref={search}
               type="search"

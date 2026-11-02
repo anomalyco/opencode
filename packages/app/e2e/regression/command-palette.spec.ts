@@ -349,7 +349,7 @@ test("appends search results without resetting the selected command", async ({ p
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
 
-test("lists matching sessions above commands and jumps between sections with Alt and the arrows", async ({ page }) => {
+test("lists commands above matching sessions and jumps between sections with Alt and the arrows", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   await page.route("**/api/session?*", (route) =>
     route.fulfill({
@@ -367,16 +367,17 @@ test("lists matching sessions above commands and jumps between sections with Alt
   )
   await input.fill("copy")
   const session = dialog.getByRole("option", { name: /Copy fixture/ })
-  await expect(session).toHaveAttribute("aria-selected", "true")
-  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Session")
+  await expect(session).toBeVisible()
   const commands = dialog.getByRole("group", { name: "Commands", exact: true }).getByRole("option")
+  await expect(commands.first()).toHaveAttribute("aria-selected", "true")
+  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Commands")
   await input.press("Alt+ArrowDown")
+  await expect(session).toHaveAttribute("aria-selected", "true")
+  await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
   await input.press("ArrowDown")
   await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
-  await input.press("Alt+ArrowUp")
-  await expect(session).toHaveAttribute("aria-selected", "true")
 })
 
 test("selects the first session when it arrives above automatically selected files", async ({ page }) => {

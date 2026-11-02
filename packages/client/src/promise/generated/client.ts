@@ -255,6 +255,20 @@ import type {
   ExperimentalScheduleResumeOutput,
   ExperimentalScheduleDeleteInput,
   ExperimentalScheduleDeleteOutput,
+  ExperimentalArtifactsProvidersInput,
+  ExperimentalArtifactsProvidersOutput,
+  ExperimentalArtifactsListInput,
+  ExperimentalArtifactsListOutput,
+  ExperimentalArtifactsCreateInput,
+  ExperimentalArtifactsCreateOutput,
+  ExperimentalArtifactsGetInput,
+  ExperimentalArtifactsGetOutput,
+  ExperimentalArtifactsUpdateInput,
+  ExperimentalArtifactsUpdateOutput,
+  ExperimentalArtifactsDeleteInput,
+  ExperimentalArtifactsDeleteOutput,
+  ExperimentalArtifactsViewInput,
+  ExperimentalArtifactsViewOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1433,9 +1447,9 @@ export function make(options: ClientOptions) {
             {
               method: "PUT",
               path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
-              body: { attachmentID: input["attachmentID"], size: input["size"] },
+              body: { attachmentID: input["attachmentID"], size: input["size"], title: input["title"] },
               successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
+              declaredStatuses: [400, 401, 404, 501, 503],
               empty: false,
             },
             requestOptions,
@@ -1563,6 +1577,106 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [400, 401, 403, 404],
               empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      artifacts: {
+        providers: (input?: ExperimentalArtifactsProvidersInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsProvidersOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/providers`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        list: (input?: ExperimentalArtifactsListInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsListOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts`,
+              query: { location: input?.["location"], sessionID: input?.["sessionID"], provider: input?.["provider"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        create: (input: ExperimentalArtifactsCreateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsCreateOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/artifacts`,
+              query: { location: input["location"] },
+              body: {
+                title: input["title"],
+                files: input["files"],
+                entry: input["entry"],
+                provider: input["provider"],
+                sessionID: input["sessionID"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        get: (input: ExperimentalArtifactsGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        update: (input: ExperimentalArtifactsUpdateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              body: {
+                title: input["title"],
+                files: input["files"],
+                entry: input["entry"],
+                sessionID: input["sessionID"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        delete: (input: ExperimentalArtifactsDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsDeleteOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        view: (input: ExperimentalArtifactsViewInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsViewOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}/view/${encodePath(input.path)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+              binary: true,
             },
             requestOptions,
           ),

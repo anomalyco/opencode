@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
+import { Effect, Exit, Fiber, Layer, Ref, Scope, Stream, Tracer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -994,6 +994,14 @@ describe("ModelsDev Service", () => {
 
   it.live("refresh(false) revalidates with the stored ETag and treats 304 as unchanged", () =>
     Effect.gen(function* () {
+      const spans: Tracer.NativeSpan[] = []
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })
       const cache = makeCache()
       const state = yield* Ref.make<MockState>({ ...initialState, etag: 'W/"v1"' })
       const body = yield* provided(
@@ -1006,6 +1014,7 @@ describe("ModelsDev Service", () => {
           cache.values.set(metaKey, { ...meta, updatedAt: Date.now() - 10 * 60 * 1000 })
           const body = cache.values.get(cacheKey)
           yield* Ref.update(state, (s) => ({ ...s, status: 304 }))
+          spans.length = 0
           const bus = yield* Bus.Service
           const event = yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
             Stream.take(1),
@@ -1022,13 +1031,36 @@ describe("ModelsDev Service", () => {
           expect(event._tag).toBe("None")
           expect(yield* svc.get()).toEqual(fixtureSnapshot)
           return body
-        }),
+        }).pipe(Effect.provideService(Tracer.Tracer, tracer)),
       )
       const final = yield* Ref.get(state)
       expect(final.calls.map((call) => call.ifNoneMatch)).toEqual([undefined, 'W/"v1"'])
       expect(cache.values.get(cacheKey)).toBe(body)
       expect(cache.values.get(metaKey)).toMatchObject({ etag: 'W/"v1"' })
       expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
+      const fetchSpans = spans.filter((span) => span.name === "ModelsDev.fetchApi")
+      expect(fetchSpans).toHaveLength(1)
+      for (const span of spans.filter((span) => span.name.startsWith("ModelsDev."))) {
+        if (span.status._tag === "Ended") {
+          expect(Exit.isFailure(span.status.exit)).toBe(false)
+        }
+      }
+
+      spans.length = 0
+      yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          yield* svc.refresh(true)
+          expect(yield* svc.get()).toEqual(fixtureSnapshot)
+        }).pipe(Effect.provideService(Tracer.Tracer, tracer)),
+      )
+      const unrequested304 = spans.find((span) => span.name === "ModelsDev.fetchApi")
+      expect(unrequested304?.status._tag).toBe("Ended")
+      if (unrequested304?.status._tag === "Ended") {
+        expect(Exit.isFailure(unrequested304.status.exit)).toBe(true)
+      }
     }),
   )
 
