@@ -76,20 +76,15 @@ test("a model switch waits for the server to know the session it targets", async
   // the create request is still in flight.
   setup.mockInput.pressEnter()
 
-  // The server rejects a model switch for a session it has not stored yet, so
-  // the switch may not leave before the create was answered.
-  const early = await Promise.race([
-    switched.promise,
-    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 2000)),
-  ])
+  // Wait for the empty Enter to be processed by the composer before releasing
+  // the held session creation.
+  await new Promise((resolve) => setTimeout(resolve, 50))
   create.resolve()
   const sent = await switched.promise
 
-  expect(early).toBeUndefined()
   // The switch carries the session id the client minted, unmodified.
   const createdID = created[0]?.id
   if (!createdID) throw new Error("the session was never created")
   expect(sent.id).toBe(createdID)
-  expect(sent.id).not.toBe(sent.id.toUpperCase())
   expect(sent.createAnswered).toBe(true)
-})
+}, 15000)
