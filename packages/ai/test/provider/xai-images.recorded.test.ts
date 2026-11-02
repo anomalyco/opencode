@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/effect.js"
+import { ai, Media } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -19,7 +19,7 @@ const recorded = recordedTests({
 describe("xAI Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat black diamond centered on a plain white background.",
         aspect: "1:1",
@@ -34,7 +34,7 @@ describe("xAI Images recorded", () => {
 
   recorded.effect("edits an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "Keep the simple shape and change it from black to bright purple.",
         images: [

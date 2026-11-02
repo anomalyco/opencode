@@ -5,7 +5,14 @@ import { motionTimeScale } from "@opencode/ui/motion-tuning"
 // Panels in flight, across the app. Native views, which no DOM box clips, stay hidden while any panel moves.
 const [flights, setFlights] = createSignal(0)
 
-export const panelsMoving = () => flights() > 0
+// A resize handle being dragged. A native view's bounds land on screen frames before the DOM around it, so one kept
+// live through a drag would jump against its panel on every move.
+const [resizing, setResizing] = createSignal(false)
+
+export const panelsMoving = () => flights() > 0 || resizing()
+
+/** Pass to a resize handle's `onDraggingChange` when its drag moves a panel that can hold a native view. */
+export const setPanelResizing = (dragging: boolean) => setResizing(dragging)
 
 // The left sidebar and the side panel share one spring, so they move as one system. Each panel's flight takes its time
 // scaled by the square root of how far it travels against a 480px panel, between 0.15s and 0.3s, so a narrow sidebar

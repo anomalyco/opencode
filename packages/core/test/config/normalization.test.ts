@@ -112,7 +112,8 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
     const info = Schema.decodeUnknownSync(Info)(result.encoded)
     if (typeof info.warming === "boolean" || info.warming === undefined) throw new Error("expected warming info")
-    expect(Duration.toMillis(info.warming.interval ?? Duration.zero)).toBe(240_000)
+    const interval = info.warming.interval
+    expect(interval === "auto" ? interval : Duration.toMillis(interval ?? Duration.zero)).toBe(240_000)
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 
@@ -520,6 +521,13 @@ describe("ConfigNormalize", () => {
       ["conflict", ["compaction", "keep", "tokens"]],
       ["conflict", ["compaction", "buffer"]],
     ])
+
+    expect(normalized({ compaction: { buffer: "12.5%" } }).encoded.compaction).toEqual({ buffer: "12.5%" })
+    for (const buffer of ["0%", "100%", "150%"]) {
+      const result = normalized({ compaction: { buffer } })
+      expect(result.encoded.compaction).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["compaction", "buffer"]]])
+    }
   })
 
   test("distinguishes empty, mixed, and wholly malformed enabled provider lists", () => {

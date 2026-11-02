@@ -58,6 +58,8 @@ describe("parseFileLink", () => {
     ["a%2520b.ts", "a%2520b.ts", undefined],
     ["C:/foo/../../x.ts", "C:/x.ts", undefined],
     ["file:///C:/tmp/demo%20file.ts:12", "C:/tmp/demo file.ts", { start: 12, end: 12 }],
+    ["skill://opencode/SKILL.md", "skill://opencode/SKILL.md", undefined],
+    ["skill://guide/references/style.md:12", "skill://guide/references/style.md", { start: 12, end: 12 }],
   ])("parses %s", (href, expectedPath, expectedSelection) => {
     const parsed = parseFileLink(href)
     expect(parsed.path).toBe(expectedPath)

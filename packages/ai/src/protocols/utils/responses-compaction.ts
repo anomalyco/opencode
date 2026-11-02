@@ -5,7 +5,7 @@ import {
   CompactionPart,
   CompactionResponse,
   HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ContentPart,
   mergeJsonRecords,
@@ -108,9 +108,10 @@ export const make = (
     const url = Endpoint.render(route.endpoint, { request, body: native })
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
-      request: LLMRequest.update(request, {
+      request: {
+        ...request,
         http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-      }),
+      },
       body,
       endpoint: Endpoint.path(url.toString()),
       auth: route.auth,

@@ -2,9 +2,11 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
 import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
+  Context,
   DateTime,
   Deferred,
   Duration,
@@ -15,6 +17,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Logger,
   Option,
   RcMap,
   Schema,
@@ -29,6 +32,7 @@ import { Global } from "@opencode/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Config } from "@opencode/core/config"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
 import { Plugin } from "@opencode/core/plugin"
@@ -316,6 +320,39 @@ describe("LocationServiceMap", () => {
     }),
   )
 
+  for (const holder of ["stays", "releases on shutdown"] as const)
+    it.effect(
+      `warns when a borrower ${holder === "stays" ? "still holds" : "lets go of"} an invalidated location`,
+      () => {
+        const warnings: unknown[] = []
+        const logger = Logger.map(Logger.formatStructured, (entry) => {
+          if (entry.level === "WARN") warnings.push(entry.message)
+        })
+        return Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const locations = yield* LocationServiceMap.Service
+          const borrow = yield* Scope.make()
+          const context = yield* locations.contextEffect(ref).pipe(Scope.provide(borrow))
+          if (holder === "releases on shutdown")
+            yield* Context.get(context, LocationLifecycle.Service).awaitShutdown.pipe(
+              Effect.andThen(Scope.close(borrow, Exit.void)),
+              Effect.forkScoped,
+            )
+
+          yield* locations.invalidate(ref)
+          yield* Effect.yieldNow
+          yield* TestClock.adjust("30 seconds")
+          expect(warnings).toEqual(
+            holder === "stays"
+              ? [["location still held after shutdown", { directory: dir.path, workspaceID: undefined, holders: 1 }]]
+              : [],
+          )
+          yield* Scope.close(borrow, Exit.void)
+        }).pipe(Effect.provide(Logger.layer([logger])))
+      },
+    )
+
   it.live("retries a location after its missing directory is recreated", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -484,6 +521,33 @@ describe("LocationServiceMap", () => {
         ),
       ),
     ),
+  )
+
+  it.live("rebuilds a cached location when its directory becomes a git repo", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(dir.path)
+      const ref = Location.Ref.make({ directory })
+      const locations = yield* LocationServiceMap.Service
+
+      // A location built before the directory is a repo keeps the markerless identity.
+      const before = Context.get(yield* locations.contextEffect(ref), Location.Service)
+      expect(before.vcs).toBeUndefined()
+
+      yield* Effect.promise(async () => {
+        await $`git init -q`.cwd(dir.path).quiet()
+        await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+          .cwd(dir.path)
+          .quiet()
+      })
+      const head = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(dir.path).text())).trim()
+
+      // Once the directory is a repo, the next borrow must report the VCS identity, not the
+      // markerless one it cached before the repo existed.
+      const after = Context.get(yield* locations.contextEffect(ref), Location.Service)
+      expect(after.vcs?.type).toBe("git")
+      expect(after.project.id).toBe(Project.ID.make(head))
+    }),
   )
 
   it.live("isolates provider state by location", () =>

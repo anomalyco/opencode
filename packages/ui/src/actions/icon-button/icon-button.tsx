@@ -1,4 +1,4 @@
-import { Root } from "@kobalte/core/button"
+import type { Root } from "@kobalte/core/button"
 import { type ComponentProps, splitProps } from "solid-js"
 import { JSX } from "solid-js"
 import "./icon-button.css"
@@ -12,11 +12,24 @@ export interface IconButtonProps
   state?: "rest" | "hover" | "pressed"
 }
 
+// A native button with the attributes Kobalte's Button sets on one, without its per-instance computations.
 export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
-  const [local, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList", "state"])
+  const [local, rest] = splitProps(props, [
+    "variant",
+    "size",
+    "icon",
+    "class",
+    "classList",
+    "state",
+    "type",
+    "disabled",
+  ])
 
   return (
-    <Root
+    <button
+      type={local.type ?? "button"}
+      disabled={local.disabled}
+      data-disabled={local.disabled ? "" : undefined}
       {...rest}
       data-component="icon-button-v2"
       data-size={local.size || "normal"}
@@ -28,6 +41,6 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
       }}
     >
       {local.icon}
-    </Root>
+    </button>
   )
 }

@@ -37,6 +37,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),
+  artifacts: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

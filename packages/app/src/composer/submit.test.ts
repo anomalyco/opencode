@@ -84,14 +84,14 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
-  delivery: ComposerDelivery = "steer",
+  delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
-    delivery: () => delivery,
+    delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -176,6 +176,108 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test.each(["steer", "queue"] as const)(
+    "sends only the selected quote as a %s, including its comment mentions, without clearing the draft",
+    async (delivery) => {
+      const state = createMemoryComposerState({ prompt: "/review keep this draft" }).capture()
+
+      const image = {
+        type: "image" as const,
+        id: "unrelated-image",
+        filename: "draft.png",
+        mime: "image/png",
+        blob: { id: "unrelated-image", url: "data:image/png;base64,YQ==" },
+      }
+
+      state.set([...state.current(), image], 5)
+      state.mode.set("shell")
+      state.context.add({ type: "quote", text: "Selected passage", commentID: "selected", comment: "Old comment" })
+      state.context.add({ type: "quote", text: "Unrelated passage", commentID: "other" })
+      state.context.add({ type: "file", path: "unrelated.ts" })
+      const before = state.current()
+
+      const requests: Parameters<ComposerSession["data"]["session"]["prompt"]>[0][] = []
+
+      const submission = submitInput(
+        active(state, session({ calls: [], prompt: async (value) => void requests.push(value) })),
+        undefined,
+        "shell",
+        undefined,
+        undefined,
+        undefined,
+        (alternate) => {
+          expect(alternate).toBe(true)
+
+          return delivery
+        },
+      )
+
+      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts")).toBe(true)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.text).toBe(
+        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts",
+      )
+      expect(requests[0]).toMatchObject({
+        delivery,
+        files: [{ uri: "file:///C:/repo/src/api.ts", name: "api.ts" }],
+        agents: [],
+        skills: [],
+        metadata: {
+          displayText: "",
+          comments: [{ type: "quote", text: "Selected passage", comment: "Compare @src/api.ts" }],
+          attachments: [],
+        },
+      })
+      expect(state.current()).toBe(before)
+      expect(state.cursor()).toBe(5)
+      expect(state.mode.current()).toBe("shell")
+      expect(state.context.items().map((item) => item.key)).toEqual([
+        "quote:c=other",
+        "file:unrelated.ts:undefined:undefined",
+      ])
+    },
+  )
+
+  test("a failed quote send retains its latest comment and prevents duplicate submissions while pending", async () => {
+    const state = createMemoryComposerState({ prompt: "Keep this draft" }).capture()
+
+    state.context.add({ type: "quote", text: "Selected passage", commentID: "selected" })
+    const failed = Promise.withResolvers<void>()
+
+    const started = Promise.withResolvers<void>()
+
+    const errors: string[] = []
+
+    const calls: string[] = []
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls,
+          prompt: async () => {
+            started.resolve()
+            await failed.promise
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: (_kind, error) => void errors.push(String(error)) },
+    )
+
+    const pending = submission.submitQuote("quote:c=selected", "Latest comment")
+
+    await started.promise
+    expect(await submission.submitQuote("quote:c=selected", "Duplicate")).toBe(false)
+    failed.reject(new Error("Could not send"))
+    expect(await pending).toBe(false)
+    expect(errors).toHaveLength(1)
+    expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
+    expect(state.context.items()).toMatchObject([
+      { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
+    ])
+    expect(calls.filter((call) => call === "send")).toHaveLength(2)
+  })
+
   test("applies the selection and runs a client argument command without admitting it to the session", async () => {
     const state = createMemoryComposerState().capture()
 
@@ -319,9 +421,15 @@ describe("Composer submission", () => {
         switchModel: async () => committed.promise,
       })
 
-      await submitInput(active(state, target), undefined, "normal", undefined, undefined, undefined, delivery).submit(
-        new Event("submit"),
-      )
+      await submitInput(
+        active(state, target),
+        undefined,
+        "normal",
+        undefined,
+        undefined,
+        undefined,
+        () => delivery,
+      ).submit(new Event("submit"))
 
       expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
       expect(statuses).toEqual(["running"])
@@ -630,7 +738,7 @@ describe("Composer submission", () => {
           () => [],
           [],
           undefined,
-          delivery,
+          () => delivery,
         ).submit(new Event("submit"))
         // The send settles after submit returns; let it and the move that follows it finish.
         await new Promise((resolve) => setTimeout(resolve, 0))

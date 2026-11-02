@@ -4,11 +4,15 @@ import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { usePlugin } from "@opencode/plugin/gui"
 
-/** A terminal's side panel tab label: renamed by double-click or its context menu, which also closes it. */
+/**
+ * A terminal's side panel tab label: renamed by double-click or its context menu, which also closes it. Without
+ * `rename` the terminal cannot be renamed.
+ */
 export function TerminalTabLabel(props: {
   label: string
   title: string
-  rename: (title: string) => void
+  /** Receives the edited title, or `null` for an emptied field; unchanged titles are the receiver's to skip. */
+  rename?: (title: string | null) => void
   close: () => void
 }): JSX.Element {
   const plugin = usePlugin()
@@ -18,6 +22,7 @@ export function TerminalTabLabel(props: {
   let renameRequested = false
 
   const edit = () => {
+    if (!props.rename) return
     setStore({ editing: true, title: props.title })
 
     // A blur fired while the trigger releases focus would end the edit before it starts.
@@ -31,9 +36,7 @@ export function TerminalTabLabel(props: {
 
   const save = () => {
     if (!store.editing) return
-    const value = store.title.trim()
-
-    if (value && value !== props.title) props.rename(value)
+    props.rename?.(store.title.trim() || null)
     setStore("editing", false)
   }
 
@@ -41,7 +44,8 @@ export function TerminalTabLabel(props: {
     if (frame !== undefined) cancelAnimationFrame(frame)
   })
 
-  // The label renders inside the strip's tab trigger, so the field keeps its keys and pointer from the trigger.
+  // The label renders inside the strip's tab trigger, so the field keeps its keys, pointer and focus from the trigger:
+  // the tab list returns focus that enters it from outside to the trigger.
   const isolate = (event: Event) => event.stopPropagation()
 
   return (
@@ -82,6 +86,7 @@ export function TerminalTabLabel(props: {
               setStore("editing", false)
             }}
             onKeyUp={isolate}
+            onFocusIn={isolate}
             onPointerDown={isolate}
             onMouseDown={isolate}
             onClick={isolate}
@@ -98,7 +103,9 @@ export function TerminalTabLabel(props: {
             edit()
           }}
         >
-          <Menu.Item onSelect={() => (renameRequested = true)}>{plugin.t("common.rename")}</Menu.Item>
+          <Menu.Item disabled={!props.rename} onSelect={() => (renameRequested = true)}>
+            {plugin.t("common.rename")}
+          </Menu.Item>
           <Menu.Item onSelect={() => props.close()}>{plugin.t("common.close")}</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

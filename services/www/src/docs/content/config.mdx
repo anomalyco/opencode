@@ -328,7 +328,7 @@ provider automatically.
 }
 ```
 
-See the [websearch guide](/websearch) for providers, credentials, selection,
+See the [web search guide](/websearch) for providers, credentials, selection,
 rate limits, and disabling search.
 
 ### MCP
@@ -363,10 +363,12 @@ Control automatic context compaction and how much recent context it preserves.
     "keep": {
       "tokens": 15000,
     },
-    "buffer": 20000,
+    "buffer": "15%",
   },
 }
 ```
+
+`buffer` is the share of the model's context window kept free before automatic compaction starts.
 
 Local summaries remain the default. Opt into native provider compaction for both
 automatic and manual requests with a provider or model policy:

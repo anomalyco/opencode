@@ -44,7 +44,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings<Options = MessagesOptionsInput> = ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -117,7 +117,10 @@ export const configure = (input: Config = {}) => {
     auth,
   }
   const messages = (modelID: string | ModelID) =>
-    messagesRoute.with(defaults).model<MessagesOptionsInput>({ id: modelID })
+    messagesRoute.with(defaults).model<MessagesOptionsInput>({
+      id: modelID,
+      compatibility: { requireSignature: false },
+    })
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,

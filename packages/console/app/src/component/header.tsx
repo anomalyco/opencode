@@ -35,7 +35,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: boolean }) {
+export function Header() {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
@@ -165,64 +165,22 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
+          {/* Console links use a full page load into its separate application. */}
           <li>
-            {/* Console links use a full page load into its separate application. */}
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
-            >
-              <a href="/console/models" target="_self">
-                {i18n.t("nav.models")}
-              </a>
-            </Show>
+            <a href="/console/models" target="_self">
+              {i18n.t("nav.models")}
+            </a>
           </li>
           <li>
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
-            >
-              <a href="/console/go" target="_self">
-                {i18n.t("nav.go")}
-              </a>
-            </Show>
+            <a href="/console/go" target="_self">
+              {i18n.t("nav.subscription")}
+            </a>
           </li>
           <li>
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
-            >
-              <a href="/console/teams" target="_self">
-                {i18n.t("nav.teams")}
-              </a>
-            </Show>
+            <a href="/console" target="_self">
+              {i18n.t("nav.console")}
+            </a>
           </li>
-          <Show when={props.zen || props.go}>
-            <li>
-              <a href="/console">{i18n.t("nav.login")}</a>
-            </li>
-          </Show>
-          <Show when={!props.hideGetStarted}>
-            <li>
-              <A href={language.route("/download")} data-slot="cta-button">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 18 18"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  style="flex-shrink: 0;"
-                >
-                  <path
-                    d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-                {i18n.t("nav.free")}
-              </A>
-            </li>
-          </Show>
         </ul>
       </nav>
       <nav data-component="nav-mobile">
@@ -288,52 +246,21 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
                 </li>
-                <Show when={!props.zen}>
-                  <li>
-                    <Show
-                      when={config.consoleMarketingEnabled}
-                      fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
-                    >
-                      <a href="/console/models" target="_self">
-                        {i18n.t("nav.models")}
-                      </a>
-                    </Show>
-                  </li>
-                </Show>
-                <Show when={!props.go}>
-                  <li>
-                    <Show
-                      when={config.consoleMarketingEnabled}
-                      fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
-                    >
-                      <a href="/console/go" target="_self">
-                        {i18n.t("nav.go")}
-                      </a>
-                    </Show>
-                  </li>
-                </Show>
                 <li>
-                  <Show
-                    when={config.consoleMarketingEnabled}
-                    fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
-                  >
-                    <a href="/console/teams" target="_self">
-                      {i18n.t("nav.teams")}
-                    </a>
-                  </Show>
+                  <a href="/console/models" target="_self">
+                    {i18n.t("nav.models")}
+                  </a>
                 </li>
-                <Show when={props.zen || props.go}>
-                  <li>
-                    <a href="/console">{i18n.t("nav.login")}</a>
-                  </li>
-                </Show>
-                <Show when={!props.hideGetStarted}>
-                  <li>
-                    <A href={language.route("/download")} data-slot="cta-button">
-                      {i18n.t("nav.getStartedFree")}
-                    </A>
-                  </li>
-                </Show>
+                <li>
+                  <a href="/console/go" target="_self">
+                    {i18n.t("nav.subscription")}
+                  </a>
+                </li>
+                <li>
+                  <a href="/console" target="_self">
+                    {i18n.t("nav.console")}
+                  </a>
+                </li>
               </ul>
             </nav>
           </div>

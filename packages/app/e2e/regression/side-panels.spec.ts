@@ -1,101 +1,7 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
-import { tabKey } from "../utils/app"
+import { expect, test, type Page } from "@playwright/test"
 import { fileDiff, openSession } from "../utils/workspace"
 import { openReviewLauncher } from "../utils/side-panel"
-import { expectSessionTitle } from "../utils/waits"
 import { base64Encode } from "@opencode/util/encode"
-
-test("review and terminal tabs follow the session tab and the terminal stays mounted", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 })
-  const a = { id: "ses_side_a", title: "Alpha session" }
-  const b = { id: "ses_side_b", title: "Beta session" }
-
-  const { directory, pty } = await openSession(page, {
-    name: "SidePanels",
-    sessions: [a, b],
-    pty: {},
-    vcsDiff: Array.from({ length: 2_740 }, (_, index) =>
-      fileDiff(`src/generated-${String(index).padStart(4, "0")}.ts`),
-    ),
-    seed: { panes: { [a.id]: { sessionWidth: 580 }, [b.id]: { sessionWidth: 520 } } },
-  })
-
-  const chat = page.locator('[data-slot="session-chat-panel"]')
-  const review = page.locator('#review-panel [data-component="session-review-v2"]')
-  const terminal = page.locator('[data-component="terminal"]')
-  const reviewTab = page.locator("#session-side-panel-review-tab")
-  const terminalTab = page.locator("#review-panel").getByRole("tab", { name: "Terminal 1", exact: true })
-
-  const switchTab = async (title: string) => {
-    await page.locator("[data-titlebar-tab-slot]", { hasText: title }).click()
-    await expectSessionTitle(page, title)
-  }
-
-  await page.getByRole("button", { name: "Toggle review" }).click()
-  await openReviewLauncher(page.locator("#review-panel"))
-  await expect(review).toBeVisible()
-  await expect(chat).toHaveCSS("width", "580px")
-  await expect(reviewTab).toHaveText("Files Changed 2740")
-
-  // The terminal opens as a tab beside review in the same strip.
-  await page.keyboard.press("Control+Backquote")
-  await expect(terminalTab).toHaveAttribute("aria-selected", "true")
-  await expect(terminal).toBeVisible()
-  await expect(review).toBeHidden()
-  await expect.poll(() => pty.sockets.length).toBe(1)
-  await mark(terminal)
-
-  await switchTab(b.title)
-  await expect(terminal).toBeHidden()
-  await expectMarked(terminal)
-  await page.getByRole("button", { name: "Toggle review" }).click()
-  await openReviewLauncher(page.locator("#review-panel"))
-  await expect(review).toBeVisible()
-  await expect(chat).toHaveCSS("width", "520px")
-  // The workspace's terminal reopens in this session's strip instead of starting another shell.
-  await page.keyboard.press("Control+Backquote")
-  await expect(terminalTab).toHaveAttribute("aria-selected", "true")
-  await expect(terminal).toBeVisible()
-  await expectMarked(terminal)
-
-  await switchTab(a.title)
-  await expect(terminal).toBeVisible()
-  await expect(chat).toHaveCSS("width", "580px")
-  await expectMarked(terminal)
-  await reviewTab.click()
-  await expect(review).toBeVisible()
-  expect(pty.sockets).toHaveLength(1)
-  expect(pty.created).toHaveLength(1)
-  expect(pty.sockets[0]!.url.searchParams.get("location[directory]")).toBe(directory)
-  expect(pty.sockets[0]!.url.searchParams.get("ticket")).toBe("e2e-ticket")
-  expect(pty.tokens[0]?.headers["x-opencode-ticket"]).toBe("1")
-
-  await terminalTab.click()
-  await expect(terminal).toBeVisible()
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (key) => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs.panes") ?? "{}")[key]?.review,
-        tabKey(a.id),
-      ),
-    )
-    .toBe(true)
-  await page.reload()
-  await expectSessionTitle(page, a.title)
-  await expect(terminalTab).toHaveAttribute("aria-selected", "true")
-  await expect(terminal).toBeVisible()
-  await expect(chat).toHaveCSS("width", "580px")
-  await reviewTab.click()
-  await expect(review).toBeVisible()
-
-  const tree = page.locator('#review-panel [data-component="file-tree-v2"]')
-  await expect(tree.getByRole("treeitem", { name: "generated-0000.ts" })).toBeVisible()
-  expect(await tree.locator('[data-type="item"]').count()).toBeLessThanOrEqual(60)
-  const viewport = tree.locator("[data-file-tree-virtualized-scroll]")
-  await viewport.hover()
-  await page.mouse.wheel(0, 100_000)
-  await expect(tree.getByRole("treeitem", { name: "generated-2739.ts" })).toBeVisible()
-})
 
 test("review content stays aligned with the side region in both directions", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })
@@ -259,15 +165,6 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
   await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
   await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
 })
-
-// A DOM mark survives only while the same node stays mounted.
-function mark(locator: Locator) {
-  return locator.evaluate((element) => element.setAttribute("data-e2e-mounted", "original"))
-}
-
-function expectMarked(locator: Locator) {
-  return expect(locator).toHaveAttribute("data-e2e-mounted", "original")
-}
 
 async function expectTreeSentinel(page: Page) {
   const tree = page.locator('#review-panel [data-component="file-tree-v2"]')

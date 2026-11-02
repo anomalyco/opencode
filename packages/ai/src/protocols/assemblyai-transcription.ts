@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
+import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -34,7 +34,7 @@ export type AssemblyAITranscriptionOptions = {
   readonly speech_models?: ReadonlyArray<OpenString<"universal-3-5-pro" | "universal-2">>
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<AssemblyAITranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<AssemblyAITranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas

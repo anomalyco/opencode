@@ -105,10 +105,12 @@ export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
     catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
+      error instanceof AIError
+        ? error
+        : new AIError({
+            reason: new InvalidRequestError({
+              message: error instanceof Error ? error.message : String(error),
+              cause: error,
+            }),
+          }),
   })

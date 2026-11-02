@@ -44,7 +44,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 

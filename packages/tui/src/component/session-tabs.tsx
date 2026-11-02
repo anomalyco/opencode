@@ -610,9 +610,7 @@ function VerticalSessionTabs(props: {
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
   const items = ordered
-  const highlightColor = createMemo(() =>
-    tint(background(), actionHovered(), actionHovered().a),
-  )
+  const highlightColor = createMemo(() => tint(background(), actionHovered(), actionHovered().a))
   const highlighted = (sessionID: string | undefined) =>
     sessionID !== undefined && (activeID() === sessionID || hovered() === sessionID || dragging() === sessionID)
   const addHighlighted = () => newTab() || addHovered()
@@ -853,7 +851,6 @@ function VerticalSessionTabs(props: {
                 () => previous()?.sessionID === activeID() && Boolean(previousStatus().attention),
                 animations,
               )
-              const indicatorWidth = 10
               let lastPreviousGlowHue: RGBA | undefined
               const previousGlowHue = () => {
                 const feedback = tabFeedbackColor(previousStatus(), theme)
@@ -864,9 +861,7 @@ function VerticalSessionTabs(props: {
               const separatorUpperColor = createMemo(() =>
                 tint(background(), previousGlowHue(), 0.1 * previousGlowLevel()),
               )
-              const separatorLowerColor = createMemo(() =>
-                tint(background(), glowHue(), 0.12 * glowLevel()),
-              )
+              const separatorLowerColor = createMemo(() => tint(background(), glowHue(), 0.12 * glowLevel()))
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -931,9 +926,7 @@ function VerticalSessionTabs(props: {
                         edge="top"
                         width={width()}
                         color={pulseBackground()}
-                        background={
-                          highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()
-                        }
+                        background={highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()}
                       />
                       <SessionTabHalfRow
                         top={1}
@@ -991,7 +984,6 @@ function VerticalSessionTabs(props: {
                       glow={glows()}
                       outerGlow={previousGlows()}
                       color={separatorLowerPulseColor()}
-                      width={indicatorWidth}
                       outerColor={separatorUpperPulseColor()}
                       flashColor={tint(background(), theme.text.base, 0.22)}
                       outerFlashColor={tint(background(), theme.text.base, 0.18)}
@@ -1018,7 +1010,6 @@ function VerticalSessionTabs(props: {
                         glow={glows()}
                         outerGlow={false}
                         color={tint(background(), theme.text.base, 0.04)}
-                        width={indicatorWidth}
                         outerColor={tint(background(), theme.text.base, 0.006)}
                         flashColor={tint(background(), theme.text.base, 0.18)}
                         flashTail={8}
@@ -1039,7 +1030,6 @@ function VerticalSessionTabs(props: {
                         complete={complete() && !status().attention}
                         glow={glows()}
                         color={pulseColor()}
-                        width={indicatorWidth}
                         glowColor={glowColor()}
                         flashColor={flashColor()}
                         flashTail={8}
@@ -1124,7 +1114,6 @@ function VerticalSessionTabs(props: {
                         complete={complete() && !status().attention}
                         glow={glows()}
                         color={detailPulseColor()}
-                        width={indicatorWidth}
                         glowColor={detailGlowColor()}
                         glowTail={10}
                         flashColor={detailFlashColor()}

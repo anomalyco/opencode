@@ -238,7 +238,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         }}
         onDragEnter={props.controller.onDragEnter}
         onDragOver={props.controller.onDragOver}
-        onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
         <div
@@ -270,6 +269,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onQuoteFocus={props.controller.focusQuotePrompt}
               onEditQuote={props.controller.editQuote}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
+              quoteSubmit={view.submit.quote}
               searchPaths={props.controller.searchPaths}
             />
           </Show>
@@ -686,6 +686,7 @@ function ComposerAttachments(props: {
   onQuoteFocus?: () => void
   onEditQuote?: (key?: string) => void
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  quoteSubmit?: ComposerEditorModel["view"]["submit"]["quote"]
   searchPaths?: (query: string) => Promise<string[]>
 }) {
   const i18n = useI18n()
@@ -882,6 +883,13 @@ function ComposerAttachments(props: {
                   text={current.text}
                   comment={current.comment ?? ""}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  send={
+                    props.quoteSubmit && {
+                      available: props.quoteSubmit.available(),
+                      delivery: props.quoteSubmit.delivery(),
+                      onSubmit: (comment) => props.quoteSubmit!.onSubmit(current.key, comment),
+                    }
+                  }
                   onSubmit={(comment) => {
                     props.onQuoteComment?.(current, comment)
                     props.onEditQuote?.()

@@ -1,10 +1,36 @@
+import { Decision } from "./decision.js"
+import { Image } from "./image.js"
+import { LLM } from "./llm.js"
+import { Speech } from "./speech.js"
+import { Transcription } from "./transcription.js"
+import { Video } from "./video.js"
+
+/** The Effect API: the same shape as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
+export const ai = {
+  request: LLM.request,
+  generate: LLM.generate,
+  stream: LLM.stream,
+  loop: LLM.loop,
+  collect: LLM.collect,
+  compact: LLM.compact,
+  canCompact: LLM.canCompact,
+  image: Image,
+  decision: Decision,
+  /** Experimental: may change without compatibility guarantees. */
+  experimental: {
+    speech: Speech,
+    transcription: Transcription,
+    video: Video,
+  },
+} as const
+
 export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
 export { ProviderPackage } from "./provider-package.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
-export type { Interface as LLMClientShape, LLMClientService } from "./route/client.js"
+export type { LLMClientService } from "./route/client.js"
 export {
   ProtocolID,
   RouteID,
@@ -48,7 +74,6 @@ export {
   ToolNamespace,
   ToolEntry,
   ToolChoice,
-  LLMRequest,
   FinishReason,
   Usage,
   MediaUsage,
@@ -67,12 +92,11 @@ export {
   ToolInputError,
   ToolCall,
   ToolResult,
-  ToolError,
   FinishReasonDetails,
   StepFinish,
   Finish,
   MediaEvent,
-  ProviderErrorEvent,
+  RawEvent,
   LLMEvent,
   LLMResponse,
   HttpContext,
@@ -80,7 +104,6 @@ export {
   InvalidRequestError,
   UnsupportedOperationError,
   ProviderConfigurationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
@@ -100,22 +123,22 @@ export type {
   GenerationOptionsInput,
   LanguageModelInput,
   LanguageModelProviderOptions,
+  LLMRequest,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
   ImageOptions,
-  ImageRequestFor,
+  ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
 } from "./image.js"
-export { Image } from "./image.js"
 export { DecisionClient } from "./decision-client.js"
 export {
   ChoiceAnswer,
@@ -129,7 +152,6 @@ export {
   DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
-  DecisionRequest,
   DecisionResponse,
   DecisionTextPart,
   DecisionUsage,
@@ -147,12 +169,11 @@ export type {
   DecisionModelOptions,
   DecisionOptions,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionRequestInput,
   DecisionResponseFor,
   DecisionModelRoute,
 } from "./decision.js"
-export { Decision } from "./decision.js"
 export { DecisionRoute } from "./route/decision.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
@@ -166,20 +187,18 @@ export type {
 } from "./generation.js"
 export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
-export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
+export type { ToolSettlement } from "./tool-runtime.js"
 export type {
   ExecutableTool,
   Tool,
   ToolExecute,
   ToolExecuteContext,
+  ToolInput,
+  ToolInputType,
   ToolModelOutputInput,
   ToolOptions,
-  Tools,
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"
-export * as LLM from "./llm.js"
-export type {
-  Definition as ProviderPackageDefinition,
-  Settings as ProviderPackageSettings,
-} from "./provider-package.js"
+export type { LLM } from "./llm.js"
+export type { LLMLoopInput, LLMRequestInput } from "./llm.js"

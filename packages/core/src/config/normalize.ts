@@ -513,6 +513,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.schedules = value
       }
+      if (own(experimental, "artifacts")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.artifacts,
+          experimental.artifacts,
+          ["experimental", "artifacts"],
+          diagnostics,
+        )
+        if (value !== undefined) result.artifacts = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,
