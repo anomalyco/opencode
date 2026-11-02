@@ -658,20 +658,31 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-        yield* lock
-          .withPermit(
+        yield* Effect.gen(function* () {
+          const stored = yield* lock.withPermit(
             Effect.gen(function* () {
-              const stored = Option.getOrUndefined(
+              const meta = Option.getOrUndefined(
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
-              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag)
-              const digest = response && bodyDigest(response.text)
+              if (!force && meta && Date.now() - meta.updatedAt < Duration.toMillis(ttl)) return undefined
+              return meta ?? null
+            }),
+          )
+          if (stored === undefined) return
+
+          const response = yield* fetchApi(force ? undefined : stored?.etag)
+          const digest = response && bodyDigest(response.text)
+
+          yield* lock.withPermit(
+            Effect.gen(function* () {
+              const latest = Option.getOrUndefined(
+                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+              )
               // models.dev rarely changes between polls; skip invalidation and
               // the Refreshed event for a byte-identical body so downstream
               // provider/model update listeners stay quiet.
-              if (!force && stored && (!response || stored.digest === digest)) {
-                yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
+              if (!force && latest && (!response || latest.digest === digest)) {
+                yield* writeMeta(Date.now(), latest.digest, response?.etag ?? latest.etag)
                 return
               }
               if (!response) return
@@ -681,10 +692,10 @@ export const layer = (options?: Options) =>
               yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),
           )
-          .pipe(
-            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-            Effect.ignore,
-          )
+        }).pipe(
+          Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+          Effect.ignore,
+        )
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
