@@ -35,9 +35,13 @@ function fail(message: string) {
   return { _tag: "fail" as const, error: new Error(message) }
 }
 
-/** The default registration file. */
+/**
+ * The default registration file. An empty `XDG_STATE_HOME` means unset, matching the XDG
+ * specification and `roots()` in `packages/util/src/global-roots.ts`, so the client and server
+ * always resolve the same registration path.
+ */
 export function fallback() {
-  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
+  return join(process.env["XDG_STATE_HOME"] || join(homedir(), ".local", "state"), "opencode", "service.json")
 }
 
 /** Whether two registrations describe the same service instance. */
