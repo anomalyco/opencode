@@ -402,7 +402,7 @@ export function PaneTabs(props: {
         </Menu>
         <div
           data-slot="session-side-panel-actions"
-          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
+          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-[var(--session-header-inset-end,12px)]"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
