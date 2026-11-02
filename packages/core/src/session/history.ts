@@ -20,8 +20,6 @@ const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
 const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
-const decodePartSync = Schema.decodeUnknownSync(SessionMessage.AssistantContent)
-export const encodePart = Schema.encodeSync(SessionMessage.AssistantContent)
 const PartQueryBatchSize = 500
 
 /**
@@ -87,9 +85,6 @@ const latestCompaction = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
 })
 
-export const hasInlineContent = (data: typeof SessionMessageTable.$inferSelect.data): boolean =>
-  "content" in data && Array.isArray(data.content) && data.content.length > 0
-
 /**
  * Puts each assistant row's `session_part` rows into its `data.content`, in ordinal order. Rows without parts keep
  * their inline content, so legacy rows read unchanged. Runs before blob hydration so media in parts restores too.
@@ -128,9 +123,6 @@ const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
   id: row.id,
   type: row.type,
 })
-
-export const decodePartRowSync = (row: typeof SessionPartTable.$inferSelect) =>
-  decodePartSync(SessionLegacy.part({ ...row.data, type: row.type }))
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
