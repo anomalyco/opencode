@@ -1,8 +1,17 @@
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import type { Provider } from "../../provider.js"
+import { ProviderRefresh } from "./refresh.js"
+
+/** Resolves the integration's active connection to its credential, or undefined when it cannot be resolved. */
+export const activeCredential = Effect.fnUntraced(function* (ctx: Context, integrationID: string) {
+  const connection = yield* ctx.integration.connection.active(integrationID)
+  const credential = connection
+    ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+    : undefined
+  return { connection, credential }
+})
 
 /**
  * Tracks provider settings a plugin derives from the active connection's stored credential, such as login form
@@ -16,7 +25,6 @@ export const credentialSettings = Effect.fn("ProviderPlugin.credentialSettings")
   select: (value: Credential.Value) => Provider.Settings,
 ) {
   const credentials = yield* Credential.Service
-  const bus = yield* Bus.Service
   const load = Effect.fn("ProviderPlugin.credentialSettings.load")(function* () {
     const connection = yield* ctx.integration.connection.active(integrationID)
     // Reads the stored value rather than resolving the connection, so startup never refreshes anything.
@@ -25,17 +33,14 @@ export const credentialSettings = Effect.fn("ProviderPlugin.credentialSettings")
     return stored ? select(stored.value) : {}
   })
   const current = { settings: yield* load() }
-  yield* bus.subscribe(Credential.Event.Switched).pipe(
-    Stream.filter((event) => event.data.integrationID === integrationID),
-    Stream.runForEach(() =>
-      Effect.gen(function* () {
-        const next = yield* load()
-        if (JSON.stringify(next) === JSON.stringify(current.settings)) return
-        current.settings = next
-        yield* ctx.provider.reload()
-      }),
-    ),
-    Effect.forkScoped({ startImmediately: true }),
+  yield* ProviderRefresh.onSwitch(
+    integrationID,
+    Effect.gen(function* () {
+      const next = yield* load()
+      if (JSON.stringify(next) === JSON.stringify(current.settings)) return
+      current.settings = next
+      yield* ctx.provider.reload()
+    }),
   )
   return current
 })

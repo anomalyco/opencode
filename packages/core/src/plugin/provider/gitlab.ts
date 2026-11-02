@@ -1,12 +1,11 @@
 import os from "os"
 import { App } from "../../app.js"
-import { Clock, Deferred, Effect, Equal, Exit, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Deferred, Effect, Equal, Exit, Option, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import type { DiscoveredWorkflowModel } from "gitlab-ai-provider"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -15,6 +14,7 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
 import { credentialSettings, metadataSettings } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.gitlab
 const integrationID = Integration.ID.make("gitlab")
@@ -55,7 +55,6 @@ export const GitLabPlugin = define({
   id: "opencode.provider.gitlab",
   effect: Effect.fn(function* (ctx) {
     const providers = yield* Provider.Service
-    const bus = yield* Bus.Service
     const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     const loaded: {
@@ -294,13 +293,9 @@ export const GitLabPlugin = define({
         ],
       })
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* refresh().pipe(Effect.forkScoped)
+    const refresh = loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()))
+    yield* ProviderRefresh.onSwitch(integrationID, refresh)
+    yield* refresh.pipe(Effect.forkScoped)
 
     yield* ctx.aisdk.hook(
       "sdk",
@@ -330,7 +325,6 @@ export const GitLabPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.gitlab) return
         const featureFlags =
           typeof evt.options.featureFlags === "object" && evt.options.featureFlags ? evt.options.featureFlags : {}
         const id = evt.model.modelID ?? evt.model.id
@@ -355,6 +349,7 @@ export const GitLabPlugin = define({
           featureFlags,
         })
       }),
+      { providerID: Provider.ID.gitlab },
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

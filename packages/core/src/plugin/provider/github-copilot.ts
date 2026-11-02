@@ -14,6 +14,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import { SharedCache } from "../../shared-cache.js"
+import { activeCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 import type { PluginInternal } from "../internal.js"
 
@@ -176,10 +177,7 @@ export const GithubCopilotPlugin = define({
       active: ctx.integration.connection.active("github-copilot"),
       reload: ctx.provider.reload(),
       load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
-        const connection = yield* ctx.integration.connection.active("github-copilot")
-        const credential = connection
-          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
+        const { connection, credential } = yield* activeCredential(ctx, "github-copilot")
         if (!connection || credential?.type !== "oauth") return { connection, value: {} }
         const url = copilotBaseURL(credential.metadata) ?? baseURL()
         const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
@@ -254,7 +252,6 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.package !== "@ai-sdk/github-copilot") return
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
@@ -264,12 +261,12 @@ export const GithubCopilotPlugin = define({
         const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
+      { providerID: Provider.ID.githubCopilot },
     )
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
         Effect.gen(function* () {
-          if (evt.model.providerID !== Provider.ID.githubCopilot) return
           const session = yield* ctx.session
             .get({ sessionID: evt.sessionID })
             .pipe(Effect.orElseSucceed(() => undefined))
@@ -287,7 +284,6 @@ export const GithubCopilotPlugin = define({
       "title",
       (evt) =>
         Effect.gen(function* () {
-          if (evt.model.providerID !== Provider.ID.githubCopilot) return
           const loaded = discovered.current
           if (!loaded.baseURL || !loaded.token || !loaded.models) return
           const agent = yield* ctx.agent
@@ -310,7 +306,6 @@ export const GithubCopilotPlugin = define({
       "http.request",
       (evt) =>
         Effect.gen(function* () {
-          if (evt.model.providerID !== Provider.ID.githubCopilot) return
           const token = evt.request.headers.get("x-api-key")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
@@ -322,7 +317,6 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
           evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)
           return
@@ -346,6 +340,7 @@ export const GithubCopilotPlugin = define({
           id.startsWith("mai-code-")
         evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
+      { providerID: Provider.ID.githubCopilot },
     )
   }),
 } satisfies PluginInternal.InternalPlugin)
