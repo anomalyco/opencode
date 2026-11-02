@@ -485,6 +485,22 @@ describe("FileSystem.find", () => {
   )
 
   it(
+    "addresses the location itself as `.` when listing its parent",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          const entries = yield* filesystem.find({ query: "", path: ".." })
+          expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make("." + path.sep), type: "directory" },
+            { path: RelativePath.make(path.join("..", "sibling") + path.sep), type: "directory" },
+          ])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
     "applies the type filter to direct children",
     prepare.pipe(
       Effect.flatMap((tmp) =>
