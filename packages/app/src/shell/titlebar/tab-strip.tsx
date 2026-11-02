@@ -78,9 +78,14 @@ function SessionTabSlot(props: {
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
-        "w-full shrink-0": props.orientation === "vertical",
+        "w-full shrink-0 transition-[max-height,opacity,margin] duration-200 ease-out":
+          props.orientation === "vertical",
+        "-my-0.5 opacity-0 pointer-events-none": props.orientation === "vertical" && props.concealed,
       }}
-      style={{ display: props.concealed ? "none" : undefined }}
+      style={{
+        "max-height": props.orientation === "vertical" ? (props.concealed ? "0px" : "48px") : undefined,
+      }}
+      inert={props.concealed}
       onPointerEnter={() => props.onIntent(true)}
       onPointerLeave={() => props.onIntent(false)}
     >
@@ -371,9 +376,14 @@ function DraftTabSlot(props: {
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
-        "w-full shrink-0": props.orientation === "vertical",
+        "w-full shrink-0 transition-[max-height,opacity,margin] duration-200 ease-out":
+          props.orientation === "vertical",
+        "-my-0.5 opacity-0 pointer-events-none": props.orientation === "vertical" && props.concealed,
       }}
-      style={{ display: props.concealed ? "none" : undefined }}
+      style={{
+        "max-height": props.orientation === "vertical" ? (props.concealed ? "0px" : "48px") : undefined,
+      }}
+      inert={props.concealed}
     >
       <DraftTabItem
         ref={(el) => {

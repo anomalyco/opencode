@@ -911,7 +911,7 @@ test("server groups limit their visible tabs and collapse from the header", asyn
   })
   await page.goto(sessionHref(local[0]!.id))
 
-  const visibleTabs = page.locator("[data-titlebar-tab-slot]:visible")
+  const visibleTabs = page.locator("[data-titlebar-tab-slot]:not([inert])")
   await expect(visibleTabs).toHaveCount(4)
 
   const showMore = page.locator(`[data-action="tab-server-group-show-more"][data-server="${SERVER}"]`)
@@ -932,6 +932,20 @@ test("server groups limit their visible tabs and collapse from the header", asyn
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(visibleTabs).toHaveCount(4)
+})
+
+test("server group motion follows the reduce motion preference", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "MotionTabs",
+    sessions: [a, b],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const tab = page.locator("[data-titlebar-tab-slot]").first()
+  await expect(tab).toHaveCSS("transition-duration", /0\.2s/)
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await expect(tab).toHaveCSS("transition-duration", "0s")
 })
 
 test("server groups can be reordered by dragging their headers", async ({ page }) => {
