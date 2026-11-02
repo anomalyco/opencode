@@ -12,13 +12,12 @@ type Options = {
   readonly command?: ReadonlyArray<string>
 }
 
-const startupDirectory = process.cwd()
-
 function command(password: string, options: Options) {
   const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
   return ChildProcess.make(executable, [...args, "--stdio", "--port", "0"], {
-    cwd: startupDirectory,
+    // Resolve at spawn time: the default handler may change the project directory after this module loads.
+    cwd: process.cwd(),
     // Explicit entry wins over anything inherited, so a user-exported
     // OPENCODE_PASSWORD cannot shadow the child's lease credential.
     env: { OPENCODE_PASSWORD: password },
