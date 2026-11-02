@@ -169,6 +169,24 @@ it.effect("kill switch: OPENCODE_TOOL_LOOP_DETECT=0 disables the cross-step rule
   }),
 )
 
+const LOOP_LINE = "I need to check the file again and again.\n"
+
+it.effect("interrupts a reasoning loop and returns a nudge carrying the pre-loop work", () =>
+  Effect.gen(function* () {
+    const s = yield* setup
+    const result = yield* s.attempt(
+      TestLLM.stop(
+        LLMEvent.reasoningStart({ id: "reasoning-1" }),
+        ...Array.from({ length: 200 }, () => LLMEvent.reasoningDelta({ id: "reasoning-1", text: LOOP_LINE })),
+        LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+      ),
+    )
+    expect(result._tag).toBe("LoopNudge")
+    expect(result._tag === "LoopNudge" && result.text).toContain("entered a repetition loop")
+    expect(result._tag === "LoopNudge" && result.text).not.toContain(LOOP_LINE.repeat(2))
+  }),
+)
+
 it.effect("loop state caps nudges per turn and clears on a new turn", () =>
   Effect.gen(function* () {
     const state = yield* SessionRunnerLoopState.Service

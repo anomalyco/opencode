@@ -27,6 +27,7 @@ import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { LOOP_STEP_ABORT_MESSAGE, TOOL_LOOP_NUDGE, TOOL_LOOP_NUDGE_TEXT } from "../llm/tool-loop.js"
+import { loopNudgeParts, loopNudgeText, reasoningLoopDetector } from "../llm/reasoning-loop.js"
 import { SessionRunnerLoopState } from "./loop-state.js"
 import { isRecord } from "@opencode/util/record"
 
@@ -111,7 +112,9 @@ export const make = Effect.gen(function* () {
 
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
-    // The cross-step tool rule lives in the session state.
+    // The reasoning rule is scoped to this step; the cross-step tool rule lives in the session state.
+    const reasoningLoop = reasoningLoopDetector()
+    let stepStream = ""
     let loopNudge: { readonly text: string } | undefined
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
@@ -124,6 +127,13 @@ export const make = Effect.gen(function* () {
           yield* publisher.publish(event)
           if (firstOutputAt === undefined && publisher.record().outputStarted)
             firstOutputAt = yield* Clock.currentTimeMillis
+          if (event.type === "reasoning-delta" || event.type === "text-delta") {
+            stepStream += event.text
+            if (reasoningLoop.feed(event.text)) {
+              loopNudge = { text: loopNudgeText(loopNudgeParts(stepStream, reasoningLoop.period)).text }
+              return
+            }
+          }
           if (
             event.type !== "tool-call" ||
             event.providerExecuted ||
