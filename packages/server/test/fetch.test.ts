@@ -276,9 +276,9 @@ it.live("applies custom CORS origins to HTTP responses and PTY ticket checks", (
               }),
             ),
           )
-          expect(preflight.status).toBe(204)
+          expect(preflight.status).toBe(allowed ? 204 : 403)
           expect(preflight.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null)
-          expect(preflight.headers.get("access-control-allow-headers")).toBe("authorization")
+          expect(preflight.headers.get("access-control-allow-headers")).toBe(allowed ? "authorization" : null)
 
           const response = yield* Effect.promise(() =>
             handler(
@@ -287,7 +287,9 @@ it.live("applies custom CORS origins to HTTP responses and PTY ticket checks", (
               }),
             ),
           )
-          expect(response.status).toBe(200)
+          // An untrusted origin is refused outright: the CORS headers only keep a browser from
+          // reading the response, they do not stop the request from reaching the handler.
+          expect(response.status).toBe(allowed ? 200 : 403)
           expect(response.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null)
 
           const ticket = yield* Effect.promise(() =>

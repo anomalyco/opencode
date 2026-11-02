@@ -17,6 +17,7 @@ import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
+import { RequestGuard } from "./middleware/request-guard"
 import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
@@ -74,6 +75,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       (transform ? transform(app) : app).pipe(
         HttpMiddleware.compression(),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
+        RequestGuard.middleware({ hostname, cors: options.cors, hosts: urls }),
       ),
       errorResponseLogger,
     )
