@@ -8,7 +8,7 @@ import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 import { readFile } from "node:fs/promises"
 import type { PullRequest } from "@opencode/schema/pull-request"
-import { pullRequest } from "../utils/pull-request"
+import { openPullRequest, pullRequest } from "../utils/pull-request"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -18,7 +18,7 @@ test("pull request snapshots label earlier evidence and incomplete results", asy
     vcs: { current: "parser", default: "dev" },
     pullRequest: () => pullRequest({ checksCommit: "b".repeat(40), incomplete: true }),
   })
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await openPullRequest(page)
   const panel = page.getByRole("region", { name: "Pull request", exact: true })
   await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeInViewport({ ratio: 1 })
   await expect(panel.getByText("Earlier commit", { exact: true })).toBeVisible()
@@ -46,9 +46,12 @@ test("pull request snapshots refresh only on demand", async ({ page }) => {
   })
 
   expect(requests).toEqual([])
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await openPullRequest(page)
   const panel = page.getByRole("region", { name: "Pull request", exact: true })
   await expect(panel.getByText("Earlier commit", { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Pull request", exact: true }).and(page.locator("[data-composer-pill]")),
+  ).toHaveCount(0)
   expect(requests).toEqual([workspace.directory])
 
   current.value = pullRequest({
@@ -87,7 +90,7 @@ test("pull request refresh failures keep the stale snapshot", async ({ page }) =
     },
   })
 
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await openPullRequest(page)
   const panel = page.getByRole("region", { name: "Pull request", exact: true })
   await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeVisible()
 
@@ -126,11 +129,11 @@ test("a late pull request response cannot replace another checkout's snapshot", 
       return value
     },
   })
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await openPullRequest(page)
   await expect.poll(() => calls).toEqual([directory])
   await page.locator("[data-titlebar-tab-slot]", { hasText: "Beta" }).click()
   await expectSessionTitle(page, "Beta")
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  await openPullRequest(page)
   const panel = page.getByRole("region", { name: "Pull request", exact: true })
   await expect(panel.getByRole("heading", { name: "#99 Beta change" })).toBeVisible()
   pending.resolve(pullRequest({ title: "Late Alpha change" }))

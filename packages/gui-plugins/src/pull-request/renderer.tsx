@@ -1,5 +1,5 @@
 import { lazy, onCleanup, Show, Suspense } from "solid-js"
-import { Command, ComposerPill, MenuItem, Panel, usePanel, type PanelTab, type Plugin } from "@opencode/plugin/gui"
+import { Command, MenuItem, Panel, usePanel, type PanelTab, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Loader } from "@opencode/ui/loader"
 import type definition from "./index"
@@ -37,11 +37,6 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       run: open,
       opened: ctx.layout.state(key, session) !== "closed",
     }
-  })
-  ctx.add(ComposerPill, {
-    id: "open",
-    show: (input) =>
-      input.session.project?.vcs === "git" ? { label: ctx.t("title"), icon: "github", run: open } : undefined,
   })
   ctx.add(Panel, {
     id: "main",

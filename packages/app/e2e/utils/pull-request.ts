@@ -1,4 +1,5 @@
 import type { PullRequest } from "@opencode/schema/pull-request"
+import type { Page } from "@playwright/test"
 
 export function pullRequest(input: Partial<PullRequest.Snapshot> = {}): PullRequest.Snapshot {
   const head = "a".repeat(40)
@@ -32,4 +33,9 @@ export function pullRequest(input: Partial<PullRequest.Snapshot> = {}): PullRequ
     incomplete: false,
     ...input,
   }
+}
+
+export async function openPullRequest(page: Page) {
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await page.locator("#review-panel").getByRole("button", { name: "Pull request", exact: true }).click()
 }
