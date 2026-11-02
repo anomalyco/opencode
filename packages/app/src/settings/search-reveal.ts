@@ -1,8 +1,12 @@
+import { settingsScroller } from "./scroller"
 import type { SettingsView } from "./surface"
+
+/** The highlighted row, and the tabindex it had before the reveal made it focusable. */
+type RevealState = { disposed: boolean; row?: HTMLElement; tabIndex: string | null }
 
 /** Reveal one explicit search activation, including targets mounted by an asynchronous scoped page. */
 export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
-  const state = { disposed: false, row: undefined as HTMLElement | undefined, tabIndex: null as string | null }
+  const state: RevealState = { disposed: false, tabIndex: null }
 
   const restore = () => {
     const row = state.row
@@ -33,7 +37,7 @@ export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
     const row =
       control.closest<HTMLElement>('[data-component="settings-row"], [data-component="settings-list"] > *') ?? control
 
-    if (!view.target) panel.scrollTop = 0
+    if (!view.target) settingsScroller(panel).scrollTop = 0
 
     if (view.target) row.scrollIntoView({ block: "center", inline: "nearest" })
     state.row = row

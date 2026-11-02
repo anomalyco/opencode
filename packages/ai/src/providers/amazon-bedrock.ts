@@ -64,9 +64,9 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, BedrockConverse.OptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput> = (
   modelID,
-  { apiKey, auth, baseURL, credentials, profile, region, topP, headers, body, ...providerOptions },
+  { apiKey, auth, baseURL, credentials, profile, region, topP, headers, body, ...providerOptions }: Settings = {},
 ) =>
   configure({
     apiKey,

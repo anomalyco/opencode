@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createDraftStore, draftTextChunk, draftTextThreshold, resolveBlobUrl } from "./drafts"
+import {
+  blobDataUrl,
+  createDraftStore,
+  draftTextChunk,
+  draftTextThreshold,
+  resolveBlobUrl,
+  setMediaBlobLoader,
+} from "./drafts"
 
 function memoryDriver() {
   const documents = new Map<string, string>()
@@ -16,10 +23,12 @@ function memoryDriver() {
       // missing is refused.
       set: async (key: string, value: string, strict: boolean) => {
         const ids = new Set<string>()
+        // oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters -- mirrors the stores' scan of opaque serialized documents
         JSON.parse(value, (_key, item) => {
           if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
 
           if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+          // oxlint-enable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters
 
           return item
         })
@@ -335,5 +344,77 @@ describe("draft store image retention", () => {
   test("a reference to bytes the store no longer holds resolves to nothing", async () => {
     fresh()
     expect(await resolveBlobUrl({ id: "gone" })).toBeUndefined()
+  })
+})
+
+describe("draft store media refs", () => {
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+  const pngDataUrl = `data:image/png;base64,${png}`
+
+  // A server's media blobs, served through the authenticated loader the way the media cache does.
+  const serveMedia = (key: string, blobs: Map<string, string>) => {
+    const loads: string[] = []
+    setMediaBlobLoader(key, async (uri) => {
+      loads.push(uri)
+
+      return blobs.get(uri.slice("media:".length))
+    })
+
+    return { loads, close: () => setMediaBlobLoader(key, undefined) }
+  }
+
+  test("a media:<hash> ref is saved with its bytes, restored, and submitted as bytes after the server sweeps it", async () => {
+    const hash = "a".repeat(64)
+    const ref = `media:${hash}`
+    const server = new Map([[hash, pngDataUrl]])
+    const media = serveMedia("srv-draft-media", server)
+
+    try {
+      const memory = memoryDriver()
+      const store = createDraftStore(memory.driver)
+      // The composer holds the URL-neutral ref a restored message carries; `media:` is never fetched directly.
+      const live = { id: ref, url: ref }
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: live }] })
+
+      const stored = JSON.parse(memory.documents.get("doc")!).prompt[0].blob
+      expect(stored.id).not.toContain("media:")
+      expect(Buffer.from(await memory.blobs.get(stored.id)!.arrayBuffer()).toString("base64")).toBe(png)
+      expect(media.loads).toEqual([ref])
+
+      // Later saves reuse the draft's copy instead of loading the blob again.
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: live }], cursor: 1 })
+      expect(JSON.parse(memory.documents.get("doc")!).prompt[0].blob.id).toBe(stored.id)
+      expect(media.loads).toEqual([ref])
+
+      // GC: the inbox item or message that referenced the blob is gone and the server swept it.
+      server.delete(hash)
+
+      const restored = JSON.parse((await createDraftStore(memory.driver).getItem("doc"))!).prompt[0].blob
+      expect(restored.id).toBe(stored.id)
+      expect(await blobDataUrl(restored, "image/png")).toBe(pngDataUrl)
+      expect(await blobDataUrl(live, "image/png")).toBe(pngDataUrl)
+      expect(media.loads).toEqual([ref])
+    } finally {
+      media.close()
+    }
+  })
+
+  test("a media ref no server can serve saves without failing and submits as the ref", async () => {
+    const ref = `media:${"b".repeat(64)}`
+    const media = serveMedia("srv-draft-media-gone", new Map())
+    const error = console.error
+    console.error = () => {}
+
+    try {
+      const memory = memoryDriver()
+      const store = createDraftStore(memory.driver)
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: { id: ref, url: ref } }] })
+      expect(JSON.parse(memory.documents.get("doc")!).prompt[0].blob).toEqual({ id: ref })
+      expect(await resolveBlobUrl({ id: ref, url: ref })).toBeUndefined()
+      expect(await blobDataUrl({ id: ref, url: ref }, "image/png")).toBe(ref)
+    } finally {
+      console.error = error
+      media.close()
+    }
   })
 })

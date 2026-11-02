@@ -40,6 +40,32 @@ describe("prompt submission state", () => {
     expect(session.context.items()[0]).toMatchObject({ type: "file", path: "src/index.ts" })
   })
 
+  test("captures quote sources before submission clears the draft and carries them to the promoted session", () => {
+    const draft = createMemoryComposerState()
+    const session = createMemoryComposerState()
+    draft.context.add({ type: "quote", commentID: "quote-source", text: "quoted passage" })
+    const key = draft.context.items()[0]!.key
+    const source = [{ partID: "part-source", revealID: "message-source", start: 4, end: 18, text: "quoted passage" }]
+    draft.quoteSource.add(key, source)
+
+    const submission = createComposerSubmission({
+      target: draft,
+      prompt: draft.current(),
+      context: draft.context.items(),
+    })
+
+    submission.retarget(session)
+    expect(session.quoteSource.state.sources[key]).toEqual(source)
+
+    // Optimistic cleanup must release the draft's source without losing the failed request's recovery snapshot.
+    session.context.replaceComments([])
+    expect(session.quoteSource.state.sources[key]).toBeUndefined()
+    expect(submission.sources).toEqual([{ key, source }])
+    expect(submission.restore()?.context).toEqual([
+      { key, type: "quote", commentID: "quote-source", text: "quoted passage" },
+    ])
+  })
+
   test("clears the original first-submit prompt after retargeting", () => {
     const workspace = createMemoryComposerState()
     const session = createMemoryComposerState()

@@ -80,14 +80,19 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
       range?: { start: number; end: number },
     ) {
-      const text = store()
-        .prompt.map((part) => ("content" in part ? part.content : ""))
-        .join("")
+      const prompt = withOffsets(store().prompt)
+      const length = promptLength(prompt)
+      const end = range?.end ?? Math.min(store().cursor ?? length, length)
 
-      const end = range?.end ?? store().cursor ?? text.length
-      const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      const part = prompt.find(
+        (item): item is Extract<ComposerPrompt[number], { type: "text" }> =>
+          item.type === "text" && end >= item.start && end <= item.end,
+      )
+
+      const index = part ? part.content.slice(0, end - part.start).lastIndexOf("@") : -1
+      const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
+      setStore()("prompt", insertMention(prompt, start, end, mention))
+      setStore()("cursor", start + mention.content.length + 1)
       clearRetry()
     },
     removeAttachment(id: string) {
@@ -132,27 +137,35 @@ function insertMention(
   end: number,
   mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
 ): ComposerPrompt {
-  if (start === 0 && end === 0) {
-    return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])
-  }
-
   let position = 0
+  let inserted = false
 
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
 
-    if (part.type !== "text" || start < partStart || end > position) return [part]
-    const before = part.content.slice(0, start - partStart)
-    const after = part.content.slice(end - partStart)
+    if (inserted) return [part]
 
-    return [
-      ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
-      mention,
-      { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
-    ]
+    if (part.type === "text" && start >= partStart && end <= position) {
+      inserted = true
+      const before = part.content.slice(0, start - partStart)
+      const after = part.content.slice(end - partStart)
+
+      return [
+        ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
+        mention,
+        { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
+      ]
+    }
+
+    if (start !== end || start > partStart) return [part]
+    inserted = true
+
+    return [mention, { type: "text", content: " ", start: 0, end: 0 }, part]
   })
+
+  if (!inserted && start === end) parts.push(mention, { type: "text", content: " ", start: 0, end: 0 })
 
   return withOffsets(parts)
 }

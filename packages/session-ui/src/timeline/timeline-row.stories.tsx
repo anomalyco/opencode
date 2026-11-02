@@ -1,8 +1,9 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
-import { createMemo, onCleanup, onMount } from "solid-js"
+import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
+import { CommentCard, commentCardTarget } from "../message/comment-card"
 import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
@@ -542,6 +543,54 @@ export const PromptWithAttachments = {
       width="480px"
     />
   ),
+}
+
+export const NoteAttachments = {
+  render: () => {
+    const [state, setState] = createStore({ selected: "None" })
+
+    const notes = [
+      { name: "Named", label: "button#save", title: "button#save", subtitle: "Browser annotation" },
+      { name: "Unnamed", label: "button", title: "button.icon-only", subtitle: "Browser annotation", comment: " \t " },
+      { name: "Legacy", label: "Legacy element" },
+      { name: "Whitespace", label: "Fallback element", title: " \n ", subtitle: " \t " },
+      { name: "Title only", label: "Original label", title: "button#save" },
+      {
+        name: "Commented",
+        label: "Original selector",
+        title: "Ignored title",
+        subtitle: "Browser annotation",
+        comment: "Fix this",
+      },
+      { name: "RTL subtitle", label: "زر الحفظ", title: "button#save", subtitle: "تعليق المتصفح", rtl: true },
+      { name: "RTL legacy", label: "العنصر الأصلي", rtl: true },
+      {
+        name: "Long selector",
+        label: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        title: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+        subtitle: "Browser annotation",
+      },
+    ]
+
+    return (
+      <div style={{ padding: "24px", display: "flex", "flex-wrap": "wrap", gap: "24px", "max-width": "800px" }}>
+        <For each={notes}>
+          {(note) => (
+            <section aria-label={note.name} dir={note.rtl ? "rtl" : "ltr"}>
+              <h2 style={{ "font-size": "13px", "margin-bottom": "8px" }}>{note.name}</h2>
+              <CommentCard
+                target={commentCardTarget({ type: "note", icon: "code", ...note })}
+                comment={note.comment ?? ""}
+                tooltip
+                onClick={() => setState("selected", note.name)}
+              />
+            </section>
+          )}
+        </For>
+        <output aria-label="Selected attachment">{state.selected}</output>
+      </div>
+    )
+  },
 }
 
 export const VoiceMessages = {

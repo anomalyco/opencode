@@ -117,7 +117,6 @@ export default function OfficeDocument(props: FileViewerProps) {
         return (
           <OfficePages
             pages={opened().pages()}
-            maxScale={1}
             paint={opened().paint}
             label={(index) => ctx.t("page", { number: index + 1 })}
             overlay={(input) => (

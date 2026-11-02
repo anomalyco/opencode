@@ -748,6 +748,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Интиқоли додаҳо {{current}}/{{total}}",
   "home.workspaceTip": "Сеанси навбатиро дар фазои кории нав оғоз кунед, то тағирот дар алоҳидагӣ нигоҳ дошта шавад",
   "session.tab.add": "Иловаи ҷадвал",
+  "session.tab.closeOthers": "Варақаҳои дигарро пӯшед",
   "session.queue.attachments.one": "Илова бар замимаи {{count}}",
   "session.queue.attachments.other": "Илова бар ин {{count}} замима",
   "settings.backToSettings": "Бозгашт ба танзимот",

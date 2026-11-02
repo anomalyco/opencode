@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Instructions } from "@opencode/core/instructions/index"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginPromise } from "@opencode/core/plugin/promise"
@@ -27,7 +28,7 @@ it.live("Effect plugins can put, list, and remove session instruction entries se
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const created = yield* context.session.create({ title: "Plugin instructions" })
 
     yield* context.session.instructions.entry.put({
@@ -41,7 +42,7 @@ it.live("Effect plugins can put, list, and remove session instruction entries se
     expect(yield* sessions.inbox(created.id)).toEqual([])
 
     const first = yield* prepareRequest(created.id)
-    expect(first.initial).toBe(['<context key="deploy-target">', "production", "</context>"].join("\n"))
+    expect(Instructions.join(first.initial)).toBe(['<context key="deploy-target">', "production", "</context>"].join("\n"))
     expect(first.entries).toEqual([])
 
     yield* context.session.instructions.entry.put({
@@ -120,7 +121,7 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const created = yield* context.session.create({ title: "Promise plugin instructions" })
 
     yield* PluginPromise.fromPromise({
@@ -168,7 +169,7 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
     }).effect(context)
 
     const first = yield* prepareRequest(created.id)
-    expect(first.initial).toBe(
+    expect(Instructions.join(first.initial)).toBe(
       ['<context key="team.guidelines">', "Prefer small, focused changes.", "</context>"].join("\n"),
     )
     expect(yield* sessions.inbox(created.id)).toEqual([])

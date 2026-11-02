@@ -31,5 +31,5 @@ export const coerce = <R>(ctx: Interpreter<R>, name: Coercion, args: Array<Value
 }
 
 /** A global coercion function such as `Number` or `parseInt`. */
-export const coercion = <R>(ctx: Interpreter<R>, name: Coercion, length = 1): Native<R> =>
+export const coercion = <R>(ctx: Interpreter<R>, name: Coercion, length = 1): Native =>
   fn(ctx.builtins, name, length, (_, args) => coerce(ctx, name, args))

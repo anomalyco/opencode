@@ -6,7 +6,7 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
+import { createWorktreeLocation, parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
@@ -19,6 +19,7 @@ export type RunCommandInput = {
   continue?: boolean
   session?: string
   fork?: boolean
+  worktree?: string | true
   model?: string
   agent?: string
   format: "default" | "json"
@@ -71,6 +72,8 @@ export function runNonInteractiveWithOptions(input: RunCommandInput, options: Ex
 
 async function run(input: RunCommandInput, options: ExecutionOptions) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
+  if (input.worktree !== undefined && (input.continue || input.session))
+    fail("--worktree starts a new session and cannot be combined with --continue or --session")
   const root = options.root ?? process.env.PWD ?? process.cwd()
   const local = localDirectory(root)
   const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
@@ -89,9 +92,19 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     fetch: noTimeoutFetch,
   })
   const explicit = parseRunModel(input.model)
+  const location = prepared.directory ? { directory: prepared.directory } : undefined
+  const worktree =
+    input.worktree === undefined
+      ? undefined
+      : await createWorktreeLocation({
+          client,
+          location,
+          name: input.worktree === true ? undefined : input.worktree,
+        })
+  if (worktree) UI.println(UI.Style.TEXT_DIM + "worktree " + worktree.root + UI.Style.TEXT_NORMAL)
   const target = await resolveSessionTarget({
     client,
-    location: prepared.directory ? { directory: prepared.directory } : undefined,
+    location: worktree ? { directory: worktree.directory } : location,
     continue: input.continue,
     session: input.session,
     fork: input.fork,

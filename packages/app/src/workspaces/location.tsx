@@ -74,3 +74,6 @@ const context = createSimpleContext({
 export const useWorkspaceLocation: () => Accessor<WorkspaceLocation> = context.use
 
 export const LocationProvider = context.provider
+
+/** Provides a resolved Location without syncing it, e.g. the one a detached view keeps while another is selected. */
+export const WorkspaceLocationContext = context.context

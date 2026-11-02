@@ -253,7 +253,7 @@ async function run(input: {
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
-  spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.message, "list").mockImplementation(() =>
     ok({
       data: input.messages?.(promptID) ?? [{ id: promptID, type: "user", text: "hello", time: { created: 1 } }],
@@ -373,7 +373,51 @@ describe("runNonInteractivePrompt", () => {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line)),
-    ).toEqual([expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) })])
+    ).toEqual([
+      expect.objectContaining({ type: "step_start", part: expect.objectContaining({ messageID: "msg_assistant" }) }),
+      expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) }),
+    ])
+  })
+
+  test("reports usage for a step that ends after the Session goes idle", async () => {
+    const tokens = { input: 3, output: 5, reasoning: 7, cache: { read: 11, write: 13 } }
+    const assistant = (messageID: string): SessionMessageInfo[] => [
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        cost: 0.25,
+        tokens,
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const lines = async (turn: (messageID: string) => V2Event[]) =>
+      (await capture({ format: "json", turn, messages: assistant, wait: () => Promise.resolve() })).stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+
+    const missed = await lines((messageID) => [prompted(messageID), stepStarted()])
+    expect(missed.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+    expect(missed[2].part).toMatchObject({ messageID: "msg_assistant", reason: "stop", cost: 0.25, tokens })
+
+    const seen = await lines((messageID) => [
+      prompted(messageID),
+      stepStarted(),
+      {
+        id: "evt_step_ended",
+        created: 2,
+        type: "session.step.ended",
+        durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", finish: "stop", cost: 0.25, tokens },
+      },
+      settled(),
+    ])
+    expect(seen.filter((event) => event.type === "step_finish")).toHaveLength(1)
   })
 
   test("reports an observed execution failure before prompt promotion", async () => {
@@ -479,7 +523,7 @@ describe("runNonInteractivePrompt", () => {
     ])
     expect(output.stderr).toBe("")
     const sdk = await run({ compatibility: "v1", turn: (messageID) => [prompted(messageID), settled()] })
-    expect(sdk.session.wait).not.toHaveBeenCalled()
+    expect(sdk.experimental.session.wait).not.toHaveBeenCalled()
     expect(sdk.message.list).not.toHaveBeenCalled()
   })
 

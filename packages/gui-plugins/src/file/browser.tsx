@@ -1,10 +1,11 @@
-import { createMemo, createUniqueId, onCleanup, Show, type Accessor } from "solid-js"
+import { createMemo, createUniqueId, For, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { getFilename } from "@opencode/util/path"
+import { artifactKind } from "@opencode/util/artifact"
 import type { ChangeKind } from "@opencode/plugin/gui/review"
 import {
   createKeyed,
@@ -187,25 +188,89 @@ export function SessionFileBrowserTab(props: {
         </SessionReviewV2Sidebar>
       }
     >
-      <Show
-        when={!props.placeholder}
-        fallback={
-          <SessionFilePanelV2Empty>
-            <div class="flex flex-col items-center gap-2 text-center text-text-weak">
-              <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{ctx.t("command.open")}</div>
-              <div class="h-5 text-13-regular leading-5">{ctx.t("selectToOpen")}</div>
-            </div>
-          </SessionFilePanelV2Empty>
-        }
-      >
-        <div class="min-h-0 flex-1">
-          <Show when={props.id} keyed>
-            {(id) => <SessionFileView session={props.session} screen={props.screen} id={id} />}
-          </Show>
-        </div>
-      </Show>
+      <SessionFileViews session={props.session} screen={props.screen} id={props.id} placeholder={props.placeholder} />
     </SessionFilePanelV2>
+  )
+}
+
+function SessionFileViews(props: {
+  session: MountedSession
+  screen: SessionScreen
+  id?: string
+  placeholder: boolean
+}) {
+  const ctx = usePlugin()
+  const panel = usePanel()
+
+  const scope = createMemo(
+    () => ({ session: props.session.key, root: props.screen.file.root, screen: props.screen }),
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous?.session === next.session && previous.root === next.root && previous.screen === next.screen,
+    },
+  )
+
+  return (
+    <Show when={scope()} keyed>
+      {(scope) => {
+        const offices = createMemo(() =>
+          panel.open().filter((id) => {
+            if (!isFileTab(id)) return false
+
+            const kind = artifactKind(fileTabPath(scope.screen.file, id))
+
+            return kind === "document" || kind === "spreadsheet" || kind === "presentation"
+          }),
+        )
+
+        const selected = () => (props.placeholder ? undefined : props.id)
+
+        const other = () => {
+          const id = selected()
+
+          return id && !offices().includes(id) ? id : undefined
+        }
+
+        return (
+          <div class="relative min-h-0 flex-1">
+            <Show when={props.placeholder}>
+              <SessionFilePanelV2Empty>
+                <div class="flex flex-col items-center gap-2 text-center text-text-weak">
+                  <Icon name="file-tree" size="large" class="mb-2" />
+                  <div class="text-[13px] font-medium leading-[13px] text-text-strong">{ctx.t("command.open")}</div>
+                  <div class="h-5 text-13-regular leading-5">{ctx.t("selectToOpen")}</div>
+                </div>
+              </SessionFilePanelV2Empty>
+            </Show>
+            <Show when={other()} keyed>
+              {(id) => <SessionFileView session={props.session} screen={props.screen} id={id} />}
+            </Show>
+            <For each={offices()}>
+              {(id) => {
+                // Selection history belongs to this open tab; closing it disposes the viewer and its worker.
+                const visited = createMemo((previous) => previous || selected() === id, false)
+                const active = () => selected() === id
+
+                return (
+                  <Show when={visited()}>
+                    <div
+                      class="absolute inset-0"
+                      // Unlike display:none, this preserves the viewport geometry and its warm page canvases.
+                      style={{ visibility: active() ? "visible" : "hidden" }}
+                      inert={!active() || undefined}
+                      aria-hidden={!active() || undefined}
+                    >
+                      <SessionFileView session={props.session} screen={props.screen} id={id} />
+                    </div>
+                  </Show>
+                )
+              }}
+            </For>
+          </div>
+        )
+      }}
+    </Show>
   )
 }
 

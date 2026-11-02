@@ -1,4 +1,5 @@
-import { defineCollection, z } from "astro:content"
+import { defineCollection } from "astro:content"
+import { z } from "astro/zod"
 import { docsLoader, i18nLoader } from "@astrojs/starlight/loaders"
 import { docsSchema, i18nSchema } from "@astrojs/starlight/schema"
 import en from "./content/i18n/en.json"

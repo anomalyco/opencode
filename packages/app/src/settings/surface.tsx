@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { ServerConnection } from "@/runtime/server/registry"
+import { useServers } from "@/runtime/server/registry"
 import { useCommand } from "@/shell/commands/command"
 import { createSettingsPages } from "@/runtime/plugin/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
@@ -38,6 +38,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const layout = useLayout()
     const command = useCommand()
     const servers = useSettingsServers()
+    const registry = useServers()
     const tabs = useTabs()
 
     const location = useLocation<{
@@ -76,7 +77,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
 
       return (
         list.find((item) => item.key === key) ??
-        list.find((item) => !!item.connection && ServerConnection.local(item.connection)) ??
+        list.find((item) => !!item.connection && registry.local(item.connection)) ??
         list[0]
       )
     })

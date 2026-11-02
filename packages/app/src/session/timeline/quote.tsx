@@ -7,7 +7,11 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { QuoteSource } from "@/composer/quote-source"
+import { quotePosition } from "@/composer/quote-position"
+import { captureQuoteSource } from "./quote-highlight"
 import {
   characterRect,
   narrowSelection,
@@ -23,8 +27,6 @@ const SETTLE_MS = 150
 
 const SHORT_LINES = 3
 
-const GAP = 8
-
 type Rect = { top: number; bottom: number; left: number; right: number }
 
 type Extent = Rect & { short: boolean; backward: boolean }
@@ -34,14 +36,15 @@ export function createTimelineQuote(input: {
   root: () => HTMLElement | undefined
   sessionKey: () => string
   enabled: () => boolean
-  add: (text: string, comment: boolean) => void
+  add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => void
 }) {
   const [state, setState] = createStore<{
     text: string | undefined
     truncated: boolean
     extent: Extent | undefined
     bounds: Rect | undefined
-  }>({ text: undefined, truncated: false, extent: undefined, bounds: undefined })
+    layout: number
+  }>({ text: undefined, truncated: false, extent: undefined, bounds: undefined, layout: 0 })
 
   let selected: TimelineSelection | undefined
   let horizontal: { left: number; right: number; origin: number } | undefined
@@ -77,48 +80,16 @@ export function createTimelineQuote(input: {
     const root = input.root()
 
     if (!root || !selected) return
-    const view = root.getBoundingClientRect()
-    const sticky = root.querySelector("[data-session-title]")
-
-    const bounds = {
-      top: view.top + (sticky instanceof HTMLElement ? sticky.offsetHeight : 0),
-      bottom: view.bottom,
-      left: view.left,
-      right: view.right,
-    }
 
     // The virtualizer removed the selected rows.
     if (selected.range.collapsed) return close()
-
-    const rects = selectionRects(selected)
-    const first = characterRect(selected.start, false)
-    const last = characterRect(selected.end, true)
-    const top = first?.top ?? Math.min(...rects.map((rect) => rect.top))
-    const bottom = last?.bottom ?? Math.max(...rects.map((rect) => rect.bottom))
-
-    const visible = rects.filter(
-      (rect) => rect.bottom > Math.max(bounds.top, top) && rect.top < Math.min(bounds.bottom, bottom),
-    )
-
-    const line =
-      first?.height ?? rects.map((rect) => rect.height).sort((a, b) => a - b)[Math.floor(rects.length / 2)] ?? 0
-
+    const measured = measureQuote(root, selected, horizontal)
     setState({
-      bounds,
-      extent: visible.length
-        ? {
-            top,
-            bottom,
-            left: horizontal
-              ? horizontal.left + view.left - horizontal.origin
-              : Math.min(...visible.map((rect) => rect.left)),
-            right: horizontal
-              ? horizontal.right + view.left - horizontal.origin
-              : Math.max(...visible.map((rect) => rect.right)),
-            short: bottom - top < line * (SHORT_LINES + 0.5),
-            backward: selected.backward,
-          }
-        : undefined,
+      bounds: measured?.bounds,
+      extent:
+        measured && measured.extent.bottom > measured.bounds.top && measured.extent.top < measured.bounds.bottom
+          ? measured.extent
+          : undefined,
     })
   }
 
@@ -266,6 +237,8 @@ export function createTimelineQuote(input: {
 
   // A resized timeline, such as when a side panel opens, reflows the selected text.
   createResizeObserver(input.root, () => {
+    setState("layout", (value) => value + 1)
+
     if (!selected || reflow !== undefined) return
     reflow = requestAnimationFrame(() => {
       reflow = undefined
@@ -287,14 +260,58 @@ export function createTimelineQuote(input: {
 
   return {
     state,
-    // With Alt held, the quote opens its comment editor in the composer.
-    add: (comment: boolean) => {
+    // Alt skips the optional comment. Otherwise the editor replaces the selection toolbar.
+    add: (skip: boolean) => {
       const text = state.text
 
       if (!text || state.truncated) return
+      const ranges = selected ? quoteText(selected).ranges : []
+      const source = captureQuoteSource(ranges)
+      const selection = selected
+      const root = input.root()
+      const sessionKey = input.sessionKey()
+      let horizontalBounds = horizontal
+      let layout = state.layout
+      const initial = root && selection ? measureQuote(root, selection, horizontalBounds) : undefined
+      let last = initial
+
+      const anchor: ComposerQuoteAnchor = (size) => {
+        // Keep the source anchor reactive when a divider resizes the timeline after selection is cleared.
+        void state.layout
+
+        if (!root?.isConnected || input.sessionKey() !== sessionKey || !input.enabled()) return
+
+        if (layout !== state.layout) {
+          // Only quoted glyphs determine the width; the enclosing selection also includes block boxes and chrome.
+          const rects = ranges
+            .flatMap((range) => (range.startContainer.isConnected ? [...range.getClientRects()] : []))
+            .filter((rect) => rect.width > 0 && rect.height > 0)
+
+          horizontalBounds = rects.length
+            ? {
+                left: Math.min(...rects.map((rect) => rect.left)),
+                right: Math.max(...rects.map((rect) => rect.right)),
+                origin: root.getBoundingClientRect().left,
+              }
+            : undefined
+          layout = state.layout
+        }
+
+        const measured = selection && measureQuote(root, selection, horizontalBounds)
+        last = measured ?? last
+
+        if (!last) return
+        const bounds = measured?.bounds ?? root.getBoundingClientRect()
+        const extent = measured?.extent ?? { ...last.extent, left: bounds.left, right: bounds.right }
+        const position = quotePosition(bounds, extent, size, window.matchMedia("(hover: none)").matches)
+
+        // A virtualized source still belongs to the quote. Keep its draft open, pinned at the timeline edge.
+        return measured ? position : { ...position, top: bounds.bottom - size.height - 8 }
+      }
+
       window.getSelection()?.removeAllRanges()
       close()
-      input.add(text, comment)
+      input.add(text, source, skip ? undefined : anchor)
     },
     setElement: (value: HTMLElement | undefined) => {
       element = value
@@ -317,28 +334,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
 
     if (!bounds || !extent) return
 
-    const pinned = bounds.bottom - size.height - GAP
-
-    if (docked()) return { top: pinned, left: (bounds.left + bounds.right - size.width) / 2 }
-
-    const above = extent.top - size.height - GAP
-    const below = extent.bottom + GAP
-    const fitsAbove = above >= bounds.top + GAP && extent.top <= bounds.bottom
-    const fitsBelow = below + size.height <= bounds.bottom - GAP && extent.bottom >= bounds.top
-
-    // Short selections get it above; taller ones at the end they were dragged towards.
-    const sides =
-      extent.short || extent.backward
-        ? [fitsAbove && above, fitsBelow && below]
-        : [fitsBelow && below, fitsAbove && above]
-
-    const top = sides.find((side) => side !== false) ?? pinned
-    const center = (extent.left + extent.right - size.width) / 2
-
-    return {
-      top,
-      left: Math.min(Math.max(center, bounds.left + GAP), bounds.right - size.width - GAP),
-    }
+    return quotePosition(bounds, extent, size, docked())
   }
 
   return (
@@ -371,12 +367,12 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
             <Tooltip
               value={
                 <>
-                  {language.t("session.quote.addWithComment")}
+                  {language.t("session.quote.addWithoutComment")}
                   <Keybind keys={[IS_MAC ? "⌥" : language.t("common.key.alt")]} variant="neutral" />
                 </>
               }
               placement="top"
-              openDelay={1200}
+              openDelay={800}
             >
               <Button
                 size="small"
@@ -393,6 +389,58 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
       )}
     </Show>
   )
+}
+
+function measureQuote(
+  root: HTMLElement,
+  selected: TimelineSelection,
+  horizontal?: { left: number; right: number; origin: number },
+) {
+  if (selected.range.collapsed || !selected.start.node.isConnected || !selected.end.node.isConnected) return
+  const view = root.getBoundingClientRect()
+
+  if (!view.height || !view.width) return
+  const sticky = root.querySelector<HTMLElement>("[data-session-title]")
+
+  const bounds = {
+    top: view.top + (sticky?.offsetHeight ?? 0),
+    bottom: view.bottom,
+    left: view.left,
+    right: view.right,
+  }
+
+  const rects = selectionRects(selected)
+
+  if (!rects.length) return
+  const first = characterRect(selected.start, false)
+  const last = characterRect(selected.end, true)
+  const top = first?.top ?? Math.min(...rects.map((rect) => rect.top))
+  const bottom = last?.bottom ?? Math.max(...rects.map((rect) => rect.bottom))
+
+  const visible = rects.filter(
+    (rect) => rect.bottom > Math.max(bounds.top, top) && rect.top < Math.min(bounds.bottom, bottom),
+  )
+
+  const line =
+    first?.height ?? rects.map((rect) => rect.height).sort((a, b) => a - b)[Math.floor(rects.length / 2)] ?? 0
+
+  const horizontalRects = visible.length ? visible : rects
+
+  return {
+    bounds,
+    extent: {
+      top,
+      bottom,
+      left: horizontal
+        ? horizontal.left + view.left - horizontal.origin
+        : Math.min(...horizontalRects.map((rect) => rect.left)),
+      right: horizontal
+        ? horizontal.right + view.left - horizontal.origin
+        : Math.max(...horizontalRects.map((rect) => rect.right)),
+      short: bottom - top < line * (SHORT_LINES + 0.5),
+      backward: selected.backward,
+    },
+  }
 }
 
 function sameRange(a: Range, b: Range) {

@@ -97,8 +97,9 @@ export type SessionPreviewProps = {
   activity?: {
     subagents: SessionActivityItem[]
     shells: SessionActivityItem[]
+    shell?: ComponentProps<typeof SessionActivityChips>["shell"]
     onOpen?: (item: SessionActivityItem) => void
-    onStop?: (item: SessionActivityItem) => void
+    onStop?: (item: SessionActivityItem) => Promise<boolean>
   }
   todos?: { items: Todo[]; open?: boolean }
   timelineDetail?: TimelineDetail
@@ -320,11 +321,15 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                                 ? props.activity.onOpen(item)
                                 : setState("activity", `Opened ${item.label ?? item.key}`)
                             }
-                            onStop={(item) =>
-                              props.activity?.onStop
-                                ? props.activity.onStop(item)
-                                : setState("activity", `Stopped ${item.label ?? item.key}`)
-                            }
+                            shell={props.activity?.shell ?? storyShell}
+                            onStop={(item) => {
+                              if (props.activity?.onStop) return props.activity.onStop(item)
+                              setState("activity", `Stopped ${item.label ?? item.key}`)
+
+                              return Promise.resolve(true)
+                            }}
+                            // The story's only editor is its composer.
+                            onEmpty={() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus()}
                           />
                           <Show when={props.todos} keyed>
                             {(todos) => <SessionTodoPill todos={todos.items} defaultOpen={todos.open} />}
@@ -397,4 +402,19 @@ function SessionSurfaceHeader(props: {
       </div>
     </header>
   )
+}
+
+// Background shells in stories print a fixed transcript and report a clean exit once they leave the list.
+const storyShell: ComponentProps<typeof SessionActivityChips>["shell"] = {
+  directory: "/story",
+  output: (input) => {
+    const output = `$ ${input.id}\nReady.\n`
+    const cursor = input.cursor ?? 0
+
+    return Promise.resolve({
+      location: { directory: "/story" },
+      data: { output: output.slice(cursor), cursor: output.length, size: output.length, truncated: false },
+    })
+  },
+  ended: () => Promise.resolve({ status: "exited", exit: 0 }),
 }

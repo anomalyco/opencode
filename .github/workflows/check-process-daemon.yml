@@ -1,0 +1,221 @@
+name: Process daemon
+
+on:
+  pull_request:
+    paths:
+      - packages/process-daemon/**
+      - .github/workflows/check-process-daemon.yml
+  push:
+    branches: [dev]
+    paths:
+      - packages/process-daemon/**
+      - .github/workflows/check-process-daemon.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: packages/process-daemon
+
+jobs:
+  miri:
+    name: Miri (callback ownership)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      CARGO_TARGET_DIR: target/miri
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Miri
+        run: rustup toolchain install nightly-2026-09-02 --profile minimal --component miri --component rust-src
+      - run: cargo +nightly-2026-09-02 miri setup
+      - name: Check Stacked Borrows
+        run: |
+          cargo +nightly-2026-09-02 miri test --locked --manifest-path tests/ghostty-effects/Cargo.toml
+          cargo +nightly-2026-09-02 miri test --locked --manifest-path tests/transport-retained/Cargo.toml
+      - name: Check Tree Borrows
+        env:
+          MIRIFLAGS: -Zmiri-tree-borrows
+        run: |
+          cargo +nightly-2026-09-02 miri test --locked --manifest-path tests/ghostty-effects/Cargo.toml
+          cargo +nightly-2026-09-02 miri test --locked --manifest-path tests/transport-retained/Cargo.toml
+
+  test:
+    name: Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        with:
+          version: 0.16.0
+      - name: Install Rust
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: core-${{ matrix.os }}-zig-0.16.0
+          workspaces: packages/process-daemon -> target
+          cache-workspace-crates: true
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Test Linux
+        if: runner.os == 'Linux'
+        run: cargo test --locked
+      # Match the release workflow's macOS playground exclusion.
+      - name: Test macOS
+        if: runner.os == 'macOS'
+        run: cargo test --locked --lib --test service --test runtime --test ownership --test rows --test ghostty-effects
+
+  windows:
+    name: Windows (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            machine: "8664"
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            machine: "aa64"
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: packages/process-daemon
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      RUSTUP_TOOLCHAIN: 1.90.0-x86_64-pc-windows-msvc
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Enable long dependency paths
+        run: git config --global core.longpaths true
+      - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
+        if: matrix.arch == 'x64'
+        with:
+          version: 0.16.0
+          cache-key: ${{ matrix.target }}
+      # Zig 0.16 crashes when building Ghostty on the native ARM64 host.
+      # Use x64-hosted compilers on this ARM64 runner, but execute ARM64 tests natively.
+      - name: Install x64 Zig for ARM64 cross-compilation
+        if: matrix.arch == 'arm64'
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'zig-x64.zip'
+          Invoke-WebRequest 'https://ziglang.org/download/0.16.0/zig-x86_64-windows-0.16.0.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e') { throw 'Zig archive checksum mismatch' }
+          Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
+          Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0' >> $env:GITHUB_PATH
+      - name: Fix Zig 0.16 ARM64 function-pointer alignment
+        if: matrix.arch == 'arm64'
+        run: |
+          # ARM64 function pointers require 4-byte alignment, unlike *anyopaque.
+          # Zig 0.16's Windows stack-trace helper omits the required alignment assertion.
+          $file = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.16.0/lib/std/debug/SelfInfo/Windows.zig'
+          $source = [System.IO.File]::ReadAllText($file)
+          $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
+          if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
+          [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+      - name: Install Rust toolchain and target
+        run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --component rustfmt --component clippy --target $env:CARGO_BUILD_TARGET
+      - name: Verify runner and compiler architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+          Write-Output "Windows architecture: $arch"
+          if ($arch -ine $env:EXPECTED_ARCH) { throw "Expected native $env:EXPECTED_ARCH runner, got $arch" }
+          $compiler = rustc -vV
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $compiler
+          if ($compiler -notcontains 'host: x86_64-pc-windows-msvc') { throw 'Unexpected Rust compiler host' }
+          Write-Output "Executable target: $env:CARGO_BUILD_TARGET"
+          zig version
+      # No cache-on-failure: a timed-out run once saved a partial cache that broke re-runs.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: windows-${{ matrix.target }}-zig-0.16.0
+          workspaces: packages/process-daemon -> target
+          # The native Ghostty build is now an output of the workspace crate.
+          cache-workspace-crates: true
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Check Clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Build executable
+        id: build
+        run: cargo build --locked
+      - name: Run tests
+        id: tests
+        timeout-minutes: 10
+        run: cargo test --locked --all-targets --all-features
+      - name: Run standalone library tests
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          $artifacts = cargo test --locked --lib --no-run --message-format=json | ForEach-Object { $_ | ConvertFrom-Json }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $binary = ($artifacts | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.profile.test -and $_.executable }).executable
+          # Cargo adds native library paths to PATH, which can hide accidental DLL dependencies.
+          # Copy only the executable so neither Cargo nor adjacent build artifacts can supply them.
+          $directory = Join-Path $env:RUNNER_TEMP 'pty-standalone-tests'
+          New-Item -ItemType Directory -Force $directory | Out-Null
+          $standalone = Join-Path $directory 'opencode-pty-tests.exe'
+          Copy-Item $binary $standalone
+          $bytes = [System.IO.File]::ReadAllBytes($standalone)
+          $header = [BitConverter]::ToInt32($bytes, 0x3c)
+          $machine = [BitConverter]::ToUInt16($bytes, $header + 4)
+          if ($machine -ne [Convert]::ToUInt16($env:EXPECTED_MACHINE, 16)) { throw 'Test executable architecture does not match the runner' }
+          & $standalone
+      - name: Diagnose failed library tests
+        if: failure() && steps.tests.outcome == 'failure'
+        timeout-minutes: 10
+        run: cargo test --locked --lib --all-features -- --test-threads=1 --nocapture
+      - name: Diagnose failed runtime tests
+        if: failure() && steps.tests.outcome == 'failure'
+        timeout-minutes: 3
+        run: cargo test --locked --test runtime -- --test-threads=1 --nocapture
+      - name: Diagnose failed daemon tests
+        if: failure() && steps.tests.outcome == 'failure'
+        timeout-minutes: 3
+        run: cargo test --locked --test windows-daemon -- --test-threads=1 --nocapture
+      - name: Smoke test executable
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = ($metadata.packages | Where-Object name -eq 'opencode-pty').version
+          $binary = Join-Path $metadata.target_directory "$env:CARGO_BUILD_TARGET/debug/opencode-pty.exe"
+          $output = & $binary --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output $output
+          if ($output -ne "opencode-pty $version (protocol 7)") { throw "Unexpected executable version: $output" }
+      - name: Document current coverage
+        if: always()
+        run: |
+          @"
+          ## Windows ${{ matrix.arch }}
+
+          Target: $env:CARGO_BUILD_TARGET
+
+          This job builds the executable and runs all enabled tests natively, including libghostty parser, protocol, direct TerminalService ConPTY runtime, named-pipe transport, and daemon tests.
+          The runtime suite spawns real Rust console children and checks input/output, Unicode, cwd/environment/argv/PATH, OS resize, snapshots, replay, terminal replies, and independent terminals.
+          Daemon tests cover private atomic registration, ownership/handoff, stale registration/locking, partial requests, blocked subscribers, and live ConPTY operations over real named pipes.
+          The older service, ownership, playground, and rows integration suites remain Unix-only.
+          Basic tests do not establish exhaustive lifecycle coverage or Windows interactive CLI parity.
+          No packages or releases are published.
+          "@ >> $env:GITHUB_STEP_SUMMARY

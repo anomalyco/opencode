@@ -4,7 +4,6 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { OpenCode, type SessionMessageInfo } from "@opencode/client"
-import { SessionBlob } from "@opencode/core/session/blob"
 import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -77,38 +76,6 @@ const client = (handler: (request: Request) => Promise<Response>, capabilities?:
     }),
   })
 
-// Import stores media inline, so move the imported rows' media into blobs the way the live write path stores them.
-const storeAsBlobs = (database: string) => {
-  const db = new Sqlite(database)
-  const rows = db
-    .query<
-      { id: string; session_id: string; seq: number; data: string },
-      []
-    >(`SELECT id, session_id, seq, data FROM session_message`)
-    .all()
-  for (const row of rows) {
-    const split = SessionBlob.split(JSON.parse(row.data))
-    if (!split.moved) continue
-    db.run(`UPDATE session_message SET data = ? WHERE id = ?`, [JSON.stringify(split.data), row.id])
-    for (const blob of split.blobs)
-      db.run(`INSERT OR IGNORE INTO blob (hash, mime, bytes, data, time_created) VALUES (?, ?, ?, ?, ?)`, [
-        blob.hash,
-        blob.mime,
-        blob.bytes,
-        blob.data,
-        Date.now(),
-      ])
-    for (const hash of split.hashes)
-      db.run(`INSERT OR IGNORE INTO blob_ref (session_id, message_id, hash, seq) VALUES (?, ?, ?, ?)`, [
-        row.session_id,
-        row.id,
-        hash,
-        row.seq,
-      ])
-  }
-  db.close()
-}
-
 const media = (base64: string) => `media:${hash(base64)}`
 const route = (base64: string) => `http://opencode.local/api/experimental/media/${hash(base64)}`
 
@@ -125,8 +92,8 @@ it.live("serves stored media as refs only to clients that opt in while experimen
 
       yield* Effect.promise(async () => {
         const template = await plain.session.create({ title: "Media wire" })
-        await plain.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
-        storeAsBlobs(database)
+        // With the flag on, import stores the media as blobs.
+        await plain.experimental.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
 
         // Without the capability, reads stay byte-for-byte what was imported.
         expect((await plain.message.list({ sessionID, order: "asc" })).data).toEqual([user, assistant])
@@ -187,7 +154,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
         expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
-        expect((await opted.session.export({ sessionID })).messages).toEqual([user, assistant])
+        expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
         // The route serves raw bytes, immutable caching and a 304, and never renders active content inline.
         const image = await handler(new Request(route(png)))

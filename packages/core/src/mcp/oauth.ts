@@ -18,6 +18,7 @@ import {
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
 import { Cause, Deferred, Effect } from "effect"
 import type { ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { Credential } from "../credential.js"
@@ -106,7 +107,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
 
 // A configured authorization server document stands in for RFC 9728 discovery: the SDK reuses this
 // state instead of probing the resource server, whose well-known path may not exist.
-export const configuredDiscovery = async (input: {
+const configuredDiscovery = async (input: {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly fetchFn: FetchLike
 }): Promise<OAuthDiscoveryState | undefined> => {
@@ -123,7 +124,7 @@ export const configuredDiscovery = async (input: {
   }
 }
 
-export interface Store {
+interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
   readonly clientInformation: () => Promise<StoredOAuthClientInformation | undefined>
@@ -132,7 +133,7 @@ export interface Store {
   readonly saveCodeVerifier: (verifier: string) => Promise<void>
 }
 
-export interface Options {
+interface Options {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
   /** Absent on connect: the provider then refuses to register a client or redirect, ending in needs_auth. */
@@ -146,7 +147,7 @@ export interface Options {
   readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
 }
 
-export const provider = (options: Options): OAuthClientProvider => {
+const provider = (options: Options): OAuthClientProvider => {
   const oauth = options.config.oauth || undefined
   const client = oauth?.client_id ? { client_id: oauth.client_id, client_secret: oauth.client_secret } : undefined
   const redirect = options.redirect
@@ -214,7 +215,7 @@ export const provider = (options: Options): OAuthClientProvider => {
   }
 }
 
-export const memoryStore = (): Store => {
+const memoryStore = (): Store => {
   let tokens: StoredOAuthTokens | undefined
   let client: StoredOAuthClientInformation | undefined
   let verifier: string | undefined
@@ -237,7 +238,7 @@ export const memoryStore = (): Store => {
 export const clientFromCredential = (credential: Credential.OAuth) =>
   credential.metadata?.client as StoredOAuthClientInformation | undefined
 
-export const toCredential = (input: {
+const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
   readonly tokens: StoredOAuthTokens
@@ -259,7 +260,7 @@ export const toCredential = (input: {
     },
   })
 
-export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
+const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
     access_token: credential.access,
@@ -397,12 +398,7 @@ export const authorize = (input: {
     const port = yield* Effect.callback<number, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)))
       server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        const address = server.address()
-        resume(
-          address && typeof address === "object"
-            ? Effect.succeed(address.port)
-            : Effect.fail(new Error("Could not determine MCP OAuth callback port")),
-        )
+        resume(Effect.succeed((server.address() as AddressInfo).port))
       })
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))

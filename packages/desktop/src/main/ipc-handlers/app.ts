@@ -8,6 +8,7 @@ import { setForceFocus } from "../native/debug"
 import { showCliInstaller } from "../native/install-cli"
 import { DesktopLogging, scoped } from "../native/logging"
 import { createMenu, sendMenuCommand } from "../native/menu"
+import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
@@ -37,6 +38,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppCheckAppExists: ({ appName }) => checkAppExists(appName).pipe(Effect.orDie),
       AppResolveAppPath: ({ appName }) => resolveAppPath(appName).pipe(Effect.orDie),
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
+      AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
+      AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>
