@@ -157,7 +157,8 @@ const baseLayer = Layer.effect(
     const outsideEntry = (base: string, item: DirectoryItem) => {
       const absolute = path.join(base, item.name)
       const type = item.type === "Directory" ? "directory" : "file"
-      const relative = path.relative(location.directory, absolute) + (type === "directory" ? path.sep : "")
+      // Keep the location itself addressable as "." like FileSystem.list does.
+      const relative = (path.relative(location.directory, absolute) || ".") + (type === "directory" ? path.sep : "")
       return Entry.make({
         path: RelativePath.make(relative),
         type,
