@@ -154,6 +154,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor"/><path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor"/><path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor"/>`,
   },
+  "outline-list": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5.5 4H13.5M5.5 8H13.5M5.5 12H13.5" stroke="currentColor"/><path d="M2.5 4H3.5M2.5 8H3.5M2.5 12H3.5" stroke="currentColor"/>`,
+  },
   expand: {
     viewBox: "0 0 16 16",
     body: `<path d="M8.25 6.17773V1.17773M11.25 4.17773L8.25 1.17773L5.25 4.17773" stroke="currentColor"/><path d="M8.25 9.17773V14.1777M11.25 11.1777L8.25 14.1777L5.25 11.1777" stroke="currentColor"/><path d="M4.25 7.67773H12.25" stroke="currentColor"/>`,

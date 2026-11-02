@@ -109,6 +109,7 @@ export type IconName =
   | "outline-globe"
   | "outline-globe-plus"
   | "outline-hexagonal-warning"
+  | "outline-list"
   | "outline-magnifier-minus"
   | "outline-magnifier-plus"
   | "outline-photo"

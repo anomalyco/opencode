@@ -539,7 +539,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     type="button"
                     variant="ghost-muted"
                     size="normal"
-                    icon={<Icon name={settings.appearance.tabGroupByServer() ? "file-tree" : "bullet-list"} />}
+                    icon={<Icon name={settings.appearance.tabGroupByServer() ? "filetree" : "outline-list"} />}
                     state={settings.appearance.tabGroupByServer() ? "pressed" : undefined}
                     onClick={() =>
                       settings.appearance.setTabGroupByServer(!settings.appearance.tabGroupByServer())
