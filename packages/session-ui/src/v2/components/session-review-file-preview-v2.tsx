@@ -145,17 +145,24 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     return text(view(), "deletions")
   })
 
-  const canCopy = () => (view().status === "deleted" ? deletedContent() !== undefined : !!props.readFile)
+  const snapshotContent = createMemo(() =>
+    view().status === "deleted" ? deletedContent() : "after" in props.diff ? props.diff.after : undefined,
+  )
+
+  const canCopy = () => snapshotContent() !== undefined || (view().status !== "deleted" && !!props.readFile)
 
   const copyContents = async () => {
     if (copying()) return
     setCopying(true)
 
     try {
+      const snapshot = snapshotContent()
       const content =
-        view().status === "deleted"
-          ? { type: "text", content: deletedContent() }
-          : await props.readFile?.(props.file)
+        snapshot !== undefined
+          ? { type: "text", content: snapshot }
+          : view().status === "deleted"
+            ? undefined
+            : await props.readFile?.(props.file)
 
       if (content?.type !== "text" || content.content === undefined || content.content.includes("\0")) {
         showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyUnavailable") })

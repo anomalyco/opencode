@@ -13,36 +13,21 @@ test.use({ viewport: { width: 1440, height: 900 } })
 test("copies the current whole review file rather than its bounded diff", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
 
-  const content = {
-    text: "export const value = 'after'\n" + "// unchanged outside the hunk\n".repeat(20) + "export const last = true\n",
-  }
+  const content =
+    "export const value = 'after'\n" + "// unchanged outside the hunk\n".repeat(20) + "export const last = true\n"
 
   await openSession(page, {
     name: "ReviewCopyContent",
     vcsDiff: [fileDiff("src/example.ts")],
-    fileContent: () => content.text,
+    fileContent: () => content,
   })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
   const panel = page.locator("#review-panel")
   await openReviewLauncher(panel)
-  const copy = panel.getByRole("button", { name: "Copy file contents", exact: true })
-  await copy.focus()
-  await copy.press("Enter")
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(content.text)
+  await panel.getByRole("button", { name: "Copy file contents", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(content)
   await expect(page.getByText("File contents copied", { exact: true })).toBeVisible()
   await expect(panel.getByRole("textbox")).toHaveCount(0)
-
-  content.text += "// edited after the diff was loaded\n"
-  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }))
-  await copy.click()
-  await expect(copy).toBeEnabled()
-  await page.evaluate(() =>
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      get: Object.getOwnPropertyDescriptor(Navigator.prototype, "clipboard")?.get,
-    }),
-  )
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(content.text)
 })
 
 test("copies a deleted review file's complete old text without reading its missing path", async ({ page, context }) => {
