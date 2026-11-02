@@ -125,7 +125,7 @@ for (const fixture of [
       expect(executions).toBe(fixture.toolChoice === "none" ? 0 : 1)
       if (Exit.isSuccess(result))
         expect(result.value).toEqual(
-          SessionStep.Outcome.Completed({ needsContinuation: fixture.toolChoice !== "none" }),
+          SessionStep.Outcome.Completed({ needsContinuation: fixture.toolChoice !== "none", changed: true }),
         )
       expect(yield* llm.requests()).toHaveLength(1)
       expect(captures).toBe(2)

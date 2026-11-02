@@ -598,6 +598,28 @@ describe("ConfigNormalize", () => {
     }
   })
 
+  test("normalizes the verification setting", () => {
+    for (const [value, expected] of [
+      [true, true],
+      [false, false],
+      [{ command: "bun test" }, { command: "bun test" }],
+      [
+        { command: "bun test", timeout: "30 seconds", max_attempts: 2 },
+        { command: "bun test", timeout: "30000 millis", max_attempts: 2 },
+      ],
+    ] as const)
+      expect(normalized({ experimental: { verification: value } }).encoded.experimental).toEqual({
+        verification: expected,
+      })
+    for (const value of ["bun test", 1, { command: 1 }, { command: "bun test", timeout: "soon" }]) {
+      const result = normalized({ experimental: { verification: value } })
+      expect(result.encoded.experimental).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+        ["invalid", ["experimental", "verification"]],
+      ])
+    }
+  })
+
   test("never emits experimental policies", () => {
     expect(
       normalized({ experimental: { policies: [{ action: "provider.use", resource: "*", effect: "deny" }] } }).encoded,

@@ -28,7 +28,7 @@ import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
-  Completed: { readonly needsContinuation: boolean }
+  Completed: { readonly needsContinuation: boolean; readonly changed: boolean }
   Retry: { readonly error: SessionError.Error; readonly decision: SessionRunnerRetry.Decision }
   Continue: {
     readonly error: SessionError.Error
@@ -243,9 +243,11 @@ export const make = Effect.gen(function* () {
         }
 
         const record = publisher.record()
+        let changed = false
         if (record.finish || record.failure) {
           const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
           const snapshot = yield* snapshots.capture()
+          changed = startSnapshot !== undefined && snapshot !== undefined && startSnapshot !== snapshot
           const files =
             startSnapshot && snapshot
               ? startSnapshot === snapshot
@@ -281,7 +283,7 @@ export const make = Effect.gen(function* () {
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
-          if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })
+          if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true, changed: false })
           return yield* Effect.interrupt
         }
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
@@ -289,7 +291,7 @@ export const make = Effect.gen(function* () {
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         const needsContinuation = input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation
         if (record.finish?.finish === "length") return Outcome.OutputLimit({ needsContinuation })
-        return Outcome.Completed({ needsContinuation })
+        return Outcome.Completed({ needsContinuation, changed })
       }),
     )
   }, Effect.scoped)

@@ -19,6 +19,7 @@ import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionVerification } from "../verification.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
@@ -52,6 +53,8 @@ const layer = Layer.effect(
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
+    const verification = yield* SessionVerification.Service
+    const inbox = yield* SessionInbox.Service
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
@@ -68,6 +71,7 @@ const layer = Layer.effect(
       let step = input.continuation?.step ?? 1
       let entering = true
       let stepped = input.stepped ?? false
+      const verificationState = { attempts: 0, changed: false }
       const promotable = input.promotable ?? "input"
       if (!force && !continuing && !stepped) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
@@ -212,7 +216,7 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        continuing = yield* runStep(next.context, step, verificationState)
         stepped = true
         step++
         force = false
@@ -229,8 +233,63 @@ const layer = Layer.effect(
       return selected
     })
 
+    /** Run the configured verification command once when a turn changed files. */
+    const verifyTurn = Effect.fn("SessionRunner.verifyTurn")(function* (
+      loaded: SessionContext.Loaded,
+      state: { attempts: number; changed: boolean },
+      stepLimitReached: boolean,
+    ) {
+      // Subagents report to their parent; only the owning turn verifies.
+      if (loaded.session.parentID !== undefined) return
+      if (lifecycle.isClosed()) return
+      if (stepLimitReached) return
+      if (!state.changed) return
+      if ((yield* SessionBackground.outstanding(jobs, store, loaded.session.id)).length > 0) return
+      const check = yield* verification.check({
+        sessionID: loaded.session.id,
+        directory: loaded.session.location.directory,
+        attempt: state.attempts,
+      })
+      if (check.status !== "failed") return
+      state.attempts++
+      const text = [
+        `Verification failed: \`${check.command}\`${check.exit === undefined ? "" : ` (exit ${check.exit})`}`,
+        "",
+        "```",
+        check.output,
+        "```",
+        "",
+        "Fix the failure, then run the verification command again before finishing.",
+      ].join("\n")
+      yield* Effect.logInfo("verification steered repair", {
+        sessionID: loaded.session.id,
+        command: check.command,
+        attempt: state.attempts,
+      })
+      yield* inbox
+        .admit({
+          id: SessionMessage.ID.create(),
+          sessionID: loaded.session.id,
+          item: {
+            type: "synthetic",
+            payload: SessionInbox.SyntheticPayload.make({
+              text,
+              description: "Verification failed",
+              metadata: { source: "verification", command: check.command },
+            }),
+            delivery: "steer",
+          },
+        })
+        .pipe(Effect.orDie)
+      return true
+    })
+
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (
+      first: SessionContext.Loaded,
+      step: number,
+      verificationState: { attempts: number; changed: boolean },
+    ) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
@@ -314,11 +373,14 @@ const layer = Layer.effect(
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
-            // The Session is about to go idle, which leaves the background summary time to finish.
-            if (!outcome.needsContinuation)
+            verificationState.changed ||= outcome.changed
+            if (!outcome.needsContinuation) {
+              if (yield* verifyTurn(loaded, verificationState, stepLimitReached)) return true
+              // The Session is about to go idle, which leaves the background summary time to finish.
               yield* compaction.precompute(
                 store.context(sessionID).pipe(Effect.map((messages) => ({ ...loaded, messages }))),
               )
+            }
             return outcome.needsContinuation
           }),
           Retry: (outcome) =>
@@ -451,6 +513,8 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    SessionVerification.node,
+    SessionInbox.node,
     Plugin.node,
     PluginHooks.node,
     Job.node,

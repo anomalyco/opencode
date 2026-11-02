@@ -513,6 +513,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.schedules = value
       }
+      if (own(experimental, "verification")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.verification,
+          experimental.verification,
+          ["experimental", "verification"],
+          diagnostics,
+        )
+        if (value !== undefined) result.verification = value
+      }
       if (own(experimental, "artifacts")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.artifacts,

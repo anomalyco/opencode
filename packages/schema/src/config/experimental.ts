@@ -37,6 +37,25 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),
+  verification: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      command: Schema.String.annotate({
+        description: "Shell command that verifies the current workspace, for example `bun test` or `pnpm check`.",
+      }),
+      timeout: Schema.DurationFromString.pipe(optional).annotate({
+        description: "Maximum time to wait for the verification command. Defaults to 120 seconds.",
+      }),
+      max_attempts: NonNegativeInt.pipe(optional).annotate({
+        description: "How many times a failed verification may send its output back to the model. Defaults to 1.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Run a verification command after a turn changes files. `true` auto-detects a package script; pass an object to set the command, timeout, or retry budget. Defaults to disabled.",
+    }),
   artifacts: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
   }),
