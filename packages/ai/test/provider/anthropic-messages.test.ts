@@ -858,6 +858,65 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers per-part Anthropic media options from provider metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: {
+                anthropic: { file_id: "file_img", transformations: { oversized_image: "downsize" } },
+              },
+            }),
+            Message.media(Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }), {
+              filename: "report.pdf",
+              providerMetadata: { anthropic: { context: "Q3", citations: { enabled: true } } },
+            }),
+            Message.media(Media.base64("aGk=", "text/plain"), {
+              filename: "notes.txt",
+              providerMetadata: { anthropic: { title: "Notes" } },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[0]?.content).toEqual([
+        {
+          type: "image",
+          source: { type: "file", file_id: "file_img" },
+          transformations: { oversized_image: "downsize" },
+        },
+        {
+          type: "document",
+          source: { type: "url", url: "https://example.com/report.pdf" },
+          title: "report.pdf",
+          context: "Q3",
+          citations: { enabled: true },
+        },
+        { type: "document", source: { type: "text", media_type: "text/plain", data: "hi" }, title: "Notes" },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid per-part Anthropic media options", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: { anthropic: { transformations: { oversized_image: "shrink" } } },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("oversized_image")
+    }),
+  )
+
   const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } }
   const videoFile = { type: "file" as const, uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" }
   const customModel = AnthropicMessages.route.with({ provider: "custom" }).model({ id: "video-model" })

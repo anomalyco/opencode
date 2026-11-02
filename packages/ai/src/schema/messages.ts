@@ -50,7 +50,6 @@ export const MediaPart = Schema.Struct({
   media: Media.AssetSchema,
   filename: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
