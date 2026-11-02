@@ -41,7 +41,12 @@ import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
-import { directoryAutocomplete, slashArgumentAutocomplete, mentionFileSearch } from "../../prompt/directory-completion"
+import {
+  directoryAutocomplete,
+  slashArgumentAutocomplete,
+  mentionFileSearch,
+  mentionFileName,
+} from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -401,15 +406,9 @@ export function Autocomplete(props: {
 
       options.push(
         ...result.data.map((item): AutocompleteOption => {
-          const name = mention
-            ? mention.prefix + path.basename(item.path) + (item.type === "directory" ? "/" : "")
-            : undefined
-          const { filename, part } = createFilePart(
-            item,
-            path.join(result.location.directory, item.path),
-            lineRange,
-            name,
-          )
+          const absolute = path.join(result.location.directory, item.path)
+          const name = mention ? mentionFileName(mention.prefix, absolute, item.type === "directory") : undefined
+          const { filename, part } = createFilePart(item, absolute, lineRange, name)
           return {
             display: Locale.truncateMiddle(filename, width),
             value: filename,

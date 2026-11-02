@@ -63,6 +63,10 @@ export function mentionFileSearch(query: string) {
   }
 }
 
+export function mentionFileName(prefix: string, absolute: string, directory: boolean) {
+  return prefix + path.basename(absolute) + (directory ? "/" : "")
+}
+
 export function directoryAutocompleteSearch(query: string, directory: string, home: string) {
   if (query === "~") return { directory: home, prefix: "~/", query: "" }
   if (query.startsWith("~/")) return directorySearch(query.slice(2), home, "~/")
