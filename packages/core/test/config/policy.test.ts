@@ -15,6 +15,7 @@ import { Credential } from "@opencode/core/credential"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Schema } from "effect"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { organizationPolicy } from "../fixture/policy"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -309,13 +310,13 @@ describe("integration policy", () => {
 
       // Only the required organization's connection works, and with it everything that organization supplies.
       yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: consoleCredential(orgID) })
-      yield* eventually(available().pipe(Effect.map((ids) => ids.length > 0)))
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length > 0)))
       expect(yield* available()).toEqual(["acme-gateway", "opencode"])
       expect(yield* searches()).toEqual(["opencode"])
 
       // Switching back to the personal account revokes it again.
       yield* credentials.activate(personal.id)
-      yield* eventually(available().pipe(Effect.map((ids) => ids.length === 0)))
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length === 0)))
       expect(yield* searches()).toEqual([])
     }).pipe(Effect.provide(Config.testLayer([lockdown()]))),
   )
@@ -399,21 +400,4 @@ describe("integration policy", () => {
       ])
     }),
   )
-})
-
-const eventually = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for policy reload")
-})
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for policy reload")
 })
