@@ -11,6 +11,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
+import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
@@ -381,11 +382,7 @@ export const Plugin = {
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
                 metadata: { files: output.files },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
-              ),
+              Effect.mapError(toolFailure(`Unable to edit ${input.path}`)),
             )
           },
         }),

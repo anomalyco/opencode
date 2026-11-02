@@ -8,6 +8,7 @@ import { Identifier } from "@opencode/schema/identifier"
 import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { toolFailure } from "../runtime.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -186,9 +187,7 @@ export const Plugin = {
             duration: DOWNLOAD_TIMEOUT,
             orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
           }),
-          Effect.mapError((error) =>
-            error instanceof ToolFailure ? error : new ToolFailure({ message: `Unable to download ${source}`, error }),
-          ),
+          Effect.mapError(toolFailure(`Unable to download ${source}`)),
         )
       }
       const target = yield* access.authorizeRead(source, context)
@@ -374,9 +373,7 @@ export const Plugin = {
                 metadata: { path: stem, model: ref, jobID: id },
               }
             }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to generate image", error }),
-              ),
+              Effect.mapError(toolFailure("Unable to generate image")),
             ),
         })
       })

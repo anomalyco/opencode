@@ -6,6 +6,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
+import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
@@ -203,11 +204,7 @@ export const Plugin = {
                     updates.set(target.absolute, next)
                   }
                 }).pipe(
-                  Effect.mapError((error) =>
-                    error instanceof ToolFailure
-                      ? error
-                      : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
-                  ),
+                  Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)),
                 )
               }
 
@@ -307,9 +304,7 @@ export const Plugin = {
                 content: toModelContent(output),
                 metadata: { files: output.files },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to apply patch", error }),
-              ),
+              Effect.mapError(toolFailure("Unable to apply patch")),
             )
           },
         }),
