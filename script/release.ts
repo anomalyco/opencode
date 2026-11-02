@@ -9,6 +9,37 @@ import path from "path"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
+// The changelog covers OpenCode itself and its clients. Commits that only touch other paths, such as the console, stats,
+// cloud functions, docs, websites, infra, and release tooling, are left out.
+const changelogPaths = [
+  "packages/ai",
+  "packages/app",
+  "packages/cli",
+  "packages/client",
+  "packages/codemode",
+  "packages/core",
+  "packages/desktop",
+  "packages/gui-plugins",
+  "packages/latex",
+  "packages/merman",
+  "packages/patchmark",
+  "packages/plugin",
+  "packages/plugin-browser",
+  "packages/plugins",
+  "packages/process-daemon",
+  "packages/protocol",
+  "packages/schema",
+  "packages/sdk",
+  "packages/server",
+  "packages/session-ui",
+  "packages/theme",
+  "packages/tui",
+  "packages/ui",
+  "packages/util",
+  "sdks/vscode",
+  "install",
+  "patches",
+]
 const review = path.join(root, "RELEASE_REVIEW.md")
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -59,8 +90,11 @@ const base =
   values.from ??
   (await $`git tag --list "v2.*" --sort=-version:refname`.text()).split("\n").find((tag) => /^v2\.\d+\.\d+$/.test(tag))
 if (!base) throw new Error("No stable V2 release tag was found")
-console.log(`Comparing ${commitRange(base, values.to)}`)
-await generateReview(base, values.to)
+console.log(`Comparing ${base}..${values.to}`)
+const commits = (await $`git log --format=${"%h %s"} ${commitRange(base, values.to)}`.text()).trim()
+if (!commits) throw new Error(`No OpenCode or client changes were found since ${base}`)
+console.log(`Found ${commits.split("\n").length} commits for the changelog`)
+await generateReview(base, values.to, commits)
 
 if (!(await Bun.file(review).exists())) throw new Error("OpenCode did not create RELEASE_REVIEW.md")
 if (values.print) {
@@ -103,7 +137,7 @@ if (answer?.trim().toLowerCase() !== "y" && answer?.trim().toLowerCase() !== "ye
 await $`gh workflow run release.yml --ref dev ${input} -f release_notes=${releaseNotes}`
 console.log(`Triggered the ${version} release`)
 
-async function generateReview(base: string, head: string) {
+async function generateReview(base: string, head: string, commits: string) {
   const endpoint = await Service.ensure()
   const client = OpenCode.make({
     baseUrl: endpoint.url,
@@ -143,7 +177,7 @@ async function generateReview(base: string, head: string) {
   })()
 
   try {
-    await client.session.prompt({ sessionID: session.id, text: reviewPrompt(base, head) })
+    await client.session.prompt({ sessionID: session.id, text: reviewPrompt(base, head, commits) })
     await completed
     const messages = await client.message.list({ sessionID: session.id, limit: 100, order: "desc" })
     const response = messages.data.find((message) => message.type === "assistant")
@@ -159,21 +193,27 @@ async function generateReview(base: string, head: string) {
 // V1 history was merged into dev when V2 was promoted, so it must be excluded from the release range. Merges are skipped
 // because dev only takes squash merges, and the promotion merge would otherwise show the whole V1 tree.
 function commitRange(base: string, head: string) {
-  return `--no-merges ${base}..${head} --not origin/v1`
+  return ["--no-merges", `${base}..${head}`, "--not", "origin/v1", "--", ...changelogPaths]
 }
 
-function reviewPrompt(base: string, head: string) {
+function reviewPrompt(base: string, head: string, commits: string) {
+  const paths = changelogPaths.join(" ")
   return `Create a concise pre-release review for a maintainer.
 
-The previous stable V2 release is ${base}. Inspect every relevant commit in \`git log ${commitRange(base, head)}\` and
-read each commit's actual diff with \`git show\`. Do not use a whole-tree \`git diff\` between the endpoints, which
-includes V1 history merged into dev. Do not compare against V1 release tags or commits outside that range. Do not rely
-only on commit titles. Write a
-user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty sections and changes that
-are entirely internal. Group bug fixes separately from improvements. Preserve community contributor attribution when it
-is available from merged pull requests, but never thank authors listed in .github/TEAM_MEMBERS. Leave out changes to
-the @opencode/ai package in packages/ai unless they change how OpenCode itself behaves for users; then describe only
-that OpenCode behavior.
+The previous stable V2 release is ${base}. These commits from \`git log ${commitRange(base, head).join(" ")}\` are
+the only ones in scope:
+
+${commits}
+
+Inspect every relevant commit and read its actual diff with \`git show <commit> -- ${paths}\`. Those paths are
+OpenCode itself and its clients. Ignore any part of a commit outside them, such as the console, stats, cloud functions,
+docs, websites, infra, and release tooling. Do not use a whole-tree \`git diff\` between the endpoints, which includes
+V1 history merged into dev. Do not compare against V1 release tags or commits outside that range. Do not rely only on
+commit titles. Write a user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty
+sections and changes that are entirely internal. Group bug fixes separately from improvements. Preserve community
+contributor attribution when it is available from merged pull requests, but never thank authors listed in
+.github/TEAM_MEMBERS. Leave out changes to the @opencode/ai package in packages/ai unless they change how OpenCode itself
+behaves for users; then describe only that OpenCode behavior.
 
 Start the changelog with a "### Highlights" section: the few changes worth telling people about, written for humans.
 Pick 2 to 5 user-visible changes a user would notice, try, or share: new capabilities, clearly better workflows, or fixes
