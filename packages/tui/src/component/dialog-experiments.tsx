@@ -25,6 +25,12 @@ export const experiments: Experiment[] = [
     title: "TUI tools",
     description: "Let the agent open terminals in this TUI (requires server support)",
   },
+  {
+    id: "native-input",
+    title: "Native input parser",
+    description:
+      "Parse terminal input with the native parser. Fixes dropped CJK input on Windows/WSL, where ConPTY splits UTF-8 characters across reads (restart required)",
+  },
 ]
 
 export function DialogExperiments() {

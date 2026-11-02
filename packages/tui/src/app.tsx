@@ -258,6 +258,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         autoFocus: false,
         openConsoleOnError: false,
         useMouse: config.mouse,
+        experimental_nativeInput: config.experimental?.["native-input"],
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
         },
