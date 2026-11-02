@@ -5,8 +5,8 @@ import "./menu-scroll.css"
 
 /**
  * A scroll container for menus, popovers and dialog lists. It hides the native scrollbar and draws the shared thumb
- * over the content, so rows keep equal start and end padding whether or not the list overflows. Touch devices keep
- * their native overlay scrollbar.
+ * over the content, so rows keep equal start and end padding whether or not the list overflows. Touch devices and
+ * high-contrast modes keep the native scrollbar.
  */
 export function MenuScroll(
   props: Omit<ComponentProps<"div">, "ref" | "onScroll"> & {

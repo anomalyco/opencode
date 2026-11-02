@@ -16,7 +16,8 @@
   display: none;
 }
 
-@media (hover: hover) and (pointer: fine) {
+/* High-contrast modes keep the native scrollbar, which follows the system colours. */
+@media (hover: hover) and (pointer: fine) and (forced-colors: none) {
   [data-component="menu-scroll"] > [data-scrollable] {
     scrollbar-width: none;
   }
