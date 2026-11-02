@@ -1638,7 +1638,10 @@ describe("current session timeline rows", () => {
 
     const go = [
       user,
-      { ...assistant, error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 120_000 } },
+      {
+        ...assistant,
+        error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 25 * 86_400_000 },
+      },
     ] satisfies SessionMessageInfo[]
 
     expect(Timeline.constructSessionMessageRows(step, true, { type: "idle" }).rows.at(-1)).toEqual(
@@ -1671,7 +1674,7 @@ describe("current session timeline rows", () => {
         userMessageID: "msg_user",
         text: "Go usage limit reached.",
         kind: "go-limit",
-        resetAt: 121_000,
+        resetAt: 1_000 + 25 * 86_400_000,
       }),
     )
     expect(Timeline.constructSessionMessageRows(quota, true, { type: "idle" }).rows.at(-1)).toEqual(
