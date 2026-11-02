@@ -238,7 +238,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         }}
         onDragEnter={props.controller.onDragEnter}
         onDragOver={props.controller.onDragOver}
-        onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
         <div
@@ -266,9 +265,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
               onFileRemove={(file) => props.controller.removeContext(file.key)}
               editingQuote={props.controller.editingQuote()}
+              quoteAnchor={props.controller.quoteAnchor()}
+              onQuoteFocus={props.controller.focusQuotePrompt}
               onEditQuote={props.controller.editQuote}
-              quoteSource={props.controller.quoteSource}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
+              quoteSubmit={view.submit.quote}
               searchPaths={props.controller.searchPaths}
             />
           </Show>
@@ -422,6 +423,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               <Show when={view.agent} keyed>
                 {(control) => (
                   <ComposerEditorConfiguredSelect
+                    fitMenuToOptions
                     title={i18n.t("ui.promptInput.chooseAgent")}
                     keybind={["Mod", "."]}
                     control={control}
@@ -527,7 +529,9 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
     }),
   )
 
-  if (!active) return
+  // Emptying the editor already collapses its caret to the start, which is also its end. Any selection call, even a
+  // read, forces a layout, and a submit empties the editor from its key handler.
+  if (!active || prompt.every((part) => isAttachment(part) || (part.type === "text" && !part.content))) return
   const selection = window.getSelection()
   const range = document.createRange()
   range.selectNodeContents(editor)
@@ -678,9 +682,11 @@ function ComposerAttachments(props: {
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
   editingQuote?: string
+  quoteAnchor?: ReturnType<ComposerEditorModel["quoteAnchor"]>
+  onQuoteFocus?: () => void
   onEditQuote?: (key?: string) => void
-  quoteSource?: ComposerEditorModel["quoteSource"]
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  quoteSubmit?: ComposerEditorModel["view"]["submit"]["quote"]
   searchPaths?: (query: string) => Promise<string[]>
 }) {
   const i18n = useI18n()
@@ -729,18 +735,17 @@ function ComposerAttachments(props: {
                   value={comment.comment}
                   placement="top"
                   openDelay={800}
-                  disabled={comment.type === "quote"}
+                  disabled={comment.type === "quote" || (comment.type === "note" && !comment.comment.trim())}
                   contentClass="max-w-[300px] break-words"
                 >
                   <CommentCard
                     comment={comment.comment ?? ""}
                     target={commentCardTarget(comment)}
                     title={quoteTitle(comment)}
-                    tooltip={quoteHint(comment)}
+                    tooltip={quoteHint(comment) || (comment.type === "note" && !comment.comment.trim())}
                     active={commentActive(comment)}
                     onClick={() => {
                       if (comment.type !== "quote") return props.onCommentClick?.(comment)
-                      props.quoteSource?.reveal(comment.key)
                       props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
                     }}
                   />
@@ -874,15 +879,27 @@ function ComposerAttachments(props: {
               {(anchor) => (
                 <QuoteCommentEditor
                   anchor={anchor()}
+                  source={props.quoteAnchor}
                   text={current.text}
-                  icon={current.source?.icon}
                   comment={current.comment ?? ""}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  send={
+                    props.quoteSubmit && {
+                      available: props.quoteSubmit.available(),
+                      delivery: props.quoteSubmit.delivery(),
+                      onSubmit: (comment) => props.quoteSubmit!.onSubmit(current.key, comment),
+                    }
+                  }
                   onSubmit={(comment) => {
                     props.onQuoteComment?.(current, comment)
                     props.onEditQuote?.()
+                    props.onQuoteFocus?.()
                   }}
-                  onClose={() => props.onEditQuote?.()}
+                  onClose={(focus) => {
+                    props.onEditQuote?.()
+
+                    if (focus) props.onQuoteFocus?.()
+                  }}
                 />
               )}
             </Show>
@@ -987,6 +1004,7 @@ function pointerFocusReturn() {
 
 function ComposerEditorConfiguredSelect(props: {
   mobileDrawer?: boolean
+  fitMenuToOptions?: boolean
   title: string
   keybind?: string[]
   control: ComposerSelectControl
@@ -999,6 +1017,7 @@ function ComposerEditorConfiguredSelect(props: {
   return (
     <ComposerEditorSelect
       mobileDrawer={props.mobileDrawer}
+      fitMenuToOptions={props.fitMenuToOptions}
       title={props.title}
       class={props.class}
       keybind={props.control.keybind?.() ?? props.keybind}
@@ -1016,6 +1035,8 @@ function ComposerEditorConfiguredSelect(props: {
 
 function ComposerEditorSelect(props: {
   mobileDrawer?: boolean
+  /** Size the menu to its longest option instead of the shared 160px minimum, with room before the check. */
+  fitMenuToOptions?: boolean
   title: string
   keybind?: string[]
   options: ComposerOption[]
@@ -1079,11 +1100,18 @@ function ComposerEditorSelect(props: {
               {content()}
             </Menu.Trigger>
             <Menu.Portal>
-              <Menu.Content onCloseAutoFocus={focus.onCloseAutoFocus}>
+              <Menu.Content
+                onCloseAutoFocus={focus.onCloseAutoFocus}
+                class={props.fitMenuToOptions ? "!min-w-0" : undefined}
+              >
                 <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
                   <For each={props.options}>
                     {(option) => (
-                      <Menu.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                      <Menu.RadioItem
+                        value={option.id}
+                        class={props.fitMenuToOptions ? "capitalize !gap-6" : "capitalize"}
+                        closeOnSelect
+                      >
                         {option.label}
                       </Menu.RadioItem>
                     )}
@@ -1315,9 +1343,11 @@ function ComposerEditorPopover(props: {
                 type="button"
                 data-suggestion-id={item.id}
                 data-active={props.activeID === item.id ? "" : undefined}
-                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
                 classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
-                onPointerMove={() => props.onActiveChange(item)}
+                onPointerMove={(event) => {
+                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                }}
                 onClick={() => props.onSelect(item)}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">

@@ -802,6 +802,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "กำลังย้ายข้อมูล {{current}}/{{total}}",
   "home.workspaceTip": "เริ่มเซสชันถัดไปในพื้นที่ทำงานใหม่เพื่อให้การเปลี่ยนแปลงแยกออกจากกัน",
   "session.tab.add": "เพิ่มแท็บ",
+  "session.tab.closeOthers": "ปิดแท็บอื่น",
   "session.queue.attachments.one": "เพิ่มไฟล์แนบ {{count}} ไฟล์",
   "session.queue.attachments.other": "เพิ่มไฟล์แนบ {{count}} ไฟล์",
   "settings.backToSettings": "กลับไปที่การตั้งค่า",

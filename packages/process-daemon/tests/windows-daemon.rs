@@ -651,7 +651,7 @@ fn observer_disconnect_and_control_input_preserve_independent_terminals() {
         matches!(daemon.request(Request::List), Response::Terminals { terminals } if terminals.len() == 2)
     );
     assert!(
-        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 7 }
+        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 7, .. }
         if instance_id == daemon.registration.instance_id && pid == daemon.registration.pid)
     );
     assert!(matches!(daemon.own(None).1, Response::Error { .. }));

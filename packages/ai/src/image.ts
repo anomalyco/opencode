@@ -12,26 +12,26 @@ import { ImageClient, Service } from "./image-client.js"
 
 export type ImageOptions = MediaModel.Options
 
-export type ImageRoute = MediaRoute.AnyRoute<ImageRequestFor, ImageEvent, ImageResponse>
+export type ImageRoute = MediaRoute.AnyRoute<ImageRequest, ImageEvent, ImageResponse>
 
 export class ImageModel<Options extends ImageOptions = ImageOptions> extends MediaModel<ImageRoute, Options> {
   declare protected readonly _ImageModel: void
 
   /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
   static fromRoute<Options extends ImageOptions>(
-    route: MediaModel.InlineRouteInput<ImageRequestFor<Options>, ImageResponse>,
+    route: MediaModel.InlineRouteInput<ImageRequest<ImageModel<Options>>, ImageResponse>,
     input: MediaRoute.ModelInput,
   ): ImageModel<Options>
   static fromRoute<Options extends ImageOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<ImageRequestFor<Options>, ImageEvent, Frame, State>,
+    route: MediaModel.StreamRouteInput<ImageRequest<ImageModel<Options>>, ImageEvent, Frame, State>,
     input: MediaRoute.ModelInput,
   ): ImageModel<Options>
   static fromRoute<Options extends ImageOptions, Token>(
-    route: MediaModel.QueuedRouteInput<ImageRequestFor<Options>, ImageResponse, Token>,
+    route: MediaModel.QueuedRouteInput<ImageRequest<ImageModel<Options>>, ImageResponse, Token>,
     input: MediaRoute.ModelInput,
   ): ImageModel<Options>
   static fromRoute<Options extends ImageOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<ImageRequestFor<Options>, ImageEvent, ImageResponse, Frame, State, Token>,
+    route: MediaModel.AnyRouteInput<ImageRequest<ImageModel<Options>>, ImageEvent, ImageResponse, Frame, State, Token>,
     input: MediaRoute.ModelInput,
   ) {
     return new ImageModel<Options>({
@@ -58,36 +58,37 @@ export const ImageAspectRatio = Media.AspectRatio
 /** Size tier: `1K` is about as many pixels as 1024×1024 at the requested aspect, `2K` as 2048×2048. */
 export type ImageResolution = OpenString<"1K" | "2K" | "4K">
 
-export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
+const ImageRequestSchema = Schema.Struct({
   model: ImageModelSchema,
   prompt: Schema.String,
-  /** Edit sources or style/subject references, in order. */
   images: Schema.optional(Schema.Array(Media.AssetSchema)),
   n: Schema.optional(Schema.Int),
   aspect: Schema.optional(ImageAspectRatio),
   resolution: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _ImageRequest: void
-}
+})
 
-export type ImageRequestFor<Options extends ImageOptions = ImageOptions> = Omit<
-  ImageRequest,
-  "model" | "providerOptions"
-> & {
-  readonly model: ImageModel<Options>
-  readonly providerOptions?: Options
+/** A normalized image request, the plain object `ai.image.request(...)` returns. */
+export interface ImageRequest<Model extends ImageModel = ImageModel> {
+  readonly model: Model
+  readonly prompt: string
+  /** Edit sources or style/subject references, in order. */
+  readonly images?: ReadonlyArray<Media.Asset>
+  readonly n?: number
+  readonly aspect?: ImageAspectRatio
+  readonly resolution?: ImageResolution
+  readonly providerOptions?: ImageModelOptions<Model>
+  readonly http?: HttpOptions
 }
 
 export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ? Options : never
 
+/** Input accepted by `ai.image.request`, `generate`, `stream` and `start`. An `ImageRequest` is also a valid input. */
 export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
-  ConstructorParameters<typeof ImageRequest>[0],
-  "model" | "providerOptions" | "http" | "resolution"
+  ImageRequest<Model>,
+  "providerOptions" | "http"
 > & {
-  readonly model: Model
-  readonly resolution?: ImageResolution
   readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
   readonly http?: HttpOptions.Input
 }
@@ -160,41 +161,42 @@ const collectResponse = (events: ReadonlyArray<ImageEvent>): Effect.Effect<Image
 // Request-shaped call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends ImageModel>(
-  input: ImageRequestInput<Model>,
-): ImageRequestFor<ImageModelOptions<Model>>
-export function request(input: ImageRequest): ImageRequest
-export function request(input: ImageRequest | ImageRequestInput) {
-  if (input instanceof ImageRequest) return input
-  return new ImageRequest({
-    ...input,
-    http: HttpOptions.make(input.http),
-  })
-}
+/** Normalize image request input into a plain `ImageRequest`. */
+export const request = <const Model extends ImageModel>(input: ImageRequestInput<Model>): ImageRequest<Model> => ({
+  ...input,
+  http: HttpOptions.make(input.http),
+})
 
-const requestEffect = (input: ImageRequest | ImageRequestInput) => tryRequest(() => request(input))
+const validate = Schema.decodeUnknownSync(ImageRequestSchema)
+
+const requestEffect = (input: ImageRequestInput) =>
+  tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
+  })
 
 export function generate<const Model extends ImageModel>(
-  input: ImageRequest | ImageRequestInput<Model>,
+  input: ImageRequestInput<Model>,
   options?: AwaitOptions,
 ): Effect.Effect<ImageResponse, AIError, Service>
-export function generate(input: ImageRequest | ImageRequestInput, options?: AwaitOptions) {
+export function generate(input: ImageRequestInput, options?: AwaitOptions) {
   return requestEffect(input).pipe(Effect.flatMap((request) => ImageClient.generate(request, options)))
 }
 
 export function stream<const Model extends ImageModel>(
-  input: ImageRequest | ImageRequestInput<Model>,
+  input: ImageRequestInput<Model>,
   options?: AwaitOptions,
 ): Stream.Stream<ImageEvent, AIError, Service>
-export function stream(input: ImageRequest | ImageRequestInput, options?: AwaitOptions) {
+export function stream(input: ImageRequestInput, options?: AwaitOptions) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => ImageClient.stream(request, options))))
 }
 
 /** Inline and streaming routes fail with `UnsupportedOperation`. */
 export function start<const Model extends ImageModel>(
-  input: ImageRequest | ImageRequestInput<Model>,
+  input: ImageRequestInput<Model>,
 ): Effect.Effect<Generation<ImageResponse>, AIError, Service>
-export function start(input: ImageRequest | ImageRequestInput) {
+export function start(input: ImageRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => ImageClient.start(request)))
 }
 

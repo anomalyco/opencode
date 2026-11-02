@@ -56,3 +56,6 @@ export function MarkdownProvider(
 }
 
 export const useMarkdown = () => useContext(context)
+
+/** Provides markdown handlers as they are, e.g. the ones a detached view keeps while another Location is selected. */
+export const MarkdownContext = context

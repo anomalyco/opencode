@@ -11,8 +11,8 @@ V2 has three intentional breaking changes:
 
 - [Plugins](/build/plugins/migrate-v1) use a new plugin API.
 - The [server API and clients](#server-api-and-clients) have new contracts.
-- [Terminal client configuration](/cli/config) moves from layered `tui.json(c)` files to one global `cli.json` file (auto
-  migrated).
+- [Terminal client configuration](/cli/config) moves from layered `tui.json(c)` files to one global `cli.json` file
+  (auto-migrated).
 
 Supported V1 functionality outside those areas is intended to remain compatible with V1. Some fields accepted by the V1
 schema never had a V2 equivalent and are intentionally ignored; these are listed under
@@ -29,7 +29,7 @@ compatibility bug rather than an expected migration requirement.
 
 ## Install V2
 
-Install the V2 terminal client with the [terminal startup guide](/cli).
+Install the V2 terminal client with the [installation instructions](/#cli).
 
 You do not need to rewrite everything before starting V2. A practical migration is:
 
@@ -61,7 +61,7 @@ V2 reads existing system, global, and project configuration from the same locati
 <project>/.opencode/opencode.json(c)
 ```
 
-V2 reads these same locations. It normalizes supported V1 and native V2 fields in memory without rewriting the source
+V2 normalizes supported V1 and native V2 fields in memory without rewriting the source
 file. Existing supported V1 configuration is intended to keep working, so you do not need to convert it to try or adopt
 V2.
 
@@ -287,6 +287,9 @@ V2 groups the retained-context token budget under `keep` and gives the reserve a
   }
 }
 ```
+
+The V1 token count carries over as is. V2 also accepts a percentage of the model's window, such as `"buffer": "15%"`,
+which fits models with different window sizes.
 
 `auto` keeps its name. V2 has no native `tail_turns` or `prune` field; both legacy fields are ignored with a warning. Recent
 context is retained by token budget instead. See [Compaction](/compaction).

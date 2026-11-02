@@ -63,6 +63,7 @@ export const SessionTable = sqliteTable(
       variant?: string
     }>(),
     ...Timestamps,
+    time_busy: integer(),
     time_idle: integer(),
     time_viewed: integer(),
     idle_outcome: text().$type<NonNullable<Session.Info["outcome"]>>(),

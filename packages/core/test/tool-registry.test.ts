@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
-import type { Permission } from "@opencode/core/permission"
+import { Permission } from "@opencode/core/permission"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Image } from "@opencode/core/image"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -14,6 +14,7 @@ import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -39,6 +40,7 @@ const imageStore = Layer.mock(Image.Service, {
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
   Image.node.replace(imageStore),
+  Permission.node.replace(permissionLayer()),
 ])
 const it = testEffect(registryLayer)
 const identity = {
@@ -719,10 +721,7 @@ describe("Tool", () => {
       expect(snapshot.codeModeCatalog).toBeUndefined()
       expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
 
-      const hidden = yield* service.snapshot([
-        ...denyExecute,
-        { action: "mcp_lookup", resource: "*", effect: "deny" },
-      ])
+      const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
     }),
@@ -1225,12 +1224,10 @@ describe("Tool", () => {
       })
 
       expect(execution).toMatchObject({ content: [{ type: "text" }] })
+      expect(execution.metadata?.toolCalls).toEqual([{ tool: "echo", status: "completed", input: { text: "request" } }])
       expect(executed).toEqual(["old:request"])
-      expect(progress).toEqual([
-        { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
-        { stage: "old" },
-        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
-      ])
+      // The inner tool's own progress would replace the call rows, so it is not published.
+      expect(progress).toEqual([{ toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] }])
     }),
   )
 })

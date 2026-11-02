@@ -159,6 +159,32 @@ ctx.add(Command, () => ({
 }))
 ```
 
+### Referencing a subject
+
+Attach a `type: "note"` part to reference a subject outside workspace lines. Set `comment: ""` to attach only the
+subject: the model reads "The user referenced <subject>." With a comment it reads "The user made the following
+comment regarding <subject>: <comment>" instead.
+
+For an uncommented note, optional `title` supplies the primary heading. Optional `subtitle` supplies a plain-text
+footer beside the icon, with or without a comment. Each defaults to `label` when omitted. For example, the browser
+uses a selector as `title` and its localized annotation label as `subtitle`; a comment replaces only the heading.
+These display fields do not change `subject`. Both survive draft storage, sent-message metadata and restoration.
+Only the process-bound `live` reference is dropped when a stored draft or sent message is restored.
+
+### Quoting selected content
+
+Attach a `type: "quote"` part with a `commentID`, then call `screen.composer.focus(commentID, { anchor })` to open its
+optional comment beside the source. `anchor(size)` returns the editor's physical viewport `{ top, left }` for its
+current `width` and frozen opening `height`. It is first called after measurement (never with an unmeasured zero
+height), then again on scroll, resize, and changes to reactive values it reads. The editor holds its opening bottom
+edge as its input grows upward. Return `undefined` when the source is hidden or gone to fall back to the quote's
+composer tile. The anchor is client-only and never persisted. Omitting the options
+anchors the editor to the tile, as clicking that tile does. To quote without opening a comment, call
+`screen.composer.focus()` instead; the built-in selection toolbars offer this through Alt-click.
+
+The built-in terminal follows manual scrolling until new output or a grid resize invalidates the captured source.
+It then falls back to the quote's composer tile without closing the editor or discarding its unsaved comment.
+
 ## Primitives
 
 | Primitive                                        | Use it for                                                                     |

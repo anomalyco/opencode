@@ -446,8 +446,8 @@
 
   th {
     padding: 8px 12px;
-    color: var(--v2-text-text-faint);
-    font-weight: 500;
+    color: var(--v2-text-text-muted);
+    font-weight: 530;
   }
 
   td {

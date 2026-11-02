@@ -43,8 +43,10 @@ migration rules remain explicit in their schemas.
   each field's optionality and codec. It does not add defaults or error recovery.
 - `Persistence.record(valueSchema)` creates a mutable string-keyed record, defaulting
   missing or invalid records to a fresh `{}`. Its value schema determines entry
-  recovery: pass `Persistence.optional(valueSchema)` to discard only invalid entries,
-  or `Persistence.fallback(valueSchema, factory)` to replace those entries.
+  recovery: pass `valueSchema.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))`
+  to discard only invalid entries, or `Persistence.fallback(valueSchema, factory)` to
+  replace those entries. Don't pass `Persistence.optional(valueSchema)`: Effect rejects
+  optional record values, and the record throws when it is built.
 - `Persistence.array(schema)` defaults to an empty mutable array and discards
   invalid entries individually. Valid entries still pass through their codecs.
 - Recovery is not a substitute for an explicit historical shape transformation.

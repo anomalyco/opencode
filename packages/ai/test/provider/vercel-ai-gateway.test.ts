@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Message, CacheHint } from "../../src/effect.js"
+import { ai, CacheHint, LLMClient, LLMEvent, Message } from "../../src/effect.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -26,7 +26,7 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
       expect(model.id).toBe(id)
       expect(model.provider).toBe("vercel-ai-gateway")
       expect(model.route.endpoint.path).toBe(path)
-      const compiled = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
+      const compiled = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
       expect(compiled.body.model).toBe(id)
       expect(compiled.body.providerOptions).toBeUndefined()
     }
@@ -42,20 +42,20 @@ it.effect("Gateway Messages applies inline cache markers only for Anthropic and 
       prompt: "Hello",
     }
     const claude = yield* compileRequest(
-      LLM.request({ ...input, model: gateway.messages("anthropic/claude-sonnet-5.5") }),
+      ai.request({ ...input, model: gateway.messages("anthropic/claude-sonnet-5.5") }),
     )
     expect(claude.body).toMatchObject({
       tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
       system: [{ type: "text", text: "System prompt", cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral" } }] }],
     })
-    const qwen = yield* compileRequest(LLM.request({ ...input, model: gateway.messages("alibaba/qwen3.8-max") }))
+    const qwen = yield* compileRequest(ai.request({ ...input, model: gateway.messages("alibaba/qwen3.8-max") }))
     expect(qwen.body).toMatchObject({
       tools: [{ name: "lookup", cache_control: undefined }],
       system: [{ type: "text", text: "System prompt", cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral" } }] }],
     })
-    const gemini = yield* compileRequest(LLM.request({ ...input, model: gateway.messages("google/gemini-3.8-flash") }))
+    const gemini = yield* compileRequest(ai.request({ ...input, model: gateway.messages("google/gemini-3.8-flash") }))
     expect(JSON.stringify(gemini.body)).not.toContain("cache_control")
   }),
 )
@@ -63,7 +63,7 @@ it.effect("Gateway Messages applies inline cache markers only for Anthropic and 
 it.effect("Gateway keeps distinct system blocks, cache hints, and upstream-scoped controls", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: VercelAIGateway.configure({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5"),
         system: [
           { type: "text", text: "Stable", cache: new CacheHint({ type: "ephemeral" }) },
@@ -96,18 +96,18 @@ it.effect("Gateway effort settings lower to the selected API", () =>
   Effect.gen(function* () {
     const gateway = VercelAIGateway.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "high" } })
     const messages = yield* compileRequest(
-      LLM.request({ model: gateway.messages("anthropic/claude-sonnet-5.5"), prompt: "Hello" }),
+      ai.request({ model: gateway.messages("anthropic/claude-sonnet-5.5"), prompt: "Hello" }),
     )
     expect(messages.body).toMatchObject({ thinking: { type: "adaptive" }, output_config: { effort: "high" } })
     const responses = yield* compileRequest(
-      LLM.request({ model: gateway.responses("openai/gpt-6-luna"), prompt: "Hello" }),
+      ai.request({ model: gateway.responses("openai/gpt-6-luna"), prompt: "Hello" }),
     )
     expect(responses.body).toMatchObject({
       reasoning: { effort: "high" },
       store: false,
       include: ["reasoning.encrypted_content"],
     })
-    const chat = yield* compileRequest(LLM.request({ model: gateway.chat("google/gemini-3.8-flash"), prompt: "Hello" }))
+    const chat = yield* compileRequest(ai.request({ model: gateway.chat("google/gemini-3.8-flash"), prompt: "Hello" }))
     expect(chat.body).toMatchObject({ reasoning_effort: "high" })
   }),
 )
@@ -115,7 +115,7 @@ it.effect("Gateway effort settings lower to the selected API", () =>
 it.effect("Gateway Responses keeps cache-key and cache controls out of upstream namespaces", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: VercelAIGateway.configure({ apiKey: "fixture" }).responses("openai/gpt-6-luna"),
         prompt: "Hello",
         promptCacheKey: "opaque-session",
@@ -130,7 +130,7 @@ it.effect("Gateway Responses keeps cache-key and cache controls out of upstream 
 it.effect("Gateway Messages preserves signatures and billing metadata through tool continuation", () =>
   Effect.gen(function* () {
     const model = VercelAIGateway.configure({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5")
-    const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" })).pipe(
+    const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         dynamicResponse((input) =>
           Effect.sync(() => {
@@ -174,7 +174,7 @@ it.effect("Gateway Messages preserves signatures and billing metadata through to
     })
     expect(response.usage?.cacheReadInputTokens).toBe(20)
     const compiled = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model,
         messages: [
           Message.user("Hello"),
@@ -196,7 +196,7 @@ it.effect("Gateway Messages preserves signatures and billing metadata through to
 it.effect("Gateway Responses replays encrypted reasoning alongside tool calls", () =>
   Effect.gen(function* () {
     const model = VercelAIGateway.configure({ apiKey: "fixture" }).responses("openai/gpt-6-luna")
-    const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" })).pipe(
+    const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         dynamicResponse((input) =>
           Effect.sync(() =>
@@ -228,7 +228,7 @@ it.effect("Gateway Responses replays encrypted reasoning alongside tool calls", 
         ),
       ),
     )
-    const compiled = yield* compileRequest(LLM.request({ model, messages: [Message.user("Hello"), response.message] }))
+    const compiled = yield* compileRequest(ai.request({ model, messages: [Message.user("Hello"), response.message] }))
     expect(compiled.body.input).toContainEqual({
       type: "reasoning",
       id: "rs_1",
@@ -249,7 +249,7 @@ it.effect("Gateway 401 and 403 failures are terminal and retain HTTP context", (
   Effect.gen(function* () {
     for (const status of [401, 403]) {
       const error = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: VercelAIGateway.configure({ apiKey: "fixture" }).chat("openai/gpt-6-luna"),
           prompt: "Hello",
         }),
@@ -276,7 +276,7 @@ it.effect("Gateway authentication supports OIDC fallback and affinity without re
   Effect.gen(function* () {
     for (const api of ["messages", "responses", "chat"] as const) {
       yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: VercelAIGateway.configure()[api]("openai/gpt-6-luna"),
           prompt: "Hello",
           promptCacheKey: "opaque-session",

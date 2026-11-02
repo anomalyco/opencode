@@ -76,11 +76,16 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
     ...resolveView(tokens, hue, categorical, hueSteps),
     surface: (name) => views[name],
   })
-  views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)
+  const dialog = definition["@dialog"]
+  const dialogTokens = dialog ? contextualize(base, tokens(dialog)) : base
+  views.dialog = view(dialogTokens)
+  // The footer override layers on the dialog surface, so footers keep every dialog token they don't override.
+  const footer = dialog?.["@footer"]
+  views["dialog.footer"] = footer ? view(contextualize(dialogTokens, footer)) : views.dialog
   return view(base)
 }
 
-function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
+function tokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
   return {
     text: definition.text,
     background: definition.background,

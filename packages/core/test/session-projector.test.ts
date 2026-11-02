@@ -600,6 +600,37 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("records each execution's start, including a resume after shutdown", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession({ time_created: 0, time_updated: 0 })
+      const bus = yield* Bus.Service
+      const times = () =>
+        db
+          .select({ busy: SessionTable.time_busy, idle: SessionTable.time_idle, updated: SessionTable.time_updated })
+          .from(SessionTable)
+          .get()
+          .pipe(Effect.orDie)
+
+      yield* TestClock.setTime(10)
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
+      expect(yield* times()).toEqual({ busy: 10, idle: null, updated: 0 })
+
+      yield* TestClock.setTime(20)
+      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
+      yield* TestClock.setTime(30)
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
+      expect(yield* times()).toEqual({ busy: 30, idle: null, updated: 0 })
+
+      yield* TestClock.setTime(40)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      expect(yield* times()).toEqual({ busy: 30, idle: 40, updated: 0 })
+
+      yield* TestClock.setTime(50)
+      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
+      expect(yield* times()).toEqual({ busy: 50, idle: 40, updated: 0 })
+    }),
+  )
+
   it.effect("updates only the newest incomplete assistant projection", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1688,4 +1719,136 @@ describe("SessionProjector", () => {
       ])
     }),
   )
+
+  it.effect("stores a fork's copies of inline parent media as blobs and leaves the parent's rows inline", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const childID = Session.ID.make("ses_media_inline_fork")
+      const boundary = yield* seedInlineMedia(db)
+      const parentRows = yield* messageRows(db, sessionID)
+      const parentParts = yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)
+      const parentMessages = yield* store.messages({ sessionID, order: "asc" })
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: boundary },
+      })
+
+      const hash = SessionBlob.hashBytes(png)
+      const uri = SessionStored.ref(hash)
+      const childRows = yield* messageRows(db, childID)
+      expect(childRows.map((row) => row.data)).toMatchObject([
+        { files: [{ uri, mime: "image/png", name: "shot.png" }] },
+        { content: [{ type: "tool", state: { content: [{ type: "file", uri, mime: "image/png" }] } }] },
+      ])
+      expect(JSON.stringify(childRows)).not.toContain(png.toString("base64"))
+      expect(yield* messageRows(db, sessionID)).toEqual(parentRows)
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toEqual(parentParts)
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(
+        yield* db
+          .select({ session: BlobRefTable.session_id, message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .orderBy(asc(BlobRefTable.seq))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual(childRows.map((row) => ({ session: childID, message: row.id, hash })))
+
+      // The child owns its blob, so it reads the same with the parent gone.
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(yield* messageRows(db, sessionID)).toEqual([])
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(
+        withoutIDs(parentMessages),
+      )
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+
+  it.effect("copies inline parent media inline into a fork unless the parent's location stores media as blobs", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const childID = Session.ID.make("ses_media_inline_fork_off")
+      const boundary = yield* seedInlineMedia(db)
+      const parentRows = yield* messageRows(db, sessionID)
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: boundary },
+      })
+
+      const childRows = yield* messageRows(db, childID)
+      expect(childRows.map((row) => row.data)).toEqual(
+        (yield* SessionHistory.withParts(db, parentRows)).map((row) => row.data),
+      )
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(
+        withoutIDs(yield* store.messages({ sessionID, order: "asc" })),
+      )
+      // The caller's own config doesn't decide: Session.fork sets ForkMedia from the parent's location.
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+})
+
+const messageRows = (db: Database.Interface["db"], session: Session.ID) =>
+  db
+    .select()
+    .from(SessionMessageTable)
+    .where(eq(SessionMessageTable.session_id, session))
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+
+const withoutIDs = (messages: ReadonlyArray<SessionMessage.Info>) => messages.map(({ id: _, ...message }) => message)
+
+/** A parent written before media blobs: an inline user file, and a tool screenshot in a session_part row. */
+const seedInlineMedia = Effect.fnUntraced(function* (db: Database.Interface["db"]) {
+  const userID = SessionMessage.ID.make("msg_inline_user")
+  const assistantID = SessionMessage.ID.make("msg_inline_assistant")
+  yield* db
+    .insert(SessionMessageTable)
+    .values([
+      {
+        id: userID,
+        session_id: sessionID,
+        type: "user",
+        seq: 1,
+        time_created: 1,
+        data: { text: "look", files: [attachment("shot.png")], time: { created: 1 } },
+      },
+      assistantRow(assistantID, 2, { created, completed: created }),
+    ])
+    .run()
+    .pipe(Effect.orDie)
+  yield* db
+    .insert(SessionPartTable)
+    .values({
+      message_id: assistantID,
+      session_id: sessionID,
+      ordinal: 0,
+      type: "tool",
+      call_id: "call_shot",
+      time_created: 2,
+      time_updated: 2,
+      data: {
+        type: "tool",
+        id: "call_shot",
+        name: "screenshot",
+        executed: true,
+        state: {
+          status: "completed",
+          input: {},
+          content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        },
+        time: { created: 2, ran: 2, completed: 2 },
+      },
+    })
+    .run()
+    .pipe(Effect.orDie)
+  return assistantID
 })

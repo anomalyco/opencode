@@ -3,6 +3,11 @@
   padding: 0 6px 8px;
 }
 
+[data-component="dialog-v2"]:has(.settings-manage-models-dialog) [data-slot="dialog-container"] {
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+}
+
 .settings-manage-models-dialog .settings-panel.settings-models {
   height: 100%;
   gap: 0;

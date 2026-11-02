@@ -8,11 +8,13 @@ import { Identifier } from "@opencode/schema/identifier"
 import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { toolFailure } from "../runtime.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
+import { ImageNotice } from "../../image/notice.js"
 import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
 import { Model } from "../../model.js"
@@ -22,7 +24,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
-export const name = "image_generate"
+export const name = "experimental_image_generate"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
 const GENERATE_TIMEOUT = Duration.minutes(30)
@@ -36,7 +38,7 @@ const EXTENSIONS: Record<string, string> = {
 
 export const description = [
   "Generates a new image, or edits existing ones.",
-  "Only call this when the user asks you to create or edit an image.",
+  "Only call this when the user asks you to create or edit an image. If you think an image would help but the user didn't ask for one, ask them first instead of generating it.",
   "Images you pass are used as the source to edit, or as references for style and subject.",
   "Each call makes one image. For several images, call it once per image.",
   "It runs in the background: the call starts a job and returns right away, and you are notified automatically when the image is saved, with its path. Never poll, sleep, or check for the file while you wait.",
@@ -65,6 +67,7 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
+  id: Schema.String.annotate({ description: "The image job's ID, repeated in its completion notice" }),
   path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
@@ -153,72 +156,81 @@ export const Plugin = {
     const readImage = Effect.fn("ImageGenerateTool.readImage")(function* (
       source: string,
       context: FileAccess.Invocation,
-      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
     ) {
-      const bytes = yield* readBytes(source, context, fetchAllowed)
+      const bytes = /^https?:\/\//i.test(source)
+        ? yield* Effect.gen(function* () {
+            // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
+            yield* permission.assert({
+              action: "webfetch",
+              resources: [source],
+              save: ["*"],
+              metadata: { url: source },
+              ...Permission.invocation(context),
+            })
+            return yield* Effect.gen(function* () {
+              const response = yield* http
+                .execute(HttpClientRequest.get(source))
+                .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
+              return yield* collectBoundedResponseBody(
+                response,
+                MAX_INPUT_BYTES,
+                () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
+              )
+            }).pipe(
+              Effect.timeoutOrElse({
+                duration: DOWNLOAD_TIMEOUT,
+                orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
+              }),
+              Effect.mapError(toolFailure(`Unable to download ${source}`)),
+            )
+          })
+        : yield* Effect.gen(function* () {
+            const target = yield* access.authorizeRead(source, context)
+            const info = yield* environment.files
+              .stat(target.absolute)
+              .pipe(
+                Effect.catchTag(
+                  "Environment.NotFound",
+                  () => new ToolFailure({ message: `File not found: ${source}` }),
+                ),
+              )
+            if (info.size > MAX_INPUT_BYTES)
+              return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
+            return (yield* environment.files.read(target.absolute)).bytes
+          })
       const mime = Mime.detect(bytes)
       if (!INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
       return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
     })
 
-    const readBytes = Effect.fn("ImageGenerateTool.readBytes")(function* (
-      source: string,
-      context: FileAccess.Invocation,
-      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
-    ) {
-      if (/^https?:\/\//i.test(source)) {
-        // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
-        yield* fetchAllowed(source)
-        return yield* Effect.gen(function* () {
-          const response = yield* http
-            .execute(HttpClientRequest.get(source))
-            .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
-          return yield* collectBoundedResponseBody(
-            response,
-            MAX_INPUT_BYTES,
-            () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
-          )
-        }).pipe(
-          Effect.timeoutOrElse({
-            duration: DOWNLOAD_TIMEOUT,
-            orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
-          }),
-          Effect.mapError((error) =>
-            error instanceof ToolFailure ? error : new ToolFailure({ message: `Unable to download ${source}`, error }),
-          ),
-        )
-      }
-      const target = yield* access.authorizeRead(source, context)
-      const info = yield* environment.files
-        .stat(target.absolute)
-        .pipe(Effect.catchTag("Environment.NotFound", () => new ToolFailure({ message: `File not found: ${source}` })))
-      if (info.size > MAX_INPUT_BYTES) return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
-      return (yield* environment.files.read(target.absolute)).bytes
-    })
-
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (sessionID: SessionSchema.ID, id: string, notificationID: SessionMessage.ID, file: string) {
-        const info = (yield* jobs.wait({ id })).info
+      function* (input: { sessionID: SessionSchema.ID; id: string; notificationID: SessionMessage.ID; file: string }) {
+        const info = (yield* jobs.wait({ id: input.id })).info
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
-          id: notificationID,
-          sessionID,
+          id: input.notificationID,
+          sessionID: input.sessionID,
           description: "Image generation",
-          text:
-            info.status === "completed"
-              ? (info.output ?? "")
-              : info.status === "error"
-                ? (info.error ?? `Image request failed for ${file}.`)
-                : `Image request for ${file} was cancelled.`,
-          metadata: { source: name, jobID: id, state: info.status, path: file },
+          text: ImageNotice.text({
+            id: input.id,
+            state: info.status,
+            body:
+              info.status === "completed"
+                ? (info.output ?? "")
+                : info.status === "error"
+                  ? (info.error ?? `Image request failed for ${input.file}.`)
+                  : `Image request for ${input.file} was cancelled.`,
+          }),
+          metadata: { source: name, jobID: input.id, state: info.status, path: input.file },
         })
-        yield* jobs.completeBackground(notificationID)
+        yield* jobs.completeBackground(input.notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
-    // Opt-in through experimental.image_generate. Internal plugins are not re-run on config changes, so reload the
+    // On by default. `experimental.image_generate: false` is still honored for configs from when the tool was opt-in;
+    // permissions are the supported way to turn it off. Internal plugins are not re-run on config changes, so reload the
     // tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
@@ -241,7 +253,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled || !optedIn(loaded.entries)) return
+        if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
           options: { codemode: false },
@@ -250,7 +262,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
               const resolved = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
               const model = resolved.model
               const variant = resolved.variant
@@ -266,9 +277,7 @@ export const Plugin = {
                 resources: [ref],
                 save: ["*"],
                 metadata: { ...input, model: ref },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
               if (target) {
                 yield* access.authorizeExternal([target], context)
@@ -276,25 +285,11 @@ export const Plugin = {
                   action: "edit",
                   resources: [target.resource],
                   save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                  ...Permission.invocation(context),
                 })
               }
               const images = input.images
-                ? yield* Effect.forEach(input.images, (image) =>
-                    readImage(image, context, (url) =>
-                      permission.assert({
-                        action: "webfetch",
-                        resources: [url],
-                        save: ["*"],
-                        metadata: { url },
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      }),
-                    ),
-                  )
+                ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
                 : undefined
 
               // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.
@@ -331,9 +326,7 @@ export const Plugin = {
                   const request = {
                     action: "edit",
                     resources: [actual.resource],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
+                    ...Permission.invocation(context),
                   }
                   yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }
@@ -345,7 +338,7 @@ export const Plugin = {
               )
               const id = `image_${Identifier.create(false)}`
               const notificationID = SessionMessage.ID.create()
-              const job = yield* jobs.start({
+              yield* jobs.start({
                 id,
                 notificationID,
                 type: name,
@@ -354,22 +347,20 @@ export const Plugin = {
                 recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
                 run,
               })
-              yield* jobs.background(job.id)
-              yield* notifyWhenDone(context.sessionID, job.id, notificationID, stem)
+              yield* jobs.background(id)
+              yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
-                output: { path: stem, model: ref },
+                output: { id, path: stem, model: ref },
                 content: [
-                  `Image request started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
+                  `Image job ${id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",
                 ].join("\n"),
-                metadata: { path: stem, model: ref, jobID: job.id },
+                metadata: { path: stem, model: ref, jobID: id },
               }
             }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to generate image", error }),
-              ),
+              Effect.mapError(toolFailure("Unable to generate image")),
             ),
         })
       })
@@ -391,11 +382,6 @@ function imageGenerate(entries: readonly Entry[]) {
   return entries.findLast(
     (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
   )?.info.experimental?.image_generate
-}
-
-function optedIn(entries: readonly Entry[]) {
-  const value = imageGenerate(entries)
-  return value !== undefined && value !== false
 }
 
 function configuredModel(entries: readonly Entry[]) {

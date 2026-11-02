@@ -152,6 +152,9 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
+export const chat = provider.chat
+export const messages = provider.messages
+export const responses = provider.responses
 
 const fromSettings = ({
   apiKey,

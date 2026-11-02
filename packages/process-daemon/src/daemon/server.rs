@@ -447,6 +447,7 @@ fn dispatch(
             instance_id: registration.instance_id.clone(),
             pid: registration.pid,
             protocol: registration.protocol,
+            features: registration.features.clone(),
         },
         Request::Create {
             program,
@@ -533,6 +534,10 @@ fn dispatch(
                 cursor_x: rows.cursor_x,
                 cursor_y: rows.cursor_y,
             }
+        }
+        Request::Rename { id, title } => {
+            service.rename(id, title)?;
+            Response::Ok
         }
         Request::Replay { id, offset } => {
             let replay = service.replay(id, offset)?;
