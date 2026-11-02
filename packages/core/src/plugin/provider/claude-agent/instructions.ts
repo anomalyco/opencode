@@ -29,11 +29,20 @@ export const register = Effect.fn("ClaudeInstructions.register")(function* (ctx:
             // Read the role from the resolved agent, not by guessing which prompt text is a built-in.
             event.options[ClaudeSystemPrompt.AGENT_OPTION] = agent.data.system ?? ""
             // Built-in providers register before user plugins, so `event.system` still grows after this hook
-            // returns. Read it when the request is built instead of folding it into a string here.
-            Object.defineProperty(event.options, ClaudeSystemPrompt.INSTRUCTIONS_OPTION, {
+            // returns. Read it when the request is built instead of folding it into a string here. A plugin that
+            // assigns the option itself still wins: the setter replaces the accessor with a plain value.
+            const option = ClaudeSystemPrompt.INSTRUCTIONS_OPTION
+            Object.defineProperty(event.options, option, {
               enumerable: true,
               configurable: true,
               get: () => instructions(event.system),
+              set: (value: unknown) =>
+                Object.defineProperty(event.options, option, {
+                  value,
+                  enumerable: true,
+                  configurable: true,
+                  writable: true,
+                }),
             })
           }),
         { providerID: ClaudeProvider.ID },

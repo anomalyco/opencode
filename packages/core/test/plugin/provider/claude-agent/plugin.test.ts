@@ -457,6 +457,24 @@ describe("ClaudeAgentPlugin session hooks", () => {
     }),
   )
 
+  it.live("lets a later plugin override the instructions outright", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      yield* addAgents
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register(
+        "session",
+        "context",
+        (event) =>
+          Effect.sync(() => {
+            event.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION] = "PLUGIN-OVERRIDE"
+          }),
+      )
+      const context = yield* hooks.trigger("session", "context", hookEvent((yield* newSession).id))
+      expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toBe("PLUGIN-OVERRIDE")
+    }),
+  )
+
   it.live("never retries a turn, since Claude Code already retries API failures", () =>
     Effect.gen(function* () {
       yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
