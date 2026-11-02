@@ -75,21 +75,31 @@ Follow the repository [style guide](./AGENTS.md).
 
 ### Windows
 
-Git checks out `packages/app/src/custom-elements.d.ts` as a symlink. Without
-Developer Mode, Windows writes the link target as a plain text file, and
-`bun run check` fails with `TS1128` in that file.
+Git checks out symbolic links as plain text files when `core.symlinks` is off,
+which is the Windows default. The checkout ends up with about 40 text files
+where symlinks should be, and `bun run check` fails on `packages/app`:
 
-Enable Developer Mode (Settings > System > For developers), then re-checkout
-the file:
+```
+packages/app/src/custom-elements.d.ts(1,1): error TS1128
+```
+
+Enable Developer Mode (Settings > System > For developers), then clone with
+symlinks on:
+
+```powershell
+git clone -c core.symlinks=true https://github.com/anomalyco/opencode
+```
+
+For an existing checkout, turn symlinks on and re-check out every tracked file.
+This discards uncommitted changes:
 
 ```powershell
 git config --local core.symlinks true
-Remove-Item packages/app/src/custom-elements.d.ts
-git checkout -- packages/app/src/custom-elements.d.ts
+git restore .
 ```
 
-Package typechecks still work without this. For example,
-`cd packages/tui && bun typecheck`.
+`packages/app` keeps failing without this. Typechecks for other packages, such
+as `cd packages/tui && bun typecheck`, work either way.
 
 ## Pull Requests
 
