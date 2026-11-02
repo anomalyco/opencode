@@ -28,6 +28,7 @@
     "check": "bun run lint && bun run typecheck",
     "typecheck:profile": "bun script/profile-typecheck.ts",
     "typecheck:profile:packages": "bun script/profile-typecheck-packages.ts",
+    "eval": "bun run eval/run.ts",
     "pack": "bun run script/pack.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
