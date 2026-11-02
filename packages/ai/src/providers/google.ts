@@ -10,6 +10,7 @@ import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
 import { GoogleVideo } from "../protocols/google-video.js"
+import { toConfig } from "./settings.js"
 
 export type { GoogleImageOptions } from "../protocols/google-images.js"
 export type { GoogleSpeechOptions } from "../protocols/google-speech.js"
@@ -51,9 +52,11 @@ const interactionsRoute = (input: Config) => {
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   const media = MediaRoute.deployment(input, auth(input))
+  const gemini = (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
+    model: gemini,
+    gemini,
     interactions: (modelID: string | ModelID) =>
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -67,23 +70,14 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 export const model: ProviderPackage.Model<Settings, Gemini.ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
 export const image = provider.image
+export const gemini = provider.gemini
 export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech

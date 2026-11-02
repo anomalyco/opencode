@@ -76,6 +76,18 @@ describe("AIError.partial", () => {
     }),
   )
 
+  it.effect("stream keeps the output that arrived before a mid-stream failure", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(textThenFail)
+
+      const error = yield* ai.stream({ model, prompt: "Hello" }).pipe(Stream.runDrain, Effect.flip)
+
+      expect(error.reason).toBe(overloaded.reason)
+      expect(error.partial?.text).toBe("Partial answer")
+    }),
+  )
+
   it.effect("loop reports only the failed step as partial", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
@@ -85,7 +97,7 @@ describe("AIError.partial", () => {
       const echo = tool({
         name: "echo",
         description: "Echo a value.",
-        parameters: Schema.Struct({ value: Schema.String }),
+        input: Schema.Struct({ value: Schema.String }),
         success: Schema.String,
         execute: ({ value }) => Effect.succeed(value),
       })

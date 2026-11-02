@@ -92,7 +92,7 @@ const readPdf = ToolDefinition.make({
 const readPdfRuntime = tool({
   name: "read_pdf",
   description: readPdf.description,
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
   execute: () => Effect.succeed("PDF read successfully"),
   toModelOutput: () => [

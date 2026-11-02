@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { ai, LLMClient, LLMRequest } from "../../src/effect.js"
+import { ai, LLMClient } from "../../src/effect.js"
 import { Azure, OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -93,7 +93,7 @@ testEffect(
         },
       },
     })
-    const original = LLMRequest.input(input)
+    const original = input
     const result = yield* ai.compact(input, {
       ...trigger,
       http: (request, next) => {
@@ -114,7 +114,7 @@ testEffect(
       totalTokens: 105,
       cacheReadInputTokens: 40,
     })
-    expect(LLMRequest.input(input)).toEqual(original)
+    expect(input).toEqual(original)
     expect(calls).toEqual(["http"])
   }),
 )
@@ -265,7 +265,7 @@ for (const body of [{ input: [] }, { previous_response_id: "stale" }, { stream: 
     `rejects caller-supplied ${Object.keys(body)[0]} before sending trigger`,
     () =>
       Effect.gen(function* () {
-        const error = yield* ai.compact(LLMRequest.update(request, { http: { body } }), trigger).pipe(Effect.flip)
+        const error = yield* ai.compact({ ...request, http: { body } }, trigger).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
       }),
   )
@@ -276,7 +276,10 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
   () =>
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
-      const unsupported = ai.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
+      const unsupported = ai.request({
+        model: Azure.configure({ resourceName: "fixture" }).responses("fixture"),
+        prompt: "Hello",
+      })
       expect(ai.canCompact(unsupported)).toBe(true)
       expect(ai.canCompact(unsupported, trigger)).toBe(false)
       // @ts-expect-error Exercise untyped consumers; the service must reject before sending.

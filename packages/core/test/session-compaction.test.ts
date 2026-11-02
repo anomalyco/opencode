@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import {
+  AIError,
   GenerationOptions,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
@@ -69,7 +71,11 @@ const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
     if (reject?.(request)) {
-      return Stream.make(LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }))
+      return Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({ message: "prompt too long", classification: "context-overflow" }),
+        }),
+      )
     }
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,

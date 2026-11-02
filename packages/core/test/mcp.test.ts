@@ -382,19 +382,21 @@ function resourceMcpLayer(
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
           subscribe: overrides?.subscribe ?? (() => Stream.never),
-          publish: (definition, data) => {
-            const event = {
-              id: ID.create(),
-              type: definition.type,
-              data,
-            } as Payload<typeof definition>
-            overrides?.published?.push(event.type)
-            if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
-            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
-          },
+          publish: (definition, data) =>
+            Effect.suspend(() => {
+              const event = {
+                id: ID.create(),
+                type: definition.type,
+                data,
+              } as Payload<typeof definition>
+              overrides?.published?.push(event.type)
+              if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
+              return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+            }),
         }),
         Layer.mock(Integration.Service, {
           revision: () => 0,
+          transform: () => Effect.succeed({ dispose: Effect.void }),
           connection: {
             active: unusedIntegration,
             resolve: unusedIntegration,
@@ -417,7 +419,7 @@ function resourceMcpLayer(
             cancel: unusedIntegration,
           },
         }),
-        Layer.mock(Credential.Service, {}),
+        Layer.mock(Credential.Service, { list: () => Effect.succeed([]) }),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -517,15 +519,11 @@ const mcp = Layer.mock(Mcp.Service, {
       invocations.push(input)
       if (input.name === "fail")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: true,
           content: [{ type: "text", text: "search index unavailable" }],
         } satisfies Mcp.ToolResult
       if (input.name === "media")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [
             { type: "text", text: "rendered chart" },
@@ -534,8 +532,6 @@ const mcp = Layer.mock(Mcp.Service, {
         } satisfies Mcp.ToolResult
       if (input.name === "attachments")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [
             {
@@ -554,28 +550,20 @@ const mcp = Layer.mock(Mcp.Service, {
         } satisfies Mcp.ToolResult
       if (input.name === "status")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: "hello" }],
         } satisfies Mcp.ToolResult
       if (input.name === "issues" || input.name === "typed")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
         } satisfies Mcp.ToolResult
       if (input.name === "count")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: "42" }],
         } satisfies Mcp.ToolResult
       return {
-        server: Mcp.ServerName.make(input.server),
-        tool: input.name,
         isError: false,
         structured: { ok: true },
         content: [],
@@ -1828,6 +1816,30 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+test("marks a remote MCP server with an invalid URL as failed", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern: true, resources: false })
+        const config = { type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" } as const
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const status = (name: string) =>
+            service.servers().pipe(Effect.map((servers) => servers.find((server) => server.name === name)?.status))
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+
+          yield* service.add("broken", new ConfigMCP.Remote({ type: "remote", url: "not a url" }))
+          expect(yield* status("broken")).toEqual({ status: "failed", error: "Invalid MCP server URL: not a url" })
+          expect(yield* status("resources")).toEqual({ status: "connected" })
+
+          yield* service.add("broken", new ConfigMCP.Remote(config))
+          expect(yield* status("broken")).toEqual({ status: "connected" })
+        }).pipe(Effect.provide(resourceMcpLayer(new ConfigMCP.Remote(config))))
+      }),
+    ),
+  )
+})
+
 testEffect(Layer.empty).live(
   "merges MCP defaults into the winning configured server without changing runtime overrides",
   () =>
@@ -2162,7 +2174,10 @@ test("reconciles only changed MCP server config", async () => {
           Effect.provide(
             resourceMcpLayer(resources(), undefined, undefined, {
               entries: () => Effect.sync(() => entries),
-              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+              subscribe: ((definition?: { readonly type: string }) =>
+                Stream.fromPubSub(updates).pipe(
+                  Stream.filter((event) => !definition || event.type === definition.type),
+                )) as Bus.Interface["subscribe"],
             }),
           ),
         )
@@ -2525,8 +2540,6 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed({
-                    server: Mcp.ServerName.make(input.server),
-                    tool: input.name,
                     isError: false,
                     content: [{ type: "text", text: "healthy" }],
                   } satisfies Mcp.ToolResult),
@@ -3111,7 +3124,10 @@ for (const source of ["config", "organization"] as const) {
           Effect.provide(
             resourceMcpLayer(server.url, undefined, undefined, {
               entries: config.entries,
-              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+              subscribe: ((definition?: { readonly type: string }) =>
+                Stream.fromPubSub(updates).pipe(
+                  Stream.filter((event) => !definition || event.type === definition.type),
+                )) as Bus.Interface["subscribe"],
             }),
           ),
         )

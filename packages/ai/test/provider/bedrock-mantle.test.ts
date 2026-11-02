@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolDefinition } from "../../src/effect.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
@@ -300,7 +300,8 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
           ?.signature
         expect(typeof signature).toBe("string")
 
-        const followUp = LLMRequest.update(initial, {
+        const followUp = {
+          ...initial,
           messages: [
             ...initial.messages,
             first.message,
@@ -309,7 +310,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
             ),
             Message.system("Reply in French in one short sentence."),
           ],
-        })
+        }
         const compiled = yield* compileRequest(followUp)
         expect(compiled.body.messages[1]?.content[0]).toEqual({
           type: "thinking",

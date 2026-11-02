@@ -11,7 +11,7 @@ const run = toDefinitions([
   tool({
     name: "run",
     description: "Run a Python snippet.",
-    parameters: Schema.Struct({ code: Schema.String }),
+    input: Schema.Struct({ code: Schema.String }),
     success: Schema.String,
     freeform: { type: "text" },
   }),

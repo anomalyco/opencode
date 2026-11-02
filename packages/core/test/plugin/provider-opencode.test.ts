@@ -29,6 +29,7 @@ import { Session } from "@opencode/core/session"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -36,7 +37,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* OpencodePlugin.effect(host)
 })
 
@@ -118,20 +119,6 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function eventually<A, E>(
-  effect: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, E | Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
 }
 
 const cost = (input: number, output = 0) => [
@@ -1779,7 +1766,7 @@ describe("OpencodePlugin with a Console config", () => {
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigPolicyPlugin.Plugin.effect(host)
 
@@ -1948,7 +1935,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host)
           yield* ConfigProviderPlugin.Plugin.effect(host)
 
@@ -1998,7 +1985,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           // Registered in production order: the OpenCode and OpenAI provider plugins, then config in `post`.
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* OpenAIPlugin.effect(host)
@@ -2047,7 +2034,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigWebSearchPlugin.Plugin.effect(host)
           // A workspace without hosted search, or a member its policy denies, would get only failed searches.

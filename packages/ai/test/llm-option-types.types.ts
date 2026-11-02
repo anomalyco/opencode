@@ -115,3 +115,25 @@ void AI.ai.stream(AI.ai.request({ model, prompt: "Hello" }))
 void AI.ai.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 // @ts-expect-error Promise stream input keeps the selected model's provider option types.
 void AI.ai.stream({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
+
+ai.request({ model, system: "Be brief.", prompt: "Hello" })
+ai.request({ model, system: "Be brief.", messages: [] })
+// @ts-expect-error A request needs `prompt` or `messages`.
+ai.request({ model })
+// @ts-expect-error A request takes `prompt` or `messages`, not both.
+ai.request({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Effect generate needs `prompt` or `messages`.
+ai.generate({ model, system: "Be brief." })
+// @ts-expect-error Effect stream takes `prompt` or `messages`, not both.
+ai.stream({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Effect loop needs `prompt` or `messages`.
+ai.loop({ model, tools: [] })
+// @ts-expect-error Effect structured output takes `prompt` or `messages`, not both.
+ai.generate({ model, prompt: "Hello", messages: [], schema: Schema.String })
+// @ts-expect-error Promise generate needs `prompt` or `messages`.
+void AI.ai.generate({ model })
+// @ts-expect-error Promise stream takes `prompt` or `messages`, not both.
+AI.ai.stream({ model, prompt: "Hello", messages: [] })
+// @ts-expect-error Promise loop takes `prompt` or `messages`, not both.
+AI.ai.loop({ model, prompt: "Hello", messages: [], tools: [] })
+AI.ai.loop({ model, messages: [], tools: [] })

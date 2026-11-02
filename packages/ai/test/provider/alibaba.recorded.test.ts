@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -85,7 +85,8 @@ for (const api of ["chat", "messages", "responses"] as const) {
           expect(first.reasoning.length).toBeGreaterThan(0)
           expect(first.events.some(LLMEvent.is.toolInputDelta)).toBe(true)
           expectUsage(first)
-          const continuation = LLMRequest.update(request, {
+          const continuation = {
+            ...request,
             messages: [
               ...request.messages,
               first.message,
@@ -93,20 +94,21 @@ for (const api of ["chat", "messages", "responses"] as const) {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           expectReasoning(api, (yield* compileRequest(continuation)).body, first)
           const second = yield* LLMClient.generate(continuation)
           expect(second.text.toLowerCase()).toContain("sunny")
           expect(second.toolCalls).toHaveLength(0)
           expect(second.finishReason.normalized).toBe("stop")
           expectUsage(second)
-          const followUp = LLMRequest.update(continuation, {
+          const followUp = {
+            ...continuation,
             messages: [
               ...continuation.messages,
               second.message,
               Message.user("What temperature did the tool report? Reply with only the temperature."),
             ],
-          })
+          }
           expectReasoning(api, (yield* compileRequest(followUp)).body, first)
           const third = yield* LLMClient.generate(followUp)
           expect(third.text).toContain("18")

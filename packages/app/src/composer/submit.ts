@@ -120,11 +120,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       return
     }
 
-    if (!read) {
-      if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
-
-      return
-    }
+    // Like the TUI, a blank Enter never interrupts; only Stop, Escape and Ctrl+G do.
+    if (!read) return
 
     // Like the TUI, a shell command runs now or not at all; it cannot wait in the queue.
     if (read.mode === "shell" && read.delivery === "queue") {
