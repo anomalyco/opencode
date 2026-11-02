@@ -8,16 +8,16 @@ import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-
 export interface BasetenDecisionOptions {
   readonly [key: string]: unknown
   readonly max_len?: number
@@ -25,7 +25,7 @@ export interface BasetenDecisionOptions {
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -53,7 +53,7 @@ const decisionProtocol = DecisionRoute.protocol({
   },
 })
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "BASETEN_API_KEY")
   const configured = route.with({
@@ -84,21 +84,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const decisionModel = (modelID: string, settings: Settings) => {
-  const input = config(settings)
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 
 export * as Baseten from "./baseten.js"

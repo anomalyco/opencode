@@ -1,4 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
+import { uuid } from "@opencode/util/uuid"
 import { decodeEvent, type VoiceEvent } from "./protocol"
 import { delegatorInstructions, liveInstructions, tools } from "./spec"
 
@@ -7,6 +8,13 @@ export class VoiceFailure extends Error {
     super(reason)
   }
 }
+
+/** A client event sent over the Live data channel; the transport adds `event_id`. */
+export type VoiceClientEvent =
+  | { type: "session.input_audio.mute" | "session.input_audio.unmute" | "response.create" }
+  | { type: "session.update"; session: { delegation: { type: "responses"; responses: { instructions: string } } } }
+  | { type: "response.item.create"; item: { type: "function_call_output"; call_id: string; output: string } }
+  | { type: "session.commentary.append"; delegation_id: null; content: string }
 
 export class VoiceTransport {
   readonly abort = new AbortController()
@@ -78,7 +86,7 @@ export class VoiceTransport {
   async join(viewing: { id: string; title?: string }, tail: string) {
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(35_000)])
     await this.context.resume()
-    const offered = await this.inputOptions.api.voice.models({ signal })
+    const offered = await this.inputOptions.api.experimental.voice.models({ signal })
 
     if (
       !offered.models.some(
@@ -106,7 +114,7 @@ export class VoiceTransport {
     })
     signal.throwIfAborted()
 
-    const response = await this.inputOptions.api.voice.session(
+    const response = await this.inputOptions.api.experimental.voice.session(
       {
         model: "gpt-live-1",
         session: {
@@ -153,9 +161,9 @@ export class VoiceTransport {
     this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 100)
   }
 
-  send(event: object) {
+  send(event: VoiceClientEvent) {
     if (this.ended || this.channel.readyState !== "open") throw new VoiceFailure("dropped")
-    this.channel.send(JSON.stringify({ event_id: crypto.randomUUID(), ...event }))
+    this.channel.send(JSON.stringify({ event_id: uuid(), ...event }))
   }
 
   mute(muted: boolean) {
@@ -185,7 +193,7 @@ export class VoiceTransport {
     await Promise.resolve()
       .then(async () => {
         if (this.channel.readyState !== "open") return
-        this.channel.send(JSON.stringify({ type: "session.close", event_id: crypto.randomUUID() }))
+        this.channel.send(JSON.stringify({ type: "session.close", event_id: uuid() }))
         const timeout = setTimeout(() => this.closed.resolve(), 1000)
         await this.closed.promise
         clearTimeout(timeout)

@@ -10,6 +10,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("meta")
 const baseURL = "https://api.meta.ai/v1"
@@ -74,7 +75,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -82,7 +83,7 @@ export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -118,7 +119,7 @@ const messagesRoute = Route.make({
 
 export const routes = [responsesRoute, chatRoute, messagesRoute]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const options = {
     ...defaults,
@@ -138,7 +139,6 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const messages = (modelID: string | ModelID) =>
     configuredMessages.model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false },
     })
   const media = MediaRoute.deployment(input, options.auth)
   const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })
@@ -151,27 +151,15 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const image = provider.image
 
-export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).responses(modelID)
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).responses(modelID)
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).chat(modelID)
+export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).chat(modelID)
 
-export const messagesModel: ProviderPackage.Definition<Settings, MessagesOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).messages(modelID)
+export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).messages(modelID)
 
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
-  return configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  })
-}
+export const imageModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).image(modelID)
 
 export * as Meta from "./meta.js"

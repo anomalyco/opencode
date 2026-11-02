@@ -67,7 +67,7 @@ const discoveryFixture = Effect.gen(function* () {
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GitLabPlugin.effect(host)
 })
 
@@ -152,6 +152,30 @@ describe("GitLabPlugin", () => {
         yield* drain
         expect(discoverWorkflowModels).toHaveBeenCalledTimes(1)
         expect(discoverWorkflowModels.mock.calls[0]![0].getHeaders()).toEqual({ Authorization: "Bearer access-token" })
+      }),
+    ),
+  )
+
+  it.effect("sends requests to the instance an OAuth login was issued against", () =>
+    withEnv({ GITLAB_TOKEN: undefined }, () =>
+      Effect.gen(function* () {
+        const fixture = yield* discoveryFixture
+        yield* fixture.credentials.create({
+          integrationID,
+          value: {
+            type: "oauth",
+            methodID: Integration.MethodID.make("oauth"),
+            access: "access-token",
+            refresh: "refresh-token",
+            expires: 0,
+            metadata: { instanceUrl: "https://self-managed.gitlab.example", clientID: "client" },
+          },
+        })
+        yield* addPlugin()
+        yield* drain
+        expect((yield* fixture.providers.get(providerID))?.settings).toEqual({
+          instanceUrl: "https://self-managed.gitlab.example",
+        })
       }),
     ),
   )

@@ -5,7 +5,7 @@ import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { ChildProcessSpawner } from "effect/process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
@@ -16,7 +16,10 @@ const it = testEffect(NodeServices.layer)
 declare const OPENCODE_CLI_NAME: string | undefined
 
 function fixture(
-  respond: (command: ChildProcess.StandardCommand) => Partial<AppProcess.RunResult> & {
+  respond: (command: {
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+  }) => Partial<AppProcess.RunResult> & {
     error?: AppProcess.AppProcessError
   } = () => ({}),
   name = "@opencode/cli",
@@ -110,11 +113,12 @@ function fixture(
           run: (command) =>
             Effect.suspend(() => {
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
-              const lookup = command.command === "git" && command.args[0] === "--exec-path"
-              if (!lookup) commands.push([command.command, ...command.args])
+              const args = command.args.map(String)
+              const lookup = command.command === "git" && args[0] === "--exec-path"
+              if (!lookup) commands.push([command.command, ...args])
               const result = lookup
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
-                : respond(command)
+                : respond({ command: command.command, args })
               if (result.error) return Effect.fail(result.error)
               return Effect.succeed({
                 command: command.command,
@@ -138,7 +142,10 @@ const windows = process.platform === "win32" ? it.live : it.live.skip
 const unix = process.platform === "win32" ? it.live.skip : it.live
 
 const installs = [
-  { method: "npm", command: ["npm", "install", "--global", "--force", "@opencode/cli@2.3.4-beta.1"] },
+  {
+    method: "npm",
+    command: ["npm", "install", "--global", "--allow-scripts=@opencode/cli", "--force", "@opencode/cli@2.3.4-beta.1"],
+  },
   {
     method: "pnpm",
     command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
@@ -590,7 +597,7 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
         ["vp", "list", "-g", "--json", "@opencode/cli-node"],
-        ["npm", "install", "--global", "@opencode/cli-node@2.3.4"],
+        ["npm", "install", "--global", "--allow-scripts=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
         ["pnpm", "add", "--global", "--allow-build=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
         ["vp", "update", "-g", "@opencode/cli-node@2.3.4"],
       ])

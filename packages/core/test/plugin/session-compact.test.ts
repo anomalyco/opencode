@@ -14,7 +14,7 @@ it.live("Effect plugins can admit session compaction", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const created = yield* context.session.create({ title: "Plugin compaction" })
     const id = SessionMessage.ID.create()
 
@@ -32,7 +32,7 @@ it.live("Promise plugins can admit session compaction", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const created = yield* context.session.create({ title: "Promise plugin compaction" })
     const id = SessionMessage.ID.create()
 

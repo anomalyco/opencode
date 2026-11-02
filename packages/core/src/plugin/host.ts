@@ -8,6 +8,7 @@ import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
+import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
@@ -48,12 +49,10 @@ const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("r
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
-export const make = Effect.fn("PluginHost.make")(function* (
-  plugin: Pick<Interface, "list">,
-  pluginID: string = "test",
-) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
+  const artifacts = yield* Artifact.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -287,6 +286,31 @@ export const make = Effect.fn("PluginHost.make")(function* (
         text: generateText,
         image: generate.image,
         decisions: generate.decisions,
+      },
+      artifact: {
+        reload: artifacts.reload,
+        transform: (callback) =>
+          artifacts.transform((editor) => {
+            callback({
+              add: (definition) =>
+                editor.add({
+                  id: Artifact.ProviderID.make(definition.id),
+                  name: definition.name,
+                  capabilities: definition.capabilities,
+                  prompt: definition.prompt,
+                  create: definition.create,
+                  read: definition.read,
+                  update: definition.update,
+                  delete: definition.delete,
+                }),
+              remove: (id) => editor.remove(Artifact.ProviderID.make(id)),
+              default: {
+                get: () => editor.default.get(),
+                set: (providerID) =>
+                  editor.default.set(providerID === undefined ? undefined : Artifact.ProviderID.make(providerID)),
+              },
+            })
+          }),
       },
     },
     generate: {
@@ -631,6 +655,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
 export const requirements = LayerNode.group([
   App.node,
   Agent.node,
+  Artifact.node,
   AISDK.node,
   Provider.node,
   Model.node,

@@ -1,16 +1,8 @@
 import type { ProviderPackage } from "../../provider-package.js"
 import { ZAICodingPlan } from "../zai-coding-plan.js"
+import { toConfig } from "../settings.js"
 
 export type Settings = ZAICodingPlan.Settings<ZAICodingPlan.ResponsesOptionsInput>
 
-export const model: ProviderPackage.Definition<Settings, ZAICodingPlan.ResponsesOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  ZAICodingPlan.configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).responses(modelID)
+export const model: ProviderPackage.Model<Settings, ZAICodingPlan.ResponsesOptionsInput> = (modelID, settings) =>
+  ZAICodingPlan.configure(toConfig(settings)).responses(modelID)

@@ -1,6 +1,7 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenResponses } from "../protocols/open-responses.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
@@ -10,17 +11,19 @@ import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput
+    readonly providerOptions?: OpenAIProviderOptionsInput | OpenResponsesProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings & OpenAIProviderOptionsInput & { readonly apiKey?: string }
+export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
+  Options & { readonly apiKey?: string | false }
 
 export const protocol = Protocol.make({
   id: "digitalocean-chat",
@@ -40,16 +43,24 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const routes = [route]
+const responsesRoute = Route.make({
+  id: "digitalocean-responses",
+  provider: id,
+  providerMetadataKey: "digitalocean",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path("/responses", { baseURL }),
+  transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const routes = [route, responsesRoute]
+
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_API_KEY", "DO_INFERENCE_API_KEY"])
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth,
-  })
+  const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
+  const configured = route.with(options)
+  const configuredResponses = responsesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "digitalocean",
@@ -64,15 +75,19 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const media = MediaRoute.deployment({ ...input, baseURL: endpoint ?? baseURL }, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+  const chat = (modelID: string | ModelID) =>
+    configured.model<OpenAIProviderOptionsInput>({
+      id: modelID,
+      compatibility: {
+        supportsPromptCacheKey: true,
+      },
+    })
   return {
     id,
-    model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({
-        id: modelID,
-        compatibility: {
-          supportsPromptCacheKey: true,
-        },
-      }),
+    model: chat,
+    chat,
+    responses: (modelID: string | ModelID) =>
+      configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
     configure,
@@ -82,19 +97,25 @@ export const configure = (input: LanguageModelOptions = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
+export const chat = provider.chat
+export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings: Settings) => {
+export const responsesModel: ProviderPackage.Model<
+  Settings<OpenResponsesProviderOptionsInput>,
+  OpenResponsesProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).responses(modelID)
+export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
-export const decisionModel = (modelID: string, settings: Settings) => {
+export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
   return {
     apiKey,
     baseURL,

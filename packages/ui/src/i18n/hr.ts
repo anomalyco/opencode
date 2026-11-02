@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Promjene sesija",
   "ui.sessionReview.title.git": "Git promjene",
   "ui.sessionReview.title.branch": "Promjene grana",
@@ -73,10 +73,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Pretplatite se na OpenCode Go za 10 USD mjesečno i ostvarite pouzdan pristup najboljim modelima otvorenog koda.",
   "dialog.usageExceeded.freeTier.actionLabel": "Pretplatite se",
-  "dialog.usageExceeded.accountRateLimit.title": "Dosegnuto je ograničenje usluge Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Dosegnuto je ograničenje upotrebe. Da biste sada nastavili koristiti ovaj model, omogućite korištenje sa svog dostupnog salda",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori postavke",
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
   "ui.sessionTurn.status.gatheringContext": "Istražujući",

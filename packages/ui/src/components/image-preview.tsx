@@ -405,12 +405,16 @@ export function ImagePreview(props: ImagePreviewProps) {
     settle()
     showOrigin()
     giveBack()
+    document.body.removeAttribute("data-image-preview-closing")
   })
 
   createEffect(
     on(
       () => dialog.isOpen(),
       (open) => {
+        // See image-preview.css: the body takes clicks again while the closing flight holds the dialog mounted.
+        document.body.toggleAttribute("data-image-preview-closing", !open)
+
         if (!open) dismiss()
       },
       { defer: true },

@@ -13,6 +13,7 @@ import ssh from "./ssh"
 import wsl from "./wsl"
 import microsoftOffice from "./microsoft-office"
 import sources from "./sources"
+import goal from "./goal"
 
 /** Built-in plugins with their main entries, by id. Lists every built-in so their ids stay reserved. */
 export const builtins = compose({
@@ -30,4 +31,5 @@ export const builtins = compose({
   wsl: { ...wsl, mainEntry: () => import("./wsl/main") },
   "microsoft-office": microsoftOffice,
   sources,
+  goal,
 })

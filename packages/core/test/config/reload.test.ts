@@ -74,7 +74,7 @@ describe("config plugin reloads", () => {
               const config = yield* Config.Service
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
-              const host = yield* PluginHost.make(plugins)
+              const host = yield* PluginHost.make(plugins, "test")
               yield* ConfigCompatibilityPlugin.Plugin.effect(host)
               expect(yield* skills.list()).toEqual([])
 
@@ -116,7 +116,7 @@ describe("config plugin reloads", () => {
         return Effect.gen(function* () {
           const plugins = yield* Plugin.Service
           const references = yield* Reference.Service
-          const host = yield* PluginHost.make(plugins)
+          const host = yield* PluginHost.make(plugins, "test")
           yield* ConfigReferencePlugin.Plugin.effect(host)
           yield* waitUntil(references.list().pipe(Effect.map((items) => items.some((item) => item.name === "docs"))))
           expect((yield* references.list())[0]?.path).toBe(AbsolutePath.make(path.join(tmp.path, "docs")))
@@ -149,7 +149,7 @@ describe("config plugin reloads", () => {
           return yield* Effect.gen(function* () {
             const plugins = yield* Plugin.Service
             const references = yield* Reference.Service
-            const host = yield* PluginHost.make(plugins)
+            const host = yield* PluginHost.make(plugins, "test")
             yield* ConfigReferencePlugin.Plugin.effect(host)
             const publish = yield* Deferred.await(parent)
             yield* Effect.promise(() => fs.mkdir(root))
@@ -184,7 +184,7 @@ describe("config plugin reloads", () => {
             return yield* Effect.gen(function* () {
               const plugins = yield* Plugin.Service
               const references = yield* Reference.Service
-              const host = yield* PluginHost.make(plugins)
+              const host = yield* PluginHost.make(plugins, "test")
               yield* ConfigReferencePlugin.Plugin.effect(host)
               expect(yield* references.list()).toEqual([])
 
@@ -242,7 +242,7 @@ describe("config plugin reloads", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
-      const host = yield* PluginHost.make(plugins)
+      const host = yield* PluginHost.make(plugins, "test")
       yield* references.transform((editor) =>
         editor.add(
           "external",
@@ -283,7 +283,7 @@ describe("config plugin reloads", () => {
       const plugins = yield* Plugin.Service
       const references = yield* Reference.Service
       const skills = yield* Skill.Service
-      const host = yield* PluginHost.make(plugins)
+      const host = yield* PluginHost.make(plugins, "test")
       const test = yield* Config.Test
 
       yield* ConfigAgentPlugin.Plugin.effect(host)
@@ -334,7 +334,7 @@ describe("config plugin reloads", () => {
       const integrations = yield* Integration.Service
       const plugins = yield* Plugin.Service
       const websearch = yield* WebSearch.Service
-      const baseHost = yield* PluginHost.make(plugins)
+      const baseHost = yield* PluginHost.make(plugins, "test")
       const test = yield* Config.Test
       const tracked = new Set<string>([
         Agent.Event.Updated.type,

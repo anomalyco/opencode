@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { LLMEvent, type AIError, type ToolResultPart } from "../../schema/index.js"
+import { LLMEvent, type AIError, type LLMRequest, type ToolResultPart } from "../../schema/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { Lifecycle } from "./lifecycle.js"
 
@@ -26,8 +26,47 @@ export interface Definition {
 
 export type Definitions = Readonly<Record<string, Definition>>
 
+/** Hosted tools that several Responses providers report with the same item shape. */
+export const common = {
+  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
+  code_interpreter_call: {
+    name: "code_interpreter",
+    input: (item) => ({ code: item.code, container_id: item.container_id }),
+  },
+  mcp_call: {
+    name: "mcp",
+    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
+  },
+} as const satisfies Definitions
+
 export const isItem = <Tools extends Definitions>(item: OpenResponses.OutputItem, tools: Tools): item is Item =>
   item.type in tools
+
+/**
+ * Responses stream that turns completed hosted tool items into a provider-executed
+ * tool call and result. `override` sees each normalized event first and may handle it.
+ */
+export const stream = (
+  adapter: OpenResponses.ProviderAdapter,
+  tools: Definitions,
+  override?: (
+    state: OpenResponses.ParserState,
+    event: OpenResponses.NormalizedEvent,
+  ) => Effect.Effect<OpenResponses.StepResult, AIError> | undefined,
+) => ({
+  event: OpenResponses.protocol.stream.event,
+  initial: (request: LLMRequest) => OpenResponses.initial(request, adapter),
+  step: (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
+    const event = OpenResponses.normalize(state, input)
+    const handled = override?.(state, event)
+    if (handled) return handled
+    if (event.type === "response.output_item.done" && event.item && isItem(event.item, tools))
+      return onDone(state, event.item, tools)
+    return OpenResponses.step(state, event)
+  },
+  terminal: OpenResponses.terminal,
+})
 
 export const onDone: (
   state: OpenResponses.ParserState,

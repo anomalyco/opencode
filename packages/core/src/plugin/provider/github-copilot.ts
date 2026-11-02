@@ -1,10 +1,10 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
-import { Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { HttpClient } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
-import { Bus } from "../../bus.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
@@ -13,6 +13,8 @@ import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { SharedCache } from "../../shared-cache.js"
+import { ProviderRefresh } from "./refresh.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -161,53 +163,46 @@ export const GithubCopilotPlugin = define({
   id: "opencode.provider.github.copilot",
   effect: Effect.fn(function* (ctx) {
     const providers = yield* Provider.Service
-    const bus = yield* Bus.Service
-    const loading = Semaphore.makeUnsafe(1)
-    const loaded: {
-      baseURL?: string
-      token?: string
-      models?: CopilotModels.Snapshot
-      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-    } = {}
-
-    const load = Effect.fn("GithubCopilotPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("github-copilot")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      if (credential?.type !== "oauth") {
-        loaded.baseURL = undefined
-        loaded.token = undefined
-        loaded.models = undefined
-        loaded.connection = undefined
-        return
-      }
-
-      const url = copilotBaseURL(credential.metadata) ?? baseURL()
-      const provider = yield* providers.get(Provider.ID.githubCopilot)
-      const remote = yield* Effect.tryPromise({
-        try: () =>
-          CopilotModels.load(url, {
-            ...provider?.headers,
-            Authorization: `Bearer ${credential.refresh}`,
-            "User-Agent": App.useragent(ctx.app),
-            "X-GitHub-Api-Version": apiVersion,
-          }),
-        catch: (cause) => cause,
-      }).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("failed to sync GitHub Copilot models", { cause }).pipe(Effect.as(undefined)),
-        ),
-      )
-      if (
-        IntegrationConnection.key(connection) !==
-        IntegrationConnection.key(yield* ctx.integration.connection.active("github-copilot"))
-      )
-        return
-      loaded.baseURL = url
-      loaded.token = credential.refresh
-      loaded.models = remote
-      loaded.connection = connection
+    const cache = yield* SharedCache.Service
+    const http = yield* HttpClient.HttpClient
+    const discovered = yield* ProviderRefresh.start({
+      integrationID: "github-copilot",
+      initial: {} as {
+        readonly baseURL?: string
+        readonly token?: string
+        readonly models?: CopilotModels.Snapshot
+        readonly connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+      },
+      active: ctx.integration.connection.active("github-copilot"),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
+        const connection = yield* ctx.integration.connection.active("github-copilot")
+        const credential = connection
+          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+          : undefined
+        if (!connection || credential?.type !== "oauth") return { connection, value: {} }
+        const url = copilotBaseURL(credential.metadata) ?? baseURL()
+        const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
+        const models = yield* cache
+          .get({
+            key: modelsKey(connection, url, headers),
+            ...options,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                current?.type === "oauth"
+                  ? CopilotModels.load(http, url, {
+                      ...headers,
+                      Authorization: `Bearer ${current.refresh}`,
+                      "User-Agent": App.useragent(ctx.app),
+                      "X-GitHub-Api-Version": apiVersion,
+                    })
+                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
+              ),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return { connection, value: { baseURL: url, token: credential.refresh, models, connection } }
+      }),
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -217,6 +212,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
+      const loaded = discovered.current
       if (loaded.models) {
         evt.add({
           info: item.provider,
@@ -255,13 +251,6 @@ export const GithubCopilotPlugin = define({
         })
       }
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* refresh().pipe(Effect.forkScoped)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
@@ -299,8 +288,11 @@ export const GithubCopilotPlugin = define({
       (evt) =>
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.githubCopilot) return
+          const loaded = discovered.current
           if (!loaded.baseURL || !loaded.token || !loaded.models) return
-          const agent = yield* ctx.agent.get({ agentID: Agent.ID.make("title") }).pipe(Effect.orElseSucceed(() => undefined))
+          const agent = yield* ctx.agent
+            .get({ agentID: Agent.ID.make("title") })
+            .pipe(Effect.orElseSucceed(() => undefined))
           if (agent?.data.model) return
           const model = utilityTitleModels.find((id) => loaded.models?.has(id))
           if (!model) return
@@ -357,6 +349,15 @@ export const GithubCopilotPlugin = define({
     )
   }),
 } satisfies PluginInternal.InternalPlugin)
+
+function modelsKey(
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  url: string,
+  headers: Record<string, string>,
+) {
+  const fingerprint = SharedCache.fingerprint(JSON.stringify(Object.entries(headers).toSorted()))
+  return `github-copilot:${IntegrationConnection.key(connection)}:${url}:${fingerprint}`
+}
 
 function normalizeDomain(input: string) {
   return input.replace(/^https?:\/\//, "").replace(/\/$/, "")

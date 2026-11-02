@@ -123,14 +123,13 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      all: Effect.fn("Credential.all")(() =>
+      all: () =>
         db
           .select()
           .from(CredentialTable)
           .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
           .all()
           .pipe(Effect.orDie, Effect.map(storedRows)),
-      ),
       list,
       get: Effect.fn("Credential.get")(function* (id) {
         const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)

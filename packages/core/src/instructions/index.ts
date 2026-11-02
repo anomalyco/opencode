@@ -46,7 +46,7 @@ export declare namespace Source {
     readonly read: Effect.Effect<A | Unavailable | Removed>
     readonly render: {
       readonly initial: (current: A) => string
-      readonly changed: (previous: A, current: A) => string
+      readonly changed: (previous: A, current: A) => string | undefined
       readonly removed?: (previous: A) => string
     }
   }
@@ -109,7 +109,8 @@ export function make<A>(source: Source.Definition<A>): List {
         const after = decodeValue(current)
         if (after === undefined) return undefined
         if (before === undefined) return initial(after)
-        return requireText(source.key, "changed", source.render.changed(before, after))
+        const text = source.render.changed(before, after)
+        return text === undefined ? undefined : requireText(source.key, "changed", text)
       },
       removed: (previous) => {
         const decoded = decodeValue(previous)
@@ -158,14 +159,23 @@ export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Adm
   return Effect.succeed({ delta, blobs })
 }
 
-export function renderInitial(value: List, values: Readonly<Record<string, Schema.Json>>) {
-  return render(
-    value.flatMap((source) => {
-      if (!Object.hasOwn(values, source.key)) return []
-      const text = source.initial(values[source.key])
-      return text === undefined ? [] : [text]
-    }),
-  )
+/** One source's rendered text, keyed so consumers can tell the sources apart. */
+export interface Rendered {
+  readonly key: Key
+  readonly text: string
+}
+
+export function renderInitial(value: List, values: Readonly<Record<string, Schema.Json>>): ReadonlyArray<Rendered> {
+  return value.flatMap((source) => {
+    if (!Object.hasOwn(values, source.key)) return []
+    const text = source.initial(values[source.key])
+    return text === undefined ? [] : [{ key: source.key, text }]
+  })
+}
+
+/** The text models see for rendered sources. */
+export function join(rendered: ReadonlyArray<Rendered>) {
+  return render(rendered.map((part) => part.text))
 }
 
 export function renderUpdate(

@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -31,7 +31,7 @@ describe("Groq recorded", () => {
     { tags: ["text", "usage"], metadata: { model: "openai/gpt-oss-20b" } },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: configure({
             apiKey,
             providerOptions: {
@@ -91,7 +91,7 @@ describe("Groq recorded", () => {
       },
       () =>
         Effect.gen(function* () {
-          const request = LLM.request({
+          const request = ai.request({
             model: item.model,
             prompt: `Look up the current weather in ${item.cities.join(" and ")}. Call lookup_weather once for each city in the same response before answering. After receiving all results, report each city's weather in one short sentence.`,
             tools: [weather],
@@ -119,7 +119,8 @@ describe("Groq recorded", () => {
             expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
           }
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             toolChoice: ToolChoice.make("none"),
             messages: [
               ...request.messages,
@@ -128,7 +129,7 @@ describe("Groq recorded", () => {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           if (item.reasoning) {
             expect(replay.body.messages).toEqual(
@@ -153,7 +154,7 @@ describe("Groq recorded", () => {
     { tags: ["reasoning", "usage"], metadata: { model: "qwen/qwen3.6-27b" } },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: configure({
             apiKey,
             providerOptions: { reasoningEffort: "default" },

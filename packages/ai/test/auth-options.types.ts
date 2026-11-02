@@ -49,6 +49,7 @@ optionalAuthModel("gpt-4.1-mini")
 optionalAuthModel("gpt-4.1-mini", {})
 optionalAuthModel("gpt-4.1-mini", { apiKey: "sk-test" })
 optionalAuthModel("gpt-4.1-mini", { apiKey: configApiKey })
+optionalAuthModel("gpt-4.1-mini", { apiKey: false })
 optionalAuthModel("gpt-4.1-mini", { auth })
 optionalAuthModel("gpt-4.1-mini", { auth, baseURL: "https://gateway.example.com/v1" })
 optionalAuthModel("gpt-4.1-mini", { apiKey: "sk-test", headers: { "x-source": "test" } })
@@ -74,6 +75,8 @@ OpenAI.responses("gpt-4.1-mini")
 OpenAI.configure({}).responses("gpt-4.1-mini")
 OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini")
 OpenAI.configure({ apiKey: configApiKey }).responses("gpt-4.1-mini")
+OpenAI.configure({ apiKey: false, baseURL: "http://localhost:8080/v1" }).responses("gpt-4.1-mini")
+OpenAI.model("gpt-4.1-mini", { apiKey: false, baseURL: "http://localhost:8080/v1" })
 OpenAI.configure({ auth: Auth.bearer("oauth-token") }).responses("gpt-4.1-mini")
 OpenAI.configure({
   auth: Auth.headers({ authorization: "Bearer gateway" }),
@@ -87,7 +90,10 @@ OpenAI.configure({
 // @ts-expect-error OpenAI model selectors only accept model ids.
 OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini", {})
 
-// @ts-expect-error apiKey only accepts string, Redacted<string>, or Config<string | Redacted<string>>.
+// @ts-expect-error apiKey only accepts string, Redacted<string>, Config<string | Redacted<string>>, or false.
+OpenAI.configure({ apiKey: true })
+
+// @ts-expect-error apiKey only accepts string, Redacted<string>, Config<string | Redacted<string>>, or false.
 OpenAI.configure({ apiKey: 123 })
 
 // @ts-expect-error provider helpers reject unknown top-level options.
@@ -136,6 +142,7 @@ Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deploym
 Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: Auth.header("api-key", "override") })
 
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku")
+Anthropic.model("claude-haiku", { apiKey: false, baseURL: "http://localhost:8080/v1" })
 Anthropic.configure({
   apiKey: "anthropic-key",
   providerOptions: {
@@ -185,6 +192,8 @@ GoogleVertex.configure({
 }).model("gemini-3.5-flash")
 GoogleVertex.configure({ accessToken: "vertex-token", project: "project" }).model("gemini-3.5-flash")
 GoogleVertex.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("gemini-3.5-flash")
+// @ts-expect-error Vertex keeps its ADC/express auth and does not accept apiKey: false.
+GoogleVertex.configure({ apiKey: false })
 // @ts-expect-error Vertex Gemini model selectors only accept model ids.
 GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash", {})
 // @ts-expect-error Vertex Gemini config accepts only one auth source.
@@ -249,6 +258,8 @@ GoogleVertexMessages.configure({
 })
 
 AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude")
+// @ts-expect-error Bedrock keeps its own SigV4/bearer auth and does not accept apiKey: false.
+AmazonBedrock.configure({ apiKey: false })
 // @ts-expect-error Bedrock model selectors only accept model ids.
 AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude", {})
 

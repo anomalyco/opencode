@@ -18,9 +18,7 @@ const Options = Schema.Struct({
   ),
   toolStream: Schema.optional(Schema.Boolean),
   doSample: Schema.optional(Schema.Boolean),
-  responseFormat: Schema.optional(
-    Schema.Struct({ type: ProviderShared.knownString<"text" | "json_object">() }),
-  ),
+  responseFormat: Schema.optional(Schema.Struct({ type: ProviderShared.knownString<"text" | "json_object">() })),
   requestID: Schema.optional(Schema.String),
   userID: Schema.optional(Schema.String),
 })

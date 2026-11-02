@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test"
+import type { Schema } from "effect"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,
@@ -20,9 +21,9 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
   name: string
   directory?: string
   // Merged over the default project.
-  project?: Record<string, unknown>
+  project?: Partial<Parameters<typeof project>[0]>
   // Defaults to one session titled `name`. Omitted fields come from `session()`.
-  sessions?: ({ id: string; title?: string } & Record<string, unknown>)[]
+  sessions?: (Partial<Parameters<typeof session>[0]> & { id: string })[]
   // Merged over the default seed: the project used before, and a tab for every session.
   seed?: SeedInput
 }
@@ -31,7 +32,7 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
 export async function mockWorkspace(page: Page, input: WorkspaceInput) {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
-  const projectID = typeof input.project?.id === "string" ? input.project.id : `proj_${slug}`
+  const projectID = input.project?.id ?? `proj_${slug}`
 
   const sessions = (input.sessions ?? [{ id: `ses_${slug}`, title: input.name }]).map((item) =>
     session({ directory, projectID, ...item }),
@@ -52,7 +53,7 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
     ...input.seed,
   })
 
-  return { server: SERVER, directory, projectID, sessions, pty: mock.pty, push: mock.push }
+  return { server: SERVER, directory, projectID, sessions, persistentPty: mock.persistentPty, push: mock.push }
 }
 
 // Opens a session (default: the first) and waits until its composer accepts input.
@@ -86,17 +87,22 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
 // Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
 // resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
 // recorded. The draft tab comes first, then a tab per session.
-// The new-session trigger that shows the draft's project and worktree and opens the location dialog.
+// The new-session trigger that shows the draft's project and opens the location dialog on its projects.
 export function newSessionLocation(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-project"]')
+}
+
+// The new-session trigger that shows the draft's worktree, or Local, and opens the project's worktree step.
+export function newSessionWorktree(page: Page) {
+  return page.locator('[data-component="new-session"] [data-action="prompt-worktree"]')
 }
 
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
   const calls: string[] = []
-  const worktreeRequests: { url: URL; body: Record<string, unknown> }[] = []
-  const creates: Record<string, unknown>[] = []
-  const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+  const worktreeRequests: { url: URL; body: Schema.JsonObject }[] = []
+  const creates: Schema.JsonObject[] = []
+  const prompts: { sessionID: string; body: Schema.JsonObject }[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const url = new URL(request.url())
@@ -138,11 +144,10 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeVisible({ timeout: APP_READY_TIMEOUT })
-  await newSessionLocation(page).click()
-  // The dialog opens on projects; → lists the current project's worktrees.
-  await page.keyboard.press("ArrowRight")
+  await newSessionWorktree(page).click()
+  await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
   await page.getByRole("option", { name: /^New worktree/ }).click()
-  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(newSessionWorktree(page)).toContainText("New worktree")
   await expect(editor).toBeEditable()
 
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }

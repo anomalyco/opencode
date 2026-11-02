@@ -38,7 +38,7 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
             const config = yield* Config.Test
             const plugins = yield* Plugin.Service
             yield* config.setEntries([new Document({ type: "document", info: new Info({ snapshots: false }) })])
-            yield* ConfigSnapshotPlugin.Plugin.effect(yield* PluginHost.make(plugins))
+            yield* ConfigSnapshotPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
             expect(yield* snapshot.capture()).toBeUndefined()
 

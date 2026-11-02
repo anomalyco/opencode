@@ -10,6 +10,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("moonshotai")
 
@@ -44,7 +45,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -133,16 +134,7 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Moonshot from "./moonshot.js"

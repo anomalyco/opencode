@@ -758,6 +758,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migrace dat {{current}}/{{total}}",
   "home.workspaceTip": "Spusťte příští relaci v novém pracovním prostoru, aby změny zůstaly oddělené",
   "session.tab.add": "Přidat kartu",
+  "session.tab.closeOthers": "Zavřít ostatní karty",
   "session.queue.attachments.one": "A {{count}} příloha",
   "session.queue.attachments.few": "A {{count}} přílohy",
   "session.queue.attachments.many": "A {{count}} přílohy",
