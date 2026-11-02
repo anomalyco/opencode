@@ -44,7 +44,7 @@ export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextR
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
-  | { readonly prompt: Message.ContentInput; readonly messages?: never }
+  | { readonly prompt: Message.UserContentInput; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
 interface TextRequestFields<Model extends LanguageModel> {
