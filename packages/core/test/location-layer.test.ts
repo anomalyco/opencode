@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
 import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
@@ -520,6 +521,33 @@ describe("LocationServiceMap", () => {
         ),
       ),
     ),
+  )
+
+  it.live("rebuilds a cached location when its directory becomes a git repo", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(dir.path)
+      const ref = Location.Ref.make({ directory })
+      const locations = yield* LocationServiceMap.Service
+
+      // A location built before the directory is a repo keeps the markerless identity.
+      const before = Context.get(yield* locations.contextEffect(ref), Location.Service)
+      expect(before.vcs).toBeUndefined()
+
+      yield* Effect.promise(async () => {
+        await $`git init -q`.cwd(dir.path).quiet()
+        await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+          .cwd(dir.path)
+          .quiet()
+      })
+      const head = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(dir.path).text())).trim()
+
+      // Once the directory is a repo, the next borrow must report the VCS identity, not the
+      // markerless one it cached before the repo existed.
+      const after = Context.get(yield* locations.contextEffect(ref), Location.Service)
+      expect(after.vcs?.type).toBe("git")
+      expect(after.project.id).toBe(Project.ID.make(head))
+    }),
   )
 
   it.live("isolates provider state by location", () =>
