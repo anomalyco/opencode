@@ -30,6 +30,7 @@ import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Wildcard } from "@opencode/core/util/wildcard"
 import { Integration } from "@opencode/schema/integration"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -1613,18 +1614,12 @@ describe("Config", () => {
   )
 
   it.live("substitutes environment variables and relative file contents", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = {
-          token: process.env.OPENCODE_TEST_MCP_TOKEN,
-          missing: process.env.OPENCODE_TEST_MISSING,
-          flag: process.env.OPENCODE_TEST_FLAG,
-        }
-        process.env.OPENCODE_TEST_FLAG = "false"
-        process.env.OPENCODE_TEST_MCP_TOKEN = String.raw`C:\Users\new\"secret"`
-        delete process.env.OPENCODE_TEST_MISSING
-        return previous
-      }),
+    withEnv(
+      {
+        OPENCODE_TEST_FLAG: "false",
+        OPENCODE_TEST_MCP_TOKEN: String.raw`C:\Users\new\"secret"`,
+        OPENCODE_TEST_MISSING: undefined,
+      },
       () =>
         Effect.acquireUseRelease(
           Effect.promise(() => tmpdir()),
@@ -1676,15 +1671,6 @@ describe("Config", () => {
             }),
           (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
         ),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous.token === undefined) delete process.env.OPENCODE_TEST_MCP_TOKEN
-          else process.env.OPENCODE_TEST_MCP_TOKEN = previous.token
-          if (previous.missing === undefined) delete process.env.OPENCODE_TEST_MISSING
-          else process.env.OPENCODE_TEST_MISSING = previous.missing
-          if (previous.flag === undefined) delete process.env.OPENCODE_TEST_FLAG
-          else process.env.OPENCODE_TEST_FLAG = previous.flag
-        }),
     ),
   )
 

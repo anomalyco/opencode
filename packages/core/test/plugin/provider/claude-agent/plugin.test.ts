@@ -31,6 +31,7 @@ import { Effect } from "effect"
 import { FakeClaude } from "./lib/fake-claude"
 import { FakeIO } from "./lib/fake-io"
 import { TestSessions } from "./lib/sessions"
+import { eventually } from "../../../lib/eventually"
 import { testEffect } from "../../../lib/effect"
 import { PluginTestLayer } from "../../fixture"
 
@@ -76,21 +77,6 @@ const connectionStatus = Effect.gen(function* () {
   const integration = yield* integrations.get(integrationID)
   return integration?.connections[0]?.status
 })
-
-// Bounded by elapsed time rather than attempts, so a busy machine still fits.
-function eventually<A, R>(
-  effect: Effect.Effect<A, never, R>,
-  predicate: (value: A) => boolean,
-  deadline = Date.now() + 10_000,
-): Effect.Effect<A, Error, R> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (Date.now() > deadline) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, deadline)
-  })
-}
 
 function find(models: readonly Model.Info[], id: string) {
   const model = models.find((model) => model.id === id)
