@@ -348,13 +348,14 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
+    if (message.role === "system") return message
     const content = message.content.map((part) => {
       if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
       return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
     })
     return content.every((part, index) => part === message.content[index])
       ? message
-      : new Message({ ...message, content })
+      : Message.make({ ...message, content })
   })
   return {
     tools: flattenTools(request.tools),

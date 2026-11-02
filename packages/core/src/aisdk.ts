@@ -28,6 +28,7 @@ import {
   type LLMRequest,
   type Media,
   type ToolDefinition,
+  type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
 import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
@@ -509,7 +510,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
     .join("\n\n")
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
-    if (input.role !== "tool") return message(input.role, input.content)
+    if (input.role !== "tool") return message(input)
     const lowered = toolMessage(input)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
@@ -527,11 +528,8 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(
-  role: Exclude<LLMRequest["messages"][number]["role"], "tool">,
-  content: LLMRequest["messages"][number]["content"],
-): LanguageModelV3Message[] {
-  switch (role) {
+function message(input: Exclude<LLMRequest["messages"][number], ToolMessage>): LanguageModelV3Message[] {
+  switch (input.role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
       // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
@@ -542,19 +540,19 @@ function message(
           content: [
             {
               type: "text",
-              text: ProviderShared.wrapSystemUpdate(content.filter((part) => part.type === "text")),
+              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
             },
           ],
         },
       ]
     case "user":
-      return [{ role: "user", content: content.flatMap(userPart) }]
+      return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
-      return [{ role: "assistant", content: content.flatMap(assistantPart) }]
+      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
   }
 }
 
-function toolMessage(input: LLMRequest["messages"][number]) {
+function toolMessage(input: ToolMessage) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
     if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)

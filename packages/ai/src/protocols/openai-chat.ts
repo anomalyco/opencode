@@ -15,12 +15,15 @@ import {
   UnknownProviderError,
   Usage,
   type FinishReasonDetails,
+  type AssistantMessage,
   type CacheHint,
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolMessage,
+  type UserMessage,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -341,7 +344,6 @@ export const OpenAIChatEvent = Schema.StructWithRest(
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 const DONE = "[DONE]" as const
 const OpenAIChatStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(OpenAIChatEvent)])
-type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
 interface PendingToolDelta {
   readonly id?: string
@@ -382,7 +384,7 @@ interface LoweringOptions {
   readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
   readonly toolCallID?: (id: string) => string
   /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
-  readonly assistant?: (source: LLMRequest["messages"][number], message: OpenAIChatMessage) => OpenAIChatMessage
+  readonly assistant?: (source: AssistantMessage, message: OpenAIChatMessage) => OpenAIChatMessage
 }
 
 type MessageLoweringOptions = LoweringOptions & {
@@ -501,7 +503,7 @@ const lowerReasoningDetail = (detail: ReasoningDetail) => {
 
 const isKimiDetail = (detail: { readonly type: string }) => detail.type === "summary" || detail.type === "encrypted"
 
-const lowerUserMessage = Effect.fnUntraced(function* (message: OpenAIChatRequestMessage, options: LoweringOptions) {
+const lowerUserMessage = Effect.fnUntraced(function* (message: UserMessage, options: LoweringOptions) {
   const content: OpenAIChatUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
@@ -523,7 +525,7 @@ const lowerUserMessage = Effect.fnUntraced(function* (message: OpenAIChatRequest
 })
 
 const lowerAssistantMessage = Effect.fnUntraced(function* (
-  message: OpenAIChatRequestMessage,
+  message: AssistantMessage,
   configuredField: string | undefined,
   requireReasoning: boolean,
   options: MessageLoweringOptions,
@@ -587,7 +589,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   return { ...result, [field]: reasoningText }
 })
 
-const lowerToolMessages = Effect.fnUntraced(function* (message: OpenAIChatRequestMessage, options: LoweringOptions) {
+const lowerToolMessages = Effect.fnUntraced(function* (message: ToolMessage, options: LoweringOptions) {
   const messages: OpenAIChatMessage[] = []
   const attachments: OpenAIChatUserContent[] = []
   for (const part of message.content) {
@@ -622,17 +624,14 @@ const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatC
 })
 
 const lowerMessage = Effect.fnUntraced(function* (
-  message: OpenAIChatRequestMessage,
+  message: UserMessage | AssistantMessage,
   reasoningField: string | undefined,
   requireReasoning: boolean,
   options: MessageLoweringOptions,
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
-  if (message.role === "assistant") {
-    const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)
-    return [options.assistant?.(message, lowered) ?? lowered]
-  }
-  return (yield* lowerToolMessages(message, options)).messages
+  const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)
+  return [options.assistant?.(message, lowered) ?? lowered]
 })
 
 const lowerMessages = Effect.fnUntraced(function* (

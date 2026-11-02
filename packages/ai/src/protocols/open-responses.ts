@@ -649,7 +649,10 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     part.namespace === undefined ? custom.get(part.name) : undefined
 
   for (const message of request.messages) {
-    const rawMetadata = message.providerMetadata?.[providerMetadataKey]
+    const rawMetadata =
+      message.role === "user" || message.role === "assistant"
+        ? message.providerMetadata?.[providerMetadataKey]
+        : undefined
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
       const update = effortUpdate(message)
