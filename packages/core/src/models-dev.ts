@@ -658,33 +658,31 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-        yield* lock
-          .withPermit(
-            Effect.gen(function* () {
-              const stored = Option.getOrUndefined(
-                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
-              )
-              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag)
-              const digest = response && bodyDigest(response.text)
-              // models.dev rarely changes between polls; skip invalidation and
-              // the Refreshed event for a byte-identical body so downstream
-              // provider/model update listeners stay quiet.
-              if (!force && stored && (!response || stored.digest === digest)) {
-                yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
-                return
-              }
-              if (!response) return
-              yield* decodeCatalog(response.text)
-              yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
-              yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
-            }),
-          )
-          .pipe(
-            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-            Effect.ignore,
-          )
+        const stored = Option.getOrUndefined(
+          Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+        )
+        if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
+        const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
+          Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+          Effect.orElseSucceed(() => undefined),
+        )
+        const digest = response && bodyDigest(response.text)
+        // models.dev rarely changes between polls; skip invalidation and
+        // the Refreshed event for a byte-identical body so downstream
+        // provider/model update listeners stay quiet.
+        if (!force && stored && (!response || stored.digest === digest)) {
+          yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
+          return
+        }
+        if (!response) return
+        yield* lock.withPermit(
+          Effect.gen(function* () {
+            yield* decodeCatalog(response.text)
+            yield* writeCache(response.text, response.etag, digest)
+            yield* invalidate
+            yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+          }),
+        )
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
