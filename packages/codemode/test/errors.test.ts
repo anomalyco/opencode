@@ -155,6 +155,61 @@ for (const ns of ["github", "tools.github", "tools", ""]) {
   })
 })
 
+describe("unavailable host globals", () => {
+  test("explains the missing host runtime and provides a suggestion", async () => {
+    for (const name of ["process", "Buffer", "window", "setTimeout", "eval"]) {
+      const failure = await error(`return ${name}`)
+      expect(failure.kind).toBe("ExecutionFailure")
+      expect(failure.suggestions).toBeDefined()
+      expect(failure.suggestions?.length).toBeGreaterThan(0)
+      if (name === "eval") expect(failure.message).toContain("Dynamic code evaluation is disabled in Code Mode")
+      else expect(failure.message).toContain(`'${name}' is unavailable`)
+    }
+  })
+
+  test("uses exact guidance for process and timer globals", async () => {
+    expect((await error("return process")).message).toBe(
+      "ReferenceError: 'process' is unavailable: Code Mode has no Node.js runtime. Use the `shell` tool for environment, binaries and paths. (line 1, col 8)",
+    )
+    expect((await error("return setTimeout")).message).toBe(
+      "ReferenceError: 'setTimeout' is unavailable: Code Mode has no timers or sleep. Await your calls, and do waiting in the `shell` tool. (line 1, col 8)",
+    )
+  })
+
+  test("leaves ordinary unknown identifiers unchanged", async () => {
+    const failure = await error("return myTypo")
+    expect(failure).toEqual({
+      kind: "ExecutionFailure",
+      message: "ReferenceError: Unknown identifier 'myTypo'. (line 1, col 8)",
+      location: { line: 1, column: 8 },
+      suggestions: undefined,
+    })
+  })
+
+  test("does not classify inherited object property names as unavailable globals", async () => {
+    for (const name of ["constructor", "toString"]) {
+      expect((await error(`return ${name}`)).message).toBe(`ReferenceError: Unknown identifier '${name}'. (line 1, col 8)`)
+    }
+  })
+
+  test("preserves the identifier location", async () => {
+    const unavailable = await error("return process")
+    const typo = await error("return myTypo")
+    expect(unavailable.location).toEqual(typo.location)
+  })
+
+  test("require reports unavailable host-provided modules clearly", async () => {
+    const failure = await error('const fs = require("fs"); return fs')
+    expect(failure.message).toBe(
+      'Error: Cannot import "fs": it isn\'t available in Code Mode, which can\'t load packages or files. Use the provided globals, or call tools through `tools`. (line 1, col 12)',
+    )
+  })
+
+  test("typeof a missing host global is still undefined", async () => {
+    expect(await value('return typeof process === "undefined"')).toBe(true)
+  })
+})
+
 describe("host errors escaping built-ins", () => {
   test("become the same-named program error", async () => {
     expect(

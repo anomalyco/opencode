@@ -13,8 +13,9 @@ The idea of code mode was originally introduced by Cloudflare. See
 
 ## How it differs from JavaScript
 
-- **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
-  globals the host adds through extensions. Timers, `process`, filesystem access, packages, and `export` are
+- **Only supported APIs are available.** Programs can use `tools`, `search`, `fetch`, supported JavaScript built-ins,
+  and globals the host adds through extensions. `require` and imports can load host-provided globals by module name;
+  arbitrary packages and files, direct filesystem access, timers, `process`, browser APIs, and dynamic evaluation are
   unavailable.
 - **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.

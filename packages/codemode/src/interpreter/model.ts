@@ -54,8 +54,9 @@ export class PendingThrow {
   }
 }
 
-const failure = (type: ErrorType, kind?: DiagnosticKind) => (message: string, node?: AstNode) =>
-  new PendingThrow(type, message, node, kind)
+const failure =
+  (type: ErrorType, kind?: DiagnosticKind) => (message: string, node?: AstNode, suggestions?: ReadonlyArray<string>) =>
+    new PendingThrow(type, message, node, kind, suggestions)
 
 export const typeError = failure("TypeError")
 export const invalidData = failure("TypeError", "InvalidDataValue")
