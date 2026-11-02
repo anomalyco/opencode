@@ -216,22 +216,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     onChanged: () => changed[key](),
   })
 
-  // A 2026-07-28 server asks for input in the result of the request that needs it, and the SDK answers
-  // through the one connection-wide handler. Each round it reports progress to that request's
-  // `onprogress`, then dispatches the input requests, in one synchronous run. A request with its own
-  // handler claims that run, so its elicitations reach its caller; the claim ends once the run does.
-  let caller: ElicitationHandler["create"] | undefined
-  const claimed = (input: PerRequest) => {
-    const create = input.elicitation
-    if (!create) return {}
-    return {
-      onprogress: () => {
-        caller = create
-        queueMicrotask(() => {
-          caller = undefined
-        })
-      },
-    }
+  // Requests that bring their own elicitation handler, keyed by the signal each passes to the SDK.
+  const callers = new WeakMap<AbortSignal, ElicitationHandler["create"]>()
+  const claim = (signal: AbortSignal, input: PerRequest) => {
+    if (input.elicitation) callers.set(signal, input.elicitation)
+    return signal
   }
 
   // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
@@ -284,10 +273,15 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
     if (elicitation) {
-      // Read before anything awaits: a request's claim lasts only for the synchronous run that dispatches it.
-      client.setRequestHandler("elicitation/create", (request, ctx) =>
-        runPromise((caller ?? elicitation.create)({ server, params: request.params, signal: ctx.mcpReq.signal })),
-      )
+      // A 2026-07-28 server asks for input in the result of the request that needs it. Our SDK patch puts
+      // that request's options on the context (`mcpReq.origin`, see patches/@modelcontextprotocol%2Fclient),
+      // so its signal finds the handler it brought. Anything else goes to the connection's handler.
+      client.setRequestHandler("elicitation/create", (request, ctx) => {
+        const origin = (ctx.mcpReq as { readonly origin?: { readonly options?: { readonly signal?: AbortSignal } } })
+          .origin?.options?.signal
+        const create = (origin && callers.get(origin)) ?? elicitation.create
+        return runPromise(create({ server, params: request.params, signal: ctx.mcpReq.signal }))
+      })
       client.setNotificationHandler("notifications/elicitation/complete", (notification) =>
         runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
@@ -496,14 +490,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       readResource: (input) => {
         if (!advertised("resources")) return Effect.succeed(undefined)
         return request("read MCP resource", (signal) =>
-          client.readResource({ uri: input.uri }, { signal, timeout: execution, ...claimed(input) }),
+          client.readResource({ uri: input.uri }, { signal: claim(signal, input), timeout: execution }),
         )
       },
       prompt: (input) =>
         request("get MCP prompt", (signal) =>
           client.getPrompt(
             { name: input.name, arguments: input.args ?? {} },
-            { signal, timeout: execution, ...claimed(input) },
+            { signal: claim(signal, input), timeout: execution },
           ),
         ),
       callTool: (input) => {
@@ -516,12 +510,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
               },
               {
-                signal,
+                signal: claim(signal, input),
                 timeout: execution,
                 // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
                 // The SDK timeout does not reset on progress; execution is the hard wall.
                 onprogress: () => {},
-                ...claimed(input),
                 // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
                 // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
                 // a string `$schema`); ours keep the server's values.
