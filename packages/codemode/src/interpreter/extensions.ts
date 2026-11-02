@@ -185,7 +185,8 @@ export const extensionGlobals = <R>(
           )
         if (before) yield ctx.runner.blocking(before)
         const host = callHost<R>(value, args)
-        if (host.async) return pending(settle(host.effect), site)
+        // A synchronous global's Effect runs to completion before the call returns, like `readFileSync`.
+        if (host.result === "promise") return pending(settle(host.effect), site)
         return (yield ctx.runner.blocking(settle(host.effect))) as Value
       },
     )
@@ -216,20 +217,17 @@ export const extensionGlobals = <R>(
   )
 }
 
-/**
- * Calls a host function and describes what the program waits on. A returned Effect or Promise settles later; a
- * returned value or a throw settles now.
- */
+/** Calls a host function and describes what it returned: an Effect, a Promise, or a value (or a throw) as an Effect. */
 const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
   try {
     const result: unknown = value.apply(undefined, args)
     // Extension.Services adds an Effect global's requirements to R.
-    if (Effect.isEffect(result)) return { async: true, effect: result as Effect.Effect<unknown, unknown, R> }
+    if (Effect.isEffect(result)) return { result: "effect", effect: result as Effect.Effect<unknown, unknown, R> }
     if (result instanceof Promise)
-      return { async: true, effect: Effect.tryPromise({ try: () => result, catch: (reason) => reason }) }
-    return { async: false, effect: Effect.succeed(result) }
+      return { result: "promise", effect: Effect.tryPromise({ try: () => result, catch: (reason) => reason }) }
+    return { result: "value", effect: Effect.succeed(result) }
   } catch (reason) {
-    return { async: false, effect: Effect.fail(reason) }
+    return { result: "value", effect: Effect.fail(reason) }
   }
 }
 
