@@ -400,7 +400,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .limit(1)
             .get()
             .pipe(Effect.orDie)
-          if (!row) return
+          if (!row || ("completed" in row.data.time && row.data.time.completed)) return
           const message = yield* decodeAssistantRow(row)
           return message.type === "assistant" && !message.time.completed ? message : undefined
         })
