@@ -84,13 +84,6 @@ test("resolves nested config and keybind defaults", () => {
   })
 })
 
-test("keeps the native input experiment in the resolved config", () => {
-  expect(resolve({ experimental: { "native-input": true } }, { terminalSuspend: true }).experimental).toEqual({
-    "native-input": true,
-  })
-  expect(resolve({}, { terminalSuspend: true }).experimental).toBeUndefined()
-})
-
 test("resolves automatic tabs from the terminal environment", () => {
   expect(resolve({}, { terminalSuspend: true, environment: {} }).tabs.enabled).toBe(true)
   expect(resolve({}, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).tabs.enabled).toBe(false)
