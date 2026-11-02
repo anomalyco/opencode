@@ -24,7 +24,7 @@ for (const [id, enabled] of [
       const request = ai.request({
         model: AnthropicMessages.route.model({ id }),
         prompt: "Hello",
-        http: { headers: { "anthropic-beta": "existing-beta" } },
+        headers: { "anthropic-beta": "existing-beta" },
       })
       const compiled = yield* compileRequest(request)
       const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)

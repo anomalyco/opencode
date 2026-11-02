@@ -3,7 +3,14 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+  type BaseRequest,
+} from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -66,31 +73,24 @@ const ImageRequestSchema = Schema.Struct({
   aspect: Schema.optional(ImageAspectRatio),
   resolution: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized image request, the plain object `ai.image.request(...)` returns. */
-export interface ImageRequest<Model extends ImageModel = ImageModel> {
-  readonly model: Model
+export interface ImageRequest<Model extends ImageModel = ImageModel>
+  extends BaseRequest<Model, ImageModelOptions<Model>> {
   readonly prompt: string
   /** Edit sources or style/subject references, in order. */
   readonly images?: ReadonlyArray<Media.Asset>
   readonly n?: number
   readonly aspect?: ImageAspectRatio
   readonly resolution?: ImageResolution
-  readonly providerOptions?: ImageModelOptions<Model>
-  readonly http?: HttpOptions
 }
 
 export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ? Options : never
 
 /** Input accepted by `ai.image.request`, `generate`, `stream` and `start`. An `ImageRequest` is also a valid input. */
-export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
-  ImageRequest<Model>,
-  "providerOptions" | "http"
-> & {
+export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<ImageRequest<Model>, "providerOptions"> & {
   readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +164,6 @@ const collectResponse = (events: ReadonlyArray<ImageEvent>): Effect.Effect<Image
 /** Normalize image request input into a plain `ImageRequest`. */
 export const request = <const Model extends ImageModel>(input: ImageRequestInput<Model>): ImageRequest<Model> => ({
   ...input,
-  http: HttpOptions.make(input.http),
 })
 
 const validate = Schema.decodeUnknownSync(ImageRequestSchema)

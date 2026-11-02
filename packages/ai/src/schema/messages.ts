@@ -2,10 +2,10 @@ import { Option, Schema } from "effect"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
+  type BaseRequest,
   CacheHint,
   type CachePolicy,
   type GenerationOptions,
-  type HttpOptions,
   JsonSchema,
   type LanguageModel,
   type LanguageModelProviderOptions,
@@ -397,16 +397,14 @@ export namespace ToolChoice {
  * A normalized text request, the plain object `ai.request(...)` returns. Edit it with a spread, such as
  * `{ ...request, messages: [...request.messages, next] }`, or pass the edited object back to `ai.request`.
  */
-export interface LLMRequest<Model extends LanguageModel = LanguageModel> {
+export interface LLMRequest<Model extends LanguageModel = LanguageModel>
+  extends BaseRequest<Model, LanguageModelProviderOptions<Model>> {
   readonly id?: string
-  readonly model: Model
   readonly system: ReadonlyArray<SystemPart>
   readonly messages: ReadonlyArray<Message>
   readonly tools: ReadonlyArray<ToolEntry>
   readonly toolChoice?: ToolChoice
   readonly generation?: GenerationOptions
-  readonly providerOptions?: LanguageModelProviderOptions<Model>
-  readonly http?: HttpOptions
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string

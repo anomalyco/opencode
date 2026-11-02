@@ -116,7 +116,7 @@ for (const model of [
           const request = ai.request({
             model,
             prompt: "hello",
-            http: { headers: { "anthropic-beta": "existing-beta" } },
+            headers: { "anthropic-beta": "existing-beta" },
             providerOptions: {
               contextManagement: {
                 edits: [

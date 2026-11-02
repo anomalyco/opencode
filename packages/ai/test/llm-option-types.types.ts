@@ -137,3 +137,11 @@ AI.ai.stream({ model, prompt: "Hello", messages: [] })
 // @ts-expect-error Promise loop takes `prompt` or `messages`, not both.
 AI.ai.loop({ model, prompt: "Hello", messages: [], tools: [] })
 AI.ai.loop({ model, messages: [], tools: [] })
+// Transport fields sit at the top level; `http` keeps only the rare wire overrides.
+ai.request({ model, prompt: "Hello", headers: { "x-trace": "1" }, timeout: 30_000, fetch: globalThis.fetch })
+ai.request({ model, prompt: "Hello", timeout: { total: false, headers: 1_000, chunk: 2_000 } })
+ai.request({ model, prompt: "Hello", http: { query: { trace: "1" }, body: { extra: true }, encoding: "gzip" } })
+// @ts-expect-error Headers moved out of `http`.
+ai.request({ model, prompt: "Hello", http: { headers: { "x-trace": "1" } } })
+// @ts-expect-error Timeouts moved out of `http`.
+ai.request({ model, prompt: "Hello", http: { headerTimeout: 1_000 } })

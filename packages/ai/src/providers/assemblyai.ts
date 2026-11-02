@@ -12,7 +12,7 @@ export type Config = ProviderAuthOption<"optional"> & {
   /** `https://api.eu.assemblyai.com` for the EU region. */
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
+  readonly http?: HttpOptions
 }
 
 // The key is the whole `authorization` value, without a scheme.
