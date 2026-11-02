@@ -5,7 +5,13 @@ import type { Provider } from "../../provider.js"
 import { ProviderRefresh } from "./refresh.js"
 
 /** Resolves the integration's active connection to its credential, or undefined when it cannot be resolved. */
-export const activeCredential = Effect.fnUntraced(function* (ctx: Context, integrationID: string) {
+export const activeCredential = Effect.fnUntraced(function* (
+  ctx: Context,
+  integrationID: string,
+): Effect.fn.Return<{
+  readonly connection: Effect.Success<ReturnType<Context["integration"]["connection"]["active"]>>
+  readonly credential: Credential.Value | undefined
+}> {
   const connection = yield* ctx.integration.connection.active(integrationID)
   const credential = connection
     ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
