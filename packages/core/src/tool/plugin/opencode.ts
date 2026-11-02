@@ -7,6 +7,7 @@ import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
+import { toolFailure } from "../runtime.js"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
@@ -216,11 +217,7 @@ export const Plugin = {
                 content: `Removed worktree ${target.absolute}.`,
               }
             }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
-              ),
+              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
             ),
         })
         draft.add({
