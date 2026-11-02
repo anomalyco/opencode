@@ -1000,11 +1000,19 @@ test("server groups can be reordered by dragging their headers", async ({ page }
   await page.mouse.move(sessionBox.x + sessionBox.width / 2, sessionBox.y + sessionBox.height / 2, { steps: 12 })
   await expect(dragSource).toHaveAttribute("data-dragging", "true")
   await expect(page.locator('[data-component="session-dropzone"]')).toBeHidden()
-  await page.mouse.up()
 
-  await dragSource.dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`))
+  const target = page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`)
+  const targetBox = await target.boundingBox()
+
+  if (!targetBox) throw new Error("drop target has no bounding box")
+
+  // Groups reorder on dragover, before the pointer is released.
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  await target.dispatchEvent("dragover", { dataTransfer, clientY: targetBox.y + 2 })
+  await dataTransfer.dispose()
 
   await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
+  await page.mouse.up()
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1014,6 +1022,11 @@ test("server groups can be reordered by dragging their headers", async ({ page }
       }),
     )
     .toEqual([REMOTE_SERVER, SERVER])
+
+  await page
+    .locator(`[data-action="tab-server-group-drag"][data-server="${SERVER}"]`)
+    .dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`))
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
 })
 
 test("a remote tab stays busy while a child session runs", async ({ page }) => {

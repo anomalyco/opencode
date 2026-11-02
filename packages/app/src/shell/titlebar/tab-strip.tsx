@@ -438,11 +438,7 @@ export function TitlebarTabStrip(props: {
   const [collapsed, setCollapsed] = createStore<Record<string, boolean>>({})
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
 
-  const [drag, setDrag] = createStore<{
-    server?: ServerConnection.Key
-    over?: ServerConnection.Key
-    after: boolean
-  }>({ after: false })
+  const [drag, setDrag] = createStore<{ server?: ServerConnection.Key }>({})
 
   const groupTabLimit = 3
 
@@ -686,7 +682,6 @@ export function TitlebarTabStrip(props: {
         ghost.removeAttribute("data-slot")
         ghost.removeAttribute("data-action")
         ghost.removeAttribute("data-server")
-        ghost.removeAttribute("data-drop")
         ghost.dataset.dragging = "true"
         ghost.setAttribute("aria-hidden", "true")
         ghost.style.position = "fixed"
@@ -699,7 +694,7 @@ export function TitlebarTabStrip(props: {
       }
     }
 
-    setDrag({ server, over: undefined, after: false })
+    setDrag({ server })
   }
 
   function dragOverGroup(event: DragEvent, server: ServerConnection.Key, element: HTMLElement) {
@@ -709,37 +704,33 @@ export function TitlebarTabStrip(props: {
     event.stopPropagation()
 
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move"
-    const rect = element.getBoundingClientRect()
-    const after = event.clientY > rect.top + rect.height / 2
-
-    if (drag.over !== server || drag.after !== after) setDrag({ over: server, after })
-  }
-
-  function dropGroup(event: DragEvent, target: ServerConnection.Key) {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const dragged = drag.server
-    const after = drag.after
-    setDrag({ server: undefined, over: undefined, after: false })
-
-    if (!dragged || dragged === target) return
 
     const order = serverOrder()
 
-    if (!order.includes(dragged)) return
+    if (!order.includes(drag.server)) return
 
-    const next = order.filter((server) => server !== dragged)
-    const index = next.indexOf(target)
+    const rect = element.getBoundingClientRect()
+    const after = event.clientY > rect.top + rect.height / 2
+    const next = order.filter((item) => item !== drag.server)
+    const index = next.indexOf(server)
 
     if (index === -1) return
 
-    next.splice(after ? index + 1 : index, 0, dragged)
+    next.splice(after ? index + 1 : index, 0, drag.server)
+
+    if (next.every((item, index) => item === order[index])) return
+
     settings.appearance.setTabServerOrder(next)
   }
 
+  function dropGroup(event: DragEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    setDrag({})
+  }
+
   function endGroupDrag() {
-    setDrag({ server: undefined, over: undefined, after: false })
+    setDrag({})
   }
 
   return (
@@ -905,14 +896,13 @@ export function TitlebarTabStrip(props: {
                             data-server={tab.server}
                             data-action="tab-server-group-drag"
                             data-dragging={drag.server === tab.server ? "true" : undefined}
-                            data-drop={drag.over === tab.server && drag.server !== tab.server ? "true" : undefined}
                             draggable={true}
                             title={language.t("session.tab.serverGroup.drag", { server: title() })}
-                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent data-[drop=true]:bg-v2-overlay-simple-overlay-hover active:cursor-grabbing"
+                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent active:cursor-grabbing"
                             onDragStart={(event) => startGroupDrag(event, tab.server, event.currentTarget)}
                             onDragEnd={endGroupDrag}
                             onDragOver={(event) => dragOverGroup(event, tab.server, event.currentTarget)}
-                            onDrop={(event) => dropGroup(event, tab.server)}
+                            onDrop={(event) => dropGroup(event)}
                           >
                             <bdi class="min-w-0 truncate">{title()}</bdi>
                             <div class="ms-auto flex shrink-0 items-center gap-0.5">
@@ -944,13 +934,6 @@ export function TitlebarTabStrip(props: {
                                 />
                               </button>
                             </div>
-                            <Show when={drag.server && drag.over === tab.server && drag.server !== tab.server}>
-                              <span class="pointer-events-none absolute inset-0 rounded-[6px] bg-v2-icon-icon-accent/15 ring-1 ring-inset ring-v2-icon-icon-accent" />
-                              <span
-                                class="pointer-events-none absolute inset-x-1 h-0.5 rounded bg-v2-icon-icon-accent"
-                                classList={{ "top-0": !drag.after, "bottom-0": drag.after }}
-                              />
-                            </Show>
                           </div>
                         )
                       }}
