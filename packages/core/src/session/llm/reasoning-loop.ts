@@ -1,30 +1,15 @@
 import { deflateSync } from "node:zlib"
 
 // Lead line of the synthetic user turn injected when the model's output
-// collapses into an uncontrolled loop (the full text is `loopNudgeText`: the
-// step's work from its start to the loop onset, then an instruction to ACT;
-// LD-05c, onset cut LD-05d). Settled loops often do useful work, so the
-// session must continue.
+// collapses into an uncontrolled loop. The full text is `loopNudgeText`: the
+// step's work from its start to the loop onset, then an instruction to act.
+// Settled loops often do useful work, so the session must continue.
 export const REASONING_LOOP_NUDGE = "Your previous step entered a repetition loop and was stopped."
 
 /**
- * The LD-05b thresholds (3rd copy / 4 copies >= 512 chars / 8 lines), used
- * only when a step ends by running out of output budget (`length`): a loop
- * that reached the cap did not end on its own, so it is handled as a loop
- * (pre-loop work pasted back) even if it never reached the patient mid-stream
- * thresholds (LD-05d).
- */
-export const LOOP_AT_CAP: ReasoningLoopOptions = {
-  minSeen: 2,
-  periodCopies: 4,
-  periodMinSpan: 512,
-  lineRepeats: 8,
-}
-
-/**
- * Kill switch for the exact-repeat rule (LD-05, 2026-10-30). Default ON;
- * `OPENCODE_LOOP_REPEAT_DETECT=0` (or `false`/`off`) turns the repeat rule off
- * for new sessions. The older tight-loop rule is unaffected.
+ * Kill switch for the exact-repeat rule. Default ON; `OPENCODE_LOOP_REPEAT_DETECT=0`
+ * (or `false`/`off`/`no`) turns the repeat rule off for new sessions. The
+ * tight-loop rule is unaffected.
  */
 export function repeatRuleEnabled(env: Record<string, string | undefined> = process.env) {
   const value = env.OPENCODE_LOOP_REPEAT_DETECT?.trim().toLowerCase()
@@ -32,9 +17,9 @@ export function repeatRuleEnabled(env: Record<string, string | undefined> = proc
 }
 
 /**
- * Kill switch for the fast short-cycle rules (LD-05b, 2026-10-30): `period`
- * and `line`. Default ON; `OPENCODE_LOOP_FAST_DETECT=0` (or `false`/`off`/`no`)
- * turns them off for new processes.
+ * Kill switch for the fast short-cycle rules (`period` and `line`). Default ON;
+ * `OPENCODE_LOOP_FAST_DETECT=0` (or `false`/`off`/`no`) turns them off for new
+ * processes.
  */
 export function fastRuleEnabled(env: Record<string, string | undefined> = process.env) {
   const value = env.OPENCODE_LOOP_FAST_DETECT?.trim().toLowerCase()
@@ -43,26 +28,7 @@ export function fastRuleEnabled(env: Record<string, string | undefined> = proces
 
 export type ReasoningLoopRule = "repeat" | "tight" | "period" | "line"
 
-export type ReasoningLoopMetrics = {
-  /** Chars fed so far (reasoning + text of the current step). */
-  chars: number
-  /** Consecutive positions whose shingle was already seen >= `minSeen` times. */
-  run: number
-  /** Positions (since the start) whose shingle was a >= `minSeen`-th repeat. */
-  seen: number
-  /** Which rule fired, if any. */
-  rule?: ReasoningLoopRule
-  /** Stream char (reasoning + text of the step) at which the rule fired. */
-  fireAt?: number
-  /** Repeating unit in chars, when the firing rule knows it (period/line). */
-  period?: number
-  /** Tight-loop window metrics from the last tight-rule evaluation, if any. */
-  zlib?: number
-  duplicateLine?: number
-  unique5Gram?: number
-}
-
-export type TightLoopMetrics = {
+type TightLoopMetrics = {
   chars: number
   zlib: number
   duplicateLine: number
@@ -93,7 +59,7 @@ export type ReasoningLoopOptions = {
   lineRepeats?: number
   /** ...each at least this long (after trimming trailing whitespace). */
   lineMinChars?: number
-  /** Tight-loop rule (the 2026-10-25 detector) on/off. */
+  /** Tight-loop rule on/off. */
   tight?: boolean
   /** Rolling window of text kept for the tight rule. */
   window?: number
@@ -109,13 +75,10 @@ export type ReasoningLoopOptions = {
   unique5GramMax?: number
 }
 
-// LD-05d (Jonathan 2026-10-30: "two loops or three loops may be too soon ...
-// if the loop ends, we want the good stuff"): the mid-stream rules wait for
-// 8 copies. From v2/cuteafd/loop-patience-replay-2026-10-30.py (dgxraid): on
-// replica-d the longest self-ending repeat reached 4 copies (C5Kqbw, 4,372
-// verbatim chars at copy 4; nothing past copy 4 runs over 640 chars), the
-// longest self-ending short cycle ran 443 chars; 8 copies / 1,024 chars is
-// >= 2x both.
+// A loop that ends on its own is usually the model correcting itself, so the
+// mid-stream rules wait for 8 copies: a self-ending repeat rarely reaches that
+// many, while an uncontrolled one keeps going. The tight rule is a
+// whitespace- and line-order-tolerant fallback for loops the exact rules miss.
 const DEFAULTS = {
   shingle: 110,
   runChars: 1800,
@@ -150,8 +113,8 @@ function powMod(base: number, exp: number, mod: number) {
   return out
 }
 
-/** The 2026-10-25 tight-loop metrics (zlib, duplicate lines, unique 5-grams). */
-export function reasoningLoopMetrics(text: string): TightLoopMetrics {
+/** Compression, duplicate-line and unique-5-gram metrics for the tight rule. */
+function reasoningLoopMetrics(text: string): TightLoopMetrics {
   const chars = text.length
   if (chars === 0) return { chars: 0, zlib: 1, duplicateLine: 0, unique5Gram: 1 }
 
@@ -179,21 +142,24 @@ export function reasoningLoopMetrics(text: string): TightLoopMetrics {
 /**
  * Streaming reasoning/text loop detector. Two rules, either fires:
  *
- * - repeat (LD-05, the engine's R(32,512,N) in chars): a 110-char shingle is
- *   slid one char at a time with a rolling hash; a position is "seen" when the
- *   same shingle already occurred >= 7 times earlier in this step (LD-05d; was
- *   2); fire when 1,800 consecutive positions are seen, i.e. the last ~1,900
- *   chars are the eighth-or-later verbatim copy. O(1) per char. Catches the
- *   paragraph-scale loops (1-15k-char period) the tight rule misses.
- * - tight (2026-10-25): zlib < 0.05 AND duplicate-line > 0.9 AND unique-5-gram
- *   < 0.3 over a 6,000-char window. Kept because it is whitespace/line-order
- *   tolerant, which the exact rule is not.
- * - period (LD-05b, idea from MiaAI's DS41 loop_abort, own code): the tail is
- *   8 identical copies of a 1..880-char unit AND the copies after the first
- *   span >= 1,024 chars (LD-05d; was 4 / 512). Catches SHORT cycles within
- *   ~8k chars instead of ~10k+. O(periodMax) per char.
- * - line (LD-05b): the last 16 complete non-empty lines are identical and
- *   >= 32 chars (trailing whitespace ignored; LD-05d, was 8).
+ * - repeat: a 110-char shingle is slid one char at a time with a rolling hash;
+ *   a position is "seen" when the same shingle already occurred >= 7 times
+ *   earlier in this step. Fire when 1,800 consecutive positions are seen, i.e.
+ *   the last ~1,900 chars are the eighth-or-later verbatim copy. O(1) per char.
+ *   Catches the paragraph-scale loops (1-15k-char period) the tight rule misses.
+ * - tight: zlib < 0.05 AND duplicate-line > 0.9 AND unique-5-gram < 0.3 over a
+ *   6,000-char window. Kept because it is whitespace/line-order tolerant, which
+ *   the exact rule is not.
+ * - period: the tail is 8 identical copies of a 1..880-char unit AND the copies
+ *   after the first span >= 1,024 chars. Catches SHORT cycles within ~8k chars
+ *   instead of ~10k+. O(periodMax) per char.
+ * - line: the last 16 complete non-empty lines are identical and >= 32 chars
+ *   (trailing whitespace ignored).
+ *
+ * The period and line rules only look at reasoning deltas: repeated lines and
+ * short cycles are common in answer text (tables, templates, generated lists),
+ * so they must not cut a legitimate answer. The repeat and tight rules look at
+ * both reasoning and text.
  *
  * The caller treats a hit as a SOFT interrupt (nudge + continue).
  */
@@ -384,14 +350,18 @@ export function reasoningLoopDetector(options: ReasoningLoopOptions = {}) {
   }
 
   return {
-    /** Feed the next reasoning/text delta. Returns true exactly once, on the first hit. */
-    feed(delta: string): boolean {
+    /**
+     * Feed the next reasoning or text delta. Returns true exactly once, on the
+     * first hit. `source` selects which rules see the delta: the period and
+     * line rules only look at reasoning.
+     */
+    feed(delta: string, source: "reasoning" | "text" = "reasoning"): boolean {
       if (fired || !delta) return false
       if (repeatOn && pushRepeat(delta)) {
         rule = "repeat"
         fireAt = chars
       } else if (!repeatOn) chars += delta.length
-      if (fastOn) {
+      if (fastOn && source === "reasoning") {
         const hit = pushFast(delta)
         if (hit && (fireAt === undefined || fastChars <= fireAt)) {
           rule = hit
@@ -436,19 +406,6 @@ export function reasoningLoopDetector(options: ReasoningLoopOptions = {}) {
       fireAt = undefined
       period = undefined
     },
-    metrics(): ReasoningLoopMetrics {
-      return {
-        chars,
-        run,
-        seen,
-        ...(rule ? { rule } : {}),
-        ...(fireAt !== undefined ? { fireAt } : {}),
-        ...(period !== undefined ? { period } : {}),
-        ...(tightLast
-          ? { zlib: tightLast.zlib, duplicateLine: tightLast.duplicateLine, unique5Gram: tightLast.unique5Gram }
-          : {}),
-      }
-    },
     get fired() {
       return fired
     },
@@ -463,13 +420,13 @@ export function reasoningLoopDetector(options: ReasoningLoopOptions = {}) {
 }
 
 /**
- * The verbatim periodic tail of a looped stream (LD-05b): with unit `p`, every
- * char in `[keep, text.length)` satisfies text[j] === text[j - p], and the scan
- * stops where that breaks, so `[keep - unit, text.length)` is the maximal
- * periodic region. When the unit is unknown (repeat/tight rules) it is the
- * distance to the previous occurrence of the last `probe` chars; the scan is
- * repeated (at most `rounds` times) to peel off earlier copies whose
- * boundaries jittered. `unit` is 0 when nothing repeats.
+ * The verbatim periodic tail of a looped stream: with unit `p`, every char in
+ * `[keep, text.length)` satisfies text[j] === text[j - p], and the scan stops
+ * where that breaks, so `[keep - unit, text.length)` is the maximal periodic
+ * region. When the unit is unknown (repeat/tight rules) it is the distance to
+ * the previous occurrence of the last `probe` chars; the scan is repeated (at
+ * most `rounds` times) to peel off earlier copies whose boundaries jittered.
+ * `unit` is 0 when nothing repeats.
  */
 export function loopCut(text: string, period?: number, probe = 110, rounds = 8) {
   let keep = text.length
@@ -496,13 +453,13 @@ export function loopCut(text: string, period?: number, probe = 110, rounds = 8) 
   return { keep, unit: Math.min(last, keep) }
 }
 
-// Walk left from the verbatim onset over text that still belongs to the loop
-// (LD-05d): 32-char blocks that occur somewhere in the first two copies of the
-// unit. An earlier copy that differs (a changed word, number or sentence, an
-// inserted char, a partial first copy) leaves gaps of non-matching blocks; a
-// gap of up to max(2, unit/256) blocks (~1/8 of the unit) is bridged when
-// two matching blocks in a row lie past it. A longer gap is pre-loop text.
-// The boundary is then refined to the char.
+// Walk left from the verbatim onset over text that still belongs to the loop:
+// 32-char blocks that occur somewhere in the first two copies of the unit. An
+// earlier copy that differs (a changed word, number or sentence, an inserted
+// char, a partial first copy) leaves gaps of non-matching blocks; a gap of up
+// to max(2, unit/256) blocks (~1/8 of the unit) is bridged when two matching
+// blocks in a row lie past it. A longer gap is pre-loop text. The boundary is
+// then refined to the char.
 function loopStart(text: string, onset: number, unit: number) {
   const A = 32
   if (unit < A || onset < A) return onset
@@ -522,14 +479,13 @@ function loopStart(text: string, onset: number, unit: number) {
 }
 
 /**
- * Where the loop STARTED (LD-05d, Jonathan 2026-10-30: "anything pasted back
- * should cut off the looping section and just keep what is before it"): the
- * start of the FIRST copy of the repeated unit. Begins at the maximal verbatim
- * periodic region (`loopCut`, so a partial first copy that matches the unit's
- * tail is included), then walks back over earlier copies that differ slightly
- * (`loopStart`). A split a few chars before a line start (the text before
- * the loop ended like the unit does, e.g. ".\n") moves to that line start, so
- * no pre-loop word is cut. Returns `text.length` when nothing repeats.
+ * Where the loop STARTED: the start of the FIRST copy of the repeated unit.
+ * Begins at the maximal verbatim periodic region (`loopCut`, so a partial
+ * first copy that matches the unit's tail is included), then walks back over
+ * earlier copies that differ slightly (`loopStart`). A split a few chars
+ * before a line start (the text before the loop ended like the unit does, e.g.
+ * ".\n") moves to that line start, so no pre-loop word is cut. Returns
+ * `text.length` when nothing repeats.
  */
 export function loopOnset(text: string, period?: number, probe = 110, rounds = 8) {
   const cut = loopCut(text, period, probe, rounds)
@@ -546,21 +502,11 @@ export function loopOnset(text: string, period?: number, probe = 110, rounds = 8
 }
 
 /**
- * How many leading chars of a looped stream to keep in the transcript
- * (LD-05d): everything before the loop onset, no copy of the repeated unit.
- * `text.length` means "nothing to cut".
- */
-export function loopKeep(text: string, period?: number, probe = 110, rounds = 8) {
-  return loopOnset(text, period, probe, rounds)
-}
-
-/**
- * Loop-recovery nudge (LD-05c, Jonathan 2026-10-30: "pasting that information
- * in and saying it looped will let it get on the task and next step"). The
- * nudge carries ONLY the step's work from its start to the loop onset (LD-05d:
- * no copy of the repeated unit), so the next step starts from that work instead
- * of re-deriving it. Bounded by LOOP_NUDGE_MAX_CHARS: over it, the work keeps
- * a head (LOOP_NUDGE_HEAD share) + tail with the elided middle stated.
+ * Loop-recovery nudge. The nudge carries ONLY the step's work from its start
+ * to the loop onset (no copy of the repeated unit), so the next step starts
+ * from that work instead of re-deriving it. Bounded by LOOP_NUDGE_MAX_CHARS:
+ * over it, the work keeps a head (LOOP_NUDGE_HEAD share) + tail with the
+ * elided middle stated.
  */
 export const LOOP_NUDGE_MAX_CHARS = 32_000
 export const LOOP_NUDGE_HEAD = 1 / 3
@@ -581,7 +527,7 @@ const elide = (text: string, max: number, head: number) => {
   }
 }
 
-export function loopNudgeText(work: { preLoop: string }, max = LOOP_NUDGE_MAX_CHARS) {
+export function loopNudgeText(work: { preLoop: string; hasPriorWork?: boolean }, max = LOOP_NUDGE_MAX_CHARS) {
   const pre = elide(work.preLoop.trim() ? work.preLoop : "", max, LOOP_NUDGE_HEAD)
   const lines = [REASONING_LOOP_NUDGE]
   if (pre.text) {
@@ -592,7 +538,8 @@ export function loopNudgeText(work: { preLoop: string }, max = LOOP_NUDGE_MAX_CH
       pre.text,
       "</work-before-loop>",
     )
-  } else lines.push("You produced no work before the loop started.")
+  } else if (work.hasPriorWork) lines.push("The work you produced before the loop is in your previous message.")
+  else lines.push("You produced no work before the loop started.")
   lines.push(
     "",
     "The repeated part was removed. Do not start it again; continue the task from here with the next concrete step (make the tool call / write the answer).",

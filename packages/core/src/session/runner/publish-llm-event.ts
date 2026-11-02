@@ -225,7 +225,23 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* publishDelta(id)
       }
     })
-    return { start, append, end, flush, publishPending, has: (id: string) => chunks.has(id) }
+    /** The open fragment's id, when the helper allows only one at a time. */
+    const open = () => (single ? chunks.keys().next().value : undefined)
+    /** The open fragment's full value, including unpublished deltas. */
+    const value = (id: string) => chunks.get(id)?.values.join("")
+    /** End the open fragment with only its first `keep` chars. */
+    const trimTo = Effect.fnUntraced(function* (id: string, keep: number) {
+      const current = chunks.get(id)
+      if (!current) return
+      const full = current.values.join("")
+      if (keep >= full.length) return
+      if (current.timer) yield* Fiber.interrupt(current.timer)
+      current.pending = ""
+      current.values.length = 0
+      current.values.push(full.slice(0, keep))
+      yield* end(id)
+    })
+    return { start, append, end, flush, publishPending, has: (id: string) => chunks.has(id), open, value, trimTo }
   }
 
   const contentFragments = (name: string, events: typeof SessionEvent.Text | typeof SessionEvent.Reasoning) =>
@@ -587,6 +603,16 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     publishStepFailure,
     failUnsettledTools,
     failIncompleteTools,
+    /** The open text part's full value, including unpublished deltas. */
+    textValue: () => {
+      const id = text.open()
+      return id === undefined ? undefined : text.value(id)
+    },
+    /** End the open text part with only its first `keep` chars. */
+    trimText: (keep: number) => {
+      const id = text.open()
+      return id === undefined ? Effect.void : text.trimTo(id, keep)
+    },
     hasStarted: () => stepStarted,
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({

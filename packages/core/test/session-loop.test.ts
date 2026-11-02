@@ -16,7 +16,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerLoopState } from "@opencode/core/session/runner/loop-state"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
-import { SessionTable } from "@opencode/core/session/sql"
+import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
@@ -184,6 +184,37 @@ it.effect("interrupts a reasoning loop and returns a nudge carrying the pre-loop
     expect(result._tag).toBe("LoopNudge")
     expect(result._tag === "LoopNudge" && result.text).toContain("entered a repetition loop")
     expect(result._tag === "LoopNudge" && result.text).not.toContain(LOOP_LINE.repeat(2))
+  }),
+)
+
+it.effect("trims the looped text part so the next request does not replay it", () =>
+  Effect.gen(function* () {
+    const s = yield* setup
+    const pre = "Plan: add the flag and one test.\n"
+    const result = yield* s.attempt(
+      TestLLM.stop(
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: pre }),
+        ...Array.from({ length: 200 }, () => LLMEvent.textDelta({ id: "text-1", text: LOOP_LINE })),
+        LLMEvent.textEnd({ id: "text-1" }),
+      ),
+    )
+    expect(result._tag).toBe("LoopNudge")
+    const messages = yield* s.db
+      .select({ type: SessionMessageTable.type, data: SessionMessageTable.data })
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.session_id, s.sessionID))
+      .all()
+    const text = messages
+      .filter((message) => message.type === "assistant")
+      .flatMap(
+        (message) =>
+          (message.data as unknown as { content: { type: string; text?: string }[] }).content,
+      )
+      .filter((part) => part.type === "text")
+      .map((part) => part.text ?? "")
+      .join("")
+    expect(text).toBe(pre)
   }),
 )
 
