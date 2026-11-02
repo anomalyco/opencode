@@ -3,12 +3,12 @@ import type { ProviderPackage } from "../provider-package.js"
 import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../protocols/index.js"
 import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { CloudflareShared } from "./cloudflare-shared.js"
 
 export const id = ProviderID.make("cloudflare-ai-gateway")
 export const authEnvVars = ["CLOUDFLARE_API_TOKEN", "CF_AIG_TOKEN"] as const
@@ -43,34 +43,15 @@ export type Settings = ProviderPackage.Settings &
     readonly gatewayApiKey?: string
   }
 
-export const baseURL = (input: GatewayURL) => {
-  if (input.baseURL) return input.baseURL
-  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(requireAccountId(input))}/ai/v1`
-}
+export const baseURL = (input: GatewayURL) => CloudflareShared.baseURL(input, id, "CloudflareAIGateway")
 
 /** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
-export const runBaseURL = (input: GatewayURL) => {
-  const url = Endpoint.trimBaseUrl(baseURL(input))
-  if (!url.endsWith("/ai/v1"))
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareAIGateway needs accountId or a baseURL ending in /ai/v1 to derive the Run API base",
-    })
-  return `${url.slice(0, -"/v1".length)}/run`
-}
+export const runBaseURL = (input: GatewayURL) => CloudflareShared.runBaseURL(input, id, "CloudflareAIGateway")
 
 // Cloudflare's REST API rejects parts of the Anthropic Messages and OpenAI Responses request shapes, such as
 // system prompt blocks and `minimal` reasoning effort, so these models use the provider-native gateway endpoints.
 const passthroughURL = (input: GatewayURL & GatewayOptions, provider: "anthropic/v1" | "openai") =>
-  `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(requireAccountId(input))}/${encodeURIComponent(gatewayId(input))}/${provider}`
-
-const requireAccountId = (input: GatewayURL) => {
-  if (input.accountId) return input.accountId
-  throw new ProviderConfigurationError({
-    provider: id,
-    message: "CloudflareAIGateway.configure requires accountId unless baseURL is supplied",
-  })
-}
+  `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(CloudflareShared.requireAccountId(input, id, "CloudflareAIGateway"))}/${encodeURIComponent(gatewayId(input))}/${provider}`
 
 const gatewayId = (input: GatewayOptions) => input.gatewayId?.trim() || "default"
 
