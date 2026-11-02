@@ -3318,7 +3318,9 @@ describe("MCP pool", () => {
       const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
-      expect(spawns).toHaveLength(0)
+      // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
+      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
     }),
   )
 
