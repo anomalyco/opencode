@@ -32,6 +32,7 @@ import { SessionMessage } from "../src/session/message"
 import { SessionProjector } from "../src/session/projector"
 import { SessionRunnerModel } from "../src/session/runner/model"
 import { SessionStep } from "../src/session/runner/step"
+import { SessionRunnerLoopState } from "../src/session/runner/loop-state"
 import { SessionTable } from "../src/session/sql"
 import { Snapshot } from "../src/snapshot"
 import { ToolOutput } from "../src/tool-output"
@@ -167,11 +168,12 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
   }).pipe(
     Effect.provide(snapshots),
     Effect.provide(
-      Layer.merge(
+      Layer.mergeAll(
         AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
           Bus.node.replace(Bus.configured({ persist: true })),
         ]),
         TestLLM.testLayer(),
+        SessionRunnerLoopState.layer,
       ),
     ),
     Effect.provide(Logger.layer([])),

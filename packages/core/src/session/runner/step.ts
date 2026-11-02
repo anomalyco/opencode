@@ -26,6 +26,9 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
+import { TOOL_LOOP_NUDGE, TOOL_LOOP_NUDGE_TEXT } from "../llm/tool-loop.js"
+import { SessionRunnerLoopState } from "./loop-state.js"
+import { isRecord } from "@opencode/util/record"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
@@ -37,6 +40,7 @@ export type Outcome = Data.TaggedEnum<{
   RecoverFull: {}
   Compacted: {}
   OutputLimit: { readonly needsContinuation: boolean }
+  LoopNudge: { readonly text: string }
 }>
 export const Outcome = Data.taggedEnum<Outcome>()
 
@@ -67,6 +71,7 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
+  const loopState = yield* SessionRunnerLoopState.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
@@ -106,6 +111,8 @@ export const make = Effect.gen(function* () {
 
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
+    // The cross-step tool rule lives in the session state.
+    let loopNudge: { readonly text: string } | undefined
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
@@ -116,7 +123,24 @@ export const make = Effect.gen(function* () {
           yield* publisher.publish(event)
           if (firstOutputAt === undefined && publisher.record().outputStarted)
             firstOutputAt = yield* Clock.currentTimeMillis
-          if (event.type !== "tool-call" || event.providerExecuted) return
+          if (
+            event.type !== "tool-call" ||
+            event.providerExecuted ||
+            event.name === "invalid" ||
+            !isRecord(event.input)
+          )
+            return
+          // The call is already durable, so a dropped repeat is settled rather than removed.
+          // Once the turn is being nudged, later calls from the same response are dropped too.
+          if (loopNudge) {
+            yield* publisher.failTool(event.id, { type: "aborted", message: TOOL_LOOP_NUDGE })
+            return
+          }
+          if (yield* loopState.recordToolCall(input.sessionID, event.name, event.input)) {
+            yield* publisher.failTool(event.id, { type: "aborted", message: TOOL_LOOP_NUDGE })
+            loopNudge = { text: TOOL_LOOP_NUDGE_TEXT }
+            return
+          }
           toolRuns.push({
             call: event,
             fiber: yield* Effect.uninterruptibleMask((restore) =>
@@ -268,6 +292,11 @@ export const make = Effect.gen(function* () {
               files,
             })
         }
+
+        // The repeated call was failed above and the step settled through the normal
+        // path, so its usage, snapshot and file changes are recorded. The turn then
+        // continues with a nudge instead of a continuation step.
+        if (loopNudge && !llmError) return Outcome.LoopNudge({ text: loopNudge.text })
 
         if (
           llmFailure &&
