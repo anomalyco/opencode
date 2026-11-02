@@ -569,14 +569,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   return yield* new ConnectError({ server, message: explain(error), answered: !unreachable(error) })
 })
 
-// Connecting again would fail the same way: the server could not be spawned or reached, or did not answer
-// in time. A failed auto probe wraps the error it hit.
+// Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
+// time, or is overloaded or down for now. A failed auto probe wraps the error it hit.
 function unreachable(error: unknown): boolean {
-  if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed) return unreachable(error.cause)
+  if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed && error.cause !== undefined)
+    return unreachable(error.cause)
   return (
     (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
-    // Fetch reports network failures as a TypeError carrying a system error code.
-    (error instanceof TypeError && "code" in error) ||
+    isTransient(error) ||
     PlatformError.isPlatformError(error)
   )
 }

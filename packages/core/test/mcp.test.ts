@@ -3160,6 +3160,8 @@ describe("MCP pool", () => {
   const makePool = Layer.build(poolLayer).pipe(Effect.map((context) => Context.get(context, McpPool.Service)))
   const directories = [import.meta.dir, path.join(import.meta.dir, "fixture")]
 
+  const status = (mcp: Mcp.Interface) => mcp.servers().pipe(Effect.map((servers) => servers[0]?.status))
+
   // A pool whose own spawns, the attempts at a shared local connection, are recorded.
   const recordingPool = (spawns: Array<ChildProcess.Command>) =>
     Layer.build(
@@ -3203,10 +3205,13 @@ describe("MCP pool", () => {
         scope,
       )
       const mcp = Context.get(context, Mcp.Service)
-      yield* settled(mcp)
+      // Up to 10 seconds: a server that is down is retried for a while before it shows failed.
+      yield* status(mcp).pipe(
+        Effect.filterOrFail((status) => status?.status !== "pending"),
+        Effect.retry({ times: 1_000, schedule: Schedule.spaced("10 millis") }),
+      )
       return { mcp, forms: Context.get(context, Form.Service), shutdown: Scope.close(scope, Exit.void) }
     })
-  const status = (mcp: Mcp.Interface) => mcp.servers().pipe(Effect.map((servers) => servers[0]?.status))
 
   live("shares one connection and one tool list between Locations", () =>
     Effect.gen(function* () {
@@ -3306,6 +3311,24 @@ describe("MCP pool", () => {
       expect(yield* status(b.mcp)).toEqual({ status: "connected" })
       expect(probes).toHaveLength(1)
       expect(spawns).toHaveLength(2)
+    }),
+  )
+
+  live("keeps pooling a server that was down when first tried", () =>
+    Effect.gen(function* () {
+      const down = { value: true }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: () => (down.value ? new Response(null, { status: 503 }) : undefined),
+      })
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      expect((yield* status(a.mcp))?.status).toBe("failed")
+      down.value = false
+      yield* a.mcp.connect("resources")
+      yield* open(pooled(server.url), pool, directories[1])
+      expect(server.state.toolLists).toBe(1)
     }),
   )
 
