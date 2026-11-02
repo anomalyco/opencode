@@ -25,6 +25,10 @@ export const snapshot = Effect.fn("InstructionEntry.snapshot")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
+  return yield* rows(db, sessionID, true)
+})
+
+const rows = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID, includeRemoved: boolean) {
   return yield* db
     .select({
       key: InstructionEntryTable.key,
@@ -32,7 +36,12 @@ export const snapshot = Effect.fn("InstructionEntry.snapshot")(function* (
       removed: InstructionEntryTable.removed,
     })
     .from(InstructionEntryTable)
-    .where(eq(InstructionEntryTable.session_id, sessionID))
+    .where(
+      and(
+        eq(InstructionEntryTable.session_id, sessionID),
+        includeRemoved ? undefined : eq(InstructionEntryTable.removed, false),
+      ),
+    )
     .orderBy(asc(InstructionEntryTable.key))
     .all()
     .pipe(Effect.orDie)
@@ -108,27 +117,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
 
-    const rows = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, includeRemoved: boolean) {
-      return yield* db
-        .select({
-          key: InstructionEntryTable.key,
-          value: InstructionEntryTable.value,
-          removed: InstructionEntryTable.removed,
-        })
-        .from(InstructionEntryTable)
-        .where(
-          and(
-            eq(InstructionEntryTable.session_id, sessionID),
-            includeRemoved ? undefined : eq(InstructionEntryTable.removed, false),
-          ),
-        )
-        .orderBy(asc(InstructionEntryTable.key))
-        .all()
-        .pipe(Effect.orDie)
-    })
-
     const list = Effect.fn("InstructionEntry.list")(function* (sessionID: SessionSchema.ID) {
-      return (yield* rows(sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
+      return (yield* rows(db, sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
     })
 
     const put = Effect.fn("InstructionEntry.put")(function* (input: Parameters<Interface["put"]>[0]) {
@@ -171,7 +161,7 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fn("InstructionEntry.load")(function* (sessionID: SessionSchema.ID) {
-      return Instructions.combine((yield* rows(sessionID, true)).map(source))
+      return Instructions.combine((yield* rows(db, sessionID, true)).map(source))
     })
 
     return Service.of({ list, put, remove, load })
