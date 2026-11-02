@@ -29,6 +29,8 @@ import { llmClient } from "../../effect/app-node-platform.js"
 import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
+import { SessionRunnerLoopState } from "./loop-state.js"
+import { LOOP_ABORT_MESSAGE } from "../llm/tool-loop.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
@@ -56,6 +58,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
+    const loopState = yield* SessionRunnerLoopState.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
@@ -199,7 +202,12 @@ const layer = Layer.effect(
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
+                  if (promoted > 0) {
+                    step = 1
+                    // Loop protection is scoped to one user turn, so a promoted prompt
+                    // starts with a clean detector and a fresh nudge count.
+                    yield* loopState.clear(sessionID)
+                  }
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
@@ -367,6 +375,14 @@ const layer = Layer.effect(
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_OUTPUT_LIMIT })
             assistantMessageID = SessionMessage.ID.create()
           }),
+          LoopNudge: Effect.fnUntraced(function* (outcome) {
+            if (!(yield* loopState.takeNudge(sessionID)))
+              return yield* new StepFailedError({
+                error: { type: "unknown", message: LOOP_ABORT_MESSAGE },
+              })
+            yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: outcome.text })
+            assistantMessageID = SessionMessage.ID.create()
+          }),
           Compacted: Effect.fnUntraced(function* () {
             recoverOverflow = false
             assistantMessageID = SessionMessage.ID.create()
@@ -458,5 +474,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    SessionRunnerLoopState.node,
   ],
 })
