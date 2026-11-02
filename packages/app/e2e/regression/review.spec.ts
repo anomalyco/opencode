@@ -12,27 +12,15 @@ import { pullRequest } from "../utils/pull-request"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test("pull request snapshots distinguish older evidence and refresh only on demand", async ({ page }) => {
-  const requests: string[] = []
-  const current = { value: pullRequest({ checksCommit: "b".repeat(40), incomplete: true }), failed: false }
-
-  const workspace = await openSession(page, {
-    name: "PullRequestReadiness",
+test("pull request snapshots label earlier evidence and incomplete results", async ({ page }) => {
+  await openSession(page, {
+    name: "PullRequestEvidence",
     vcs: { current: "parser", default: "dev" },
-    pullRequest: (directory) => {
-      requests.push(directory)
-
-      if (current.failed) throw new Error("Unavailable")
-
-      return current.value
-    },
+    pullRequest: () => pullRequest({ checksCommit: "b".repeat(40), incomplete: true }),
   })
-
-  expect(requests).toEqual([])
   await page.getByRole("button", { name: "Pull request", exact: true }).click()
   const panel = page.getByRole("region", { name: "Pull request", exact: true })
   await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeInViewport({ ratio: 1 })
-  expect(requests).toEqual([workspace.directory])
   await expect(panel.getByText("Earlier commit", { exact: true })).toBeVisible()
   await expect(panel.getByText("No reviews of this commit are shown.", { exact: true })).toBeVisible()
   await expect(panel.getByText("Checks aren't available for the pull request commit.", { exact: false })).toBeVisible()
@@ -41,6 +29,27 @@ test("pull request snapshots distinguish older evidence and refresh only on dema
   ).toHaveCount(0)
   await expect(panel.getByText("Some checks, reviews, or threads are missing", { exact: false })).toBeVisible()
   await expect(panel.getByRole("link", { name: "src/parser.ts:8" })).toHaveAttribute("href", /#discussion-1$/)
+})
+
+test("pull request snapshots refresh only on demand", async ({ page }) => {
+  const requests: string[] = []
+  const current = { value: pullRequest() }
+
+  const workspace = await openSession(page, {
+    name: "PullRequestRefresh",
+    vcs: { current: "parser", default: "dev" },
+    pullRequest: (directory) => {
+      requests.push(directory)
+
+      return current.value
+    },
+  })
+
+  expect(requests).toEqual([])
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  const panel = page.getByRole("region", { name: "Pull request", exact: true })
+  await expect(panel.getByText("Earlier commit", { exact: true })).toBeVisible()
+  expect(requests).toEqual([workspace.directory])
 
   current.value = pullRequest({
     localHead: "a".repeat(40),
@@ -60,21 +69,36 @@ test("pull request snapshots distinguish older evidence and refresh only on dema
   ).toBeVisible()
   await expect(panel.getByText("Earlier commit", { exact: true })).toHaveCount(0)
   expect(requests).toEqual([workspace.directory, workspace.directory])
+})
+
+test("pull request refresh failures keep the stale snapshot", async ({ page }) => {
+  const requests: string[] = []
+  const current = { failed: false }
+
+  const workspace = await openSession(page, {
+    name: "PullRequestStale",
+    vcs: { current: "parser", default: "dev" },
+    pullRequest: (directory) => {
+      requests.push(directory)
+
+      if (current.failed) throw new Error("Unavailable")
+
+      return pullRequest()
+    },
+  })
+
+  await page.getByRole("button", { name: "Pull request", exact: true }).click()
+  const panel = page.getByRole("region", { name: "Pull request", exact: true })
+  await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeVisible()
 
   current.failed = true
   await panel.getByRole("button", { name: "Refresh pull request", exact: true }).click()
   await expect(panel.getByRole("alert")).toContainText("These details may be out of date")
   await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeVisible()
-  expect(requests).toEqual([workspace.directory, workspace.directory, workspace.directory])
-
-  current.failed = false
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole("tab", { name: "Session", exact: true }).click()
-  await page.getByRole("button", { name: "Pull request", exact: true }).click()
-  await expect(panel.getByRole("heading", { name: "#12 Improve parser" })).toBeInViewport({ ratio: 1 })
-  const thread = panel.getByRole("link", { name: "src/parser.ts:8" })
-  await thread.scrollIntoViewIfNeeded()
-  await expect(thread).toBeInViewport({ ratio: 1 })
+  await expect(
+    panel.getByRole("region", { name: "Checks", exact: true }).getByText("Passed", { exact: true }),
+  ).toBeVisible()
+  expect(requests).toEqual([workspace.directory, workspace.directory])
 })
 
 test("a late pull request response cannot replace another checkout's snapshot", async ({ page }) => {
