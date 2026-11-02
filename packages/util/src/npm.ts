@@ -2,7 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Clock, Effect, Either, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -251,7 +251,20 @@ const layer = Layer.effect(
       dir: string,
       update: boolean,
     ) {
-      yield* flock.acquire(`npm-install:${dir}`)
+      const acquired = yield* Effect.either(flock.acquire(`npm-install:${dir}`))
+      // 多 location 并发装同一包：等待方超时不再硬失败——抢先者若已完成安装，
+      // 直接复用其当前代次作为成功结果（缺失才回落原始 LockTimeoutError）。
+      if (Either.isLeft(acquired) && acquired.left._tag === "LockTimeoutError") {
+        const winner = yield* current(dir)
+        if (winner) {
+          const winnerName = yield* installedName(pkg, winner, target)
+          if (yield* afs.existsSafe(path.join(winner, "node_modules", winnerName))) {
+            return yield* metadata(winner, winnerName, path.join(winner, "node_modules", winnerName), target)
+          }
+        }
+        return yield* acquired.left
+      }
+      yield* acquired.right
       const active = yield* current(dir)
       const name = yield* installedName(pkg, active ?? dir, target)
       if (active && !update && (yield* afs.existsSafe(path.join(active, "node_modules", name)))) {
