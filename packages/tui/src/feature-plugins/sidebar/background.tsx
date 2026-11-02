@@ -1,9 +1,9 @@
 import type { SessionMessageAssistant } from "@opencode/client"
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 
-function elapsed(start: number, end?: number) {
-  const seconds = Math.max(0, Math.floor(((end ?? Date.now()) - start) / 1000))
+function elapsed(start: number, end: number | undefined, now: number) {
+  const seconds = Math.max(0, Math.floor(((end ?? now) - start) / 1000))
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`
 }
 
@@ -27,13 +27,6 @@ function tokens(context: Plugin.Context, sessionID: string) {
   )
 }
 
-function sessionEnd(context: Plugin.Context, sessionID: string) {
-  const last = context.data.session
-    .message.list(sessionID)
-    .findLast((item): item is SessionMessageAssistant => item.type === "assistant" && item.time.completed !== undefined)
-  return last?.time.completed
-}
-
 type Item = {
   id: string
   sessionID: string
@@ -45,7 +38,7 @@ type Item = {
   tokens?: number
 }
 
-function Row(props: { context: Plugin.Context; item: Item }) {
+function Row(props: { context: Plugin.Context; item: Item; now: number }) {
   const theme = props.context.theme
   const [hover, setHover] = createSignal(false)
 
@@ -73,25 +66,33 @@ function Row(props: { context: Plugin.Context; item: Item }) {
         </Show>
         <text fg={theme.text.muted}>{props.item.tokens === undefined ? "—" : compact(props.item.tokens)}</text>
         <text fg={props.item.running ? theme.text.feedback.success.base : theme.text.muted}>
-          {elapsed(props.item.start, props.item.end)}
+          {props.item.running || props.item.end !== undefined
+            ? elapsed(props.item.start, props.item.end, props.now)
+            : "—"}
         </text>
       </box>
     </box>
   )
 }
 
-function mainItem(context: Plugin.Context, sessionID: string): Item {
+function mainItem(context: Plugin.Context, sessionID: string, now: number): Item {
   const session = context.data.session.get(sessionID)
-  const last = context.data.session
-    .message.list(sessionID)
-    .findLast((item): item is SessionMessageAssistant => item.type === "assistant" && (item.tokens?.output ?? 0) > 0)
+  const messages = context.data.session.message.list(sessionID)
+  // The current turn starts at the latest prompt, not at the previous turn's
+  // assistant message, so a running root does not inherit the last turn's clock.
+  const start = messages.findLast((item) => item.type === "user" || item.type === "synthetic")?.time.created
+  const turnStart = start ?? session?.time.created ?? now
+  const last = messages.findLast(
+    (item): item is SessionMessageAssistant =>
+      item.type === "assistant" && item.time.created >= turnStart && item.time.completed !== undefined,
+  )
   const running = context.data.session.status(sessionID) === "running"
   return {
     id: sessionID,
     sessionID,
     title: session?.title ?? "Main session",
     agent: "main",
-    start: last?.time.created ?? session?.time.created ?? Date.now(),
+    start: turnStart,
     end: running ? undefined : last?.time.completed,
     running,
     tokens: tokens(context, sessionID),
@@ -103,39 +104,44 @@ export function SidebarBackground(props: { context: Plugin.Context; sessionID: s
   const sessionID = createMemo(() => props.context.data.session.root(props.sessionID))
   const tasks = createMemo(() =>
     props.context.data.session
-      .message.list(sessionID())
-      .flatMap((message) => {
-        if (message.type !== "assistant") return []
-        return message.content.flatMap((part) => {
-          if (part.type !== "tool" || part.name !== "subagent" || part.state.status !== "completed") return []
-          const metadata = part.state.metadata
-          if (metadata?.status !== "running" || typeof metadata.sessionID !== "string") return []
-          const running = props.context.data.session.status(metadata.sessionID) === "running"
-          const input = part.state.input
-          return [
-            {
-              id: part.id,
-              sessionID: metadata.sessionID,
-              title: typeof input.description === "string" ? input.description : "Background task",
-              agent: typeof input.agent === "string" ? input.agent : undefined,
-              start: part.time.created,
-              end: running ? undefined : sessionEnd(props.context, metadata.sessionID),
-              running,
-              tokens: tokens(props.context, metadata.sessionID),
-            },
-          ]
-        })
+      .family(sessionID())
+      .filter((id) => id !== sessionID())
+      .flatMap((id) => {
+        const session = props.context.data.session.get(id)
+        if (!session) return []
+        const running = props.context.data.session.status(id) === "running"
+        return [
+          {
+            id,
+            sessionID: id,
+            title: session.title ?? "Background task",
+            agent: session.agent,
+            start: session.time.created,
+            end: running ? undefined : session.time.updated,
+            running,
+            tokens: tokens(props.context, id),
+          },
+        ]
       })
       .sort((a, b) => {
         if (a.running !== b.running) return a.running ? -1 : 1
         return b.start - a.start
       }),
   )
-  const list = createMemo(() => [mainItem(props.context, sessionID()), ...tasks()])
+  // A ticking signal keeps the live timers moving without relying on unrelated
+  // re-renders. It only runs while something is actually running.
+  const [now, setNow] = createSignal(Date.now())
+  const list = createMemo(() => [mainItem(props.context, sessionID(), now()), ...tasks()])
   const running = createMemo(() => list().filter((item) => item.running).length)
 
+  createEffect(() => {
+    if (running() === 0) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
   return (
-    <Show when={list().length > 0}>
+    <Show when={tasks().length > 0}>
       <box>
         <box flexDirection="row" gap={1}>
           <text fg={theme.text.base}>
@@ -145,7 +151,7 @@ export function SidebarBackground(props: { context: Plugin.Context; sessionID: s
             ({running() > 0 ? `${running()} running / ${list().length}` : list().length})
           </text>
         </box>
-        <For each={list()}>{(item) => <Row context={props.context} item={item} />}</For>
+        <For each={list()}>{(item) => <Row context={props.context} item={item} now={now()} />}</For>
       </box>
     </Show>
   )
