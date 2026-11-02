@@ -41,6 +41,23 @@ export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect
   )
 }
 
+/** A call the loop answers before the next step. With `error`, it is not run and the model gets the error back. */
+export interface PendingCall {
+  readonly call: ToolCallPart
+  readonly error?: string
+}
+
+/** Run a step's tool calls concurrently, with results in call order. */
+export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<PendingCall>) =>
+  Effect.forEach(
+    calls,
+    (item) =>
+      item.error === undefined
+        ? dispatch(tools, item.call)
+        : Effect.succeed(result(item.call, { type: "error", value: item.error })),
+    { concurrency: "unbounded" },
+  )
+
 const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),

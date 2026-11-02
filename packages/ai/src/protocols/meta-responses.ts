@@ -127,7 +127,7 @@ const isFunctionCallOutput = (
   item.type === "function_call_output" || item.type === "custom_tool_call_output"
 
 const HOSTED_TOOLS = {
-  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  web_search_call: ResponsesHostedTools.common.web_search_call,
   image_generation_call: {
     name: "image_generation",
     input: () => ({}),

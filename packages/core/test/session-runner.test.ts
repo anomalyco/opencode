@@ -3191,6 +3191,38 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
+  scenario("does not resend a rejected conversation unchanged when compacting", function* (s) {
+    const filler = "context ".repeat(1_000)
+    // The provider counts far more than the characters suggest, so only its rejection shows the conversation is too long.
+    const answer = (index: number) =>
+      TestLLM.complete(
+        {
+          reason: { normalized: "stop" },
+          usage: { inputTokens: 60_000, nonCachedInputTokens: 60_000, outputTokens: 10 },
+        },
+        LLMEvent.textStart({ id: `answer-${index}` }),
+        LLMEvent.textDelta({ id: `answer-${index}`, text: `Answer ${index}` }),
+        LLMEvent.textEnd({ id: `answer-${index}` }),
+      )
+    yield* s.llm.push(...Array.from({ length: 4 }, (_, index) => answer(index)))
+    yield* Effect.forEach(
+      Array.from({ length: 4 }, (_, index) => index),
+      (index) => s.runPrompt(`Request ${index}: ${filler}`),
+    )
+    s.currentModel = recoveryModel
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
+      TestLLM.text("## Objective\n- Recovered", "summary"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[1]?.tools).toEqual([])
+    expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
+  })
+
   scenario("aims the first overflow compaction below the rejected context", function* (s) {
     const filler = "context ".repeat(1_000)
     yield* s.llm.push(...Array.from({ length: 4 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))

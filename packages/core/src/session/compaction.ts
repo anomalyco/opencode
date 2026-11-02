@@ -518,7 +518,13 @@ export const layer = Layer.effect(
         prepared,
         budget - overhead,
         send,
-        { fit: fit - overhead, history: withoutTail(prepared.request, keepID), measured },
+        {
+          fit: fit - overhead,
+          history: withoutTail(prepared.request, keepID),
+          measured,
+          // The provider just rejected this conversation, so sending it unchanged again would be rejected too.
+          text: trigger.reason === "overflow",
+        },
         background,
       )
       if (!keepID) return result
@@ -596,7 +602,12 @@ export const layer = Layer.effect(
       prepared: Prepared,
       target: number,
       send: (request: LLMRequest, size?: Estimate) => Effect.Effect<Result, AIError | Failure>,
-      shrink: { readonly fit: number; readonly history: LLMRequest; readonly measured?: Estimate } = {
+      shrink: {
+        readonly fit: number
+        readonly history: LLMRequest
+        readonly measured?: Estimate
+        readonly text?: boolean
+      } = {
         fit: target,
         history: prepared.request,
       },
@@ -608,7 +619,7 @@ export const layer = Layer.effect(
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let rejections = 0
       let rejected: number | undefined
-      let asText = false
+      let asText = shrink.text ?? false
       let fit = shrink.fit
 
       while (true) {

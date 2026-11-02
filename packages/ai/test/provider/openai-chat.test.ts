@@ -1787,8 +1787,8 @@ describe("OpenAI Chat route", () => {
               publishedEndMetadata.push(decodeJson(encodeJson(event.providerMetadata)))
           }),
         ),
-        Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-        Effect.map((state) => LLMResponse.complete(state)!),
+        Stream.runCollect,
+        Effect.map((events) => LLMResponse.fromEvents(events)!),
         Effect.provide(
           fixedResponse(
             sseEvents(

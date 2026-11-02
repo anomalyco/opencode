@@ -537,43 +537,48 @@ function hasConfiguredAuth(model: RuntimeInfo) {
   )
 }
 
+const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
+  "@ai-sdk/openai",
+  "@ai-sdk/anthropic",
+  "@ai-sdk/cerebras",
+  "@ai-sdk/deepinfra",
+  "@ai-sdk/openai-compatible",
+  "@ai-sdk/google",
+  "@ai-sdk/groq",
+  "@ai-sdk/mistral",
+  "@ai-sdk/togetherai",
+  "@ai-sdk/xai",
+  "@openrouter/ai-sdk-provider",
+  "@ai-sdk/azure",
+  "@opencode/ai/providers/openai",
+  "@opencode/ai/providers/anthropic",
+  "@opencode/ai/providers/anthropic-compatible",
+  "@opencode/ai/providers/baseten",
+  "@opencode/ai/providers/cerebras",
+  "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/deepinfra",
+  "@opencode/ai/providers/deepseek",
+  "@opencode/ai/providers/fireworks",
+  "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/google",
+  "@opencode/ai/providers/google/interactions",
+  "@opencode/ai/providers/groq",
+  "@opencode/ai/providers/mistral",
+  "@opencode/ai/providers/togetherai",
+  "@opencode/ai/providers/vercel-ai-gateway",
+  "@opencode/ai/providers/xai",
+  "@opencode/ai/providers/openrouter",
+  "@opencode/ai/providers/azure",
+])
+
 function usesAPIKeyAuth(packageName: string | undefined) {
   const name = Provider.packageName(packageName)
+  if (name === undefined) return false
   return (
-    name === "@ai-sdk/openai" ||
-    name === "@ai-sdk/anthropic" ||
-    name === "@ai-sdk/cerebras" ||
-    name === "@ai-sdk/deepinfra" ||
-    name === "@ai-sdk/openai-compatible" ||
-    name === "@ai-sdk/google" ||
-    name === "@ai-sdk/groq" ||
-    name === "@ai-sdk/mistral" ||
-    name === "@ai-sdk/togetherai" ||
-    name === "@ai-sdk/xai" ||
-    name === "@openrouter/ai-sdk-provider" ||
-    name === "@ai-sdk/azure" ||
-    name === "@opencode/ai/providers/openai" ||
-    name?.startsWith("@opencode/ai/providers/openai/") === true ||
-    name === "@opencode/ai/providers/anthropic" ||
-    name === "@opencode/ai/providers/anthropic-compatible" ||
-    name === "@opencode/ai/providers/baseten" ||
-    name === "@opencode/ai/providers/cerebras" ||
-    name === "@opencode/ai/providers/cloudflare-ai-gateway" ||
-    name === "@opencode/ai/providers/cloudflare-workers-ai" ||
-    name === "@opencode/ai/providers/deepinfra" ||
-    name === "@opencode/ai/providers/deepseek" ||
-    name === "@opencode/ai/providers/fireworks" ||
-    name === "@opencode/ai/providers/openai-compatible" ||
-    name === "@opencode/ai/providers/google" ||
-    name === "@opencode/ai/providers/google/interactions" ||
-    name === "@opencode/ai/providers/groq" ||
-    name === "@opencode/ai/providers/mistral" ||
-    name === "@opencode/ai/providers/togetherai" ||
-    name === "@opencode/ai/providers/vercel-ai-gateway" ||
-    name === "@opencode/ai/providers/xai" ||
-    name === "@opencode/ai/providers/openrouter" ||
-    name === "@opencode/ai/providers/azure" ||
-    name?.startsWith("@opencode/ai/providers/azure/") === true
+    API_KEY_AUTH_PACKAGES.has(name) ||
+    name.startsWith("@opencode/ai/providers/openai/") ||
+    name.startsWith("@opencode/ai/providers/azure/")
   )
 }
 
