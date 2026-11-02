@@ -15,6 +15,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
+import { SessionRunnerLoopState } from "@opencode/core/session/runner/loop-state"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -51,13 +52,16 @@ for (const fixture of [
       let executions = 0
       const steps = yield* SessionStep.make.pipe(
         Effect.provide(
-          Layer.mock(Snapshot.Service)({
-            capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
-            files: (input) => {
-              expect(input).toEqual({ from: start, to: end })
-              return Effect.succeed(files)
-            },
-          }),
+          Layer.merge(
+            SessionRunnerLoopState.layer,
+            Layer.mock(Snapshot.Service)({
+              capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
+              files: (input) => {
+                expect(input).toEqual({ from: start, to: end })
+                return Effect.succeed(files)
+              },
+            }),
+          ),
         ),
       )
       yield* db
@@ -167,10 +171,13 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
     const assistantMessageID = SessionMessage.ID.create()
     const steps = yield* SessionStep.make.pipe(
       Effect.provide(
-        Layer.mock(Snapshot.Service)({
-          capture: () => Effect.succeed(undefined),
-          files: () => Effect.succeed([]),
-        }),
+        Layer.merge(
+          SessionRunnerLoopState.layer,
+          Layer.mock(Snapshot.Service)({
+            capture: () => Effect.succeed(undefined),
+            files: () => Effect.succeed([]),
+          }),
+        ),
       ),
     )
     yield* db

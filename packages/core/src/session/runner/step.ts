@@ -26,6 +26,9 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
+import { LOOP_STEP_ABORT_MESSAGE, TOOL_LOOP_NUDGE, TOOL_LOOP_NUDGE_TEXT } from "../llm/tool-loop.js"
+import { SessionRunnerLoopState } from "./loop-state.js"
+import { isRecord } from "@opencode/util/record"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
@@ -37,6 +40,7 @@ export type Outcome = Data.TaggedEnum<{
   RecoverFull: {}
   Compacted: {}
   OutputLimit: { readonly needsContinuation: boolean }
+  LoopNudge: { readonly text: string }
 }>
 export const Outcome = Data.taggedEnum<Outcome>()
 
@@ -67,6 +71,7 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
+  const loopState = yield* SessionRunnerLoopState.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
@@ -106,8 +111,11 @@ export const make = Effect.gen(function* () {
 
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
+    // The cross-step tool rule lives in the session state.
+    let loopNudge: { readonly text: string } | undefined
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
+      Stream.takeWhile(() => loopNudge === undefined),
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           if (publisher.record().providerFailed) return
@@ -116,7 +124,19 @@ export const make = Effect.gen(function* () {
           yield* publisher.publish(event)
           if (firstOutputAt === undefined && publisher.record().outputStarted)
             firstOutputAt = yield* Clock.currentTimeMillis
-          if (event.type !== "tool-call" || event.providerExecuted) return
+          if (
+            event.type !== "tool-call" ||
+            event.providerExecuted ||
+            event.name === "invalid" ||
+            !isRecord(event.input)
+          )
+            return
+          // The call is already durable, so a dropped repeat is settled rather than removed.
+          if (yield* loopState.recordToolCall(input.sessionID, event.name, event.input)) {
+            yield* publisher.failTool(event.id, { type: "aborted", message: TOOL_LOOP_NUDGE })
+            loopNudge = { text: TOOL_LOOP_NUDGE_TEXT }
+            return
+          }
           toolRuns.push({
             call: event,
             fiber: yield* Effect.uninterruptibleMask((restore) =>
@@ -149,6 +169,31 @@ export const make = Effect.gen(function* () {
         )
           return yield* Effect.failCause(stream.cause)
         if (publisher.hasStarted()) yield* publisher.streamed()
+        if (loopNudge) {
+          yield* interruptTools
+          yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
+          yield* publisher.failUnsettledTools({
+            type: "aborted",
+            message: "Tool execution interrupted by loop detection",
+          })
+          yield* publisher.failIncompleteTools()
+          // The stream was cut before its finish event, so settle the step here:
+          // without a terminal event the assistant message stays open and the
+          // step's file changes and usage are never recorded.
+          yield* publisher.failAssistant({ type: "aborted", message: LOOP_STEP_ABORT_MESSAGE })
+          const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
+          const snapshot = yield* snapshots.capture()
+          const files =
+            startSnapshot && snapshot
+              ? startSnapshot === snapshot
+                ? []
+                : yield* snapshots
+                    .files({ from: startSnapshot, to: snapshot })
+                    .pipe(Effect.orElseSucceed(() => undefined))
+              : undefined
+          yield* publisher.publishStepFailure({ snapshot, files })
+          return Outcome.LoopNudge({ text: loopNudge.text })
+        }
         if (streamInterrupted) yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools
