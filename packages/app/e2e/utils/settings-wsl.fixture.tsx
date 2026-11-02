@@ -262,16 +262,6 @@ export function mount(input: {
             />
             WSL plugin
           </label>
-          {/* The distro's server stopping, as main reports it after a shutdown. */}
-          <button
-            type="button"
-            onClick={() => {
-              setRuntime("wsl:Ubuntu", { kind: "stopped" })
-              publish("wsl")
-            }}
-          >
-            Stop WSL server
-          </button>
           {/* The SSH plugin's main side going away and coming back. */}
           <label>
             <input

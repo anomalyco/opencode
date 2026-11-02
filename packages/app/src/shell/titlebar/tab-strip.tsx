@@ -7,7 +7,7 @@ import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } f
 import { RestrictToHorizontalAxis, RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@/runtime/array-move"
-import { tabHref, tabKey, type DraftTab, type SessionTab, type Tab } from "@/shell/tabs/tabs"
+import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import type { ServerHealth } from "@/runtime/server/health"
 import { ServerHealthIndicator } from "@/servers/registry/row"
@@ -22,7 +22,7 @@ import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
-import { orderTabsByServer, serverGroupHeaders } from "./tab-groups"
+import { groupTabDirectory, orderTabsByServer, serverGroupHeaders } from "./tab-groups"
 import { TAB_GROUP_DRAG_TYPE } from "@/runtime/drag"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -46,6 +46,7 @@ function TabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   concealed?: boolean
+  restrictToServer?: boolean
   onIntent?: (hovered: boolean) => void
   children: (dragging: boolean) => JSX.Element
 }) {
@@ -62,7 +63,21 @@ function TabSlot(props: {
     get data() {
       return { server: props.server }
     },
-    accept: (source) => source.data?.server === props.server,
+    accept: (source) => !props.restrictToServer || source.data?.server === props.server,
+  })
+
+  // A concealed row stays mounted for its collapse transition, but a stale drag index
+  // would sort it against the visible rows. Leave it out of the sortable registry instead.
+  createEffect(() => {
+    const instance = sortable.sortable
+
+    if (props.concealed) {
+      instance.unregister()
+
+      return
+    }
+
+    onCleanup(instance.register())
   })
 
   return (
@@ -98,6 +113,7 @@ function SessionTabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   concealed?: boolean
+  restrictToServer?: boolean
   session: SessionInfo | undefined
   preparing: boolean
   unread: boolean
@@ -121,6 +137,7 @@ function SessionTabSlot(props: {
       active={props.active}
       orientation={props.orientation}
       concealed={props.concealed}
+      restrictToServer={props.restrictToServer}
       onIntent={props.onIntent}
     >
       {(dragging) => (
@@ -158,6 +175,7 @@ function SessionTabEntry(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   concealed?: boolean
+  restrictToServer?: boolean
   serverCtx: ServerCtx | undefined
   onVisibleChange: (visible: boolean) => void
   onUnreadChange: (unread: boolean) => void
@@ -359,6 +377,7 @@ function SessionTabEntry(props: {
         active={props.active}
         orientation={props.orientation}
         concealed={props.concealed}
+        restrictToServer={props.restrictToServer}
         session={session()}
         preparing={!!pending()}
         unread={unread()}
@@ -387,6 +406,7 @@ function DraftTabSlot(props: {
   active: boolean
   orientation: "horizontal" | "vertical"
   concealed?: boolean
+  restrictToServer?: boolean
   title: string
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
@@ -401,6 +421,7 @@ function DraftTabSlot(props: {
       active={props.active}
       orientation={props.orientation}
       concealed={props.concealed}
+      restrictToServer={props.restrictToServer}
     >
       {(dragging) => (
         <DraftTabItem
@@ -747,14 +768,9 @@ export function TitlebarTabStrip(props: {
     const group = props.tabs.filter((tab) => tab.server === server)
 
     const directory =
-      group.find((tab): tab is DraftTab => tab.type === "draft" && !!tab.directory)?.directory ??
-      group
-        .flatMap((tab) =>
-          tab.type === "session"
-            ? [tabs.info[tabKey(tab)]?.directory ?? ctx.data.session.get(tab.sessionId)?.location.directory]
-            : [],
-        )
-        .find(Boolean) ??
+      groupTabDirectory(group, (tab) =>
+        tabs.info[tabKey(tab)]?.directory ?? ctx.data.session.get(tab.sessionId)?.location.directory,
+      ) ??
       ctx.projects.last()?.worktree ??
       ctx.projects.used()[0]?.worktree
 
@@ -768,7 +784,6 @@ export function TitlebarTabStrip(props: {
     }
 
     setCollapsed(server, false)
-    ctx.projects.touch(directory)
     void tabs.newDraft({ server, directory }).catch((cause) => {
       console.error("[tab-strip] failed to start a draft in a server group", { server, name, cause })
       showToast({
@@ -926,10 +941,8 @@ export function TitlebarTabStrip(props: {
 
             if (initialIndex === index) return
 
-            const order = ordering().map(tabKey)
             const visible = visibleTabIds()
-            const shown = new Set(visible)
-            const next = arrayMove(order, initialIndex, index).filter((key) => shown.has(key))
+            const next = arrayMove(visible, initialIndex, index)
 
             props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), visible, next))
           }}
@@ -945,7 +958,7 @@ export function TitlebarTabStrip(props: {
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
-                const orderIndex = () => ordering().findIndex((item) => tabKey(item) === id)
+                const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
                 const header = () => headers().get(id)
                 const last = () => lastShown().get(tab.server) === id
                 const concealed = () => !shownKeys().has(id)
@@ -971,10 +984,11 @@ export function TitlebarTabStrip(props: {
                       tab={tab}
                       currentTab={props.currentTab}
                       id={id}
-                      index={orderIndex()}
+                      index={visibleIndex()}
                       active={props.currentTab === tab}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       concealed={concealed()}
+                      restrictToServer={grouped()}
                       serverCtx={serverCtx()}
                       onVisibleChange={(visible) => setVisibility(id, visible)}
                       onUnreadChange={(value) => setUnread(id, value)}
@@ -988,10 +1002,11 @@ export function TitlebarTabStrip(props: {
                     <DraftTabSlot
                       tab={tab}
                       id={id}
-                      index={orderIndex()}
+                      index={visibleIndex()}
                       active={props.currentTab === tab}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       concealed={concealed()}
+                      restrictToServer={grouped()}
                       title={language.t("session.tab.session")}
                       onNavigate={(element) => {
                         ref = element

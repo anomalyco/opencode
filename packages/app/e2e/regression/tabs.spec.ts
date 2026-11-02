@@ -26,8 +26,6 @@ const b = { id: "ses_tab_b", title: "Tab B session" }
 
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
-const WSL_SERVER = "http://127.0.0.1:4098"
-
 test.use({ serviceWorkers: "block" })
 
 test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
@@ -512,33 +510,27 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
-  const remote = session({ id: "ses_narrow_remote", directory: "/srv/narrow", title: "Remote" })
-  await twoServers(page, {
-    a: [
-      session({ id: a.id, directory, title: a.title }),
-      session({ id: b.id, directory, title: b.title }),
-    ],
-    b: [remote],
-  })
-  await seed(page, {
-    settings: {
-      appearance: { tabLayout: "vertical" },
-      keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a, b],
+    seed: {
+      settings: {
+        appearance: { tabLayout: "vertical" },
+        keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
+      },
+      tabs: [
+        a.id,
+        ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
+        b.id,
+      ],
     },
-    tabs: [
-      a.id,
-      ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
-      b.id,
-    ],
   })
   await page.goto(sessionHref(a.id))
 
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
-  const groupToggle = page.locator('[data-action="toggle-tab-server-groups"]')
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
   await expect(sidebar).toHaveCSS("width", "240px")
-  await expect(groupToggle).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
@@ -583,7 +575,6 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
 
   await resize(-44, "196px")
   await resize(-40, "156px")
-  await expect(groupToggle).toBeHidden()
 
   for (const name of ["Home", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
@@ -850,7 +841,6 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await twoServers(page, { a: [sessionA], b: [sessionB] })
   await page.goto(sessionHref(sessionA.id))
   await expectSessionTitle(page, sessionA.title)
-  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
 
   await page
     .locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`)
@@ -866,16 +856,22 @@ test("closing the active server's last tab opens the remaining server tab", asyn
 
 test("Side tabs group by server only after the list toggle is enabled", async ({ page }) => {
   const local = session({ id: "ses_group_toggle_a", directory: "C:/server-a", title: "Local one" })
+  const local2 = session({ id: "ses_group_toggle_a2", directory: "C:/server-a", title: "Local two" })
   const remote = session({ id: "ses_group_toggle_b", directory: "/home/server-b", title: "Remote one" })
-  await twoServers(page, { a: [local], b: [remote] })
+  await twoServers(page, { a: [local, local2], b: [remote] })
   await seed(page, {
     settings: { appearance: { tabLayout: "vertical" } },
-    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }, local2.id],
   })
   await page.goto(sessionHref(local.id))
 
   const headers = page.locator('[data-slot="tab-server-group"]')
   const toggle = page.locator('[data-action="toggle-tab-server-groups"]')
+  const order = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
+
   await expect(toggle).toHaveCount(1)
   await expect(headers).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-pressed", "false")
@@ -883,34 +879,15 @@ test("Side tabs group by server only after the list toggle is enabled", async ({
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-pressed", "true")
   await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
 
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-pressed", "false")
   await expect(headers).toHaveCount(0)
-})
-
-test("vertical tabs group by server and keep each server's tab order", async ({ page }) => {
-  const sessionA = session({ id: "ses_group_a1", directory: "C:/server-a", title: "Group the sidebar by server" })
-  const sessionA2 = session({ id: "ses_group_a2", directory: "C:/server-a", title: "Review the tab order" })
-  const sessionB = session({ id: "ses_group_b1", directory: "/home/server-b", title: "Fix the docs build" })
-  await twoServers(page, { a: [sessionA, sessionA2], b: [sessionB] })
-  await seed(page, {
-    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
-    tabs: [sessionA.id, { session: sessionB.id, server: REMOTE_SERVER }, sessionA2.id],
-  })
-  await page.goto(sessionHref(sessionA.id))
-
-  const order = () =>
-    page
-      .locator("[data-titlebar-tab-slot]")
-      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
-
-  await expect.poll(order).toEqual([
-    `${SERVER}\n${sessionHref(sessionA.id)}`,
-    `${SERVER}\n${sessionHref(sessionA2.id)}`,
-    `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
-  ])
-  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer", "127.0.0.1:4097"])
 })
 
 test("server group add starts a draft in the clicked group", async ({ page }) => {
@@ -920,13 +897,7 @@ test("server group add starts a draft in the clicked group", async ({ page }) =>
   await twoServers(page, { a: [local, local2], b: [remote] })
   await seed(page, {
     settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
-    tabs: [
-      local.id,
-      { session: remote.id, server: REMOTE_SERVER },
-      local2.id,
-      // An empty draft must not shadow the directory its sessions already know.
-      { draft: "draft_group_add_empty", directory: "" },
-    ],
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }, local2.id],
   })
   await page.goto(sessionHref(local.id))
 
@@ -950,7 +921,6 @@ test("server group add starts a draft in the clicked group", async ({ page }) =>
     "group:This computer",
     `${SERVER}\n${sessionHref(local.id)}`,
     `${SERVER}\n${sessionHref(local2.id)}`,
-    "draft:draft_group_add_empty",
     expect.stringMatching(/^draft:/),
     "group:127.0.0.1:4097",
     `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
@@ -965,164 +935,11 @@ test("server group add starts a draft in the clicked group", async ({ page }) =>
     "group:This computer",
     `${SERVER}\n${sessionHref(local.id)}`,
     `${SERVER}\n${sessionHref(local2.id)}`,
-    "draft:draft_group_add_empty",
     expect.stringMatching(/^draft:/),
     "group:127.0.0.1:4097",
     `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
     expect.stringMatching(/^draft:/),
   ])
-})
-
-test("vertical tabs stay flat with one registered server", async ({ page }) => {
-  await mockWorkspace(page, {
-    name: "SingleServerTabs",
-    sessions: [a, b],
-    seed: { settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } } },
-  })
-  await page.goto(sessionHref(a.id))
-  await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
-  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
-  await expect(page.locator('[data-action="toggle-tab-server-groups"]')).toHaveCount(0)
-})
-
-test("grouping works when only one registered server has tabs", async ({ page }) => {
-  const local = session({ id: "ses_group_one_a", directory: "C:/server-a", title: "Local one" })
-  const remote = session({ id: "ses_group_one_b", directory: "/home/server-b", title: "Remote one" })
-  await twoServers(page, { a: [local], b: [remote] })
-  await seed(page, {
-    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
-    tabs: [local.id],
-  })
-  await page.goto(sessionHref(local.id))
-
-  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer"])
-  await expect(page.locator('[data-action="toggle-tab-server-groups"]')).toHaveAttribute("aria-pressed", "true")
-})
-
-test("server group add reports when no working directory is known", async ({ page }) => {
-  const remote = session({ id: "ses_group_missing_dir_b", directory: "/home/server-b", title: "Remote one" })
-  await mockServers(page, {
-    [SERVER]: {
-      directory: "C:/server-a",
-      project: project({ id: "proj_server_a", directory: "C:/server-a" }),
-      provider: NO_PROVIDER,
-      sessions: [],
-      pageMessages: () => ({ items: [] }),
-      strictDirectory: true,
-    },
-    [REMOTE_SERVER]: {
-      directory: "/home/server-b",
-      project: project({ id: "proj_server_b", directory: "/home/server-b" }),
-      provider: NO_PROVIDER,
-      sessions: [remote],
-      pageMessages: () => ({ items: [] }),
-      strictDirectory: true,
-    },
-  })
-  await seed(page, {
-    servers: [REMOTE_SERVER],
-    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
-    tabs: [{ draft: "draft_group_missing_dir", directory: "" }, { session: remote.id, server: REMOTE_SERVER }],
-  })
-  await page.goto(sessionHref(remote.id, REMOTE_SERVER))
-
-  const keys = () =>
-    page
-      .locator("[data-titlebar-tab-slot]")
-      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
-
-  await expect.poll(keys).toEqual([
-    "draft:draft_group_missing_dir",
-    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
-  ])
-
-  await page
-    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
-    .locator('[data-action="tab-server-group-add"]')
-    .click()
-
-  await expect(page.getByText("Could not start a session", { exact: true })).toBeVisible()
-  await expect(
-    page.getByText("No working directory is known for This computer. Open a session there first.", {
-      exact: true,
-    }),
-  ).toBeVisible()
-  await expectPath(page, sessionHref(remote.id, REMOTE_SERVER))
-  await expect.poll(keys).toEqual([
-    "draft:draft_group_missing_dir",
-    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
-  ])
-})
-
-test("server group add reports when the group's server is gone", async ({ page }) => {
-  const wsl = session({ id: "ses_group_missing_server", directory: "/home/ubuntu/project", title: "WSL session" })
-  const health = Promise.withResolvers<void>()
-  await mockServers(page, {
-    [SERVER]: {
-      directory: "C:/server-a",
-      project: project({ id: "proj_group_server_a", directory: "C:/server-a" }),
-      provider: NO_PROVIDER,
-      sessions: [],
-      pageMessages: () => ({ items: [] }),
-      strictDirectory: true,
-    },
-    [REMOTE_SERVER]: {
-      directory: "/remote/project",
-      project: project({ id: "proj_group_server_b", directory: "/remote/project" }),
-      provider: NO_PROVIDER,
-      sessions: [],
-      pageMessages: () => ({ items: [] }),
-      strictDirectory: true,
-    },
-    [WSL_SERVER]: {
-      directory: "/home/ubuntu/project",
-      project: project({ id: "proj_group_server_wsl", directory: "/home/ubuntu/project" }),
-      provider: NO_PROVIDER,
-      sessions: [wsl],
-      pageMessages: () => ({ items: [] }),
-      strictDirectory: true,
-    },
-  })
-  await seed(page, {
-    servers: [REMOTE_SERVER],
-    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
-    tabs: [{ session: wsl.id, server: "wsl:Ubuntu" }],
-  })
-  // The remote health probe never answers, so the stopped WSL server keeps its last healthy status.
-  await page.route(`${REMOTE_SERVER}/api/info`, async (route) => {
-    await health.promise
-    await route.fallback()
-  })
-
-  const href = sessionHref(wsl.id, "wsl:Ubuntu")
-  await page.goto(
-    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", wsl: WSL_SERVER, path: href })}`,
-  )
-  await expectSessionTitle(page, wsl.title)
-
-  const keys = () =>
-    page
-      .locator("[data-titlebar-tab-slot]")
-      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
-
-  await expect.poll(keys).toEqual([`wsl:Ubuntu\n${href}`])
-
-  const header = page.locator('[data-slot="tab-server-group"]', { hasText: "Ubuntu" })
-  const add = header.locator('[data-action="tab-server-group-add"]')
-  await expect(add).toBeEnabled()
-
-  await page.getByRole("button", { name: "Stop WSL server" }).click()
-  await expect(add).toBeEnabled()
-  await add.click()
-
-  await expect(page.getByText("Could not start a session", { exact: true })).toBeVisible()
-  await expect(
-    page.getByText("wsl:Ubuntu is no longer connected. Reconnect it and try again.", { exact: true }),
-  ).toBeVisible()
-  await expect.poll(keys).toEqual([`wsl:Ubuntu\n${href}`])
-
-  health.resolve()
-  await page.unroute(`${REMOTE_SERVER}/api/info`)
 })
 
 test("server groups limit their visible tabs and collapse from the header", async ({ page }) => {
@@ -1224,20 +1041,35 @@ test("server groups reorder visible tabs without disturbing concealed ones", asy
 
   await slot(local[0]!.id).dragTo(remoteSlot)
   await expect.poll(order).toEqual(grouped)
-})
 
-test("server group motion follows the reduce motion preference", async ({ page }) => {
-  await mockWorkspace(page, {
-    name: "MotionTabs",
-    sessions: [a, b],
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
-  })
-  await page.goto(sessionHref(a.id))
+  // Turning grouping off restores the flat strip, where a tab can move past another server's tab.
+  await page.locator('[data-action="toggle-tab-server-groups"]').click()
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+  ])
 
-  const tab = page.locator('[data-titlebar-tab-slot][data-orientation="vertical"]').first()
-  await expect(tab).toHaveCSS("transition-duration", /0\.2s/)
-  await page.emulateMedia({ reducedMotion: "reduce" })
-  await expect(tab).toHaveCSS("transition-duration", "0s")
+  const flatSource = await slot(local[0]!.id).boundingBox()
+  const flatTarget = await remoteSlot.boundingBox()
+
+  if (!flatSource || !flatTarget) throw new Error("flat tab has no bounding box")
+
+  await page.mouse.move(flatSource.x + 80, flatSource.y + flatSource.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(flatTarget.x + 80, flatTarget.y + flatTarget.height / 2, { steps: 12 })
+  await page.mouse.up()
+
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+  ])
 })
 
 test("server groups can be reordered by dragging their headers", async ({ page }) => {

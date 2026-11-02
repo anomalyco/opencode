@@ -1,10 +1,23 @@
-import { tabKey, type Tab } from "@/shell/tabs/tabs"
+import { tabKey, type DraftTab, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 
 /** Sort tabs by the order their servers appear in the app, keeping each server's tabs in their existing order. */
 export function orderTabsByServer(tabs: readonly Tab[], serverOrder: readonly string[]) {
   const rank = new Map(serverOrder.map((server, index) => [server, index]))
 
   return tabs.toSorted((a, b) => (rank.get(a.server) ?? rank.size) - (rank.get(b.server) ?? rank.size))
+}
+
+/** The first directory a group's tabs already know, preferring a draft's directory over session metadata. */
+export function groupTabDirectory(
+  tabs: readonly Tab[],
+  sessionDirectory: (tab: SessionTab) => string | undefined,
+) {
+  return (
+    tabs.find((tab): tab is DraftTab => tab.type === "draft" && !!tab.directory)?.directory ??
+    tabs
+      .flatMap((tab) => (tab.type === "session" ? [sessionDirectory(tab)] : []))
+      .find((directory) => !!directory)
+  )
 }
 
 /** The first visible tab of each server carries its group header. */

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/runtime/server/registry"
-import { tabKey, type Tab } from "@/shell/tabs/tabs"
-import { orderTabsByServer, serverGroupHeaders } from "./tab-groups"
+import { tabKey, type DraftTab, type Tab } from "@/shell/tabs/tabs"
+import { groupTabDirectory, orderTabsByServer, serverGroupHeaders } from "./tab-groups"
 
 const local = ServerConnection.Key.make("local\nhttp://127.0.0.1:4096")
 
@@ -10,6 +10,30 @@ const remote = ServerConnection.Key.make("remote\nhttp://127.0.0.1:4097")
 function tab(server: ServerConnection.Key, sessionId: string): Tab {
   return { type: "session", server, sessionId }
 }
+
+function draft(server: ServerConnection.Key, draftID: string, directory: string): DraftTab {
+  return { type: "draft", server, draftID, directory }
+}
+
+describe("groupTabDirectory", () => {
+  test("prefers a draft's directory over the sessions' metadata", () => {
+    const tabs = [tab(local, "a1"), draft(local, "d1", "C:/draft")]
+
+    expect(groupTabDirectory(tabs, () => "C:/session")).toBe("C:/draft")
+  })
+
+  test("skips an empty draft and uses the first session directory", () => {
+    const tabs = [draft(local, "d1", ""), tab(local, "a1"), tab(local, "a2")]
+
+    expect(groupTabDirectory(tabs, (item) => (item.sessionId === "a1" ? undefined : "/srv/project"))).toBe(
+      "/srv/project",
+    )
+  })
+
+  test("reports no directory when the group knows none", () => {
+    expect(groupTabDirectory([draft(local, "d1", ""), tab(local, "a1")], () => undefined)).toBeUndefined()
+  })
+})
 
 describe("orderTabsByServer", () => {
   test("keeps tabs of a server the app no longer lists at the end, in their existing order", () => {
