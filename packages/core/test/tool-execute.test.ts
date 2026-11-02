@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import type { CodeModeFs } from "@opencode/core/codemode/fs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -237,7 +238,7 @@ describe("fs", () => {
               code(() => fs.renameSync("a.txt", "full")),
               code(() => fs.renameSync("moved", "full")),
               fs.readdirSync("src", { withFileTypes: true, recursive: true }).map((e) => [e.parentPath, e.name]),
-              fs.readFileSync(new URL("file://${tmp.path}/a.txt"), "utf8"),
+              fs.readFileSync(new URL(${JSON.stringify(pathToFileURL(path.join(tmp.path, "a.txt")).href)}), "utf8"),
             ]`,
         },
         context,
@@ -250,7 +251,7 @@ describe("fs", () => {
       ["ENOTEMPTY", "number"],
       [
         ["src", "nested"],
-        ["src/nested", "b.txt"],
+        [path.join("src", "nested"), "b.txt"],
       ],
       "a",
     ])
