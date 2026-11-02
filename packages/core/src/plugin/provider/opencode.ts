@@ -63,6 +63,12 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type LibrarySkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
+// Downloaded skills by sign-in and workspace, then slug. Shared by every project in this process, so a skill downloads again
+// only when its version changes.
+const downloaded = new Map<
+  string,
+  Map<string, { readonly slug: string; readonly version: string; readonly skill: LibrarySkill }>
+>()
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -282,6 +288,8 @@ export const OpencodePlugin = define<
         skillDownload,
         loadSkills(next.connection, library?.skills ?? []).pipe(
           Effect.flatMap((loaded) => {
+            // A failed load keeps the skills already shown.
+            if (!loaded) return Effect.void
             librarySkills = { owner: owner(next), items: loaded }
             return skills.reload()
           }),
@@ -289,27 +297,37 @@ export const OpencodePlugin = define<
       )
     }
     const loadSkills = Effect.fnUntraced(
-      function* (connection: ActiveConnection, listed: ReadonlyArray<{ readonly slug: string }>) {
+      function* (
+        connection: ActiveConnection,
+        listed: ReadonlyArray<{ readonly slug: string; readonly version: string }>,
+      ) {
         if (listed.length === 0 || !connection) return []
         const credential = yield* ctx.integration.connection.resolve(connection)
         if (!credential || credential.type === "external") return []
         const server = yield* normalizeServer(ConsoleAccess.server(credential))
-        // One skill that fails to download is skipped; the rest still load.
+        // API keys carry no account or org, so the sign-in itself identifies the workspace.
+        const workspace = JSON.stringify([server, IntegrationConnection.key(connection), credential.metadata?.orgID])
+        const cached = downloaded.get(workspace)
         const loaded = yield* Effect.forEach(
           listed,
-          (item) =>
-            downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
+          (item) => {
+            const previous = cached?.get(item.slug)
+            if (previous?.version === item.version) return Effect.succeed(previous)
+            return downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
+              Effect.map((skill) => ({ slug: item.slug, version: item.version, skill })),
+              // A failed download keeps the last copy that loaded, and retries on the next config change.
               Effect.catch((cause) =>
-                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(
-                  Effect.as(undefined),
-                ),
+                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(Effect.as(previous)),
               ),
-            ),
+            )
+          },
           { concurrency: 8 },
         )
-        return loaded.filter((item) => item !== undefined)
+        const kept = loaded.filter((item) => item !== undefined)
+        downloaded.set(workspace, new Map(kept.map((item) => [item.slug, item])))
+        return kept.map((item) => item.skill)
       },
-      Effect.catch((cause) => Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as([]))),
+      Effect.catch((cause) => Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as(undefined))),
     )
     const search = (providerID: WebSearch.ID, connection: NonNullable<ActiveConnection>) => ({
       id: providerID,
