@@ -2,9 +2,8 @@ import { Effect, Schema } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
-import { extensionHost, type HostModule } from "./interpreter/extensions.js"
+import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
-import { moduleName } from "./interpreter/interpreter.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
@@ -51,7 +50,7 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   tools?: Provided & Tools<Services<Provided>>
   /** Hooks around every tool and extension call the program makes; see `Hooks`. */
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
-  /** Host functions exposed as globals and host values exposed as modules; see `Extension.make`. */
+  /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
@@ -157,7 +156,8 @@ export const execute = <
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> =>
+  make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
 export const make = <
@@ -178,28 +178,14 @@ export const make = <
       bound.add(name)
     }
   }
-  const modules = new Map<string, HostModule>()
-  for (const extension of extensions) {
-    for (const [specifier, value] of Object.entries(extension.modules)) {
-      const name = moduleName(specifier)
-      if (modules.has(name)) throw new TypeError(`Extension "${extension.name}" module "${name}" is already defined.`)
-      modules.set(name, { extension: extension.name, value })
-    }
-  }
   return {
     get catalog() {
       return prepared.catalog
     },
     execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => {
-        const host = extensionHost(ctx, extensions, modules)
-        return {
-          globals: [
-            ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-            ...host.globals,
-          ],
-          modules: host.modules,
-        }
-      }),
+      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
+        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+        ...extensionGlobals(ctx, extensions),
+      ]),
   }
 }

@@ -474,11 +474,11 @@ describe("Effect globals", () => {
   })
 })
 
-describe("modules", () => {
+describe("imports", () => {
   const fs = { readFile: (path: string) => `text of ${path}`, promises: { readFile: async (path: string) => path } }
-  const files = Extension.make({ name: "files", modules: { "node:fs": fs, "fs/promises": fs.promises } })
+  const files = Extension.make({ name: "files", globals: { fs } })
 
-  test("every import form, require, and import() load the same module, and its functions fire the hooks", async () => {
+  test("import, require, and import() load globals by Node module name, and their functions fire the hooks", async () => {
     const calls: Array<string> = []
     const target = CodeMode.make({
       extensions: [files],
@@ -486,44 +486,31 @@ describe("modules", () => {
     })
     expect(
       await value(
-        `import fs, { readFile, readFile as read } from "fs"
-         import * as ns from "node:fs"
-         import "fs/promises"
+        `import fs, { readFile } from "node:fs"
+         import * as ns from "fs"
+         import { readFile as readAsync } from "fs/promises"
+         import { URL } from "url"
          const dynamic = await import("fs")
-         return [readFile("a"), read("b"), fs === require("node:fs"), ns.default === fs, dynamic === ns,
-           ns.readFile("c"), await require("fs/promises").readFile("d"), await fs.promises.readFile("e")]`,
+         return [readFile("a"), fs === require("fs"), ns.default === fs, dynamic === ns,
+           await readAsync("b"), new URL("https://a.test/x").pathname, typeof require("crypto").randomUUID]`,
         target,
       ),
-    ).toEqual(["text of a", "text of b", true, true, true, "text of c", "d", "e"])
-    expect(calls).toEqual([
-      "files:fs.readFile",
-      "files:fs.readFile",
-      "files:fs.readFile",
-      "files:fs/promises.readFile",
-      "files:fs.promises.readFile",
-    ])
+    ).toEqual(["text of a", true, true, true, "b", "/x", "function"])
+    expect(calls).toEqual(["files:fs.readFile", "files:fs.promises.readFile"])
   })
 
-  test("an unknown module or export fails with what is available", async () => {
+  test("a module that isn't provided, or a missing export, fails at the import", async () => {
     const target = CodeMode.make({ extensions: [files] })
     expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
-      `Error: Module "yaml" isn't available. Available modules: fs, fs/promises (line 1, col 8)`,
+      `Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files.`,
     )
-    expect(await value(`try { await import("yaml") } catch (e) { return e.message }`, target)).toBe(
-      `Module "yaml" isn't available. Available modules: fs, fs/promises`,
+    expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
+      `Cannot import "child_process"`,
     )
     expect((await failure(`import { writeFile } from "fs"`, target)).message).toStartWith(
-      `SyntaxError: Module "fs" has no export named "writeFile".`,
+      `SyntaxError: "fs" has no export named "writeFile".`,
     )
-    expect((await failure(`require("fs")`)).message).toStartWith(
-      `Error: Module "fs" isn't available. No modules are available;`,
-    )
-  })
-
-  test("a module name may be provided once, with or without node:", () => {
-    expect(() =>
-      CodeMode.make({ extensions: [files, Extension.make({ name: "again", modules: { fs: {} } })] }),
-    ).toThrow('Extension "again" module "fs" is already defined.')
+    expect((await failure(`require("fs")`)).message).toStartWith(`Error: Cannot import "fs"`)
   })
 })
 
@@ -655,9 +642,9 @@ describe("configuration", () => {
     })
   })
 
-  test("a global must be a function", () => {
+  test("a global must be a function or an object", () => {
     expect(() => Extension.make({ name: "bad", globals: { n: 1 as never } })).toThrow(
-      'Extension "bad" global "n" must be a function.',
+      'Extension "bad" global "n" must be a function or an object.',
     )
   })
 

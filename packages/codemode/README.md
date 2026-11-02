@@ -14,7 +14,7 @@ The idea of code mode was originally introduced by Cloudflare. See
 ## How it differs from JavaScript
 
 - **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
-  globals and modules the host adds through extensions. Timers, `process`, filesystem access, and `export` are
+  globals the host adds through extensions. Timers, `process`, filesystem access, packages, and `export` are
   unavailable.
 - **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
@@ -137,23 +137,19 @@ Every value crossing in either direction is converted, never shared: arguments c
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
 
-An extension can also provide modules, any host value under a name the program loads the way Node code does:
+A global can also be an object of functions, such as `fs`. Every function reachable from it is an entry point like a
+global, so calls fire the `extension` hooks with their path as the name (`fs.readFile`, `fs.promises.readFile`).
 
-```ts
-const files = Extension.make({ name: "files", modules: { fs, "fs/promises": fs.promises } })
-```
+Programs load globals the way Node code loads modules. `import` and `require` take a global by its Node module name,
+with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them. There are
+no packages, so anything else throws.
 
 ```js
-import fs, { readFile } from "node:fs"
-import * as promises from "fs/promises"
-const same = require("fs")
-const { default: alsoSame } = await import("fs")
+import fs, { readFile } from "node:fs" // the `fs` global, if the host provides one
+import { URL } from "url"
+const crypto = require("crypto")
+const { default: same } = await import("fs")
 ```
-
-A `node:` prefix names the same module. A default import is the module itself and a named import reads one of its
-properties. A module crosses like a result, but every function reachable from it is an entry point like a global, so
-calls fire the `extension` hooks with its path as the name (`fs.readFile`, `fs/promises.readFile`). Loading an unknown
-module throws an error listing the available ones, and a module name provided twice throws at `CodeMode.make`.
 
 ### OpenAPI tools
 

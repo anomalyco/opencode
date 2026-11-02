@@ -4,7 +4,8 @@ import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
-import { type Host, Interpreter } from "./interpreter.js"
+import { Interpreter } from "./interpreter.js"
+import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
 import type { Runner } from "./runner.js"
 
@@ -13,7 +14,7 @@ export const executeProgram = <R>(
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
-  host?: (ctx: Interpreter<R>) => Host,
+  globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -37,7 +38,7 @@ export const executeProgram = <R>(
       const parsed = parseProgram(code)
       if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] } satisfies Result
       const services = yield* Effect.context<R>()
-      const ctx = new Interpreter<R>({ tools, services, builtins, logs, host })
+      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
       runner = ctx.runner
       const outcome = yield* runner.run(ctx.main(parsed.program))
       if (!outcome.ok) {
@@ -116,7 +117,7 @@ export const parseProgram = (code: string): { ok: true; program: Program } | { o
       sourceType: "script",
       allowReturnOutsideFunction: true,
       allowAwaitOutsideFunction: true,
-      // Imports bind host modules; scripts keep sloppy-mode semantics, which module source would make strict.
+      // Imports bind globals by module name; scripts keep sloppy-mode semantics, which module source would make strict.
       allowImportExportEverywhere: true,
       locations: true,
     })

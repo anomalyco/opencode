@@ -29,19 +29,15 @@ import {
 } from "./objects.js"
 import { describeValue, isOpaque } from "./references.js"
 
-/** A module by its normalized name, with the extension that provides it. */
-export type HostModule = { readonly extension: string; readonly value: unknown }
-
 /**
- * The global bindings and modules of one run's extensions. Everything crossing the boundary is converted: plain data
- * and built-in wrappers are copied, a host function becomes a program function whose calls cross the same way, and a
- * host Promise or Effect becomes a program promise. A module is converted the first time the program loads it.
+ * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
+ * wrappers are copied, a host function becomes a program function whose calls cross the same way, and a host Promise
+ * or Effect becomes a program promise.
  */
-export const extensionHost = <R>(
+export const extensionGlobals = <R>(
   ctx: Interpreter<R>,
   extensions: ReadonlyArray<Extension>,
-  modules: ReadonlyMap<string, HostModule>,
-) => {
+): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
 
   const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
@@ -78,7 +74,7 @@ export const extensionHost = <R>(
     return copied
   }
 
-  // `extension` is set while converting a module, whose functions are entry points like globals and fire the hooks.
+  // `extension` is set while converting a global object, whose functions are entry points like globals and fire the hooks.
   const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), extension?: string): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
@@ -157,7 +153,7 @@ export const extensionHost = <R>(
     throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
-  // A host function as a program function. Arguments cross in; for a global or a module's function, the
+  // A host function as a program function. Arguments cross in; for a global or a global object's function, the
   // `extension.before` hook runs before the host function is called, so a call it denies never reaches the host. The
   // host's result, or what it threw, crosses out so the program catches a copy, and `extension.after` sees how the
   // call ended. Functions inside results are part of a value's API and skip the hooks.
@@ -207,23 +203,17 @@ export const extensionHost = <R>(
     return promise
   }
 
-  const loaded = new Map<string, Value>()
-  return {
-    globals: extensions.flatMap((extension) =>
-      Object.entries(extension.globals).map(
-        ([name, value]) => [name, wrap(value, name, (args) => ({ extension: extension.name, name, args }))] as const,
-      ),
+  return extensions.flatMap((extension) =>
+    Object.entries(extension.globals).map(
+      ([name, value]) =>
+        [
+          name,
+          typeof value === "function"
+            ? wrap(value, name, (args) => ({ extension: extension.name, name, args }))
+            : fromHost(value, name, 0, new Set(), extension.name),
+        ] as const,
     ),
-    modules: new Map(
-      [...modules].map(([name, module]) => [
-        name,
-        () => {
-          if (!loaded.has(name)) loaded.set(name, fromHost(module.value, name, 0, new Set(), module.extension))
-          return loaded.get(name)
-        },
-      ]),
-    ),
-  }
+  )
 }
 
 /**

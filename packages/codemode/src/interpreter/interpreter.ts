@@ -123,6 +123,7 @@ import {
   Yield,
   normal,
 } from "./runner.js"
+import { moduleName, resolveModule } from "./modules.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { fn } from "./native.js"
 import { capability, promiseLike } from "./promises.js"
@@ -380,15 +381,6 @@ const isAbrupt = (result: StatementResult): boolean =>
 const isThenable = (value: Value): boolean =>
   value instanceof PromiseObj || (value instanceof Obj && typeofValue(get(value, "then")) === "function")
 
-/** What the host adds to a program: global bindings, and modules by normalized name, each loaded on first use. */
-export type Host = {
-  readonly globals: ReadonlyArray<readonly [string, Value]>
-  readonly modules?: ReadonlyMap<string, () => Value>
-}
-
-/** `node:fs` names the same module as `fs`. */
-export const moduleName = (specifier: string) => (specifier.startsWith("node:") ? specifier.slice(5) : specifier)
-
 /** One program execution: the tool bridge, job queue, captured logs, and the global scope built once. */
 export class Interpreter<R> {
   readonly tools: ToolRuntime<R>
@@ -398,7 +390,8 @@ export class Interpreter<R> {
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
-  private readonly modules: ReadonlyMap<string, () => Value>
+  private readonly globalScope: ReadonlyMap<string, Binding>
+  private readonly modules = new Map<string, Value>()
   private readonly namespaces = new Map<string, Obj>()
 
   constructor(options: {
@@ -407,7 +400,7 @@ export class Interpreter<R> {
     readonly services: Context.Context<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
-    readonly host?: (ctx: Interpreter<R>) => Host
+    readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
     this.builtins = options.builtins
@@ -417,25 +410,29 @@ export class Interpreter<R> {
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
-    const host = options.host?.(this)
-    this.modules = host?.modules ?? new Map()
-    for (const [name, value] of [...globals(this), ...(host?.globals ?? [])]) {
+    this.globalScope = globalScope
+    for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
       globalScope.set(name, { mutable: false, value })
     }
   }
 
-  /** A host module, as `require` returns it and a default import binds it. */
+  /** A module, as `require` returns it and a default import binds it: a global, by its Node module name. */
   module(specifier: string, site?: AstNode): Value {
-    const load = this.modules.get(moduleName(specifier))
-    if (load) return load()
-    const names = [...this.modules.keys()]
-    throw new PendingThrow(
-      "Error",
-      names.length === 0
-        ? `Module "${specifier}" isn't available. No modules are available; call tools through \`tools\` and use the built-in globals.`
-        : `Module "${specifier}" isn't available. Available modules: ${names.join(", ")}`,
-      site,
-    )
+    const name = moduleName(specifier)
+    const cached = this.modules.get(name)
+    if (cached !== undefined) return cached
+    const module = resolveModule(name, (global) => {
+      const binding = this.globalScope.get(global)
+      return binding && "value" in binding ? binding.value : undefined
+    })
+    if (module === undefined)
+      throw new PendingThrow(
+        "Error",
+        `Cannot import "${specifier}": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through \`tools\`.`,
+        site,
+      )
+    this.modules.set(name, module)
+    return module
   }
 
   /**
@@ -550,7 +547,7 @@ class Frame<R> {
     const namespace = this.ctx.namespace(specifier, binding)
     if (binding.type === "ImportNamespaceSpecifier") return namespace
     const name = binding.imported.type === "Identifier" ? binding.imported.name : String(binding.imported.value)
-    if (!hasOwn(namespace, name)) throw syntaxError(`Module "${specifier}" has no export named "${name}".`, binding)
+    if (!hasOwn(namespace, name)) throw syntaxError(`"${specifier}" has no export named "${name}".`, binding)
     return getOwn(namespace, name)
   }
 

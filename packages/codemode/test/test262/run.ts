@@ -42,11 +42,11 @@ export const run = async (file: string): Promise<Outcome> => {
   // work instead, so drain explicitly.
   const drain = meta.flags?.includes("async") ? "\nfor (let i = 0; i < 100; i++) await null" : ""
   const result = await Effect.runPromise(
-    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (ctx) => ({
-      globals: harness(ctx, (error) => {
+    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (ctx) =>
+      harness(ctx, (error) => {
         done ??= { error }
       }),
-    })),
+    ),
   )
   if (meta.negative !== undefined) {
     // Runtime negatives only check that execution failed: diagnostics do not carry the error name.
