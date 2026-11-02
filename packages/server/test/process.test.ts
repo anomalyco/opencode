@@ -69,7 +69,7 @@ it.live("authenticates API requests behind the frontend transform while allowing
               },
             }),
           )
-          expect(preflight.status).toBe(204)
+          expect(preflight.status).toBe(allowed ? 204 : 403)
           expect(preflight.headers.get("access-control-allow-origin")).toBe(allowed)
 
           const status = yield* Effect.promise(() =>
@@ -77,14 +77,16 @@ it.live("authenticates API requests behind the frontend transform while allowing
               headers: { origin, authorization: `Basic ${btoa("opencode:secret")}` },
             }),
           )
-          expect(status.status).toBe(200)
+          // An untrusted origin is refused outright: the CORS headers only keep a browser from
+          // reading the response, they do not stop the request from reaching the handler.
+          expect(status.status).toBe(allowed ? 200 : 403)
           expect(status.headers.get("access-control-allow-origin")).toBe(allowed)
           yield* Effect.promise(() => status.arrayBuffer())
 
           const denied = yield* Effect.promise(() =>
             fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), { headers: { origin } }),
           )
-          expect(denied.status).toBe(401)
+          expect(denied.status).toBe(allowed ? 401 : 403)
           expect(denied.headers.get("access-control-allow-origin")).toBe(allowed)
           yield* Effect.promise(() => denied.arrayBuffer())
         }),
