@@ -226,6 +226,9 @@ export const layer = Layer.effect(
       const own = McpConnection.make(input)
       const state: { claim?: Scope.Closeable; holder?: Holder; shared?: McpConnection.Connection } = {}
       const live = () => state.shared ?? own
+      // The shared connection carries the name of the Location that opened it; forms show this Location's.
+      const elicit: McpClient.ElicitationHandler["create"] = (request) =>
+        input.elicitation.create({ ...request, server: input.name })
 
       // Holder callbacks run in the Location's own callback runtime, under its lock, and only while the
       // claim they belong to is the current one.
@@ -249,7 +252,7 @@ export const layer = Layer.effect(
           const claim = yield* Scope.fork(input.scope)
           const holder: Holder = {
             authProvider: input.authProvider,
-            elicitation: input.elicitation.create,
+            elicitation: elicit,
             closed: (reason) => current(holder, () => input.events.closed(reason)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
@@ -276,9 +279,9 @@ export const layer = Layer.effect(
       // Requests through a shared connection bring this Location's elicitation handler along.
       const bind = (client: McpClient.Connection): McpClient.Connection => ({
         ...client,
-        callTool: (request) => client.callTool({ elicitation: input.elicitation.create, ...request }),
-        prompt: (request) => client.prompt({ elicitation: input.elicitation.create, ...request }),
-        readResource: (request) => client.readResource({ elicitation: input.elicitation.create, ...request }),
+        callTool: (request) => client.callTool({ elicitation: elicit, ...request }),
+        prompt: (request) => client.prompt({ elicitation: elicit, ...request }),
+        readResource: (request) => client.readResource({ elicitation: elicit, ...request }),
       })
 
       return {

@@ -3351,8 +3351,10 @@ describe("MCP pool", () => {
       const pool = yield* makePool
       const environment = Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service)
       const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" })
-      const holder = (directory: string) =>
+      // Each holder knows the server by its own name; the connection carries the first one's.
+      const holder = (directory: string, name: string) =>
         Effect.gen(function* () {
+          const asked: string[] = []
           const forms = Context.get(
             yield* Layer.build(
               Form.layer.pipe(
@@ -3369,17 +3371,18 @@ describe("MCP pool", () => {
           const scope = yield* Effect.scope
           const run = yield* FiberSet.makeRuntime<never, void, never>()
           const connection = pool.connection({
-            name: "resources",
+            name,
             config,
             directory,
             authProvider: Effect.undefined,
             elicitation: {
-              create: () =>
-                forms
-                  .ask({ sessionID: "global", title: "Confirm", fields: [{ key: "ok", type: "boolean" }] })
-                  .pipe(
-                    Effect.map((state) => ({ action: state.status === "answered" ? "accept" : "cancel" }) as const),
+              create: (request) =>
+                Effect.sync(() => asked.push(request.server)).pipe(
+                  Effect.andThen(
+                    forms.ask({ sessionID: "global", title: "Confirm", fields: [{ key: "ok", type: "boolean" }] }),
                   ),
+                  Effect.map((state) => ({ action: state.status === "answered" ? "accept" : "cancel" }) as const),
+                ),
               complete: () => Effect.void,
             },
             environment,
@@ -3398,10 +3401,10 @@ describe("MCP pool", () => {
             key: Effect.succeed(McpPool.key({ config, directory })),
           })
           yield* connection.start
-          return { connection, forms }
+          return { connection, forms, asked }
         })
-      const a = yield* holder(directories[0])
-      const b = yield* holder(directories[1])
+      const a = yield* holder(directories[0], "first")
+      const b = yield* holder(directories[1], "second")
       const client = a.connection.client
       if (!client) throw new Error("expected a shared connection")
       expect(b.connection.client).toBe(client)
@@ -3418,6 +3421,7 @@ describe("MCP pool", () => {
       yield* a.forms.reply({ id: asked.id, answer: { ok: true } })
       expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept" })
       expect((yield* b.forms.state(other.id)).status).toBe("cancelled")
+      expect([a.asked, b.asked]).toEqual([["first"], ["second"]])
     }),
   )
 
