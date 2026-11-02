@@ -6,8 +6,6 @@ import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
-import { tempLocationLayer } from "./fixture/location"
-import { Location } from "@opencode/core/location"
 import { TodoTool } from "@opencode/core/tool/plugin/todo"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
@@ -26,11 +24,7 @@ const todos = [
 ] as const
 
 const it = testEffect(
-  AppNodeBuilder.build(Tool.node, [
-    Image.node.replace(imagePassthrough),
-    Permission.node.replace(permissionLayer()),
-    Location.node.replace(tempLocationLayer),
-  ]),
+  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
 )
 
 const setup = (experimental: ConfigExperimental.Info | undefined) =>

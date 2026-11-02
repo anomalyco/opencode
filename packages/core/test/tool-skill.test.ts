@@ -14,8 +14,6 @@ import { SkillTool } from "@opencode/core/tool/plugin/skill"
 import { Tool } from "@opencode/core/tool"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { Image } from "@opencode/core/image"
-import { Location } from "@opencode/core/location"
-import { tempLocationLayer } from "./fixture/location"
 import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
@@ -63,8 +61,6 @@ describe("SkillTool", () => {
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),
-          Location.node.replace(tempLocationLayer),
-          Location.node.replace(tempLocationLayer),
         ]),
       ),
     ),
@@ -117,9 +113,6 @@ describe("SkillTool", () => {
             Permission.node.replace(permission),
             Skill.node.replace(skills),
             Image.node.replace(imagePassthrough),
-            Location.node.replace(tempLocationLayer),
-            Location.node.replace(tempLocationLayer),
-            Location.node.replace(tempLocationLayer),
           ])
 
           return yield* Effect.gen(function* () {

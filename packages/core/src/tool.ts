@@ -11,10 +11,6 @@ import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import type { CodeModeFs } from "./codemode/fs.js"
 import { CodeModeTool } from "./codemode/tool.js"
-import { Environment } from "./environment/index.js"
-import { FileAccess } from "./file-access.js"
-import { FileMutation } from "./file-mutation.js"
-import { FileWrite } from "./file-write.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -48,7 +44,11 @@ type Data = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /** `codeModeFiles` turns on the experimental `fs` and `path` globals in Code Mode, acting through those services. */
+  readonly snapshot: (
+    permissions?: Permission.Ruleset,
+    codeModeFiles?: Context.Context<CodeModeFs.Services>,
+  ) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -92,7 +92,6 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
-    const files = yield* Effect.context<CodeModeFs.Services>()
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -191,6 +190,7 @@ const layer = Layer.effect(
       | {
           data: Data
           names: string
+          fs: boolean
           inventory: CodeModeTool.Inventory
           value: CodeModeCatalog.Inventory
           definition: ToolDefinition
@@ -254,7 +254,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, codeModeFiles) =>
         Effect.sync(() => {
           const data = state.get()
           const active = new Map<string, Tool.Info>()
@@ -273,14 +273,15 @@ const layer = Layer.effect(
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
+          const fs = codeModeFiles !== undefined
+          const cached = catalog?.data === data && catalog.names === names && catalog.fs === fs ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
-                files,
+                codeModeFiles,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -291,6 +292,7 @@ const layer = Layer.effect(
             catalog = {
               data,
               names,
+              fs,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,
@@ -422,13 +424,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [
-    PluginHooks.node,
-    Image.node,
-    Permission.node,
-    Environment.node,
-    FileAccess.node,
-    FileMutation.node,
-    FileWrite.node,
-  ],
+  deps: [PluginHooks.node, Image.node, Permission.node],
 })

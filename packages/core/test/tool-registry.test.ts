@@ -8,8 +8,6 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
 import { Tool } from "@opencode/core/tool"
-import { tempLocationLayer } from "./fixture/location"
-import { Location } from "@opencode/core/location"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
@@ -42,7 +40,6 @@ const imageStore = Layer.mock(Image.Service, {
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
   Image.node.replace(imageStore),
-  Location.node.replace(tempLocationLayer),
   Permission.node.replace(permissionLayer()),
 ])
 const it = testEffect(registryLayer)

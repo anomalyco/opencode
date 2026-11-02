@@ -1,13 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
-import os from "os"
 import path from "path"
 import type { CodeModeFs } from "@opencode/core/codemode/fs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
-import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
@@ -20,7 +18,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
@@ -43,7 +41,7 @@ const fileServices = (directory: string, permission: Partial<Permission.Interfac
   Effect.runSync(
     Effect.context<CodeModeFs.Services>().pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileMutation.node, FileWrite.node]), [
+        AppNodeBuilder.build(LayerNode.group([Environment.node, FileAccess.node, FileWrite.node]), [
           Environment.node.replace(hostEnvironmentLayer),
           Location.node.replace(
             Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
@@ -55,16 +53,17 @@ const fileServices = (directory: string, permission: Partial<Permission.Interfac
     ),
   )
 
-const unusedFiles = fileServices(os.tmpdir())
-
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll, files = unusedFiles) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, files)
+const createCodeMode = (
+  tools: ReadonlyMap<string, Info>,
+  permission = allowAll,
+  files?: Context.Context<CodeModeFs.Services>,
+) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, files)
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "`fetch` is available for HTTP requests, and Node's `fs` (with `fs.promises`) and `path` for files, also importable as `node:fs`, `fs/promises` and `node:path`. Other modules and packages, and timers, are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
       "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
@@ -179,6 +178,14 @@ describe("fetch permissions", () => {
 })
 
 describe("fs", () => {
+  test("without the experimental flag there is no fs or path", async () => {
+    const result = await Effect.runPromise(
+      createCodeMode(new Map()).execute({ code: "return [typeof fs, typeof path]" }, context),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual(["undefined", "undefined"])
+  })
+
   const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
 
   test("fs reads and writes files in the session's directory, asking read and edit permission as the execute call", async () => {
@@ -400,20 +407,10 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(
-    inventory,
-    (_, tool, input, context) => execute(tool, input, context),
-    allowAll,
-    unusedFiles,
-  )
+  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
   const run = (id: string) => {
     const progress: Array<Tool.Metadata> = []
-    return CodeModeTool.create(
-      inventory,
-      (_, tool, input, context) => execute(tool, input, context),
-      allowAll,
-      unusedFiles,
-    )
+    return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
       .execute(
         { code: `return await tools.echo({ value: "${id}" })` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },

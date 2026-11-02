@@ -6,8 +6,6 @@ import { Form } from "@opencode/core/form"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
-import { tempLocationLayer } from "./fixture/location"
-import { Location } from "@opencode/core/location"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
@@ -71,7 +69,6 @@ const it = testEffect(
     Permission.node.replace(permission),
     Form.node.replace(form),
     Image.node.replace(imagePassthrough),
-    Location.node.replace(tempLocationLayer),
   ]),
 )
 

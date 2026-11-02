@@ -13,8 +13,6 @@ import { Tool } from "@opencode/core/tool"
 import { WebSearchTool } from "@opencode/core/tool/plugin/websearch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Image } from "@opencode/core/image"
-import { Location } from "@opencode/core/location"
-import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
@@ -93,7 +91,6 @@ const setup = Effect.gen(function* () {
         }),
       ),
       Image.node.replace(imagePassthrough),
-      Location.node.replace(tempLocationLayer),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })

@@ -8,8 +8,6 @@ import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
-import { tempLocationLayer } from "./fixture/location"
-import { Location } from "@opencode/core/location"
 import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Image } from "@opencode/core/image"
@@ -60,7 +58,6 @@ const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
     Permission.node.replace(permission),
     Image.node.replace(imagePassthrough),
-    Location.node.replace(tempLocationLayer),
     ...replacements,
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))

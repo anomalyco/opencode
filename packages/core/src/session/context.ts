@@ -4,8 +4,13 @@ import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
+import type { CodeModeFs } from "../codemode/fs.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
+import { Config } from "../config.js"
 import { Database } from "../database/database.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
+import { FileWrite } from "../file-write.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -88,6 +93,8 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
+    const config = yield* Config.Service
+    const codeModeFiles = yield* Effect.context<CodeModeFs.Services>()
 
     const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
 
@@ -136,7 +143,10 @@ const layer = Layer.effect(
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions),
+          tools: Effect.gen(function* () {
+            const fs = Config.latest(yield* config.entries(), "experimental")?.codemode_fs === true
+            return yield* registry.snapshot(permissions, fs ? codeModeFiles : undefined)
+          }),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
@@ -207,6 +217,10 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
+    Config.node,
+    Environment.node,
+    FileAccess.node,
+    FileWrite.node,
     Model.node,
     Database.node,
     InstructionBuiltIns.node,

@@ -513,6 +513,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.schedules = value
       }
+      if (own(experimental, "codemode_fs")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.codemode_fs,
+          experimental.codemode_fs,
+          ["experimental", "codemode_fs"],
+          diagnostics,
+        )
+        if (value !== undefined) result.codemode_fs = value
+      }
       if (own(experimental, "artifacts")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.artifacts,
