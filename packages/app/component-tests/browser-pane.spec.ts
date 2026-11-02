@@ -5,6 +5,7 @@ const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 const modules = {
   fixture: source("../../gui-plugins/src/browser/panel.fixture.tsx"),
   embeds: source("../src/runtime/plugin/embeds.tsx"),
+  panelMotion: source("../src/shell/panel-motion.ts"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
 
@@ -12,14 +13,16 @@ story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createEmbeds }, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
       import(modules.embeds),
+      import(modules.panelMotion),
       import(modules.language),
     ])
 
     mountBrowserPane({
       createEmbeds,
+      panelMotion,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
       useLanguage: language.useLanguage,
@@ -94,6 +97,36 @@ story("paints a still of the page in place of the native view while a panel move
   await expect(still).toBeVisible()
   await expect(native).toHaveAttribute("data-visible", "false")
   await motion.click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+})
+
+story("paints a still of the page in place of the native view while a resize handle is dragged", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+
+  // A native view's bounds land on screen frames before the DOM around it, so one left up through a drag jumps against
+  // its pane on every move. A click on the handle moves nothing and must not blink the page out. Read in the same task
+  // as each event, so a view hidden and shown again before the next frame cannot pass.
+  const visible = await handle.evaluate((element) => {
+    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new MouseEvent("mousedown", { ...at, detail: 1 }))
+    document.dispatchEvent(new MouseEvent("mouseup", at))
+    const click = read()
+    element.dispatchEvent(new MouseEvent("mousedown", { ...at, detail: 1 }))
+    const pressed = read()
+    document.dispatchEvent(new MouseEvent("mousemove", { ...at, clientX: at.clientX - 40 }))
+
+    return { click, pressed, dragging: read() }
+  })
+
+  expect(visible).toEqual({ click: "true", pressed: "true", dragging: "false" })
+  await expect(still).toBeVisible()
+  await page.mouse.up()
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
 })

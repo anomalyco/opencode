@@ -185,17 +185,19 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
       },
       /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
       updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
-        setStore("context", "items", (items) =>
-          items.map((item) => {
-            if (item.commentID !== commentID) return item
-
-            if (item.type === "quote") return { ...item, comment: next.comment }
+        setStore(
+          "context",
+          "items",
+          (item) => item.commentID === commentID,
+          (item) => {
+            // Preserve quote identity so an open comment editor does not remount.
+            if (item.type === "quote") return { comment: next.comment }
 
             const value =
               item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
 
             return { ...value, key: contextItemKey(value) }
-          }),
+          },
         )
         clearRetry()
       },

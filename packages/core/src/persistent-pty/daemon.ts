@@ -120,6 +120,15 @@ export type StreamEvent =
   | { readonly type: "title_changed"; readonly title: string }
   | { readonly type: "foreground_process_changed"; readonly process: string | null }
 
+export type SubscribeInput = {
+  readonly cursor: number
+  readonly attachmentID: string
+  readonly role: Role
+  readonly takeover?: boolean
+  readonly onEvent: (event: StreamEvent) => void
+  readonly onEnd: () => void
+}
+
 export type DaemonAttachment = {
   readonly terminal: WireTerminal
   readonly role: Role
@@ -149,14 +158,7 @@ export interface DaemonTransport {
   readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
     id: number,
-    input: {
-      readonly cursor: number
-      readonly attachmentID: string
-      readonly role: Role
-      readonly takeover?: boolean
-      readonly onEvent: (event: StreamEvent) => void
-      readonly onEnd: () => void
-    },
+    input: SubscribeInput,
   ) => Effect.Effect<DaemonAttachment, DaemonError>
 }
 
@@ -316,15 +318,21 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   })
 
-  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")(function* (value: object, shouldStart: boolean) {
-    const current = yield* connect(shouldStart)
-    return yield* oneShot(current, value).pipe(
-      Effect.catch((error) => {
-        if (error.kind === "registration" && registration === current) registration = undefined
-        return Effect.fail(error)
-      }),
-    )
-  })
+  // Runs against the live registration and forgets it when the daemon rejects it as stale.
+  const withRegistration = <A>(shouldStart: boolean, run: (current: Registration) => Effect.Effect<A, DaemonError>) =>
+    Effect.gen(function* () {
+      const current = yield* connect(shouldStart)
+      return yield* run(current).pipe(
+        Effect.catch((error) => {
+          if (error.kind === "registration" && registration === current) registration = undefined
+          return Effect.fail(error)
+        }),
+      )
+    })
+
+  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")((value: object, shouldStart: boolean) =>
+    withRegistration(shouldStart, (current) => oneShot(current, value)),
+  )
 
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
@@ -392,20 +400,14 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (
     terminalID: number,
-    input: Parameters<DaemonTransport["subscribe"]>[1],
+    input: SubscribeInput,
   ) {
-    const attempt = Effect.gen(function* () {
-      const current = yield* connect(false)
-      return yield* Effect.tryPromise({
+    const attempt = withRegistration(false, (current) =>
+      Effect.tryPromise({
         try: () => subscribePromise(current, terminalID, input),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
-      }).pipe(
-        Effect.catch((error) => {
-          if (error.kind === "registration" && registration === current) registration = undefined
-          return Effect.fail(error)
-        }),
-      )
-    })
+      }),
+    )
     return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
@@ -535,13 +537,7 @@ const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registratio
           try: () => decode(first),
           catch: (cause) => failure("protocol", cause),
         })
-        if (response.type === "error")
-          return yield* Effect.fail(
-            new DaemonError({
-              kind: response.message === "authentication failed" ? "registration" : "protocol",
-              message: response.message,
-            }),
-          )
+        if (response.type === "error") return yield* Effect.fail(responseError(response.message))
         return response
       }),
     (socket) => Effect.sync(() => socket.destroy()),
@@ -562,7 +558,7 @@ const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registratio
 async function subscribePromise(
   registration: Registration,
   id: number,
-  input: Parameters<DaemonTransport["subscribe"]>[1],
+  input: SubscribeInput,
 ): Promise<DaemonAttachment> {
   const socket = net.createConnection(registration.socket)
   const frames = decoder(socket)
@@ -587,11 +583,7 @@ async function subscribePromise(
     const initial = await frames.next()
     if (initial.done) throw new Error("opencode-pty closed before attachment")
     const response = decode(initial.value)
-    if (response.type === "error")
-      throw new DaemonError({
-        kind: response.message === "authentication failed" ? "registration" : "protocol",
-        message: response.message,
-      })
+    if (response.type === "error") throw responseError(response.message)
     if (response.type !== "attached") throw new Error(`unexpected opencode-pty response: ${response.type}`)
     let detached = false
     const pump = async () => {
@@ -696,6 +688,10 @@ const decodeWireResponse = Schema.decodeUnknownSync(Schema.fromJsonString(WireRe
 
 function decode(payload: Uint8Array) {
   return decodeWireResponse(Buffer.from(payload).toString("utf8"))
+}
+
+function responseError(message: string) {
+  return new DaemonError({ kind: message === "authentication failed" ? "registration" : "protocol", message })
 }
 
 function failure(kind: DaemonError["kind"], cause: unknown) {

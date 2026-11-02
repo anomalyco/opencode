@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import {
+  AIError,
   GenerationOptions,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
@@ -69,7 +71,11 @@ const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
     if (reject?.(request)) {
-      return Stream.make(LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }))
+      return Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({ message: "prompt too long", classification: "context-overflow" }),
+        }),
+      )
     }
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,
@@ -430,6 +436,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(native(231_200))).toBe(true)
     expect(yield* due(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
+    // An input limit above the context window, as some catalogs and config overrides report, cannot be used in full.
+    const overstated = { context: 128_000, input: 272_000, output: 128_000 }
+    expect(yield* due(input(108_799, overstated))).toBe(false)
+    expect(yield* due(input(108_800, overstated))).toBe(true)
+    expect(yield* due(input(200_000, { context: 0, input: 272_000, output: 0 }))).toBe(false)
+
     // The summary's 16k output limit is more than 15% of a 100k window, so it sets the ceiling.
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
@@ -446,6 +458,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
         yield* compaction.transform((editor) => editor.configure({ buffer: 100_000 }))
         expect(yield* due(input(60_000, contextLimited))).toBe(false)
         expect(yield* due(input(84_000, contextLimited))).toBe(true)
+      }),
+    )
+
+    // A percentage buffer is a share of the model's window.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* compaction.transform((editor) => editor.configure({ buffer: "25%" }))
+        expect(yield* due(input(74_999, contextLimited))).toBe(false)
+        expect(yield* due(input(75_000, contextLimited))).toBe(true)
       }),
     )
 

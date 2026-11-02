@@ -119,12 +119,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
   resource: string,
   page: PageInput = {},
 ) {
+  const virtual = resource.startsWith("skill://")
   const first = yield* files.read(input, { offset: 0, length: FIRST_CHUNK }).pipe(
     Effect.catchTag("Environment.WrongKind", (error) => {
       if (error.actual !== "directory")
         return Effect.fail(new PathKindError({ resource, expected: "a file or directory" }))
       return files.list(input).pipe(
-        Effect.map((entries) => list(entries, page)),
+        Effect.map((entries) => list(entries, page, virtual ? "/" : path.sep)),
         Effect.catchTag("Environment.WrongKind", () =>
           Effect.fail(new PathKindError({ resource, expected: "a file or directory" })),
         ),
@@ -140,8 +141,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
     const whole = yield* readFile(files, input, resource)
     return {
       type: "file" as const,
-      uri: pathToFileURL(input).href,
-      name: path.basename(input),
+      uri: virtual ? resource : pathToFileURL(input).href,
+      name: virtual ? path.posix.basename(input) : path.basename(input),
       content: Buffer.from(whole.bytes).toString("base64"),
       encoding: "base64" as const,
       mime: media,
@@ -153,8 +154,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
     return {
       type: "file" as const,
-      uri: pathToFileURL(input).href,
-      name: path.basename(input),
+      uri: virtual ? resource : pathToFileURL(input).href,
+      name: virtual ? path.posix.basename(input) : path.basename(input),
       content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
       encoding: "utf8" as const,
       mime: mimeType(input),
@@ -255,7 +256,7 @@ const makeTextPage = Effect.fnUntraced(function* (
   })
 })
 
-const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
+const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep) => {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const visible = items
@@ -264,7 +265,7 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
         ? []
         : [
             ListEntry.make({
-              path: RelativePath.make(item.name + (item.type === "directory" ? path.sep : "")),
+              path: RelativePath.make(item.name + (item.type === "directory" ? sep : "")),
               type: item.type,
             }),
           ],

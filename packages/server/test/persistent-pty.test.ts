@@ -16,8 +16,6 @@ import { ServerProcess } from "../src/process"
 // These tests drive Unix shell commands, so they skip Windows; the package resolves no binary on unsupported platforms.
 const binary = process.platform === "win32" ? undefined : (process.env.OPENCODE_PTY_BIN ?? binaryPath)
 const smoke = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
-// The published @opencode/pty predates renaming, so only a local build set through OPENCODE_PTY_BIN can rename.
-const renameSmoke = process.env.OPENCODE_PTY_BIN ? smoke : it.live.skip
 
 smoke(
   "reads the latest controlled terminal with optional physical line counts through the SDK",
@@ -135,7 +133,7 @@ smoke(
   20_000,
 )
 
-renameSmoke(
+smoke(
   "renames and resizes a terminal independently through the SDK",
   () =>
     Effect.gen(function* () {

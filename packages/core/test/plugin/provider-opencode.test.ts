@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -13,7 +13,6 @@ import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
-import { ConfigManaged } from "@opencode/core/config/managed"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
@@ -30,6 +29,7 @@ import { Session } from "@opencode/core/session"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -37,7 +37,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* OpencodePlugin.effect(host)
 })
 
@@ -119,20 +119,6 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function eventually<A, E>(
-  effect: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, E | Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
 }
 
 const cost = (input: number, output = 0) => [
@@ -1574,7 +1560,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )
@@ -1780,7 +1766,7 @@ describe("OpencodePlugin with a Console config", () => {
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigPolicyPlugin.Plugin.effect(host)
 
@@ -1901,7 +1887,7 @@ describe("OpencodePlugin with a Console config", () => {
     ),
   )
 
-  it.live("keeps Console providers out of user and project config's reach, bound to the Console connection", () =>
+  it.live("layers Console providers below user config, bound to the Console connection", () =>
     Effect.acquireUseRelease(
       Effect.sync(() =>
         Bun.serve({
@@ -1930,23 +1916,17 @@ describe("OpencodePlugin with a Console config", () => {
           const providers = yield* Provider.Service
           const models = yield* Model.Service
           const config = yield* Config.Test
-          const overlay = {
-            name: "Mine",
-            settings: { apiKey: "my-key", baseURL: "https://mine.example/v1" },
-            headers: { "x-org-id": "mine" },
-            models: { chat: { name: "My Chat" }, mine: { name: "My Model" } },
-          }
           yield* config.setEntries([
-            new ConfigManaged.Document({
-              type: "document",
-              info: Schema.decodeUnknownSync(Info)({ providers: { remote: { headers: { "x-managed": "true" } } } }),
-            }),
             new Document({
               type: "document",
               info: Schema.decodeUnknownSync(Info)({
                 providers: {
-                  remote: overlay,
-                  normal: { ...overlay, package: "aisdk:@ai-sdk/openai-compatible" },
+                  remote: {
+                    name: "Mine",
+                    settings: { apiKey: "my-key" },
+                    headers: { "x-org-id": "mine" },
+                    models: { chat: { name: "My Chat" } },
+                  },
                 },
               }),
             }),
@@ -1955,30 +1935,26 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host)
           yield* ConfigProviderPlugin.Plugin.effect(host)
 
-          // Managed configuration may still shape a Console provider; a project or user file cannot.
           const provider = required(yield* providers.get(Provider.ID.make("remote")))
-          expect(provider.name).toBe("Console")
+          expect(provider.name).toBe("Mine")
           expect(provider.integrationID).toBe(Integration.ID.make("opencode"))
-          expect(provider.headers).toEqual({ "x-org-id": "console", "x-console": "true", "x-managed": "true" })
+          expect(provider.headers).toEqual({ "x-org-id": "mine", "x-console": "true" })
           expect(provider.settings).toEqual({
             baseURL: `${server.url.origin}/v1`,
             custom: "console",
+            apiKey: "my-key",
             provider: "remote",
           })
           const chat = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("chat")))
-          expect(chat.name).toBe("Console Chat")
+          expect(chat.name).toBe("My Chat")
           expect(chat.settings).toMatchObject({ temperature: 0.1 })
-          expect(yield* models.get(Provider.ID.make("remote"), Model.ID.make("mine"))).toBeUndefined()
-
-          // Providers the Console does not supply stay overridable.
-          const normal = required(yield* providers.get(Provider.ID.make("normal")))
-          expect(normal.headers).toEqual({ "x-org-id": "mine" })
-          expect(normal.settings).toMatchObject({ baseURL: "https://mine.example/v1", apiKey: "my-key" })
-          expect(required(yield* models.get(Provider.ID.make("normal"), Model.ID.make("chat"))).name).toBe("My Chat")
+          expect(required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("other"))).name).toBe(
+            "Console Other",
+          )
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
@@ -2009,7 +1985,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           // Registered in production order: the OpenCode and OpenAI provider plugins, then config in `post`.
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* OpenAIPlugin.effect(host)
@@ -2058,7 +2034,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigWebSearchPlugin.Plugin.effect(host)
           // A workspace without hosted search, or a member its policy denies, would get only failed searches.
