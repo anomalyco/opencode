@@ -92,6 +92,8 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
   await fs.writeFile(path.join(data, "repos", "readme"), "DATA_REFERENCE_CANARY")
   await fs.writeFile(path.join(data, "opencode-probe.db"), "PRIVATE_DATABASE_CANARY")
   await fs.writeFile(path.join(root, "models.json"), "{}")
+  await fs.writeFile(path.join(root, "git-system"), "[core]\n  abbrev = 8\n")
+  await fs.writeFile(path.join(root, "git-global"), "[user]\n  name = Smoke Test\n")
   await fs.writeFile(
     path.join(config, "opencode.json"),
     JSON.stringify({
@@ -151,6 +153,8 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
     SMOKE_SECRET_TOKEN: "PRIVATE_ENVIRONMENT_CANARY",
     PWD: directory,
     TMPDIR: path.join(root, "tmp"),
+    GIT_CONFIG_SYSTEM: path.join(root, "git-system"),
+    GIT_CONFIG_GLOBAL: path.join(root, "git-global"),
   })
   return { root, directory, outside, reference, data, config, env }
 }
@@ -208,6 +212,11 @@ for (const fullDiskRead of [false, true]) {
     { name: "grep", input: { pattern: "NATIVE_EDIT_CANARY" }, expect: "NATIVE_EDIT_CANARY" },
     { name: "write", input: { path: "format.fmt", content: "unformatted" } },
     { name: "shell", input: { command: network }, expect: "NETWORK_BLOCKED" },
+    {
+      name: "shell",
+      input: { command: "git config --get core.abbrev && printf GIT_CONFIG_OK" },
+      expect: "GIT_CONFIG_OK",
+    },
     { name: "shell", input: { command: `cat '${f.reference}/readme'` }, expect: "REFERENCE_READ_CANARY" },
     { name: "shell", input: { command: `cat '${f.data}/repos/readme'` }, expect: "DATA_REFERENCE_CANARY" },
     { name: "shell", input: { command: `cat '${f.data}/opencode-probe.db'` }, expect: "Operation not permitted" },

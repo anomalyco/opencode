@@ -16,6 +16,7 @@ export interface Policy {
   readonly writableRoots: readonly string[]
   readonly protectedPaths: readonly string[]
   readonly unreadablePaths: readonly string[]
+  readonly gitConfigFiles?: readonly string[]
   readonly referenceRoots?: readonly string[]
   readonly referenceDataRoots?: readonly string[]
   readonly referenceDeniedPaths?: readonly string[]

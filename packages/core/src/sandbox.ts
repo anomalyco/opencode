@@ -10,6 +10,7 @@ import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { Location } from "./location.js"
 import { Reference } from "./reference.js"
 import { SandboxPolicy } from "./sandbox/policy.js"
+import { SandboxGitConfig } from "./sandbox/git-config.js"
 import { ShellSelect } from "./shell/select.js"
 import type { SandboxFiles } from "./sandbox/files.js"
 
@@ -138,12 +139,20 @@ export const configured = (input?: Options) => {
               )
             : undefined
         const backend = scratch ? yield* Effect.promise(() => import("./sandbox/macos.js")) : undefined
+        const gitConfigFiles = scratch
+          ? yield* SandboxGitConfig.discover(location.directory, SandboxPolicy.environment(process.env, scratch))
+          : []
         // Resolve grants once. Re-resolving a workspace-controlled symlink on every invocation
         // would let a command redirect a configured grant to a different host directory.
         const policy =
           backend && scratch
             ? yield* Effect.tryPromise({
-                try: () => backend.MacSandbox.policy({ ...global, directory: location.directory, scratch }, options),
+                try: () =>
+                  backend.MacSandbox.policy(
+                    { ...global, directory: location.directory, scratch },
+                    options,
+                    gitConfigFiles,
+                  ),
                 catch: (cause) => new UnavailableError({ message: `Unable to initialize shell sandbox: ${cause}` }),
               }).pipe(Effect.orDie)
             : undefined
@@ -248,7 +257,10 @@ export const configured = (input?: Options) => {
               reads: enabled ? (options.fullDiskRead ? "broad" : "restricted") : "unrestricted",
               escalation: enabled ? approval : "disabled",
               writableRoots: current?.writableRoots ?? [],
-              readableRoots: current && backend ? backend.MacSandbox.readableRoots(current) : [],
+              readableRoots:
+                current && backend
+                  ? [...backend.MacSandbox.readableRoots(current), ...(current.gitConfigFiles ?? [])]
+                  : [],
             }
           }),
           search: Effect.fn("Sandbox.search")(function* (command) {

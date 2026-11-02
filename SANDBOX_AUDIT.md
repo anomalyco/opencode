@@ -40,6 +40,8 @@ Shell launch policy is fixed for each invocation after hooks and approval. A run
 
 Registered references are trusted read-only grants. Each confined launch resolves the current registry, including asynchronous Git checkouts; existing aliases are pinned for the Location and a changed target fails closed. OpenCode's data directory remains denied except for explicit reference roots within it, with credentials, databases and private state denied again after the reference grants. Existing processes retain the policy with which they started.
 
+At Location startup Git reports system and global configuration origins, including active includes. These host-owned files receive individual read-only grants; repository-controlled include origins are not trusted. Existing read exclusions take precedence, and configuration values are not collected by discovery. Git configuration can itself contain sensitive information, which becomes readable through the granted files.
+
 ## Trusted host services and human operations
 
 | Service or entry point                                                                      | Classification and retained behavior                                                                                                                                                                                                                                                                                                                                                                                |

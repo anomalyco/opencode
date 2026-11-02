@@ -97,6 +97,7 @@ export async function roots(values: readonly string[]) {
 export async function policy(
   host: { directory: string; scratch: string; home: string; config: string; data: string; state: string },
   options: SandboxPolicy.Options,
+  gitConfigFiles: readonly string[] = [],
 ): Promise<SandboxPolicy.Policy> {
   const directory = await fs.realpath(host.directory)
   if (directory === path.parse(directory).root || directory === (await fs.realpath(host.home)))
@@ -122,6 +123,7 @@ export async function policy(
     ]),
     ...hostPaths,
     ...readableRoots,
+    ...gitConfigFiles,
   ]
   const unreadablePaths = [
     ...hostPaths,
@@ -138,6 +140,7 @@ export async function policy(
     writableRoots,
     protectedPaths: [...new Set([...protectedPaths, ...aliases])],
     unreadablePaths: [...new Set([...unreadablePaths, ...unreadableAliases])],
+    gitConfigFiles,
     scratch,
   }
 }
@@ -201,6 +204,7 @@ export function launch(
   ]
   const parameters = [
     ...readable.map((value, index) => `-DREAD_${index}=${value}`),
+    ...(policy.gitConfigFiles ?? []).map((value, index) => `-DGIT_CONFIG_${index}=${value}`),
     ...policy.writableRoots.map((value, index) => `-DWRITE_${index}=${value}`),
     ...policy.protectedPaths.map((value, index) => `-DPROTECTED_${index}=${value}`),
     ...policy.unreadablePaths.map((value, index) => `-DUNREADABLE_${index}=${value}`),
@@ -227,6 +231,7 @@ export function launch(
     ...(policy.fullDiskRead
       ? ["(allow file-read* file-map-executable)"]
       : readable.map((_, index) => `(allow file-read* file-map-executable (subpath (param \"READ_${index}\")))`)),
+    ...(policy.gitConfigFiles ?? []).map((_, index) => `(allow file-read* (literal (param \"GIT_CONFIG_${index}\")))`),
     ...policy.writableRoots.map((_, index) => `(allow file-write* (subpath (param \"WRITE_${index}\")))`),
     ...policy.writableRoots.map((_, index) => `(deny file-write-unlink (literal (param \"WRITE_${index}\")))`),
     ...policy.protectedPaths.map((_, index) => `(deny file-write* (subpath (param \"PROTECTED_${index}\")))`),
