@@ -10,11 +10,18 @@ execution instead of letting the Session go idle.
 
 ## Install
 
-Plugins are installed from a Git URL. Add the package path to
-`opencode.json(c)`:
+Install directly from Git:
+
+```sh
+opencode plugin add 'git+https://github.com/anomalyco/opencode.git#path:packages/plugins/ralph-loop'
+```
+
+For local development, add the directory to `plugins` in the project's
+`opencode.jsonc`:
 
 ```jsonc
 {
+  "$schema": "https://opencode.ai/config.json",
   "plugins": ["./packages/plugins/ralph-loop"],
 }
 ```
