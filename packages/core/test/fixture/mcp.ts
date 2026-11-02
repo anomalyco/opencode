@@ -9,6 +9,7 @@ import { location } from "./location"
 export const emptyMcp = Mcp.Service.of({
   transform: () => Effect.succeed({ dispose: Effect.void }),
   reload: () => Effect.void,
+  start: () => Effect.void,
   servers: () => Effect.succeed([]),
   add: () => Effect.die("unused mcp.add"),
   connect: () => Effect.die("unused mcp.connect"),

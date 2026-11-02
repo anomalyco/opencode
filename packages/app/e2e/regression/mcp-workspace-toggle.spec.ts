@@ -79,6 +79,26 @@ async function open(
   return { requests, panel, show, push: mock.push, toggle: panel.getByRole("switch") }
 }
 
+for (const surface of ["popover", "dialog", "settings"] as const) {
+  test(`idle MCP stays enabled and disconnects from the ${surface}`, async ({ page }) => {
+    const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
+
+    const view = await open(page, {
+      surface,
+      mcp: [{ name: "figma-desktop", status: { status: "idle" } }],
+      onMcpAction: (action) => void actions.push(action),
+    })
+
+    await expect(view.toggle).toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    await expect(view.toggle).toHaveAccessibleDescription("Idle")
+    await view.panel.locator('[data-slot="switch-control"]').click()
+    await expect(view.toggle).not.toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    expect(actions).toEqual([{ server: "figma-desktop", action: "disconnect", directory: workspace }])
+  })
+}
+
 test("settings shows and toggles the MCP of the session it was opened from", async ({ page }) => {
   const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
 

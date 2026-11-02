@@ -82,7 +82,12 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
         .filter(([name, enabled]) => {
           const server = catalog.data.find((server) => server.name === name)
 
-          return server && (enabled ? server.status.status !== "connected" : server.status.status !== "disabled")
+          return (
+            server &&
+            (enabled
+              ? server.status.status !== "connected" && server.status.status !== "idle"
+              : server.status.status !== "disabled")
+          )
         })
         .map(([name, enabled]) =>
           toggle.mutateAsync({ name, enabled, directory }).then(
@@ -98,7 +103,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     const unresolved = entries.find(([name, enabled]) => {
       const status = current.data.find((server) => server.name === name)?.status.status
 
-      return enabled ? status !== "connected" : status !== undefined && status !== "disabled"
+      return enabled ? status !== "connected" && status !== "idle" : status !== undefined && status !== "disabled"
     })
 
     if (!unresolved) return true

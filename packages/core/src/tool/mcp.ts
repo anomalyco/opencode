@@ -2,7 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
-import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { extension } from "mime-types"
 import { Bus } from "../bus.js"
@@ -42,15 +42,18 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
     const toolOutput = yield* ToolOutput.Service
+    const root = yield* Effect.scope
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
 
-    // Register once after initial discovery; only subsequent updates need a debounced reload.
-    const initial = yield* lock
-      .withPermit(
-        Effect.gen(function* () {
-          discovered = yield* mcp.tools()
-          yield* tools.transform((editor) => {
+    // Session preparation starts discovery, not graph construction. Concurrent subagents share it.
+    const initial = yield* Effect.cached(
+      mcp.start().pipe(
+        Effect.andThen(
+          lock.withPermit(
+            Effect.gen(function* () {
+              discovered = yield* mcp.tools()
+              yield* tools.transform((editor) => {
             for (const tool of discovered) {
               editor.add({
                 name: tool.name,
@@ -117,8 +120,13 @@ export const layer = Layer.effect(
             }
           })
         }),
-      )
-      .pipe(Effect.forkScoped)
+      ),
+    ),
+    Scope.provide(root),
+    Effect.forkIn(root),
+    Effect.uninterruptible,
+  ),
+)
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
         discovered = yield* mcp.tools()
@@ -141,7 +149,7 @@ export const layer = Layer.effect(
     )
     return Service.of({
       flush: Effect.gen(function* () {
-        yield* Fiber.await(initial)
+        yield* Effect.flatMap(initial, Fiber.join)
         yield* mcp.awaitStartup()
         // Each catalog refresh creates new tool objects, so identity shows whether the registry is behind.
         const current = yield* mcp.tools()

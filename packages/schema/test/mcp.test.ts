@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Mcp } from "../src/mcp.js"
 
+test("round-trips an enabled idle MCP server", () => {
+  const input = { name: "docs", status: { status: "idle" } } as const
+  const value = Schema.decodeUnknownSync(Mcp.Server)(input)
+  expect(value).toEqual(input)
+  expect(Schema.encodeSync(Mcp.Server)(value)).toEqual(input)
+})
+
 describe("Mcp resources", () => {
   test("decodes resource catalogs and omits absent metadata", () => {
     const value = Schema.decodeUnknownSync(Mcp.ResourceCatalog)({

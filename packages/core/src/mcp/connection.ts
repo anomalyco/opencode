@@ -20,8 +20,10 @@ export interface Events {
   readonly failed: (failure: Failure) => Effect.Effect<void>
   /** The attempt ended, however it ended. */
   readonly settled: Effect.Effect<void>
-  /** A live connection was torn down. */
+  /** A live connection was torn down for disposal, so its cached metadata is gone too. */
   readonly stopped: Effect.Effect<void>
+  /** A live connection released its transport while keeping the metadata it discovered. */
+  readonly released: Effect.Effect<void>
   /** The live connection closed on its own. Runs under the lock; the owner decides how to stop. */
   readonly closed: (reason: string) => Effect.Effect<void>
   readonly toolsChanged: Effect.Effect<void>
@@ -57,15 +59,23 @@ export interface Catalog {
   readonly templates: ReadonlyArray<McpClient.ResourceTemplate>
 }
 
-/** One server connection, reconnected in place, with the catalogs it listed. */
+/** One server connection, reconnected in place, with the metadata it discovered. */
 export interface Connection {
   readonly client: McpClient.Connection | undefined
   /** The server's tool list as listed. Each refresh replaces the array. */
   readonly tools: ReadonlyArray<McpClient.Tool> | undefined
   readonly prompts: ReadonlyArray<McpClient.Prompt> | undefined
+  /** Retained while the transport is released so startup and prompts survive an idle disconnect. */
+  readonly instructions: string | undefined
+  readonly title: string | undefined
+  /** The resource catalog most recently listed through this connection, retained while released. */
+  readonly catalog: Catalog | undefined
   /** Connects and lists tools; a failure is reported through `failed`. */
   readonly start: Effect.Effect<void>
+  /** Tears the connection down for disposal, dropping every cached catalog. */
   readonly stop: Effect.Effect<void>
+  /** Releases the transport after discovery while keeping the cached catalogs for the next use. */
+  readonly release: Effect.Effect<void>
   /**
    * Runs a request against `client` and, if that request observed a session expiry, reconnects and
    * runs it once more against the replacement. Any other failure passes through.
@@ -74,7 +84,8 @@ export interface Connection {
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
   ) => Effect.Effect<A, E>
-  readonly catalog: (client: McpClient.Connection) => Effect.Effect<Catalog, Error>
+  /** Lists the resource catalog through the live connection and caches the result. */
+  readonly loadCatalog: (client: McpClient.Connection) => Effect.Effect<Catalog, Error>
 }
 
 export function make(input: Input): Connection {
@@ -83,6 +94,9 @@ export function make(input: Input): Connection {
     client?: McpClient.Connection
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
+    instructions?: string
+    title?: string
+    catalog?: Catalog
   } = {}
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
@@ -140,7 +154,14 @@ export function make(input: Input): Connection {
     client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.toolsChanged))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
-    client.onResourcesChanged(() => live(input.events.resourcesChanged))
+    client.onResourcesChanged(() =>
+      live(
+        Effect.suspend(() => {
+          state.catalog = undefined
+          return input.events.resourcesChanged
+        }),
+      ),
+    )
   }
 
   const start: Effect.Effect<void> = Effect.suspend(() =>
@@ -173,6 +194,9 @@ export function make(input: Input): Connection {
         state.client = result.value.client
         state.tools = result.value.tools
         state.prompts = []
+        state.instructions = result.value.client.instructions
+        state.title = result.value.client.title
+        state.catalog = undefined
         watch(result.value.client)
         yield* input.events.connected
         whenLive(result.value.client)(refreshPrompts(result.value.client))
@@ -199,9 +223,40 @@ export function make(input: Input): Connection {
     state.client = undefined
     state.tools = undefined
     state.prompts = undefined
+    state.instructions = undefined
+    state.title = undefined
+    state.catalog = undefined
     yield* Scope.close(scope, Exit.void)
     yield* input.events.stopped
   })
+
+  // Idle release closes only the transport. The tools, prompts, instructions, title and resource
+  // catalog stay available, because MCP has no protocol for proving a tool left no persistent state.
+  const release = Effect.gen(function* () {
+    const scope = state.scope
+    if (!scope) return
+    state.scope = undefined
+    state.client = undefined
+    yield* Scope.close(scope, Exit.void)
+    yield* input.events.released
+  })
+
+  const loadCatalog = (client: McpClient.Connection) =>
+    recovering(client, (client) =>
+      Effect.all(
+        {
+          resources: client.resources(),
+          // Some servers declare resources without implementing template listing.
+          templates: client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
+        },
+        { concurrency: "unbounded" },
+      ),
+    ).pipe(
+      Effect.map((catalog) => {
+        if (state.client === client) state.catalog = catalog
+        return catalog
+      }),
+    )
 
   return {
     get client() {
@@ -213,19 +268,19 @@ export function make(input: Input): Connection {
     get prompts() {
       return state.prompts
     },
+    get instructions() {
+      return state.instructions
+    },
+    get title() {
+      return state.title
+    },
+    get catalog() {
+      return state.catalog
+    },
     start,
     stop,
+    release,
     recovering,
-    catalog: (client) =>
-      recovering(client, (client) =>
-        Effect.all(
-          {
-            resources: client.resources(),
-            // Some servers declare resources without implementing template listing.
-            templates: client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
-          },
-          { concurrency: "unbounded" },
-        ),
-      ),
+    loadCatalog,
   }
 }
