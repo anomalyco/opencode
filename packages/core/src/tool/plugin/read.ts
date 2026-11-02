@@ -59,22 +59,17 @@ export const Plugin = {
                 if (!skill || !Skill.isUri(skill.path))
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const extra = yield* skills.files(id)
-                const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
                   save: [skill.id],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                  ...Permission.invocation(context),
                 })
                 yield* permission.assert({
                   action: "read",
                   resources: [parsed.uri],
                   save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                  ...Permission.invocation(context),
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
                 const encoder = new TextEncoder()

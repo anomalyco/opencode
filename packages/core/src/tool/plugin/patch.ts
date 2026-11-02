@@ -101,11 +101,6 @@ export const Plugin = {
               })
             }
             return Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
               const hunks = yield* Effect.fromResult(parsed).pipe(
                 Effect.mapError((error) => new ToolFailure({ message: `patch verification failed: ${error.message}` })),
@@ -222,9 +217,7 @@ export const Plugin = {
                   diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
                   files: patchFiles,
                 },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
 
               yield* Effect.forEach(

@@ -154,9 +154,7 @@ export const Plugin = {
                 resources: [url],
                 save: ["*"],
                 metadata: input,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
 
               const { body, contentType } = yield* Effect.gen(function* () {
@@ -165,9 +163,7 @@ export const Plugin = {
                     action: name,
                     resources: [next],
                     metadata: { ...input, url: next },
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: { type: "tool", messageID: context.messageID, id: context.id },
+                    ...Permission.invocation(context),
                   })
                 const response = yield* execute(http, check, url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () => execute(http, check, url, input.format, "opencode")),

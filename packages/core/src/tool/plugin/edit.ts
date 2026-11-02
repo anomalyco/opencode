@@ -277,11 +277,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const permissionSource = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
               if (input.oldString === input.newString) {
                 return yield* new ToolFailure({
                   message: "No changes to apply: oldString and newString are identical.",
@@ -330,9 +325,7 @@ export const Plugin = {
                   action: "read",
                   resources: [target.resource],
                   save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: permissionSource,
+                  ...Permission.invocation(context),
                 })
                 const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
                 return yield* new ToolFailure({

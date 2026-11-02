@@ -165,9 +165,7 @@ export const Plugin = {
               resources: [source],
               save: ["*"],
               metadata: { url: source },
-              sessionID: context.sessionID,
-              agent: context.agent,
-              source: { type: "tool", messageID: context.messageID, id: context.id },
+              ...Permission.invocation(context),
             })
             return yield* Effect.gen(function* () {
               const response = yield* http
@@ -264,7 +262,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
               const resolved = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
               const model = resolved.model
               const variant = resolved.variant
@@ -280,9 +277,7 @@ export const Plugin = {
                 resources: [ref],
                 save: ["*"],
                 metadata: { ...input, model: ref },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
               if (target) {
                 yield* access.authorizeExternal([target], context)
@@ -290,9 +285,7 @@ export const Plugin = {
                   action: "edit",
                   resources: [target.resource],
                   save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
+                  ...Permission.invocation(context),
                 })
               }
               const images = input.images
@@ -333,9 +326,7 @@ export const Plugin = {
                   const request = {
                     action: "edit",
                     resources: [actual.resource],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
+                    ...Permission.invocation(context),
                   }
                   yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }

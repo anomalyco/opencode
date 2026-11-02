@@ -51,9 +51,7 @@ export const Plugin = {
                 resources: [input.query],
                 save: ["*"],
                 metadata: input,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               const search = (providerID?: WebSearch.ID) =>
                 websearch.query(
