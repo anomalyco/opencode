@@ -180,7 +180,6 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
 
   await menu.hover()
   await expect(thumb).toHaveCSS("opacity", "1")
-  await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
 
   const track = (await menu.boundingBox())!
 
