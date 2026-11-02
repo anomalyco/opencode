@@ -211,3 +211,41 @@ test("local config commands do not start or require a server", async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test.each([
+  { name: "plain text with NO_COLOR", noColor: "1", prefix: "ERROR" },
+  { name: "colored text with FORCE_COLOR", noColor: undefined, prefix: "\u001b[31m\u001b[1mERROR\u001b[22m\u001b[39m" },
+])("startup connection failures print $name without a stack trace", async ({ noColor, prefix }) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-startup-error-"))
+  try {
+    // Port zero cannot have a listener, so this cannot contact the user's background service.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        path.join(import.meta.dir, "../src/index.ts"),
+        "--server",
+        "http://127.0.0.1:0",
+        "api",
+        "get",
+        "/api/info",
+      ],
+      {
+        cwd: path.join(import.meta.dir, ".."),
+        env: isolatedEnv(root, { NO_COLOR: noColor, FORCE_COLOR: "1" }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    expect(stderr).toStartWith(`${prefix}: Could not reach server at http://127.0.0.1:0:`)
+    expect(stderr).not.toMatch(/\n\s+at /)
+    expect(stdout).toBe("")
+    expect(exitCode).toBe(1)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

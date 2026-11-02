@@ -1,9 +1,11 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Option, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { randomBytes } from "node:crypto"
 import { selfCommand } from "../util/process"
+import { AllowElevated } from "../commands/commands"
+import { Elevation } from "./elevation"
 
 const Ready = Schema.Struct({ url: Schema.String })
 const decodeReady = Schema.decodeUnknownPromise(Schema.fromJsonString(Ready))
@@ -14,29 +16,35 @@ type Options = {
 
 const startupDirectory = process.cwd()
 
-function command(password: string, options: Options) {
+function command(password: string, options: Options, allowElevated: boolean) {
   const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
-  return ChildProcess.make(executable, [...args, "--stdio", "--port", "0"], {
-    cwd: startupDirectory,
-    // Explicit entry wins over anything inherited, so a user-exported
-    // OPENCODE_PASSWORD cannot shadow the child's lease credential.
-    env: { OPENCODE_PASSWORD: password },
-    extendEnv: true,
-    // The server treats EOF on this pipe as the end of its ownership lease.
-    // The OS closes it even when the TUI is killed before Effect finalizers run.
-    stdin: "pipe",
-    stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
-    killSignal: "SIGTERM",
-    forceKillAfter: "3 seconds",
-  })
+  return ChildProcess.make(
+    executable,
+    [...args, "--stdio", "--port", "0", ...(allowElevated ? ["--allow-elevated"] : [])],
+    {
+      cwd: startupDirectory,
+      // Explicit entry wins over anything inherited, so a user-exported
+      // OPENCODE_PASSWORD cannot shadow the child's lease credential.
+      env: { OPENCODE_PASSWORD: password },
+      extendEnv: true,
+      // The server treats EOF on this pipe as the end of its ownership lease.
+      // The OS closes it even when the TUI is killed before Effect finalizers run.
+      stdin: "pipe",
+      stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
+      killSignal: "SIGTERM",
+      forceKillAfter: "3 seconds",
+    },
+  )
 }
 
 const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
   function* (options: Options) {
+    const allowElevated = yield* Effect.serviceOption(AllowElevated).pipe(Effect.map(Option.getOrElse(() => false)))
+    yield* Elevation.check(allowElevated)
     const password = randomBytes(32).toString("base64url")
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-    const proc = yield* spawner.spawn(command(password, options))
+    const proc = yield* spawner.spawn(command(password, options, allowElevated))
     const readyLine = yield* Deferred.make<string, Error>()
     // Keep draining stdout after readiness so later server writes cannot hit EPIPE.
     yield* proc.stdout.pipe(
