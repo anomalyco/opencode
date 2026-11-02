@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
@@ -14,7 +14,7 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -244,20 +244,18 @@ const responsesRoute = Route.make({
 export const routes = [route, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
-  const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
+  const options = bearerRouteDefaults(input, "OPENROUTER_API_KEY", baseURL)
   const chatRoute = route.with(options)
   const configuredResponses = responsesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "openrouter",
-    endpoint: { baseURL: input.baseURL ?? baseURL },
-    auth,
+    endpoint: options.endpoint,
+    auth: options.auth,
     headers: input.headers,
     http: input.http,
   })
-  const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
+  const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     OpenAIImages.model({
       ...media,

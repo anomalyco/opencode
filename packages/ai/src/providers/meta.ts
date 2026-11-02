@@ -4,13 +4,13 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { MetaResponses } from "../protocols/meta-responses.js"
 import { MetaMessages } from "../protocols/meta-messages.js"
 import { MetaImages } from "../protocols/meta-images.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("meta")
 const baseURL = "https://api.meta.ai/v1"
@@ -120,12 +120,7 @@ const messagesRoute = Route.make({
 export const routes = [responsesRoute, chatRoute, messagesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const options = {
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "META_API_KEY"),
-  }
+  const options = bearerRouteDefaults(input, "META_API_KEY", baseURL)
   const configuredResponses = responsesRoute.with(options)
   const configuredChat = chatRoute.with(options)
   const configuredMessages = messagesRoute.with(options)

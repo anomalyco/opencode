@@ -2,13 +2,13 @@ import { Effect, Schema } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("groq")
 const baseURL = "https://api.groq.com/openai/v1"
@@ -73,12 +73,7 @@ export const route = Route.make({
 })
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "GROQ_API_KEY"),
-  })
+  const configured = route.with(bearerRouteDefaults(input, "GROQ_API_KEY", baseURL))
   return {
     id,
     model: (modelID: string | ModelID) =>

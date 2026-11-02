@@ -4,13 +4,13 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("moonshotai")
 
@@ -100,12 +100,7 @@ const responsesRoute = Route.make({
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
-  const defaults = {
-    ...rest,
-    endpoint: baseURL === undefined ? undefined : { baseURL },
-    auth: AuthOptions.bearer(input, ["MOONSHOT_API_KEY", "MOONSHOTAI_API_KEY"]),
-  }
+  const defaults = bearerRouteDefaults(input, ["MOONSHOT_API_KEY", "MOONSHOTAI_API_KEY"])
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,

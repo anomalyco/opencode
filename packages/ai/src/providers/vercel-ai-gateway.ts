@@ -8,7 +8,7 @@ import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
@@ -23,7 +23,7 @@ import {
   type ProviderOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
 const baseURL = "https://ai-gateway.vercel.sh/v1"
@@ -223,12 +223,7 @@ const imageSizing: OpenAIImageSizing = (request) => {
 }
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const configured = {
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"]),
-  }
+  const configured = bearerRouteDefaults(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"], baseURL)
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(configured).model<ProviderOptionsInput>({
       id: modelID,
