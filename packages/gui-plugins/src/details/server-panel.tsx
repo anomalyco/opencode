@@ -3,6 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Switch } from "@opencode/ui/switch"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -471,17 +472,17 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     data-overflow={menu.overflow[service.type] || undefined}
                     inert={menu.pane !== service.type || undefined}
                   >
-                    <div
-                      ref={(element) => (scrollers[service.type] = element)}
-                      class="session-service-scroll"
-                      data-scrollable
+                    <MenuScroll
+                      class="min-h-0"
+                      viewportClass="session-service-scroll"
+                      viewportRef={(element) => (scrollers[service.type] = element)}
                     >
                       <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
                         <ServiceBody source={source}>
                           <source.Body />
                         </ServiceBody>
                       </div>
-                    </div>
+                    </MenuScroll>
                     <ServiceFooter source={source} />
                   </div>
                 )
@@ -790,9 +791,7 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
     Body: () => (
       <Show
         when={list().length}
-        fallback={
-          <ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />
-        }
+        fallback={<ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />}
       >
         <For each={list()}>
           {(item) => (
