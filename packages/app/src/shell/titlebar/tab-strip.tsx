@@ -9,6 +9,8 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@/runtime/array-move"
 import { tabHref, tabKey, type DraftTab, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import type { ServerHealth } from "@/runtime/server/health"
+import { ServerHealthIndicator } from "@/servers/registry/row"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -420,6 +422,7 @@ function DraftTabSlot(props: {
 
 function ServerGroupHeader(props: {
   title: string
+  health?: ServerHealth
   collapsed: boolean
   dragging: boolean
   onAdd: () => void
@@ -430,6 +433,7 @@ function ServerGroupHeader(props: {
   onDrop: (event: DragEvent) => void
 }) {
   const language = useLanguage()
+  const healthy = () => props.health?.healthy === true
 
   const toggleLabel = () =>
     language.t(props.collapsed ? "session.tab.serverGroup.expand" : "session.tab.serverGroup.collapse", {
@@ -450,14 +454,21 @@ function ServerGroupHeader(props: {
       onDragOver={(event) => props.onDragOver(event, event.currentTarget)}
       onDrop={props.onDrop}
     >
-      <bdi class="min-w-0 truncate">{props.title}</bdi>
+      <div class="flex min-w-0 items-center gap-1">
+        <bdi class="min-w-0 truncate">{props.title}</bdi>
+        <ServerHealthIndicator
+          health={props.health}
+          authenticationRequired={!!props.health?.unauthorized}
+        />
+      </div>
       <div class="ms-auto flex shrink-0 items-center gap-0.5">
         <button
           type="button"
           data-action="tab-server-group-add"
           aria-label={language.t("session.tab.newOnServer", { server: props.title })}
           title={language.t("session.tab.newOnServer", { server: props.title })}
-          class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+          disabled={!healthy()}
+          class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-v2-text-text-faint"
           onClick={props.onAdd}
         >
           <Icon name="plus" size="small" />
@@ -939,6 +950,7 @@ export function TitlebarTabStrip(props: {
                 const last = () => lastShown().get(tab.server) === id
                 const concealed = () => !shownKeys().has(id)
                 const groupSize = () => groups().get(tab.server)?.length ?? 0
+                const groupHealth = () => global.servers.health[tab.server]
                 const groupCollapsed = () => !!collapsed[tab.server]
                 const groupExpanded = () => !!expanded[tab.server]
                 const element = () => ref
@@ -995,6 +1007,7 @@ export function TitlebarTabStrip(props: {
                       {(title) => (
                         <ServerGroupHeader
                           title={title()}
+                          health={groupHealth()}
                           collapsed={groupCollapsed()}
                           dragging={drag.server === tab.server}
                           onAdd={() => newSessionInGroup(tab.server, title())}
