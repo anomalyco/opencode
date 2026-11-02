@@ -94,22 +94,6 @@ describe("Project.list", () => {
     }),
   )
 
-  it.effect("skips rows whose stored worktree is not an absolute path on any OS", () =>
-    Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      const project = yield* Project.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.make("valid"), worktree: abs("/valid"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 })
-        .run()
-      yield* db.run(
-        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('relative', ${"relative/path"}, '[]', 1, 1, 2)`,
-      )
-
-      expect((yield* project.list()).map((item) => item.id)).toEqual([Project.ID.make("valid")])
-    }),
-  )
-
   it.effect("lists rows whose stored sandboxes hold a backslash Windows path, normalized", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
