@@ -1,6 +1,8 @@
 import type { AnyAuthClient, GoogleAuthOptions } from "google-auth-library"
 import { Effect, Redacted } from "effect"
+import type { ProviderPackage } from "../provider-package.js"
 import { Auth, MissingCredentialError } from "../route/auth.js"
+import type { CompactionOperations, Route, RouteDefaultsInput } from "../route/client.js"
 import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
@@ -110,6 +112,65 @@ export const oauth = (input: OAuthOptions, project?: string) => {
   if (input.auth) return input.auth
   if (input.accessToken !== undefined) return Auth.bearer(input.accessToken)
   return adc(project)
+}
+
+export const oauthRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
+  route: Route<Body, Prepared, Compact>,
+  label: string,
+  input: RouteDefaultsInput &
+    OAuthOptions & { readonly baseURL?: string; readonly location?: string; readonly project?: string },
+  url: (project: string, location: string) => string,
+) => {
+  if ("apiKey" in input && input.apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: `Google Vertex ${label} does not support API keys` })
+  const {
+    accessToken: _accessToken,
+    auth: _auth,
+    baseURL,
+    location: inputLocation,
+    project: inputProject,
+    ...rest
+  } = input
+  const resolvedLocation = location(inputLocation)
+  const resolvedProject = project(inputProject)
+  return route.with({
+    ...rest,
+    endpoint: { baseURL: baseURL ?? url(requireProject(resolvedProject), resolvedLocation) },
+    auth: oauth(input, resolvedProject),
+  })
+}
+
+export const oauthSettings = <Options>(
+  label: string,
+  {
+    accessToken,
+    apiKey,
+    baseURL,
+    body,
+    headers,
+    location,
+    project,
+    ...providerOptions
+  }: ProviderPackage.Settings &
+    Options & {
+      readonly accessToken?: string
+      readonly apiKey?: never
+      readonly baseURL?: string
+      readonly location?: string
+      readonly project?: string
+    },
+) => {
+  if (apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: `Google Vertex ${label} does not support API keys` })
+  return {
+    accessToken,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body },
+    location,
+    project,
+    providerOptions,
+  }
 }
 
 export * as GoogleVertexShared from "./google-vertex-shared.js"

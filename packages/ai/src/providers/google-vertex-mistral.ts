@@ -6,7 +6,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export const id = ProviderID.make("google-vertex")
@@ -52,29 +52,14 @@ const route = Route.make({
 
 export const routes = [route]
 
-const configuredRoute = (input: Config) => {
-  if ("apiKey" in input && input.apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Mistral does not support API keys" })
-  const {
-    accessToken: _accessToken,
-    auth: _auth,
-    baseURL,
-    location: inputLocation,
-    project: inputProject,
-    ...rest
-  } = input
-  const location = GoogleVertexShared.location(inputLocation)
-  const project = GoogleVertexShared.project(inputProject)
-  return route.with({
-    ...rest,
-    endpoint: {
-      baseURL:
-        baseURL ??
-        `https://${GoogleVertexShared.host(location)}/v1/projects/${GoogleVertexShared.requireProject(project)}/locations/${location}/publishers/mistralai/models`,
-    },
-    auth: GoogleVertexShared.oauth(input, project),
-  })
-}
+const configuredRoute = (input: Config) =>
+  GoogleVertexShared.oauthRoute(
+    route,
+    "Mistral",
+    input,
+    (project, location) =>
+      `https://${GoogleVertexShared.host(location)}/v1/projects/${project}/locations/${location}/publishers/mistralai/models`,
+  )
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
@@ -90,19 +75,5 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Model<Settings, MistralChat.ProviderOptionsInput> = (
-  modelID,
-  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {},
-) => {
-  if (apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Mistral does not support API keys" })
-  return configure({
-    accessToken,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    location,
-    project,
-    providerOptions,
-  }).model(modelID)
-}
+export const model: ProviderPackage.Model<Settings, MistralChat.ProviderOptionsInput> = (modelID, settings = {}) =>
+  configure(GoogleVertexShared.oauthSettings<MistralChat.ProviderOptionsInput>("Mistral", settings)).model(modelID)
