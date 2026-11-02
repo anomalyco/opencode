@@ -62,7 +62,7 @@ const consoleCredential = (org: string) =>
 
 const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
@@ -131,7 +131,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const test = yield* Config.Test
       const plugin = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugin)
+      const host = yield* PluginHost.make(plugin, "test")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
       expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
@@ -239,7 +239,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const catalog = yield* Provider.Service
       const bus = yield* Bus.Service
       const test = yield* Config.Test
-      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
       const opencode = Integration.ID.make("opencode")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
@@ -262,7 +262,7 @@ describe("integration policy", () => {
       const catalog = yield* Provider.Service
       const credentials = yield* Credential.Service
       const websearch = yield* WebSearch.Service
-      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
       const search = (id: string) => ({
         id: WebSearch.ID.make(id),
         name: id,

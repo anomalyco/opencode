@@ -49,10 +49,7 @@ const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("r
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
-export const make = Effect.fn("PluginHost.make")(function* (
-  plugin: Pick<Interface, "list">,
-  pluginID: string = "test",
-) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service

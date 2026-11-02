@@ -21,7 +21,7 @@ const decodeShowRequest = Schema.decodeUnknownSync(Schema.Struct({ model: Schema
 
 const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input = "1 hour") {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* make(origin, interval).effect(host)
 })
 
@@ -43,7 +43,7 @@ describe("OllamaPlugin", () => {
   it.live("skips unconfigured default local discovery when the location has no local execution plane", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugin)
+      const host = yield* PluginHost.make(plugin, "test")
       const providers = yield* Provider.Service
       yield* OllamaPlugin.effect(host).pipe(
         Effect.provideService(

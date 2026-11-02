@@ -30,7 +30,7 @@ describe("ConfigToolOutputPlugin.Plugin", () => {
               info: new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 1 }) }),
             }),
           ])
-          yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins))
+          yield* ConfigToolOutputPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
           expect((yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })).metadata?.truncated).toBe(
             true,
