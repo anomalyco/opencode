@@ -112,6 +112,9 @@
     --v2-elevation-overlay:
       0px 16px 32px 0px var(--v2-alpha-dark-4), 0px 8px 16px 0px var(--v2-alpha-dark-8),
       0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0);
+    --v2-elevation-input:
+      0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14),
+      0px 0px 0px 0px var(--v2-alpha-dark-0);
     --v2-elevation-button-neutral:
       0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14),
       0px 0px 0px 0px var(--v2-alpha-dark-0);
@@ -229,6 +232,10 @@
         0px 8px 16px 0px var(--v2-alpha-dark-30),
         0px 0px 0px 0.5px var(--v2-alpha-light-16),
         0px -0.5px 0px 0px var(--v2-alpha-light-6);
+      --v2-elevation-input:
+        0px 1px 2px 0px var(--v2-alpha-dark-0),
+        0px 0px 0px 0.5px var(--v2-alpha-light-16),
+        0px -0.5px 0px 0px var(--v2-alpha-light-6);
       --v2-elevation-button-neutral:
         0px 1px 2px 0px var(--v2-alpha-dark-40),
         0px 0px 0px 0.5px var(--v2-alpha-light-20),
@@ -342,6 +349,9 @@
     --v2-elevation-overlay:
       0px 16px 32px 0px var(--v2-alpha-dark-4), 0px 8px 16px 0px var(--v2-alpha-dark-8),
       0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0);
+    --v2-elevation-input:
+      0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14),
+      0px 0px 0px 0px var(--v2-alpha-dark-0);
     --v2-elevation-button-neutral:
       0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14),
       0px 0px 0px 0px var(--v2-alpha-dark-0);
@@ -488,6 +498,9 @@
     --v2-elevation-overlay:
       0px 16px 32px 0px var(--v2-alpha-dark-30), 0px 8px 16px 0px var(--v2-alpha-dark-30),
       0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6);
+    --v2-elevation-input:
+      0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16),
+      0px -0.5px 0px 0px var(--v2-alpha-light-6);
     --v2-elevation-button-neutral:
       0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20),
       0px -0.5px 0px 0px var(--v2-alpha-light-10);

@@ -12,7 +12,7 @@ import { TranscriptionClient, Service } from "./transcription-client.js"
 
 export type TranscriptionOptions = MediaModel.Options
 
-export type TranscriptionRoute = MediaRoute.AnyRoute<TranscriptionRequestFor, TranscriptionEvent, TranscriptionResponse>
+export type TranscriptionRoute = MediaRoute.AnyRoute<TranscriptionRequest, TranscriptionEvent, TranscriptionResponse>
 
 export class TranscriptionModel<Options extends TranscriptionOptions = TranscriptionOptions> extends MediaModel<
   TranscriptionRoute,
@@ -22,20 +22,25 @@ export class TranscriptionModel<Options extends TranscriptionOptions = Transcrip
 
   /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
   static fromRoute<Options extends TranscriptionOptions>(
-    route: MediaModel.InlineRouteInput<TranscriptionRequestFor<Options>, TranscriptionResponse>,
+    route: MediaModel.InlineRouteInput<TranscriptionRequest<TranscriptionModel<Options>>, TranscriptionResponse>,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<TranscriptionRequestFor<Options>, TranscriptionEvent, Frame, State>,
+    route: MediaModel.StreamRouteInput<
+      TranscriptionRequest<TranscriptionModel<Options>>,
+      TranscriptionEvent,
+      Frame,
+      State
+    >,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Token>(
-    route: MediaModel.QueuedRouteInput<TranscriptionRequestFor<Options>, TranscriptionResponse, Token>,
+    route: MediaModel.QueuedRouteInput<TranscriptionRequest<TranscriptionModel<Options>>, TranscriptionResponse, Token>,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Frame, State, Token>(
     route: MediaModel.AnyRouteInput<
-      TranscriptionRequestFor<Options>,
+      TranscriptionRequest<TranscriptionModel<Options>>,
       TranscriptionEvent,
       TranscriptionResponse,
       Frame,
@@ -66,7 +71,7 @@ export const TranscriptionModelSchema = Schema.declare(
 export const TranscriptionTimestamps = Schema.Literals(["none", "segment", "word"])
 export type TranscriptionTimestamps = Schema.Schema.Type<typeof TranscriptionTimestamps>
 
-export class TranscriptionRequest extends Schema.Class<TranscriptionRequest>("Transcription.Request")({
+const TranscriptionRequestSchema = Schema.Struct({
   model: TranscriptionModelSchema,
   audio: Media.AssetSchema,
   language: Schema.optional(Schema.String),
@@ -77,25 +82,24 @@ export class TranscriptionRequest extends Schema.Class<TranscriptionRequest>("Tr
   speakers: Schema.optional(Schema.Int),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _TranscriptionRequest: void
-}
+})
 
-export type TranscriptionRequestFor<Options extends TranscriptionOptions = TranscriptionOptions> = Omit<
-  TranscriptionRequest,
+/** A normalized transcription request, the plain object `Transcription.request(...)` returns. */
+export type TranscriptionRequest<Model extends TranscriptionModel = TranscriptionModel> = Omit<
+  typeof TranscriptionRequestSchema.Type,
   "model" | "providerOptions"
 > & {
-  readonly model: TranscriptionModel<Options>
-  readonly providerOptions?: Options
+  readonly model: Model
+  readonly providerOptions?: TranscriptionModelOptions<Model>
 }
 
 export type TranscriptionModelOptions<Model> = Model extends TranscriptionModel<infer Options> ? Options : never
 
+/** Input accepted by `Transcription.request` and the calls; a `TranscriptionRequest` is also a valid input. */
 export type TranscriptionRequestInput<Model extends TranscriptionModel = TranscriptionModel> = Omit<
-  ConstructorParameters<typeof TranscriptionRequest>[0],
-  "model" | "providerOptions" | "http"
+  TranscriptionRequest<Model>,
+  "providerOptions" | "http"
 > & {
-  readonly model: Model
   readonly providerOptions?: NoInfer<TranscriptionModelOptions<Model>>
   readonly http?: HttpOptions.Input
 }
@@ -182,41 +186,44 @@ const collectResponse = (events: ReadonlyArray<TranscriptionEvent>): Effect.Effe
 // Request-shaped call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends TranscriptionModel>(
+/** Normalize transcription request input into a plain `TranscriptionRequest`. */
+export const request = <const Model extends TranscriptionModel>(
   input: TranscriptionRequestInput<Model>,
-): TranscriptionRequestFor<TranscriptionModelOptions<Model>>
-export function request(input: TranscriptionRequest): TranscriptionRequest
-export function request(input: TranscriptionRequest | TranscriptionRequestInput) {
-  if (input instanceof TranscriptionRequest) return input
-  return new TranscriptionRequest({
-    ...input,
-    http: HttpOptions.make(input.http),
-  })
-}
+): TranscriptionRequest<Model> => ({
+  ...input,
+  http: HttpOptions.make(input.http),
+})
 
-const requestEffect = (input: TranscriptionRequest | TranscriptionRequestInput) => tryRequest(() => request(input))
+const validate = Schema.decodeUnknownSync(TranscriptionRequestSchema)
+
+const requestEffect = (input: TranscriptionRequestInput) =>
+  tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
+  })
 
 export function generate<const Model extends TranscriptionModel>(
-  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
+  input: TranscriptionRequestInput<Model>,
   options?: AwaitOptions,
 ): Effect.Effect<TranscriptionResponse, AIError, Service>
-export function generate(input: TranscriptionRequest | TranscriptionRequestInput, options?: AwaitOptions) {
+export function generate(input: TranscriptionRequestInput, options?: AwaitOptions) {
   return requestEffect(input).pipe(Effect.flatMap((request) => TranscriptionClient.generate(request, options)))
 }
 
 export function stream<const Model extends TranscriptionModel>(
-  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
+  input: TranscriptionRequestInput<Model>,
   options?: AwaitOptions,
 ): Stream.Stream<TranscriptionEvent, AIError, Service>
-export function stream(input: TranscriptionRequest | TranscriptionRequestInput, options?: AwaitOptions) {
+export function stream(input: TranscriptionRequestInput, options?: AwaitOptions) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => TranscriptionClient.stream(request, options))))
 }
 
 /** Inline and streaming routes fail with `UnsupportedOperation`. */
 export function start<const Model extends TranscriptionModel>(
-  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
+  input: TranscriptionRequestInput<Model>,
 ): Effect.Effect<Generation<TranscriptionResponse>, AIError, Service>
-export function start(input: TranscriptionRequest | TranscriptionRequestInput) {
+export function start(input: TranscriptionRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => TranscriptionClient.start(request)))
 }
 

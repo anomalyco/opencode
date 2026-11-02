@@ -21,6 +21,7 @@ import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
+import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -29,6 +30,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { Schedule } from "@opencode/core/schedule"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -55,6 +57,7 @@ const applicationServiceNodes = [
   Global.node,
   FSUtil.node,
   Database.node,
+  KV.node,
   Bus.node,
   EventLogger.node,
   httpClient,
@@ -77,6 +80,7 @@ const applicationServiceNodes = [
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
+  Schedule.node,
   Workspace.node,
   FileWatch.node,
 ] as const

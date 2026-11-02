@@ -1,6 +1,12 @@
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
-import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import {
+  ForbiddenError,
+  InvalidRequestError,
+  PtyFeatureUnsupportedError,
+  PtyNotFoundError,
+  ServiceUnavailableError,
+} from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
@@ -12,18 +18,35 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { makeArtifact } from "./artifact"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
+import { makeSchedule } from "./schedule"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const artifact = yield* makeArtifact
     const mediaGet = yield* makeMediaGet
+    const schedule = yield* makeSchedule
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
+      .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
+      .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))
+      .handle("artifacts.get", (ctx) => artifact.get(ctx.params.artifactID, ctx.query, ctx.request))
+      .handle("artifacts.update", (ctx) => artifact.update(ctx.params.artifactID, ctx.query, ctx.payload, ctx.request))
+      .handle("artifacts.delete", (ctx) => artifact.remove(ctx.params.artifactID, ctx.query, ctx.request))
+      .handleRaw("artifacts.view", (ctx) => artifact.view(ctx.params.artifactID, ctx.query, ctx.request))
+      .handle("schedule.create", (ctx) => schedule.create(ctx.payload))
+      .handle("schedule.list", (ctx) => schedule.list(ctx.query.sessionID))
+      .handle("schedule.get", (ctx) => schedule.get(ctx.params.scheduleID))
+      .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
+      .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
+      .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
@@ -50,7 +73,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
                 cols: ctx.payload.size?.cols,
                 rows: ctx.payload.size?.rows,
               })
-              .pipe(Effect.catchTag("PersistentPty.UnavailableError", unavailable)),
+              .pipe(
+                Effect.catchTags({
+                  "PersistentPty.InvalidCwdError": (error) =>
+                    new InvalidRequestError({ message: error.message, kind: "invalid_cwd", field: "cwd" }),
+                  "PersistentPty.UnavailableError": unavailable,
+                }),
+              ),
           }
         }),
       )
@@ -76,10 +105,24 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle(
         "persistentPty.update",
         Effect.fn(function* (ctx) {
-          yield* pty
-            .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
-            .pipe(mapTerminalError)
-          return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
+          if (ctx.payload.size)
+            yield* pty
+              .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
+              .pipe(mapTerminalError)
+          if (ctx.payload.title === undefined) return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
+          return {
+            data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(
+              Effect.catchTags({
+                "PersistentPty.NotFoundError": notFound,
+                "PersistentPty.UnsupportedError": (error) =>
+                  new PtyFeatureUnsupportedError({
+                    feature: error.feature,
+                    message: "Terminal renaming will be available after OpenCode's terminal service restarts",
+                  }),
+                "PersistentPty.UnavailableError": unavailable,
+              }),
+            ),
+          }
         }),
       )
       .handle(
@@ -218,11 +261,13 @@ const mapUnavailable = <A>(effect: Effect.Effect<A, PersistentPty.UnavailableErr
 const mapTerminalError = <A>(effect: Effect.Effect<A, PersistentPty.NotFoundError | PersistentPty.UnavailableError>) =>
   effect.pipe(
     Effect.catchTags({
-      "PersistentPty.NotFoundError": (error) =>
-        new PtyNotFoundError({ ptyID: error.ptyID, message: `PTY session not found: ${error.ptyID}` }),
+      "PersistentPty.NotFoundError": notFound,
       "PersistentPty.UnavailableError": unavailable,
     }),
   )
+
+const notFound = (error: PersistentPty.NotFoundError) =>
+  new PtyNotFoundError({ ptyID: error.ptyID, message: `PTY session not found: ${error.ptyID}` })
 
 const unavailable = (error: PersistentPty.UnavailableError) =>
   new ServiceUnavailableError({ message: error.message, service: "opencode-pty" })

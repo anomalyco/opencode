@@ -1,5 +1,4 @@
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -9,8 +8,6 @@ import { Slash } from "@opencode/ui/slash"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
-import { DialogSelectModelNext, ModelSelectorDrawerNext } from "@/providers/models/select-dialog-next"
-import { useSettings } from "@/settings/model"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -98,14 +95,12 @@ function ComposerModelControl(props: {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? (props.loading && !props.preview))
   const mobile = createMediaQuery("(max-width: 767px)")
   const dialog = useDialog()
-  const settings = useSettings()
 
   const open = (detail: number) => {
     if (!props.paid) return props.onUnpaidClick()
-    const Picker = settings.general.newModelPicker() ? DialogSelectModelNext : DialogSelectModel
     // A pointer open keeps focus in the composer, so the dialog returns it to the caret. A keyboard open
     // (a click with no pointer presses) returns focus to this trigger instead of moving it to the editor.
-    void dialog.show(() => <Picker model={props.model} />, detail === 0 ? undefined : props.onClose)
+    void dialog.show(() => <DialogSelectModel model={props.model} />, detail === 0 ? undefined : props.onClose)
   }
 
   // A previewed chip is visible before the catalog loads, so a click on it opens the dialog once loading finishes.
@@ -175,8 +170,7 @@ function ComposerModelControl(props: {
             </Button>
           }
         >
-          <Dynamic
-            component={settings.general.newModelPicker() ? ModelSelectorDrawerNext : ModelSelectorDrawer}
+          <ModelSelectorDrawer
             model={props.model}
             trigger={(triggerProps) => (
               <Button

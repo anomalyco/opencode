@@ -2,7 +2,7 @@ import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 
-type SessionExportData = {
+export type SessionExportData = {
   info: SessionInfo
   messages: SessionMessageInfo[]
 }
@@ -13,18 +13,21 @@ export async function fetchSessionExport(input: {
 }): Promise<SessionExportData> {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),
+    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }, { mediaRefs: false }),
   ])
 
   const pages = [first]
 
   while (pages.at(-1)?.cursor.next) {
     pages.push(
-      await input.api.message.list({
-        sessionID: input.sessionID,
-        limit: 200,
-        cursor: pages.at(-1)!.cursor.next ?? undefined,
-      }),
+      await input.api.message.list(
+        {
+          sessionID: input.sessionID,
+          limit: 200,
+          cursor: pages.at(-1)!.cursor.next ?? undefined,
+        },
+        { mediaRefs: false },
+      ),
     )
   }
 
@@ -45,7 +48,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   return `${clean || session.id}.json`
 }
 
-export function downloadSessionExport(filename: string, data: unknown) {
+export function downloadSessionExport(filename: string, data: SessionExportData) {
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
@@ -58,7 +61,11 @@ export function downloadSessionExport(filename: string, data: unknown) {
   URL.revokeObjectURL(url)
 }
 
-export async function saveSessionExport(filename: string, data: unknown, platform: Pick<Platform, "saveFile">) {
+export async function saveSessionExport(
+  filename: string,
+  data: SessionExportData,
+  platform: Pick<Platform, "saveFile">,
+) {
   if (!platform.saveFile) {
     downloadSessionExport(filename, data)
 

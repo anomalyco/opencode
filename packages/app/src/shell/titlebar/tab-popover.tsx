@@ -1,6 +1,6 @@
 import { HoverCard } from "@kobalte/core/hover-card"
 import { prefersReducedMotion } from "@opencode/ui/motion"
-import { createEffect, createSignal, on, onCleanup, Show, type JSXElement } from "solid-js"
+import { createEffect, createSignal, For, on, onCleanup, Show, type JSXElement } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createMediaQuery } from "@solid-primitives/media"
 import "./tab-popover.css"
@@ -145,9 +145,21 @@ export function TabPreviewPopover(props: {
           </div>
 
           <Show when={props.data.path}>
-            <div data-slot="row">
-              <span data-slot="detail">{props.data.path}</span>
-            </div>
+            {(path) => (
+              <div data-slot="row">
+                {/* Break after separators so long paths wrap between folder names, not mid-name. */}
+                <span data-slot="detail">
+                  <For each={path().split(/(?<=[\\/])/)}>
+                    {(part) => (
+                      <>
+                        {part}
+                        <wbr />
+                      </>
+                    )}
+                  </For>
+                </span>
+              </div>
+            )}
           </Show>
 
           <Show when={props.data.serverName}>

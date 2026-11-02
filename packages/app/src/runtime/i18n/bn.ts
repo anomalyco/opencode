@@ -749,6 +749,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ডেটা স্থানান্তরিত হচ্ছে {{current}}/{{total}}",
   "home.workspaceTip": "পরিবর্তনগুলিকে বিচ্ছিন্ন রাখতে একটি নতুন কর্মক্ষেত্রে পরবর্তী সেশন শুরু করুন৷",
   "session.tab.add": "ট্যাব যোগ করুন",
+  "session.tab.closeOthers": "অন্য ট্যাবগুলো বন্ধ করুন",
   "session.queue.attachments.one": "প্লাস {{count}} সংযুক্তি",
   "session.queue.attachments.other": "প্লাস {{count}}টি সংযুক্তি৷",
   "settings.backToSettings": "সেটিংসে ফিরে যান",

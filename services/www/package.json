@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@astrojs/mdx": "7.0.5",
-    "astro": "7.3.8"
+    "astro": "catalog:"
   },
   "devDependencies": {
     "@astrojs/cloudflare": "14.1.4",

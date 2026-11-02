@@ -6,7 +6,7 @@ import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Loader } from "@opencode/ui/loader"
 import { TextField } from "@opencode/ui/text-field"
-import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
+import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import {
@@ -17,9 +17,11 @@ import {
   For,
   type JSX,
   Match,
+  onCleanup,
   onMount,
   Show,
   Switch,
+  untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
@@ -42,6 +44,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import type { FormAnswer, FormField, FormValue, IntegrationInfo } from "@opencode/client/promise"
 import {
+  CLAUDE_AGENT_INTEGRATION,
   CONSOLE_INTEGRATION,
   connectMethods,
   createProviderConnectionController,
@@ -56,6 +59,7 @@ import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import "@/shell/search-list.css"
 import "./models.css"
 
 export function useProviderConnectController() {
@@ -90,6 +94,7 @@ export const DialogConnectProvider: Component<{
     chatgptWelcome: boolean
     picked: boolean
     stepBack: boolean
+    accounts: boolean
     title: string
   }>({
     completed: false,
@@ -97,6 +102,7 @@ export const DialogConnectProvider: Component<{
     chatgptWelcome: false,
     picked: false,
     stepBack: false,
+    accounts: false,
     title: "",
   })
 
@@ -112,6 +118,7 @@ export const DialogConnectProvider: Component<{
   const reset = controller.reset
   const back = { current: reset }
   const consoleSelected = () => controller.selected() === CONSOLE_INTEGRATION
+  const accounts = () => state.accounts && !!controller.selected() && !state.modelProvider
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })
 
@@ -143,6 +150,7 @@ export const DialogConnectProvider: Component<{
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
               onStepBack={(stepBack) => setState("stepBack", stepBack)}
+              onAccounts={(accounts) => setState("accounts", accounts)}
               onTitle={(title) => setState("title", title)}
             />
           )}
@@ -158,7 +166,7 @@ export const DialogConnectProvider: Component<{
     <Dialog
       preventBackdropDismiss={state.authorization}
       // The top edge stays where the provider list puts it, so a step that fits its content only moves the bottom edge.
-      containerClass={`!self-start [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
+      containerClass={`!self-start !rounded-[12px] !bg-v2-background-bg-base [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
         state.modelProvider
           ? "!h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]"
           : controller.selected()
@@ -178,8 +186,13 @@ export const DialogConnectProvider: Component<{
           void dialog.show(() => <DialogChatGPTPlanWelcome />)
         })
       }}
-      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
-      classList={{ "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider }}
+      class="[font-family:var(--v2-font-family-sans)]"
+      classList={{
+        "[&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
+          !!controller.selected() && !accounts(),
+        "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
+        "search-dialog": !controller.selected() || accounts(),
+      }}
     >
       <DialogHeader closeLabel={language.t("common.close")}>
         <Switch>
@@ -190,6 +203,21 @@ export const DialogConnectProvider: Component<{
                 <DialogTitle>{language.t("provider.connect.models.title", { provider: provider().name })}</DialogTitle>
               </div>
             )}
+          </Match>
+          <Match when={accounts()}>
+            <div class="flex min-w-0 flex-1 items-center gap-0.5">
+              <Show when={!props.standalone}>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                  onClick={() => back.current()}
+                >
+                  {language.t("dialog.provider.title")}
+                </button>
+                <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              </Show>
+              <DialogTitle>{state.title}</DialogTitle>
+            </div>
           </Match>
           <Match when={controller.selected()}>
             {(provider) => (
@@ -213,13 +241,24 @@ export const DialogConnectProvider: Component<{
             )}
           </Match>
           <Match when={true}>
-            <DialogTitle>{language.t("command.provider.connect")}</DialogTitle>
+            <DialogTitleGroup
+              title={language.t("dialog.provider.title")}
+              description={language.t("dialog.provider.description")}
+            />
           </Match>
         </Switch>
       </DialogHeader>
       <DialogBody
-        class={`min-h-0 flex-1 overflow-hidden px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`}
+        class={`min-h-0 flex-1 overflow-hidden ${
+          controller.selected() && !accounts()
+            ? `px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`
+            : "px-1.5 pb-1.5"
+        }`}
       >
+        {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}
+        <Show when={accounts()}>
+          <div data-slot="search-dialog-divider" />
+        </Show>
         <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
           <Content />
         </div>
@@ -228,7 +267,9 @@ export const DialogConnectProvider: Component<{
   )
 }
 
-// Same groups and order as the TUI's integration list.
+const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
+
+// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
 const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
@@ -242,34 +283,38 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
+  // MCP servers are connected and managed from the MCP dialog, not here.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
-    if (!query) return integrations.list()
-
-    return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
+    return integrations
+      .list()
+      .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
-  const mcp = createMemo(() =>
+  const connected = createMemo(() =>
     all()
-      .filter((row) => row.metadata?.source === "mcp")
+      .filter((row) => row.connections.length > 0)
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
+  const unconnected = createMemo(() => all().filter((row) => row.connections.length === 0))
+
   const popular = createMemo(() =>
-    all()
-      .filter((row) => row.metadata?.source !== "mcp" && POPULAR.includes(row.id))
+    unconnected()
+      .filter((row) => POPULAR.includes(row.id))
       .toSorted((a, b) => POPULAR.indexOf(a.id) - POPULAR.indexOf(b.id)),
   )
 
   const services = createMemo(() =>
-    all()
-      .filter((row) => row.metadata?.source !== "mcp" && !POPULAR.includes(row.id))
+    unconnected()
+      .filter((row) => !POPULAR.includes(row.id))
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
   const groups = () => [
-    { title: language.t("dialog.provider.group.mcp"), items: mcp },
+    { title: language.t("dialog.provider.connected"), items: connected },
     { title: language.t("dialog.provider.group.popular"), items: popular },
     { title: language.t("dialog.provider.group.services"), items: services },
   ]
@@ -277,7 +322,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   // An integration that only reads environment variables has nothing to connect from here.
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
-  const rows = createMemo(() => [...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
+  const rows = createMemo(() => [...connected(), ...popular(), ...services()].filter((row) => !disabled(row)))
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -313,14 +358,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   }
 
   return (
-    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-4" onKeyDown={handleKeyDown}>
-      <div class="shrink-0 px-1 pt-px">
+    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-0.5" onKeyDown={handleKeyDown}>
+      <div class="search-dialog-search shrink-0">
         <TextInput
           ref={search}
           type="search"
           class="!w-full [font-family:var(--v2-font-family-sans)]"
-          leadingIcon={<Icon name="magnifying-glass" size="small" />}
-          placeholder={language.t("dialog.provider.search.placeholder")}
+          leadingIcon={<Icon name="magnifying-glass" />}
+          placeholder={language.t("common.search.placeholder")}
+          aria-label={language.t("dialog.provider.search.placeholder")}
           value={store.filter}
           onInput={(event) => {
             setStore({ filter: event.currentTarget.value, active: undefined })
@@ -328,38 +374,32 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         />
       </div>
       <div class="relative min-h-0 flex-1">
-        <div class="flex size-full min-h-0 flex-col gap-4 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div class="flex size-full min-h-0 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>
-                <section class="flex flex-col">
-                  <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+                <section class="flex flex-col gap-0.5">
+                  <div class="px-2 pt-2.5 pb-0.5 text-[12px] font-[440] leading-[18px] tracking-[0.05px] text-v2-text-text-faint">
                     {group.title}
                   </div>
                   <For each={group.items()}>
                     {(provider) => {
-                      const connections = () => provider.connections
-                      const status = () => connections()[0]?.status
+                      const connection = () => provider.connections[0]
 
-                      const summary = () => {
-                        const list = connections()
+                      // The server lists the active account first.
+                      const account = () => {
+                        const current = connection()
 
-                        if (list.length > 1)
-                          return language.plural("dialog.provider.connections.count", list.length, {
-                            count: list.length,
-                          })
-                        const connection = list[0]
+                        if (!current) return
 
-                        if (!connection) return ""
-
-                        return connection.type === "credential" ? connection.label : `$${connection.name}`
+                        return current.type === "credential" ? current.label : `$${current.name}`
                       }
 
                       return (
                         <button
                           type="button"
                           data-provider-id={provider.id}
-                          class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-1.5 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
                           classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                           onMouseEnter={() => setStore("active", provider.id)}
                           disabled={disabled(provider)}
@@ -370,7 +410,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                             class={`shrink-0 text-v2-icon-icon-base ${disabled(provider) ? "opacity-50" : ""}`}
                           />
                           <span
-                            class="min-w-0 truncate font-[530]"
+                            class="min-w-0 truncate font-[440]"
                             classList={{
                               "text-v2-text-text-base": !disabled(provider),
                               "text-v2-text-text-faint": disabled(provider),
@@ -383,30 +423,21 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                               {language.t("dialog.provider.environmentOnly")}
                             </span>
                           </Show>
-                          <Switch>
-                            <Match when={status()}>
-                              <span
-                                data-slot="provider-status"
-                                class="ml-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
-                              >
-                                {language.t("dialog.provider.signInRequired")}
-                              </span>
-                            </Match>
-                            <Match when={connections().length > 0}>
-                              <span
-                                data-slot="provider-connected"
-                                class="ml-auto flex min-w-0 items-center gap-1.5 font-[440] text-v2-text-text-muted"
-                              >
-                                <span class="min-w-0 truncate">{summary()}</span>
-                                <Icon
-                                  name="check"
-                                  size="small"
-                                  class="shrink-0 text-[var(--v2-state-fg-success)]"
-                                  aria-label={language.t("dialog.provider.connected")}
-                                />
-                              </span>
-                            </Match>
-                          </Switch>
+                          <Show when={account()}>
+                            {(label) => (
+                              <Badge data-slot="provider-connected" class="min-w-0 shrink truncate">
+                                {label()}
+                              </Badge>
+                            )}
+                          </Show>
+                          <Show when={!!connection()?.status}>
+                            <span
+                              data-slot="provider-status"
+                              class="ms-auto shrink-0 pe-1 font-[440] text-[var(--v2-state-fg-warning)]"
+                            >
+                              {language.t("dialog.provider.needsSignIn")}
+                            </span>
+                          </Show>
                         </button>
                       )
                     }}
@@ -423,7 +454,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         </div>
         <div
           class="pointer-events-none absolute inset-x-0 bottom-0 h-10"
-          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-layer-01))" }}
+          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-base))" }}
         />
       </div>
     </div>
@@ -442,6 +473,7 @@ function ProviderConnection(props: {
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
   onStepBack: (stepBack: boolean) => void
+  onAccounts: (accounts: boolean) => void
   onTitle: (title: string) => void
   accounts?: boolean
 }) {
@@ -462,6 +494,7 @@ function ProviderConnection(props: {
   const accountActions = useProviderAccountActions(directory)
   const integrationID = props.provider
   const isConsole = props.provider === CONSOLE_INTEGRATION
+  const isClaudeAgent = props.provider === CLAUDE_AGENT_INTEGRATION
   const remote = isConsole && authServerName(sdk.server) !== undefined
 
   const [state, setState] = createStore<{
@@ -478,6 +511,7 @@ function ProviderConnection(props: {
     switching?: string
     activating?: string
     renaming?: string
+    claudeAgent?: "checking" | "confirming" | "timeout"
   }>({
     adding: false,
     direct: false,
@@ -501,56 +535,65 @@ function ProviderConnection(props: {
 
   const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
 
-  const mcp = () =>
-    integrations.list().find((integration) => integration.id === props.provider)?.metadata?.source === "mcp"
-
   const controller = createProviderConnectionController({
     provider: () => integrationID,
     directory,
-    manual: () => !!props.accounts && accounts().length > 0,
+    // Claude Agent explains its setup before connecting, so its lone method never starts on its own.
+    manual: () => isClaudeAgent || (!!props.accounts && accounts().length > 0),
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
       const method = controller.currentMethod()
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
-      // The picker only lists the newest model per family by default, which hides most of
-      // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
 
-      if (state.catalogPending) {
-        setState("noModels", true)
+      // Saving the connection only records the choice; wait for the server's check of `claude`.
+      if (isClaudeAgent) {
+        setState("claudeAgent", "checking")
 
         return
       }
 
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
-      })
-
-      // Like the TUI, every connection continues to that provider's models, not just the first.
-      // MCP servers have no models, so they close instead.
-      const first = mcp() ? undefined : connectionGroups()[0]?.models[0]
-
-      if (first) {
-        setState({ models: true, selectedModel: modelKey(first) })
-        props.onFirstConnection({ id: props.provider, name: provider().name })
-
-        return
-      }
-
-      // Keep the "connected, but no models" state visible so the workspace can be fixed.
-      if (isConsole) {
-        setState("noModels", true)
-
-        return
-      }
-
-      dialog.close()
+      showConnected()
     },
   })
+
+  function showConnected() {
+    // The picker only lists the newest model per family by default, which hides most of
+    // what a new connection just unlocked. Show everything the connected integration offers.
+    global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
+
+    if (state.catalogPending) {
+      setState("noModels", true)
+
+      return
+    }
+
+    showToast({
+      variant: "success",
+      icon: "circle-check",
+      title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
+      description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+    })
+
+    // Like the TUI, every connection continues to that provider's models, not just the first.
+    const first = connectionGroups()[0]?.models[0]
+
+    if (first) {
+      setState({ models: true, selectedModel: modelKey(first) })
+      props.onFirstConnection({ id: props.provider, name: provider().name })
+
+      return
+    }
+
+    // Keep the "connected, but no models" state visible so the workspace can be fixed.
+    if (isConsole) {
+      setState("noModels", true)
+
+      return
+    }
+
+    dialog.close()
+  }
 
   const connectionProviders = createMemo(() =>
     (data.location.provider.list(location()) ?? []).filter(
@@ -575,6 +618,58 @@ function ProviderConnection(props: {
   })
 
   const managedProviders = createMemo(() => (isConsole ? consoleProviderGroup(connectionProviders()) : undefined))
+
+  // The server lists the active account first, and its status is the latest check of `claude`.
+  const claudeAgentProblem = () => (isClaudeAgent ? serverAccounts()[0]?.status : undefined)
+
+  // A healthy connection keeps the usual accounts list; anything else shows the setup and its latest check.
+  const claudeAgentSetup = () =>
+    isClaudeAgent &&
+    controller.auth.state() !== "error" &&
+    (!showAccounts() || !!state.claudeAgent || !!claudeAgentProblem() || controller.methodIndex() !== undefined)
+
+  // A check that outlives the timeout can still finish, so a late result replaces the timeout message.
+  createEffect(() => {
+    if (!state.claudeAgent) return
+
+    if (claudeAgentProblem()) return setState("claudeAgent", undefined)
+
+    if (state.claudeAgent === "confirming" || connectionGroups().length === 0) return
+    setState("claudeAgent", "confirming")
+    void untrack(confirmClaudeAgent)
+  })
+
+  // A signed-out `claude` still lists its models, and the login problem arrives in a separate event,
+  // so read the connection again before treating the models as a working login.
+  async function confirmClaudeAgent() {
+    const ref = location()
+    data.location.integration.invalidate(ref)
+    await data.location.integration.sync(ref).catch(() => undefined)
+
+    if (state.claudeAgent !== "confirming" || claudeAgentProblem()) return
+    setState("claudeAgent", undefined)
+    showConnected()
+  }
+
+  createEffect(() => {
+    if (state.claudeAgent !== "checking") return
+    // The server allows 30 seconds for `claude` to start and 30 more to read each model's context size.
+    const timer = setTimeout(() => setState("claudeAgent", "timeout"), 65_000)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  // Connecting again is what makes the server check `claude` again.
+  const checkClaudeAgent = async () => {
+    const previous = serverAccounts().map((account) => account.id)
+    setState("claudeAgent", undefined)
+    await controller.auth.select(0)
+
+    if (controller.auth.state() !== "ready") return
+    // Each connect saves a new account, so drop the ones this check replaces.
+    await Promise.all(
+      previous.map((credentialID) => sdk.api.credential.remove({ credentialID }).catch(() => undefined)),
+    )
+  }
 
   // The server loads the Console workspace's providers after the grant lands, so the first refresh
   // can still show only the free catalog. Poll briefly for the workspace providers before moving on.
@@ -670,7 +765,7 @@ function ProviderConnection(props: {
     controller.authorization()?.mode === "auto"
 
   createEffect(() => {
-    if (showAccounts()) return props.onTitle(provider().name)
+    if (showAccounts() && !claudeAgentSetup()) return props.onTitle(provider().name)
 
     if (isConsole && controller.auth.state() === "error")
       return props.onTitle(language.t("provider.connect.opencode.errorTitle"))
@@ -1087,6 +1182,15 @@ function ProviderConnection(props: {
   const backToMethods = () => (isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined
 
   createEffect(() => props.onStepBack(backToAccounts() || backToMethods()))
+  onCleanup(() => props.onAccounts(false))
+  createEffect(() =>
+    props.onAccounts(
+      showAccounts() &&
+        controller.methodIndex() === undefined &&
+        !claudeAgentSetup() &&
+        !(state.noModels && controller.auth.state() !== "error"),
+    ),
+  )
 
   function goBack() {
     if (backToAccounts()) {
@@ -1348,8 +1452,8 @@ function ProviderConnection(props: {
   const addAccount = () => {
     setState({ adding: true, direct: false, confirming: undefined })
 
-    // Like the TUI: a lone method starts directly, several show the method list.
-    if (controller.methods().length !== 1) return
+    // Like the TUI: a lone method starts directly, several show the method list. Claude Agent shows its setup first.
+    if (isClaudeAgent || controller.methods().length !== 1) return
     setState("direct", true)
     void controller.auth.select(0)
   }
@@ -1388,14 +1492,18 @@ function ProviderConnection(props: {
 
   function AccountsView() {
     return (
-      <div data-component="provider-accounts" class="flex flex-col">
-        <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
+      <div data-component="provider-accounts" class="flex flex-col gap-0.5">
+        <div
+          role="radiogroup"
+          aria-label={language.t("dialog.provider.accounts.connected")}
+          class="flex flex-col gap-0.5"
+        >
           <For each={accounts()}>
             {(account) => (
               <Show
                 when={state.confirming !== account.id}
                 fallback={
-                  <div class="flex min-h-9 items-center gap-2 rounded-md px-3 text-[13px] leading-5 tracking-[-0.04px]">
+                  <div class="flex min-h-7 items-center gap-1.5 rounded-md ps-7 pe-0.5 text-[13px] leading-5 tracking-[-0.04px]">
                     <span role="alert" class="min-w-0 flex-1 truncate font-[440] text-v2-text-text-base">
                       {language.t("dialog.provider.accounts.removeConfirm", { account: account.label })}
                     </span>
@@ -1408,11 +1516,11 @@ function ProviderConnection(props: {
                   </div>
                 }
               >
-                <div class="group relative flex min-h-9 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover has-[[data-expanded]]:bg-v2-overlay-simple-overlay-hover">
+                <div class="group relative flex min-h-7 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover has-[[data-expanded]]:bg-v2-overlay-simple-overlay-hover">
                   <Show
                     when={state.renaming !== account.id}
                     fallback={
-                      <div class="flex min-h-9 min-w-0 flex-1 items-center ps-9 pe-3">
+                      <div class="flex min-h-7 min-w-0 flex-1 items-center ps-7 pe-2">
                         <AccountNameInput
                           value={account.label}
                           class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
@@ -1426,7 +1534,7 @@ function ProviderConnection(props: {
                       type="button"
                       role="radio"
                       aria-checked={activeAccount() === account.id}
-                      class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      class="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 ps-1.5 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
                       disabled={state.switching !== undefined}
                       onClick={() => selectAccount(account)}
                     >
@@ -1443,13 +1551,13 @@ function ProviderConnection(props: {
                             title={status().message}
                             class="ms-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
                           >
-                            {language.t("dialog.provider.signInRequired")}
+                            {language.t("dialog.provider.needsSignIn")}
                           </span>
                         )}
                       </Show>
                     </button>
                   </Show>
-                  <div class="hover-reveal flex shrink-0 items-center pe-1.5 group-hover:opacity-100 focus-within:opacity-100 has-[[data-expanded]]:opacity-100">
+                  <div class="hover-reveal flex shrink-0 items-center pe-1 group-hover:opacity-100 focus-within:opacity-100 has-[[data-expanded]]:opacity-100">
                     <Menu gutter={4} modal={false} placement="bottom-end">
                       <Menu.Trigger
                         as={IconButton}
@@ -1485,15 +1593,78 @@ function ProviderConnection(props: {
         <button
           type="button"
           data-action="provider-account-add"
-          class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          class="flex h-7 w-full items-center gap-1.5 rounded-md ps-1.5 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
           disabled={state.switching !== undefined || controller.methods().length === 0}
           onClick={addAccount}
         >
           <span class="flex size-4 shrink-0 items-center justify-center">
-            <Icon name="plus" size="small" class="text-v2-icon-icon-muted" />
+            <Icon name="plus" class="text-v2-icon-icon-muted" />
           </span>
           {language.t("dialog.provider.accounts.add")}
         </button>
+      </div>
+    )
+  }
+
+  function ClaudeAgentSetup() {
+    const problem = () =>
+      claudeAgentProblem()?.message ??
+      (state.claudeAgent === "timeout" ? language.t("provider.connect.claudeAgent.timeout") : undefined)
+
+    const checking = () =>
+      state.claudeAgent === "checking" ||
+      state.claudeAgent === "confirming" ||
+      controller.auth.state() === "pending" ||
+      controller.auth.state() === "refreshing"
+
+    return (
+      <div
+        data-component="claude-agent-setup"
+        class="flex flex-col items-start gap-5 px-3 pb-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+      >
+        <p>{language.t("provider.connect.claudeAgent.description")}</p>
+        <Show when={problem()}>
+          {(message) => (
+            <div class="flex items-start gap-2 text-v2-text-text-base">
+              <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
+              <span role="alert">{message()}</span>
+            </div>
+          )}
+        </Show>
+        <TextField
+          label={language.t("provider.connect.claudeAgent.signIn.command")}
+          hideLabel
+          class="font-mono"
+          value="claude auth login"
+          readOnly
+          copyable
+        />
+        <Show
+          when={!checking()}
+          fallback={<StatusRow>{language.t("provider.connect.claudeAgent.checking")}</StatusRow>}
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              variant="contrast"
+              data-action="provider-connect-submit"
+              disabled={controller.loading()}
+              onClick={() => void checkClaudeAgent()}
+            >
+              {language.t(
+                serverAccounts().length > 0
+                  ? "provider.connect.claudeAgent.checkAgain"
+                  : "provider.connect.claudeAgent.connect",
+              )}
+            </Button>
+            <Button
+              variant="neutral"
+              icon="arrow-up-right"
+              onClick={() => platform.openExternal(claudeAgentProblem()?.url ?? CLAUDE_CODE_SETUP_URL)}
+            >
+              {language.t("provider.connect.claudeAgent.install")}
+            </Button>
+          </div>
+        </Show>
       </div>
     )
   }
@@ -1623,7 +1794,7 @@ function ProviderConnection(props: {
 
                       return (
                         <section class="settings-section" data-expanded={expanded() ? "" : undefined}>
-                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-layer-01">
+                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-base">
                             <button
                               type="button"
                               class="settings-models-group-trigger"
@@ -1684,7 +1855,7 @@ function ProviderConnection(props: {
         data-component="provider-connect-content"
         class={
           isConsole
-            ? `flex min-h-0 flex-1 flex-col overflow-y-auto ${showAccounts() ? "pb-2" : "pb-4"}`
+            ? `flex min-h-0 flex-1 flex-col overflow-y-auto ${showAccounts() ? "" : "pb-4"}`
             : "flex min-h-0 flex-1 flex-col"
         }
       >
@@ -1708,6 +1879,9 @@ function ProviderConnection(props: {
                 onOpen={() => void controller.auth.open()}
               />
             </div>
+          </Match>
+          <Match when={claudeAgentSetup()}>
+            <ClaudeAgentSetup />
           </Match>
           <Match when={showAccounts() && controller.methodIndex() === undefined}>
             <AccountsView />

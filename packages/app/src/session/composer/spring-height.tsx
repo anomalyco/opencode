@@ -454,16 +454,9 @@ function grow(
     return
   }
 
-  const mb = parseFloat(getComputedStyle(el).marginBottom) || 0
-
-  const prevMb =
-    (!mb && el.previousElementSibling ? parseFloat(getComputedStyle(el.previousElementSibling).marginBottom) : 0) || 0
-
   const state: Growth = {
-    spring: Spring.fromDuration(
-      open ? 0 : el.getBoundingClientRect().height,
-      reduced ? fade : open ? morph() : (close ?? morph()),
-    ),
+    // A closing box starts from its height, which the first frame measures.
+    spring: Spring.fromDuration(0, reduced ? fade : open ? morph() : (close ?? morph())),
     // Opening fades in on its own spring; closing fades with the height, inside the closing box.
     presence: Spring.fromDuration(open ? 0 : 1, reduced ? fade : fadeIn()),
     open,
@@ -474,23 +467,20 @@ function grow(
   el.toggleAttribute("data-moving", true)
   el.toggleAttribute("data-dock-border-underlay", !!card)
 
-  if (!reduced) {
-    el.style.height = `${snap(state.spring.value)}px`
-
-    if (open && mb > 0) el.style.marginBottom = "0px"
-
-    if (open && prevMb > 0) el.style.marginTop = `${-prevMb}px`
-  }
+  // Writes only until the first frame: a grow usually starts inside an input handler that has just changed the DOM,
+  // where a read would force a layout that the frame then repeats.
+  if (open && !reduced) el.style.height = "0px"
 
   if ((withFade || reduced) && open) el.style.opacity = "0"
-
-  // The content's height is read once here, then kept current by a ResizeObserver rather than read every frame.
   const child = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : undefined
-  const margin = child ? parseFloat(getComputedStyle(child).marginBottom) || 0 : 0
+  let mb = 0
+  let prevMb = 0
+  let margin = 0
+  let full = 0
+  let measured = false
 
-  if (margin < 0) el.style.overflowClipMargin = `${-margin}px`
-  let full = child ? child.getBoundingClientRect().height + margin : 0
-
+  // The content's height is read once, on the first frame, then kept current by a ResizeObserver rather than read
+  // every frame.
   const observer = new ResizeObserver((entries) => {
     const size = entries[0]?.borderBoxSize[0]?.blockSize
 
@@ -499,6 +489,19 @@ function grow(
 
   if (child) observer.observe(child)
 
+  // Runs in the frame loop's read phase, before any of the frame's writes.
+  const measure = () => {
+    if (measured || !el.isConnected) return
+    measured = true
+    mb = parseFloat(getComputedStyle(el).marginBottom) || 0
+    prevMb =
+      (!mb && el.previousElementSibling ? parseFloat(getComputedStyle(el.previousElementSibling).marginBottom) : 0) || 0
+    margin = child ? parseFloat(getComputedStyle(child).marginBottom) || 0 : 0
+    full = child ? child.getBoundingClientRect().height + margin : 0
+
+    if (!open) state.spring.snap(el.getBoundingClientRect().height)
+  }
+
   const stop = frameLoop.add((dt) => {
     if (!el.isConnected) {
       observer.disconnect()
@@ -506,6 +509,8 @@ function grow(
 
       return false
     }
+
+    if (margin < 0) el.style.overflowClipMargin = `${-margin}px`
 
     const noMotion = prefersReducedMotion()
     const size = state.open ? full : 0
@@ -550,7 +555,7 @@ function grow(
     }
 
     return true
-  })
+  }, measure)
 
   state.end = () => {
     stop()

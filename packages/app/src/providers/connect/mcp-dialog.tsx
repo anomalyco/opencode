@@ -1,6 +1,8 @@
 import { Component, createEffect, createMemo, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import fuzzysort from "fuzzysort"
+import { Predicate } from "effect"
+import type { McpServer } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Button } from "@opencode/ui/button"
@@ -34,10 +36,37 @@ export const DialogSelectMcp: Component = () => {
 /** Lists the MCP servers of `directory`; `server` opens directly on that server's error. */
 export const DialogMcp: Component<{ directory: string; server?: string }> = (props) => {
   const data = useData()
-  const language = useLanguage()
-  const platform = usePlatform()
   const directory = () => props.directory
   const toggle = useMcpToggle(directory)
+
+  const target = () => {
+    const current = toggle.isPending ? toggle.variables : undefined
+
+    return Predicate.isString(current) ? current : current?.name
+  }
+
+  createEffect(() => void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined))
+
+  return (
+    <McpDialog
+      servers={data.location.mcp.server.list({ directory: directory() })}
+      server={props.server}
+      pending={toggle.isPending}
+      target={target()}
+      onToggle={(input) => toggle.mutate(input)}
+    />
+  )
+}
+
+export function McpDialog(props: {
+  servers: McpServer[] | undefined
+  server?: string
+  pending: boolean
+  target?: string
+  onToggle: (input: string | { name: string; enabled: boolean }) => void
+}) {
+  const language = useLanguage()
+  const platform = usePlatform()
 
   const [store, setStore] = createStore<{ detail?: string; copied: boolean; query: string }>({
     detail: props.server,
@@ -45,10 +74,8 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
     query: "",
   })
 
-  const loaded = () => data.location.mcp.server.list({ directory: directory() })
+  const loaded = () => props.servers
   const servers = createMemo(() => loaded() ?? [])
-
-  createEffect(() => void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined))
 
   const items = createMemo(() =>
     servers()
@@ -77,8 +104,8 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
   const toggleServer = (name: string) => {
     const status = servers().find((server) => server.name === name)?.status.status
 
-    if (!status || status === "pending" || toggle.isPending) return
-    toggle.mutate(name)
+    if (!status || status === "pending" || props.pending) return
+    props.onToggle(name)
   }
 
   const select = (name: string) => {
@@ -126,7 +153,7 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
 
   return (
     // Like the model picker and the TUI, the list has no visible header; the search field leads.
-    <Dialog class="command-palette search-list-dialog mcp-dialog" size="large">
+    <Dialog class="command-palette command-palette-compact search-list-dialog mcp-dialog" size="large" fit>
       <Show
         when={failure()}
         fallback={
@@ -172,12 +199,12 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
                 </Button>
                 <Button
                   variant="ghost"
-                  disabled={toggle.isPending}
-                  onClick={() => toggle.mutate({ name: current().name, enabled: false })}
+                  disabled={props.pending}
+                  onClick={() => props.onToggle({ name: current().name, enabled: false })}
                 >
                   {language.t("dialog.mcp.error.disable")}
                 </Button>
-                <Button variant="neutral" disabled={toggle.isPending} onClick={() => toggleServer(current().name)}>
+                <Button variant="neutral" disabled={props.pending} onClick={() => toggleServer(current().name)}>
                   {language.t("common.retry")}
                 </Button>
               </ErrorDetails>
@@ -199,19 +226,17 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
             {(item, row) => {
               const server = () => servers().find((entry) => entry.name === item().name)
               const status = () => server()?.status
+
               const error = () => {
                 const current = status()
 
                 return current?.status === "failed" ? current.error : undefined
               }
+
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 
-              const busy = () => {
-                const target = toggle.isPending ? toggle.variables : undefined
-
-                return (typeof target === "string" ? target : target?.name) === item().name
-              }
+              const busy = () => props.target === item().name
 
               // The dot shows the status, as in the session's MCP list; the words stay for assistive technology.
               const label = () => {
@@ -221,9 +246,11 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
               }
 
               return (
-                <div {...row} data-option-key={item().name} data-status={status()?.status}>
+                <div {...row} data-option-key={item().name} data-status={status()?.status} data-size="compact">
                   <span class="mcp-dialog-lead">
-                    <span class="mcp-status-dot" data-status={status()?.status} aria-hidden="true" />
+                    <span class="mcp-dialog-status" aria-hidden="true">
+                      <span class="mcp-status-dot" data-status={status()?.status} />
+                    </span>
                     <TruncatedText text={item().name} class="mcp-dialog-name" />
                   </span>
                   <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
@@ -247,8 +274,8 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
                           description={label()}
                           class="[&_[data-slot=switch-description]]:sr-only"
                           onChange={(enabled) => {
-                            if (toggle.isPending) return
-                            toggle.mutate({ name: item().name, enabled })
+                            if (props.pending) return
+                            props.onToggle({ name: item().name, enabled })
                           }}
                         >
                           <span class="sr-only">{item().name}</span>

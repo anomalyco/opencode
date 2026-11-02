@@ -1,11 +1,11 @@
 import { Effect } from "effect"
 import {
+  ai,
   CompactionPart,
   LanguageModel,
-  LLM,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   ProviderID,
 } from "../../src/effect.js"
@@ -15,7 +15,7 @@ const openai = OpenAI.configure({
   apiKey: "test",
   providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
 }).responses("gpt-5.3-codex")
-LLMClient.compact(LLM.request({ model: openai, prompt: "hello" }))
+ai.compact(ai.request({ model: openai, prompt: "hello" }))
 
 for (const model of [
   OpenAI.configure().responses("fixture"),
@@ -28,53 +28,57 @@ for (const model of [
   LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
   LanguageModel.make(LanguageModel.input(openai)),
 ]) {
-  LLMClient.compact(LLM.request({ model, prompt: "hello" }))
+  ai.compact(ai.request({ model, prompt: "hello" }))
 }
 
 const unsupported = {
-  anthropic: LLM.request({ model: Anthropic.configure().model("fixture") }),
-  openaiChat: LLM.request({ model: OpenAI.configure().chat("fixture") }),
-  azureChat: LLM.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
-  xaiChat: LLM.request({ model: XAI.configure().chat("fixture") }),
-  compatible: LLM.request({
+  anthropic: ai.request({ model: Anthropic.configure().model("fixture"), prompt: "Hello" }),
+  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture"), prompt: "Hello" }),
+  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture"), prompt: "Hello" }),
+  xaiChat: ai.request({ model: XAI.configure().chat("fixture"), prompt: "Hello" }),
+  compatible: ai.request({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+    prompt: "Hello",
   }),
 }
 // @ts-expect-error Anthropic has no standalone compact endpoint.
-LLMClient.compact(unsupported.anthropic)
+ai.compact(unsupported.anthropic)
 // @ts-expect-error Chat does not expose Responses compaction.
-LLMClient.compact(unsupported.openaiChat)
+ai.compact(unsupported.openaiChat)
 // @ts-expect-error Azure Chat does not expose Responses compaction.
-LLMClient.compact(unsupported.azureChat)
+ai.compact(unsupported.azureChat)
 // @ts-expect-error xAI Chat does not expose Responses compaction.
-LLMClient.compact(unsupported.xaiChat)
+ai.compact(unsupported.xaiChat)
 // @ts-expect-error Protocol compatibility does not guarantee endpoint support.
-LLMClient.compact(unsupported.compatible)
+ai.compact(unsupported.compatible)
 LLMClient.Service.use((client) => {
   // @ts-expect-error The service enforces the same capability as the convenience function.
   return client.compact(unsupported.anthropic)
 })
 
-const request = LLM.request({ model: openai, prompt: "hello" })
-LLMClient.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
-LLMClient.compact(new LLMRequest(LLMRequest.input(request)))
-const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
+const request = ai.request({ model: openai, prompt: "hello" })
+ai.compact({ ...request, messages: [Message.user("continue")] })
+ai.compact({ ...request })
+const switched = { ...request, model: Anthropic.configure().model("fixture") }
 // @ts-expect-error Switching models replaces, rather than inherits, the capability.
-LLMClient.compact(switched)
-LLMClient.compact(LLMRequest.update(switched, { model: openai }))
-LLMClient.compact(
+ai.compact(switched)
+ai.compact({ ...switched, model: openai })
+ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
-  LLM.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+  ai.request({
+    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
+    prompt: "Hello",
+  }),
 )
 
 declare const dynamicModel: LanguageModel
-declare const dynamicPatch: Partial<LLMRequest.Input>
-const dynamicRequest = LLM.request({ model: dynamicModel, prompt: "hello" })
+declare const dynamicPatch: Partial<LLMRequest>
+const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
-LLMClient.compact(dynamicRequest)
-if (LLMClient.canCompact(dynamicRequest)) LLMClient.compact(dynamicRequest)
+ai.compact(dynamicRequest)
+if (ai.canCompact(dynamicRequest)) ai.compact(dynamicRequest)
 // @ts-expect-error An optional model override cannot retain the old capability statically.
-LLMClient.compact(LLMRequest.update(request, dynamicPatch))
+ai.compact({ ...request, ...dynamicPatch })
 
 const checkpoint = CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_1", encrypted: "opaque" })
 const provider = ProviderID.make("anthropic")
@@ -99,7 +103,7 @@ if (checkpoint.text !== undefined) {
 checkpoint.encrypted
 // @ts-expect-error Compaction parts do not contain a generic provider payload.
 checkpoint.value
-LLMClient.compact(LLM.request({ model: openai, prompt: "hello" })).pipe(
+ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
   Effect.map((result) => {
     result.replacement satisfies ReadonlyArray<Message>
     // @ts-expect-error The replacement window is named explicitly; the old field is not an alias.
@@ -108,26 +112,35 @@ LLMClient.compact(LLM.request({ model: openai, prompt: "hello" })).pipe(
     result.message
   }),
 )
-LLM.request({
+ai.request({
   model: openai,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
     contextManagement: [{ type: "compaction", compactThreshold: "100000" }],
   },
 })
 const anthropic = Anthropic.configure().model("claude-opus-4-6")
-LLM.request({
+ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     contextManagement: {
       edits: [{ type: "compact_20260112", pauseAfterCompaction: true, instructions: "Summarize without using tools" }],
     },
   },
 })
-LLM.request({
+ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.
     contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
   },
 })
+
+// Plain inputs compact without `ai.request(...)`, and a model alone can be narrowed.
+ai.compact({ model: OpenAI.configure().responses("fixture"), messages: [Message.user("continue")] })
+if (ai.canCompact(dynamicModel)) ai.compact({ model: dynamicModel, prompt: "continue" })
+// @ts-expect-error A dynamically selected model must be narrowed first.
+ai.compact({ model: dynamicModel, prompt: "continue" })

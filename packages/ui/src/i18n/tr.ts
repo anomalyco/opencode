@@ -81,10 +81,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "En iyi açık kaynaklı modellere güvenilir erişim için aylık $10 karşılığında OpenCode Go'ya abone olun.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abone ol",
-  "dialog.usageExceeded.accountRateLimit.title": "Go sınırına ulaşıldı",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Kullanım sınırına ulaşıldı. Bu modeli şimdi kullanmaya devam etmek için mevcut bakiyenizden kullanımı etkinleştirin.",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ayarları aç",
 
   "ui.sessionTurn.status.delegating": "Görev devrediliyor",
   "ui.sessionTurn.status.planning": "Sonraki adımlar planlanıyor",

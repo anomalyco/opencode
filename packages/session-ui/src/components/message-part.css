@@ -168,16 +168,6 @@
     color: var(--v2-icon-icon-muted);
   }
 
-  [data-slot="user-message-pending"] {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 14px;
-    height: 16px;
-    color: var(--v2-icon-icon-faint);
-  }
-
   [data-slot="user-message-text"] {
     display: inline-block;
     white-space: pre-wrap;
@@ -226,9 +216,61 @@
     max-width: 100%;
   }
 
+  /* A folded message is laid out whole and clipped, so copy, select-all and assistive tech still get all of it. Its
+     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. */
+  [data-slot="user-message-fold"] {
+    overflow: hidden;
+
+    /* unicode-bidi isn't inherited, and each paragraph of mixed LTR and RTL text takes its own direction. */
+    > div {
+      unicode-bidi: plaintext;
+    }
+
+    &[data-folded] {
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+    }
+  }
+
+  [data-slot="user-message-fold-toggle"] {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 2px;
+    height: 24px;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    font-weight: 530;
+    color: var(--v2-text-text-muted);
+
+    [data-slot="icon-svg"] {
+      color: var(--v2-icon-icon-muted);
+    }
+
+    &[aria-expanded="true"] [data-slot="icon-svg"] {
+      transform: rotate(180deg);
+    }
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
   [data-slot="user-message-copy-wrapper"] {
     height: calc(20px * var(--user-run-meta, 1));
-    margin-top: calc(4px * var(--user-run-meta, 1));
+    margin-top: calc(8px * var(--user-run-meta, 1));
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -274,16 +316,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
 
-    /* The variant reads as a qualifier of the model before it, so it is dimmer and never the part that truncates. */
+    /* The variant reads as a qualifier of the model before it, so it is never the part that truncates. */
     &[data-variant] {
       flex: none;
-      opacity: 0.66;
     }
   }
 
   [data-slot="user-message-meta-separator"] {
     flex: none;
-    opacity: 0.66;
   }
 
   [data-slot="user-message-meta-wrap"],
@@ -291,7 +331,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-compact);
+    line-height: 18px;
     letter-spacing: 0.05px;
     color: var(--v2-text-text-faint);
     cursor: default;
@@ -452,11 +492,11 @@
 
   [data-slot="text-part-copy-wrapper"] {
     height: 20px;
-    margin-top: 4px;
+    margin-top: 8px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 4px;
 
     /* Hover actions show and hide at once, without a fade. */
     @media (hover: hover) {
@@ -468,6 +508,16 @@
       display: inline-flex;
       flex: none;
       width: fit-content;
+    }
+
+    [data-component="icon-button-v2"] [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Pulls the glyph toward the reply's text edge. */
+    [data-component="tooltip-v2-trigger"]:first-child {
+      margin-inline-start: -2px;
     }
   }
 
@@ -481,7 +531,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-compact);
+    line-height: 18px;
     letter-spacing: 0.05px;
     color: var(--v2-text-text-faint);
     cursor: default;
@@ -495,19 +545,16 @@
 
     &[data-variant] {
       flex: none;
-      opacity: 0.66;
     }
   }
 
   [data-slot="text-part-meta-separator"] {
     flex: none;
-    opacity: 0.66;
   }
 
   [data-slot="text-part-copy-wrapper"][data-interrupted] {
     width: 100%;
     justify-content: flex-end;
-    gap: 8px;
   }
 
   :root[data-motion="reduce"] & [data-slot="text-part-copy-wrapper"] {
@@ -726,9 +773,27 @@
       margin: 4px;
     }
 
+    /* The ghost button is transparent, so paint the section's background behind it. It fades out to the left, top
+       and bottom so text at its edges softens instead of being cut, and runs to the card edge on the right. It is
+       solid only across the button's height and never takes pointer events, so there is no gutter and the lines
+       below keep the full width. The top stops at the section edge, so it never covers the border above the output. */
+    [data-slot="bash-copy"]::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -4px -4px -8px -24px;
+      background: var(--bash-section-background);
+      mask-image:
+        linear-gradient(to right, transparent, #000 24px),
+        linear-gradient(transparent, #000 8px, #000 calc(100% - 8px), transparent);
+      mask-composite: intersect;
+      pointer-events: none;
+    }
+
     [data-slot="bash-result"] {
+      --bash-section-background: var(--v2-background-bg-layer-01);
       border-block-start: 0.5px solid var(--v2-border-border-base);
-      background: var(--v2-background-bg-layer-01);
+      background: var(--bash-section-background);
       color: var(--v2-text-text-muted);
     }
 
@@ -738,6 +803,7 @@
     }
 
     [data-slot="bash-command"] {
+      --bash-section-background: var(--v2-background-bg-base);
       color: var(--v2-text-text-base);
     }
   }
@@ -1309,7 +1375,8 @@
   scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
-[data-component="dock-prompt"] {
+[data-component="dock-prompt"][data-kind="permission"],
+[data-component="dock-prompt"][data-variant="experimental"] {
   position: relative;
   display: flex;
   flex-direction: column;

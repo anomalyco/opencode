@@ -47,7 +47,9 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
   isFormNotFoundError,
+  isMessageNotFoundError,
   isPermissionNotFoundError,
+  isSessionNotFoundError,
   type SessionPromptInput,
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -122,6 +124,7 @@ type LocationData = {
 type Store = {
   session: {
     info: Record<string, SessionInfo>
+    missing: Record<string, true | undefined>
     // Family index keyed by a family's root (or furthest-known-ancestor when the
     // true root is not yet loaded). The value is a flat deduplicated list of every
     // session ID in that family, including the key itself once its info arrives.
@@ -256,6 +259,7 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+const DELETED_SESSION_LIMIT = 512
 
 export function createData(config: CreateDataInput) {
   const api = config.api
@@ -266,6 +270,11 @@ export function createData(config: CreateDataInput) {
     if (disposed || (config.connection && config.connection.status() !== "connected")) return
     void load().catch((error) => {
       if (disposed || (config.connection && config.connection.status() !== "connected")) return
+      if (isSessionNotFoundError(error)) {
+        markDeleted(error.sessionID)
+        return
+      }
+      if (isMessageNotFoundError(error)) return
       if (config.onError) return config.onError(error)
       console.error("Failed to refresh client data", error)
     })
@@ -288,6 +297,7 @@ export function createData(config: CreateDataInput) {
   const [store, setStore] = createStore<Store>({
     session: {
       info: {},
+      missing: {},
       family: {},
       active: {},
       message: {},
@@ -631,6 +641,36 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  let deletionEpoch = 0
+  const deletedAt = new Map<string, number>()
+
+  function clearDeleted(sessionID: string) {
+    deletedAt.delete(sessionID)
+    if (store.session.missing[sessionID]) setStore("session", "missing", sessionID, undefined)
+  }
+
+  function markDeleted(sessionID: string) {
+    if (sessionOutbox.has(sessionID)) return
+    batch(() => {
+      deletedAt.delete(sessionID)
+      deletedAt.set(sessionID, ++deletionEpoch)
+      if (deletedAt.size > DELETED_SESSION_LIMIT) {
+        const oldest = deletedAt.keys().next().value
+        if (oldest !== undefined) {
+          deletedAt.delete(oldest)
+          setStore("session", "missing", oldest, undefined)
+        }
+      }
+      setStore("session", "missing", sessionID, true)
+      removeSession(sessionID)
+    })
+  }
+
+  function evictMissing(error: unknown): never {
+    if (isSessionNotFoundError(error)) markDeleted(error.sessionID)
+    throw error
+  }
+
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
@@ -705,6 +745,7 @@ export function createData(config: CreateDataInput) {
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
       case "session.created":
+        clearDeleted(event.data.sessionID)
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
@@ -716,7 +757,7 @@ export function createData(config: CreateDataInput) {
         sync.complete(`session.message:${event.data.sessionID}`)
         return
       case "session.deleted":
-        removeSession(event.data.sessionID)
+        markDeleted(event.data.sessionID)
         return
       case "session.usage.updated":
         if (store.session.info[event.data.sessionID])
@@ -779,6 +820,11 @@ export function createData(config: CreateDataInput) {
       case "session.permissions":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
+        return
+      case "session.metadata.updated":
+        // The event carries the whole record, so keys it drops must go too.
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
         return
       case "session.archived":
         if (store.session.info[event.data.sessionID])
@@ -1103,6 +1149,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")
+        // Revalidate so `time.busy` follows the projected execution start.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
@@ -1433,7 +1483,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const usageLimits = locationResource("usageLimits", (location) => api().usage.limits({ location }))
+  const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -1453,11 +1503,18 @@ export function createData(config: CreateDataInput) {
       get(sessionID: string) {
         return store.session.info[sessionID]
       },
+      missing(sessionID: string) {
+        return Boolean(store.session.missing[sessionID])
+      },
+      forget(sessionID: string) {
+        markDeleted(sessionID)
+      },
       creating(sessionID: string) {
         return creating.has(sessionID)
       },
       remember(info: SessionInfo) {
         batch(() => {
+          clearDeleted(info.id)
           setStore("session", "info", info.id, reconcile(info))
           sync.complete(`session:${info.id}`)
           registerSession(info.id)
@@ -1532,10 +1589,12 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
+            const started = deletionEpoch
             const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
             pendingUpdates.set(sessionID, updates)
             try {
-              const snapshot = await api().session.inbox.list({ sessionID })
+              const snapshot = await api().session.inbox.list({ sessionID }).catch(evictMissing)
+              if ((deletedAt.get(sessionID) ?? 0) > started) return
               // Events can overtake this HTTP response on a remote connection.
               // Reconcile them before an older snapshot can resurrect delivered input.
               const current = new Map(snapshot.map((item) => [item.id, item]))
@@ -1591,6 +1650,7 @@ export function createData(config: CreateDataInput) {
         const id = payload.id ?? SessionID.create()
         const location = payload.location ?? defaultLocation()
         const fresh = !store.session.info[id]
+        clearDeleted(id)
         if (fresh) {
           const now = Date.now()
           sessionOutbox.add(id)
@@ -1723,11 +1783,12 @@ export function createData(config: CreateDataInput) {
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+          const started = deletionEpoch
           const [info, children] = await Promise.all([
-            api().session.get({ sessionID }),
+            api().session.get({ sessionID }).catch(evictMissing),
             options?.children ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }) : [],
           ])
-          const sessions = [info, ...children]
+          const sessions = [info, ...children].filter((session) => (deletedAt.get(session.id) ?? 0) <= started)
           batch(() => {
             setStore(
               "session",
@@ -1737,6 +1798,7 @@ export function createData(config: CreateDataInput) {
               }),
             )
             for (const session of sessions) {
+              clearDeleted(session.id)
               sync.complete(`session:${session.id}`)
               registerSession(session.id)
             }
@@ -1757,11 +1819,15 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({
-              sessionID,
-              limit: config.initialMessageLimit?.() ?? messagePageLimit,
-              order: "desc",
-            })
+            const started = deletionEpoch
+            const response = await api()
+              .message.list({
+                sessionID,
+                limit: config.initialMessageLimit?.() ?? messagePageLimit,
+                order: "desc",
+              })
+              .catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
             const fetched = response.data.toReversed().map(stored)
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1868,7 +1934,10 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.permission:${sessionID}`, async () => {
-            setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
+            const started = deletionEpoch
+            const list = await api().permission.list({ sessionID }).catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
+            setStore("session", "permission", sessionID, list)
           })
         },
         invalidate(sessionID: string) {
@@ -1915,7 +1984,10 @@ export function createData(config: CreateDataInput) {
               ])
               return
             }
-            setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
+            const started = deletionEpoch
+            const list = await api().session.form.list({ sessionID }).catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
+            setStore("session", "form", sessionID, list)
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {

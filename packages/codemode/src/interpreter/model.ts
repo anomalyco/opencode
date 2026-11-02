@@ -83,8 +83,5 @@ export const sourceLocation = (node: AstNode): { readonly line: number; readonly
   column: (node.loc?.start.column ?? 0) + 1,
 })
 
-export const formatLocation = (node?: AstNode): string => {
-  if (!node?.loc) return ""
-  const location = sourceLocation(node)
-  return ` (line ${location.line}, col ${location.column})`
-}
+export const formatLocation = (location?: { readonly line: number; readonly column: number }): string =>
+  location ? ` (line ${location.line}, col ${location.column})` : ""

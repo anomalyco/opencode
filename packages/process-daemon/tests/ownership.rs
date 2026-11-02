@@ -309,6 +309,66 @@ fn shutdown_ends_an_idle_subscription() {
 }
 
 #[test]
+fn rename_is_advertised_and_served() {
+    use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
+
+    let mut daemon = Daemon::start();
+    assert_eq!(daemon.registration.features, ["rename"]);
+    assert!(matches!(
+        daemon.request(Request::Ping),
+        Response::Pong { features, .. } if features == ["rename"]
+    ));
+    let (owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    let terminal = daemon.terminal("exec cat");
+    let mut subscription = daemon.connect();
+    assert!(matches!(
+        daemon.send(
+            &mut subscription,
+            Request::Subscribe {
+                id: terminal.id,
+                offset: 0,
+                attachment_id: "rename-observer".into(),
+                role: AttachmentRole::Observer,
+                takeover: false,
+            }
+        ),
+        Response::Attached { .. }
+    ));
+    assert!(matches!(
+        daemon.request(Request::Rename {
+            id: terminal.id,
+            title: Some("renamed".into()),
+        }),
+        Response::Ok
+    ));
+    loop {
+        if let SubscriptionEvent::Response(response) =
+            read_subscription_event(&mut subscription).unwrap()
+            && let Response::TitleChanged { title } = *response
+        {
+            assert_eq!(title, "renamed");
+            break;
+        }
+    }
+    assert!(
+        matches!(daemon.request(Request::List), Response::Terminals { terminals }
+        if terminals.len() == 1 && terminals[0].title == "renamed"
+            && terminals[0].user_title.as_deref() == Some("renamed"))
+    );
+    assert!(matches!(
+        daemon.request(Request::Rename {
+            id: terminal.id.wrapping_add(1),
+            title: None,
+        }),
+        Response::Error { .. }
+    ));
+    drop(subscription);
+    drop(owner);
+    daemon.wait();
+}
+
+#[test]
 fn handoff_preserves_daemon_and_terminal_and_shutdown_overrides_it() {
     let mut daemon = Daemon::start();
     let (mut owner, response) = daemon.own(None);
@@ -475,4 +535,43 @@ fn shutdown_keeps_a_replaced_socket() {
     assert!(daemon.registration.socket.exists());
     drop(replacement);
     std::fs::remove_file(&daemon.registration.socket).unwrap();
+}
+
+#[test]
+fn stop_signals_stop_terminals_and_clean_up() {
+    for signal in [libc::SIGTERM, libc::SIGINT] {
+        let mut daemon = Daemon::start();
+        let (_owner, response) = daemon.own(None);
+        assert!(matches!(response, Response::Owned));
+        let terminal = daemon.terminal("exec sleep 1000");
+
+        // The daemon blocks these signals on its own threads; its children must not
+        // inherit that mask, so a terminal's process still dies from the signal.
+        let probe = daemon.terminal("exec sleep 1000");
+        // SAFETY: the probe PID belongs to this test's live terminal.
+        assert_eq!(unsafe { libc::kill(probe.pid.unwrap() as i32, signal) }, 0);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let Response::Terminals { terminals } = daemon.request(Request::List) else {
+                panic!("list failed");
+            };
+            let exited = terminals.iter().any(|value| {
+                value.id == probe.id
+                    && !matches!(
+                        value.lifecycle,
+                        opencode_pty::service::TerminalLifecycle::Running
+                    )
+            });
+            if exited {
+                break;
+            }
+            assert!(Instant::now() < deadline, "probe ignored signal {signal}");
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        // SAFETY: the PID belongs to the daemon this test spawned.
+        assert_eq!(unsafe { libc::kill(daemon.child.id() as i32, signal) }, 0);
+        daemon.wait();
+        assert_terminal_stopped(&terminal);
+    }
 }

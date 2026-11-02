@@ -1,5 +1,5 @@
 import { type AstNode, Throw, typeError } from "./model.js"
-import { Callable, define, get, hidden, Arr, Fn, PromiseObj, record, type Value } from "./objects.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, type Value } from "./objects.js"
 import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
@@ -256,6 +256,41 @@ function* constructPromise<R>(ctx: Interpreter<R>, executor: Value, site: AstNod
     made.reject(error)
   }
   return made.promise
+}
+
+const promiseLikePrototypes = new WeakMap<object, Obj>()
+
+/**
+ * Lets a synchronous object result also be awaited or chained like a Promise. It inherits non-enumerable
+ * then/catch/finally that settle with a plain copy, so data views never show them and awaiting does not recurse.
+ */
+export const promiseLike = <R>(ctx: Interpreter<R>, value: Value): Value => {
+  if (!(value instanceof Obj) || value.proto !== ctx.builtins.Object) return value
+  value.proto = promiseLikePrototype(ctx)
+  return value
+}
+
+const promiseLikePrototype = <R>(ctx: Interpreter<R>): Obj => {
+  const cached = promiseLikePrototypes.get(ctx)
+  if (cached !== undefined) return cached
+  const proto = new Obj(ctx.builtins.Object)
+  const settled = (thisValue: Value, name: string) => {
+    const source = receiver(Obj, thisValue, name)
+    const copy = new Obj(ctx.builtins.Object)
+    for (const [key, slot] of source.props) copy.props.set(key, { ...slot })
+    return ctx.runner.promiseResolve(copy)
+  }
+  methods(
+    ctx.builtins,
+    proto,
+    (["then", "catch", "finally"] as const).map((name) => [
+      name,
+      name === "then" ? 2 : 1,
+      (thisValue, args, site) => instanceMethod(ctx, name, settled(thisValue, name), args, site),
+    ]),
+  )
+  promiseLikePrototypes.set(ctx, proto)
+  return proto
 }
 
 export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
