@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -1573,7 +1573,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )

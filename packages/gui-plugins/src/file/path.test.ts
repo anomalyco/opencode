@@ -13,6 +13,10 @@ describe("resolveOpenInAppPath", () => {
     expect(resolveOpenInAppPath("C:/workspace", "\\\\server\\share\\file.ts")).toBe("\\\\server\\share\\file.ts")
     expect(resolveOpenInAppPath("C:/workspace", "\\src\\file.ts")).toBe("\\src\\file.ts")
   })
+
+  test("keeps in-memory skill URIs out of the workspace", () => {
+    expect(resolveOpenInAppPath("/workspace", "skill://report/SKILL.md")).toBe("skill://report/SKILL.md")
+  })
 })
 
 describe("openInAppParentPath", () => {

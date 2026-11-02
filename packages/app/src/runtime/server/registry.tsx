@@ -38,10 +38,13 @@ export function serverLabel(conn: ServerConnection.Any, current?: { hostname?: s
   return serverName(conn)
 }
 
-function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+function loopbackOrigin(url: string) {
+  if (!URL.canParse(url)) return
+  const parsed = new URL(url)
 
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "[::1]") return
+
+  return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
 }
 
 // Project data comes from the server; this keeps which projects this client has used and the last one.
@@ -130,6 +133,21 @@ export function canRemoveServer(input: {
   return input.stored.some((server) => server.http.url === input.key)
 }
 
+/**
+ * The servers Home lists. Home needs at least one, so when every server is flagged hidden (stored by an older
+ * build, or edited by hand) the built-in server, otherwise the first, is shown anyway.
+ */
+export function resolveVisibleServers(input: {
+  servers: Array<ServerConnection.Any>
+  hidden: StoredState["hidden"]
+}): Array<ServerConnection.Any> {
+  const visible = input.servers.filter((conn) => !input.hidden[ServerConnection.key(conn)])
+
+  if (visible.length > 0 || input.servers.length === 0) return visible
+
+  return [input.servers.find(ServerConnection.builtin) ?? input.servers[0]]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
@@ -192,8 +210,18 @@ export namespace ServerConnection {
     return true
   }
 
-  export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+  // The desktop sidecar, or a loopback http connection on the same port as the app's own server. Other loopback
+  // ports may belong to a WSL server, tunnel, or container with a separate filesystem.
+  export const local = (conn?: Any, ownUrl?: string) => {
+    if (!conn) return false
+
+    if (builtin(conn)) return true
+
+    if (conn.type !== "http" || !ownUrl) return false
+    const origin = loopbackOrigin(conn.http.url)
+
+    return !!origin && origin === loopbackOrigin(ownUrl)
+  }
 }
 
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
@@ -216,7 +244,16 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       return resolveServerList({ stored: store.list, props: props.servers })
     })
 
-    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
+    const visibleServers = createMemo(() => resolveVisibleServers({ servers: allServers(), hidden: store.hidden }))
+
+    // Clears the hidden flag of any server shown despite it, so the stored flags say what Home shows.
+    function unhideShown(servers: Array<ServerConnection.Any>) {
+      for (const conn of resolveVisibleServers({ servers, hidden: store.hidden })) {
+        const key = ServerConnection.key(conn)
+
+        if (store.hidden[key]) setStore("hidden", key, false)
+      }
+    }
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
@@ -241,7 +278,16 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       const list = store.list.filter((x) => x.http.url !== key)
       batch(() => {
         setStore("list", list)
+        // Removing the only shown server must not leave the rest all hidden.
+        unhideShown(resolveServerList({ stored: list, props: props.servers }))
       })
+    }
+
+    function setHidden(key: ServerConnection.Key, hidden: boolean) {
+      // Home always lists at least one server, so hiding the only shown one does nothing.
+      if (hidden && visibleServers().every((conn) => ServerConnection.key(conn) === key)) return
+
+      setStore("hidden", key, hidden)
     }
 
     function canRemove(key: ServerConnection.Key) {
@@ -265,6 +311,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const current = (conn: ServerConnection.Any) =>
       ServerConnection.builtin(conn) || ServerConnection.key(conn) === props.canonicalLocalServer
 
+    const ownUrl = () => props.servers?.find(ServerConnection.builtin)?.http.url ?? props.canonicalLocalServer
+    const local = (conn?: ServerConnection.Any) => ServerConnection.local(conn, ownUrl())
+
     const label = (conn: ServerConnection.Any) =>
       serverLabel(
         conn,
@@ -284,16 +333,16 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       // state wait on this, but the provider must not block first render on storage.
       hydrated,
       isHidden(key: ServerConnection.Key) {
-        return store.hidden[key] ?? false
+        return !!store.hidden[key] && !visibleServers().some((conn) => ServerConnection.key(conn) === key)
       },
-      setHidden(key: ServerConnection.Key, hidden: boolean) {
-        setStore("hidden", key, hidden)
-      },
+      setHidden,
       add,
       remove,
       canRemove,
       scope,
       current,
+      ownUrl,
+      local,
       /** The name switchers, menus and titles show. */
       label,
       /** The name a list row shows next to its item: nothing for the current server or when it is the only one. */

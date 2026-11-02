@@ -7,8 +7,9 @@ import { projectSettingsKey, useSettings } from "@/settings/model"
 
 type ServerData = ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>["data"]
 
+// Without a server (no session in view) the session reads as idle and read.
 export function useSessionTabAvatarState(
-  server: Accessor<ServerConnection.Key>,
+  server: Accessor<ServerConnection.Key | undefined>,
   sessionId: Accessor<string>,
   root?: Accessor<boolean>,
   snapshot?: Accessor<SessionInfo | undefined>,

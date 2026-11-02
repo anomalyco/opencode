@@ -10,7 +10,6 @@ import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
 const review = path.join(root, "RELEASE_REVIEW.md")
-const changelog = path.join(root, "UPCOMING_CHANGELOG.md")
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
@@ -86,7 +85,6 @@ const notes = document.match(/<!-- changelog:start -->\s*([\s\S]*?)\s*<!-- chang
 if (!notes) throw new Error("Release review is missing its changelog markers")
 const releaseNotes = notes[1].trim()
 if (!releaseNotes) throw new Error("Release review has no changelog")
-await Bun.write(changelog, `${releaseNotes}\n`)
 
 const highlights = parse(releaseNotes)
 highlights.problems.forEach((problem) => console.warn(`Warning: ${problem}`))
@@ -173,7 +171,9 @@ includes V1 history merged into dev. Do not compare against V1 release tags or c
 only on commit titles. Write a
 user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty sections and changes that
 are entirely internal. Group bug fixes separately from improvements. Preserve community contributor attribution when it
-is available from merged pull requests, but never thank authors listed in .github/TEAM_MEMBERS.
+is available from merged pull requests, but never thank authors listed in .github/TEAM_MEMBERS. Leave out changes to
+the @opencode/ai package in packages/ai unless they change how OpenCode itself behaves for users; then describe only
+that OpenCode behavior.
 
 Start the changelog with a "### Highlights" section: the few changes worth telling people about, written for humans.
 Pick 2 to 5 user-visible changes a user would notice, try, or share: new capabilities, clearly better workflows, or fixes

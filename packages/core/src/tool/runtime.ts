@@ -2,21 +2,22 @@ import { emptyInputJsonSchema, type ToolDefinition } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import { Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
-const jsonSchemas = Effect.runSync(
-  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown> | undefined>({
-    capacity: 100,
-    lookup: (schema) =>
-      Effect.try({
-        try: () => jsonSchema(schema),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(() => undefined)),
-  }),
-)
+// Codecs for raw JSON Schema inputs (mostly MCP tools), built once per schema object; schemas are not edited after
+// registration. Not an Effect `Cache`: each entry keeps its lookup fiber, which keeps the caller's stack frames and
+// through them the `Effect.fn` closures over its Location's services, so evicted Locations stayed alive.
+const jsonSchemas = new WeakMap<object, Schema.Codec<unknown> | undefined>()
+
+const codecFor = (schema: JsonSchema.JsonSchema) => {
+  if (jsonSchemas.has(schema)) return jsonSchemas.get(schema)
+  const codec = Result.try(() => jsonSchema(schema)).pipe(Result.getOrUndefined)
+  jsonSchemas.set(schema, codec)
+  return codec
+}
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   type: "tool",
@@ -74,7 +75,7 @@ const validateInput = (
 ): Effect.Effect<StandardSchemaV1.Result<unknown>> => {
   if (isStandardSchema(schema)) return validateStandard(schema, value)
   return Effect.gen(function* () {
-    const codec = Schema.isSchema(schema) ? schema : yield* Cache.get(jsonSchemas, schema)
+    const codec = Schema.isSchema(schema) ? schema : codecFor(schema)
     if (codec === undefined) return { value }
     return yield* Schema.decodeUnknownEffect(codec)(value, { errors: "all" }).pipe(
       Effect.match({
@@ -191,7 +192,21 @@ const flattenAllOf = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(flattenAllOf)
   if (typeof value !== "object" || value === null) return value
 
-  const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, flattenAllOf(item)]))
+  // Effect adds the safe-integer range to every Schema.Int. Drop it so tool schemas don't change and
+  // bust prompt caches.
+  const integer = "type" in value && value.type === "integer"
+  const schema = Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        ([key, item]) =>
+          !integer ||
+          !(
+            (key === "minimum" && item === Number.MIN_SAFE_INTEGER) ||
+            (key === "maximum" && item === Number.MAX_SAFE_INTEGER)
+          ),
+      )
+      .map(([key, item]) => [key, flattenAllOf(item)]),
+  )
   if (!Array.isArray(schema.allOf) || !schema.allOf.every(isRecord) || !canFlattenAllOf(schema.allOf, schema))
     return schema
   const { allOf, ...rest } = schema

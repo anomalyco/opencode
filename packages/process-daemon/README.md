@@ -71,7 +71,7 @@ ownership deadline is due, or a two-second safety net elapses. Windows still
 polls every 25 ms.
 
 The Windows named-pipe backend keeps protocol 7 and the registration fields
-`instance_id`, `pid`, `protocol`, `socket`, and `token`. Treat `socket` as an opaque
+`instance_id`, `pid`, `protocol`, `socket`, `token`, and `features`. Treat `socket` as an opaque
 local endpoint: on Windows it is `\\.\pipe\opencode-pty-<instance_id>`, not a
 filesystem socket. A random per-instance name, exclusive first pipe instance,
 current-user access control, and rejection of remote clients protect the endpoint;
@@ -382,19 +382,20 @@ instruction-set extensions from CI runners (Windows builds set
 `OPENCODE_ZIG_CPU=baseline`, since the Unix Zig wrapper is a shell script).
 Linux GNU artifacts support glibc 2.30 and newer.
 
-Tagged releases also publish `@opencode-ai/pty` to npm with optional,
+Tagged releases also publish `@opencode/pty` to npm with optional,
 platform-specific binary packages. Installing the npm package selects the native
 binary for the current platform (`opencode-pty.exe` on Windows) and exposes
 its path as `binaryPath`:
 
 ```js
-import { binaryPath } from "@opencode-ai/pty"
+import { binaryPath } from "@opencode/pty"
 ```
 
 npm publishing uses trusted publishing with provenance. Each of the nine
-packages (`@opencode-ai/pty` and the eight `@opencode-ai/pty-<platform>`
+packages (`@opencode/pty` and the eight `@opencode/pty-<platform>`
 packages) must list anomalyco/opencode with workflow
-`release-process-daemon.yml` as its trusted publisher.
+`release-process-daemon.yml` as its trusted publisher, with no environment
+(the release job does not use one).
 
 Pull requests that change the release pipeline run the same build and npm
 packing without publishing anything.

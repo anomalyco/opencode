@@ -1,6 +1,6 @@
 import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
@@ -31,16 +31,12 @@ export type Config = RouteDefaultsInput &
 
 export type Settings = ProviderPackage.Settings &
   Gemini.ProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
-const auth = (options: ProviderAuthOption<"optional">) => {
-  if ("auth" in options && options.auth) return options.auth
-  return Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("GOOGLE_GENERATIVE_AI_API_KEY"))
-    .pipe(Auth.header("x-goog-api-key"))
-}
+const auth = (options: ProviderAuthOption<"optional">) =>
+  AuthOptions.apiKey(options, "GOOGLE_GENERATIVE_AI_API_KEY", Auth.header("x-goog-api-key"))
 
 const configuredRoute = (input: Config) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
@@ -55,9 +51,11 @@ const interactionsRoute = (input: Config) => {
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   const media = MediaRoute.deployment(input, auth(input))
+  const gemini = (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
+    model: gemini,
+    gemini,
     interactions: (modelID: string | ModelID) =>
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -88,6 +86,7 @@ function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings
 }
 
 export const image = provider.image
+export const gemini = provider.gemini
 export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech

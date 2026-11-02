@@ -46,7 +46,7 @@ export type Config = Location &
 export type Settings<Options = ChatOptionsInput> = Location &
   ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 const hosts = new Map<string, string>([
@@ -127,6 +127,9 @@ export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInpu
   id,
   input,
 ) => configure(config(input)).responses(id)
+export const chat = model
+export const messages = messagesModel
+export const responses = responsesModel
 export const imageModel = (id: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(id, input.providerOptions)

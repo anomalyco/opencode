@@ -5,6 +5,8 @@ import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -20,6 +22,8 @@ import {
 import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
+import { Credential } from "@opencode/core/credential"
+import { drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
@@ -80,6 +84,62 @@ describe("GithubCopilotPlugin", () => {
     expect(copilotEntitlementError({ chat_enabled: true, can_signup_for_limited: true })).toBeUndefined()
     expect(copilotEntitlementError({})).toBeUndefined()
   })
+
+  it.effect("reloads providers only when a refreshed model list changes", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const providers = yield* Provider.Service
+      const requests = { count: 0 }
+      const http = HttpClient.make((request) =>
+        Effect.sync(() => {
+          requests.count++
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              data: [
+                {
+                  model_picker_enabled: true,
+                  id: "gpt-5",
+                  name: "GPT-5",
+                  version: "gpt-5",
+                  capabilities: {
+                    family: "gpt-5",
+                    limits: { max_output_tokens: 1, max_prompt_tokens: 1 },
+                    supports: { tool_calls: true },
+                  },
+                },
+              ],
+            }),
+          )
+        }),
+      )
+      yield* providers.transform((draft) => {
+        draft.update(Provider.ID.githubCopilot, () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("github-copilot"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "token",
+          refresh: "token",
+          expires: 0,
+        }),
+      })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      yield* drain
+      const folds = { count: 0 }
+      yield* providers.transform(() => {
+        folds.count++
+      })
+      const before = folds.count
+
+      yield* TestClock.adjust("10 minutes")
+      yield* drain
+      expect(requests.count).toBe(2)
+      expect(folds.count).toBe(before)
+    }),
+  )
 
   it.effect("registers GitHub Copilot device OAuth", () =>
     Effect.gen(function* () {
@@ -623,10 +683,9 @@ describe("GithubCopilotPlugin", () => {
         editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
-      expect(
-        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest")))
-          .enabled,
-      ).toBe(false)
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"))).enabled).toBe(
+        false,
+      )
     }),
   )
 
@@ -640,8 +699,7 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* addPlugin()
       expect(
-        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
-          .enabled,
+        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"))).enabled,
       ).toBe(true)
     }),
   )

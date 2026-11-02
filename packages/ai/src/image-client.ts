@@ -1,14 +1,8 @@
 import { Context } from "effect"
 import { MediaClient } from "./media-client.js"
-import {
-  ImageOutputEvent,
-  ImageFinishEvent,
-  type ImageEvent,
-  type ImageRequestFor,
-  type ImageResponse,
-} from "./image.js"
+import { ImageOutputEvent, ImageFinishEvent, type ImageEvent, type ImageRequest, type ImageResponse } from "./image.js"
 
-export type Interface = MediaClient.Interface<ImageRequestFor, ImageEvent, ImageResponse>
+export type Interface = MediaClient.Interface<ImageRequest, ImageEvent, ImageResponse>
 
 export class ImageClientService extends Context.Service<ImageClientService, Interface>()("@opencode/ImageClient") {}
 export const Service = ImageClientService

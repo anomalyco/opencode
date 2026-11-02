@@ -112,14 +112,13 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      all: Effect.fn("Credential.all")(() =>
+      all: () =>
         db
           .select()
           .from(CredentialTable)
           .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
           .all()
           .pipe(Effect.orDie, Effect.map(storedRows)),
-      ),
       list: Effect.fn("Credential.list")((integrationID) =>
         db
           .select()

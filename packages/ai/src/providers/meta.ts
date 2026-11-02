@@ -82,7 +82,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -138,7 +138,6 @@ export const configure = (input: Config = {}) => {
   const messages = (modelID: string | ModelID) =>
     configuredMessages.model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false },
     })
   const media = MediaRoute.deployment(input, options.auth)
   const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })
@@ -159,6 +158,8 @@ export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOpt
 
 export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
   fromSettings(settings).messages(modelID)
+
+export const imageModel = (modelID: string, settings?: Settings) => fromSettings(settings).image(modelID)
 
 function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
   return configure({

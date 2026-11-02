@@ -74,7 +74,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
     readonly organization?: string
     readonly project?: string
@@ -116,8 +116,10 @@ export const configure = (input: Config = {}) => {
       input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
     ),
   }
+  // The ChatGPT backend (ChatGPT sign-in) rejects multipart image edits with "Unsupported content type".
+  const imageInput = media.baseURL?.startsWith("https://chatgpt.com/") ? "json-edits" : undefined
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, providerOptions })
+    OpenAIImages.model({ ...media, id: modelID, providerOptions, imageInput })
   const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
   const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
   const decisionRoute = OpenAIDecisions.route.with({

@@ -23,6 +23,7 @@ type Session = Pick<SessionRef, "key">
 /** What panels read. `registration` numbers each registration so a new one is observable. */
 type Attachment = {
   registration?: number
+  ready: boolean
   browser: Browser.State | null
   embeds: Readonly<Record<string, string>>
   suspended: boolean
@@ -240,6 +241,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
               id,
               reconcile({
                 registration: next.registration ? entry.revision : undefined,
+                ready: next.ready,
                 browser: next.browser,
                 embeds: next.embeds,
                 suspended: next.suspended,
@@ -265,7 +267,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     }
 
     live.set(id, entry)
-    setState("attachments", id, { browser: null, embeds: {}, suspended: false })
+    setState("attachments", id, { ready: false, browser: null, embeds: {}, suspended: false })
 
     // The attachment's own root, not the route effect that happened to call attach(), so `entry.dispose` ends it.
     const unwatch = createRoot((dispose) => {
@@ -276,7 +278,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         (data) => {
           onCleanup(
             data.on("session.created", (event) => {
-              if (event.data.sessionID === ref.id) entry.connection.wake()
+              if (event.data.sessionID === ref.id) entry.connection.wake(true)
             }),
           )
           onCleanup(
@@ -358,7 +360,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const attached = (session: Session) => {
     const value = attachment(session)
 
-    return value?.registration !== undefined || !!value?.browser
+    return !!value?.ready || !!value?.browser
   }
 
   // The desktop has not answered with its first inventory yet: the routed session is about to attach, or it registered

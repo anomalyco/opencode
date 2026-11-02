@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition, type LLMResponse } from "../../src/effect.js"
+import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -25,7 +25,7 @@ for (const effort of [undefined, "low", "high", "max"] as const) {
     { tags: ["text", "reasoning", "usage"] },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).model("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 4096 },
@@ -48,7 +48,7 @@ recorded.effect.with(
   { tags: ["tool", "tool-loop", "reasoning", "continuation"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: ZAI.configure({
           apiKey,
           providerOptions: { reasoningEffort: "high", thinking: { type: "enabled", clear_thinking: false } },
@@ -64,7 +64,8 @@ recorded.effect.with(
       expect(first.reasoning.length).toBeGreaterThan(0)
       expect(first.events.some(LLMEvent.is.toolInputDelta)).toBe(true)
       expectUsage(first)
-      const continuation = LLMRequest.update(request, {
+      const continuation = {
+        ...request,
         messages: [
           ...request.messages,
           first.message,
@@ -72,7 +73,7 @@ recorded.effect.with(
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
           ),
         ],
-      })
+      }
       const compiled = yield* compileRequest(continuation)
       expect(compiled.body.messages).toEqual(
         expect.arrayContaining([expect.objectContaining({ role: "assistant", reasoning_content: first.reasoning })]),
@@ -82,13 +83,14 @@ recorded.effect.with(
       expect(second.toolCalls).toHaveLength(0)
       expect(second.finishReason.normalized).toBe("stop")
       expectUsage(second)
-      const followUp = LLMRequest.update(continuation, {
+      const followUp = {
+        ...continuation,
         messages: [
           ...continuation.messages,
           second.message,
           Message.user("What temperature did the tool report? Reply with only the temperature."),
         ],
-      })
+      }
       const replay = yield* compileRequest(followUp)
       expect(replay.body.messages).toEqual(
         expect.arrayContaining(

@@ -6,6 +6,7 @@ import {
   openPaletteWorkspace,
   paletteSession,
 } from "../utils/command-palette"
+import { mockWorkspace } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -128,6 +129,29 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await input.press("Enter")
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("a working session keeps its project avatar in Search sessions and shows its activity ring in place of its age", async ({
+  page,
+}) => {
+  const working = { id: "ses_palette_working", title: "Working session" }
+  const idle = { id: "ses_palette_idle", title: "Idle session" }
+  await mockWorkspace(page, {
+    name: "PaletteActivity",
+    sessions: [working, idle],
+    sessionStatus: { [working.id]: { type: "running" } },
+  })
+  await page.goto("/")
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const workingRow = dialog.getByRole("option", { name: /Working session/ })
+  const idleRow = dialog.getByRole("option", { name: /Idle session/ })
+  await expect(workingRow.locator('[data-component="activity-ring"]')).toBeVisible()
+  await expect(workingRow.locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(workingRow.locator(".command-palette-meta")).toHaveText("Working")
+  await expect(idleRow.locator('[data-component="activity-ring"]')).toHaveCount(0)
+  await expect(idleRow.locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(idleRow.locator(".command-palette-meta")).not.toHaveText("Working")
 })
 
 test("Search commands lists only commands and runs the chosen one", async ({ page }) => {
@@ -325,7 +349,7 @@ test("appends search results without resetting the selected command", async ({ p
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
 
-test("lists matching sessions above commands and jumps between sections with Alt and the arrows", async ({ page }) => {
+test("lists commands above matching sessions and jumps between sections with Alt and the arrows", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   await page.route("**/api/session?*", (route) =>
     route.fulfill({
@@ -343,16 +367,17 @@ test("lists matching sessions above commands and jumps between sections with Alt
   )
   await input.fill("copy")
   const session = dialog.getByRole("option", { name: /Copy fixture/ })
-  await expect(session).toHaveAttribute("aria-selected", "true")
-  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Session")
+  await expect(session).toBeVisible()
   const commands = dialog.getByRole("group", { name: "Commands", exact: true }).getByRole("option")
+  await expect(commands.first()).toHaveAttribute("aria-selected", "true")
+  await expect(dialog.locator('[data-slot="search-list-header"]').first()).toHaveText("Commands")
   await input.press("Alt+ArrowDown")
+  await expect(session).toHaveAttribute("aria-selected", "true")
+  await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
   await input.press("ArrowDown")
   await input.press("Alt+ArrowUp")
   await expect(commands.first()).toHaveAttribute("aria-selected", "true")
-  await input.press("Alt+ArrowUp")
-  await expect(session).toHaveAttribute("aria-selected", "true")
 })
 
 test("selects the first session when it arrives above automatically selected files", async ({ page }) => {

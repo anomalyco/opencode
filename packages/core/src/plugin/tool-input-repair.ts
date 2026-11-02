@@ -1,8 +1,9 @@
 export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
+import { ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
-import { definition } from "../tool/runtime.js"
+import { definition, normalizeContent } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -18,21 +19,56 @@ import { definition } from "../tool/runtime.js"
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const maxDepth = 6
 
+// Tool names models carry over from other harnesses, used only when no tool has that name.
+// The result tells the model which tool ran, so it calls that one next time.
+const aliases = new Map([["bash", "shell"]])
+
 export const Plugin = define({
   id: "opencode.tool.input.repair",
   effect: (ctx) =>
-    ctx.tool.hook("execute.before", (event) =>
-      Effect.gen(function* () {
-        // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
-        // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
-        if (event.tool === "execute") return
-        const tool = (yield* ctx.tool.list()).find((tool) => tool.id === event.tool)
-        if (!tool) return
-        const schema = definition(tool).inputSchema
-        if (schema.type !== "object") return
-        event.input = repair(event.input, schema, schema, 0)
-      }),
-    ),
+    Effect.gen(function* () {
+      const aliased = new Map<string, string>()
+      yield* ctx.tool.hook("execute.before", (event) =>
+        Effect.gen(function* () {
+          // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
+          // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
+          if (event.tool === "execute") return
+          const tools = yield* ctx.tool.list()
+          const alias = aliases.get(event.tool)
+          const tool =
+            tools.find((tool) => tool.id === event.tool) ??
+            (alias === undefined ? undefined : tools.find((tool) => tool.id === alias))
+          if (!tool) return
+          if (tool.id !== event.tool) {
+            aliased.set(event.id, event.tool)
+            event.tool = tool.id
+          }
+          const schema = definition(tool).inputSchema
+          if (schema.type !== "object") return
+          event.input = repair(event.input, schema, schema, 0)
+        }),
+      )
+      yield* ctx.tool.hook("execute.after", (event) =>
+        Effect.sync(() => {
+          const called = aliased.get(event.id)
+          if (called === undefined) return
+          aliased.delete(event.id)
+          const note = `There is no "${called}" tool, so this ran as "${event.tool}". Call "${event.tool}" directly.`
+          if (event.status === "error") {
+            event.error = new ToolFailure({
+              message: `${event.error.message}\n\n${note}`,
+              error: event.error.error,
+              metadata: event.error.metadata,
+            })
+            return
+          }
+          event.result = {
+            ...event.result,
+            content: [...normalizeContent(event.result.content, event.result.output), { type: "text", text: note }],
+          }
+        }),
+      )
+    }),
 })
 
 function repair(value: unknown, schema: JsonSchema.JsonSchema, root: JsonSchema.JsonSchema, depth: number): unknown {

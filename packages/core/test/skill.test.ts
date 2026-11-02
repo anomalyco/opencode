@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber, Layer, Schedule, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Document, Event } from "@opencode/schema/config"
@@ -15,10 +16,9 @@ import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/poli
 
 const configLayer = Config.testLayer()
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node]),
-    [Config.node.replace(configLayer)],
-  ).pipe(Layer.provideMerge(configLayer)),
+  AppNodeBuilder.build(LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node, FSUtil.node]), [
+    Config.node.replace(configLayer),
+  ]).pipe(Layer.provideMerge(configLayer)),
 )
 
 const info = (id: string, description: string) =>
@@ -44,13 +44,13 @@ describe("Skill", () => {
         new Document({
           type: "document",
           info: {
-            policies: [{ action: "integration.use", resource: "skill:*", effect: "allow" }],
+            policies: [{ action: "skill.use", resource: "*", effect: "allow" }],
           },
         }),
       ])
       yield* setOrganizationPolicy([
-        { action: "integration.use", resource: "*", effect: "deny" },
-        { action: "integration.use", resource: "skill:team:review", effect: "allow" },
+        { action: "skill.use", resource: "*", effect: "deny" },
+        { action: "skill.use", resource: "team:review", effect: "allow" },
       ])
       yield* registerIntegrationPolicy({ skill: skills, events: bus.subscribe() })
       expect(yield* skills.list()).toEqual([info("team:review", "Review")])
@@ -61,7 +61,7 @@ describe("Skill", () => {
       expect(guidance.text).toContain("<id>team:review</id>")
       expect(guidance.text).not.toContain("deploy")
 
-      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:team:review", effect: "deny" }])
+      yield* setOrganizationPolicy([{ action: "skill.use", resource: "team:review", effect: "deny" }])
       yield* bus.publish(Event.Updated, {})
       yield* waitUntil(skills.get(Skill.ID.make("team:review")).pipe(Effect.map((skill) => skill === undefined)))
       expect(yield* skills.get(Skill.ID.make("team:review"))).toBeUndefined()
@@ -81,12 +81,12 @@ describe("Skill", () => {
       yield* config.setEntries([
         new Document({
           type: "document",
-          info: { policies: [{ action: "integration.use", resource: "skill:*", effect: "deny" }] },
+          info: { policies: [{ action: "skill.use", resource: "*", effect: "deny" }] },
         }),
         new Document({
           type: "document",
           info: {
-            policies: [{ action: "integration.use", resource: "skill:review", effect: "allow" }],
+            policies: [{ action: "skill.use", resource: "review", effect: "allow" }],
           },
         }),
       ])
@@ -112,7 +112,7 @@ describe("Skill", () => {
         Stream.runForEach(() => skills.list().pipe(Effect.flatMap((values) => Deferred.succeed(updated, values)))),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:review", effect: "deny" }])
+      yield* setOrganizationPolicy([{ action: "skill.use", resource: "review", effect: "deny" }])
       yield* bus.publish(Event.Updated, {})
       expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([])
     }),
@@ -219,6 +219,55 @@ describe("Skill", () => {
       const agent = yield* agents.get(Agent.ID.make("reviewer"))
       expect(Skill.available([info("deploy", "Deploy")], agent!.permissions)).toEqual([])
     }),
+  )
+
+  it.effect(
+    "stores virtual skill files, notifies when they change, and prepares skill:// output without disk scans",
+    () =>
+      Effect.gen(function* () {
+        const skill = yield* Skill.Service
+        const bus = yield* Bus.Service
+        const virtual = Skill.Info.make({
+          ...info("review", "Review"),
+          path: AbsolutePath.make(Skill.uri("review", "SKILL.md")),
+        })
+        let extra: Record<string, string> = { "SKILL.md": "ignored", "references/b.md": "B", "references/a.md": "A" }
+        yield* skill.transform((editor) => {
+          editor.add(virtual, extra)
+          editor.update("review", (draft) => {
+            draft.description = "Updated"
+          })
+        })
+
+        const files = yield* skill.files(Skill.ID.make("review"))
+        expect(Array.from(files ?? [])).toEqual([
+          ["references/a.md", "A"],
+          ["references/b.md", "B"],
+        ])
+        const fs = yield* FSUtil.Service
+        const prepared = yield* Skill.prepare(
+          { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
+          virtual,
+          files,
+        )
+        expect(prepared).toEqual({
+          directory: "skill://review",
+          output: Skill.toModelOutput(virtual, ["skill://review/references/a.md", "skill://review/references/b.md"]),
+        })
+
+        let updates = 0
+        yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === Skill.Event.Updated.type) updates++
+          }),
+        )
+        extra = { "references/a.md": "Changed" }
+        yield* skill.reload()
+        expect(updates).toBe(1)
+
+        yield* skill.transform((editor) => editor.remove("review"))
+        expect(yield* skill.files(Skill.ID.make("review"))).toBeUndefined()
+      }),
   )
 })
 
