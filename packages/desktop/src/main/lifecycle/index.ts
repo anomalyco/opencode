@@ -8,7 +8,14 @@ import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import {
+  getLastFocusedWindow,
+  getMainWindows,
+  getWindowByID,
+  mainWindows,
+  setAppQuitting,
+  setRelaunchHandler,
+} from "../windows"
 import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
@@ -20,6 +27,8 @@ export interface Interface {
   readonly consumeInitialDeepLinks: () => string[]
   readonly createWindow: () => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
+  /** Brings the app forward from the tray, restoring a window when none is left. */
+  readonly showWindow: () => void
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/ApplicationLifecycle") {}
@@ -51,6 +60,17 @@ const runtime = Layer.effect(
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
+    }
+
+    const showWindow = () => {
+      // macOS keeps another app in front when its menu bar icon is clicked, so steal focus there.
+      if (process.platform === "darwin") app.focus({ steal: true })
+
+      const win = getLastFocusedWindow() ?? getMainWindows()[0]
+
+      if (win) return focusWindow(win)
+
+      restoreWindows().forEach(focusWindow)
     }
 
     const emitDeepLinks = (urls: string[]) => {
@@ -181,6 +201,7 @@ const runtime = Layer.effect(
       prepareToRestart,
       consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
       createWindow,
+      showWindow,
       restoreWindows: () => {
         if (!windowsWired) {
           windowsWired = true

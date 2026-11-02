@@ -16,3 +16,16 @@ macOS uses in System Settings lists. Regenerate them from the 1024px image and r
 
 For unpackaged Electron on macOS, `app.dock.setIcon()` should use a PNG. Keep `dock.png` in each channel folder synced with the
 extracted `icon_128x128@2x.png` from that channel's `icon.icns` so the dev Dock icon matches the packaged app inset.
+
+## Tray icons
+
+Each channel folder also holds the notification-area icon:
+
+- `trayTemplate.png` (16×16) and `trayTemplate@2x.png` (32×32) are macOS template images: black pixels with alpha, which
+  the system tints for the light and dark menu bar.
+- `tray.png` (24×24) is the Linux status-area icon, drawn like `icon.png` so it reads on light and dark panels.
+- Windows reuses `icon.ico`.
+
+All three render the frame from `packages/identity/mark.svg` (outer `128,96`–`384,416`, inner hole `192,160`–`320,352`),
+scaled to fill the canvas with one pixel of padding at 1× and area-averaged down from a 16× supersample so the 2–3px
+stroke stays crisp. Regenerate them from that geometry when the mark changes.

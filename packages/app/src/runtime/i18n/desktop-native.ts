@@ -288,6 +288,10 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.reportBug": "Report a Bug",
   "desktop.menu.ariaLabel": "OpenCode menu",
 
+  "desktop.tray.tooltip": "OpenCode",
+  "desktop.tray.show": "Show OpenCode",
+  "desktop.tray.quit": "Quit OpenCode",
+
   "desktop.cli.installed.title": "CLI Installed",
   "desktop.cli.installed.message": "CLI installed to {{path}}\n\nRestart your terminal to use the 'opencode' command.",
   "desktop.cli.failed.title": "Installation Failed",
