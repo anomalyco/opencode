@@ -10,6 +10,7 @@ import {
   directoryAutocompleteSearch,
   directoryRecentValue,
   mentionFileSearch,
+  mentionFileName,
   slashArgumentAutocomplete,
 } from "../../src/prompt/directory-completion"
 
@@ -288,5 +289,14 @@ describe("mentionFileSearch", () => {
     expect(mentionFileSearch("file")).toBeUndefined()
     expect(mentionFileSearch("src/file")).toBeUndefined()
     expect(mentionFileSearch("./file")).toBeUndefined()
+  })
+})
+
+describe("mentionFileName", () => {
+  test("uses the entry's own basename instead of the relative path", () => {
+    // The location's parent is returned as `../`, so basename("../") would render as "..".
+    expect(mentionFileName("/", "/home", true)).toBe("/home/")
+    expect(mentionFileName("../", "/project/sibling", true)).toBe("../sibling/")
+    expect(mentionFileName("~/", "/home/user/notes.md", false)).toBe("~/notes.md")
   })
 })

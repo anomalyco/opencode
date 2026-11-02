@@ -51,7 +51,7 @@ import {
   pushPromptHistory,
 } from "./prompt.shared"
 import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
-import { mentionFileSearch } from "../prompt/directory-completion"
+import { mentionFileSearch, mentionFileName } from "../prompt/directory-completion"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_COMPACT_WIDTH, FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
@@ -461,8 +461,9 @@ export function createPromptState(input: PromptInput): PromptState {
       const mention = mentionFileSearch(next.base)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
-        const url = pathToFileURL(path.resolve(input.directory(), item))
-        const name = mention ? mention.prefix + path.basename(item) + (item.endsWith("/") ? "/" : "") : item
+        const absolute = path.resolve(input.directory(), item)
+        const url = pathToFileURL(absolute)
+        const name = mention ? mentionFileName(mention.prefix, absolute, item.endsWith("/")) : item
         let filename = name
         if (next.lineRange && !item.endsWith("/")) {
           filename = `${name}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
