@@ -23,7 +23,7 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
       yield* websearch.transform((editor) =>
         editor.add({ id: WebSearch.ID.make("test"), name: "Test", execute: () => Effect.succeed([]) }),
       )
-      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins))
+      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       expect((yield* websearch.default().pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
 

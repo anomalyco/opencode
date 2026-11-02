@@ -18,7 +18,7 @@ const decode = Schema.decodeUnknownSync(Info)
 
 const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input = "1 hour") {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* make(origin, interval).effect(host)
 })
 

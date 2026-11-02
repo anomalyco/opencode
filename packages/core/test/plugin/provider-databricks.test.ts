@@ -26,7 +26,7 @@ const baseURLFor = Effect.fn(function* (host: string) {
     })
   })
   const plugin = yield* Plugin.Service
-  yield* DatabricksPlugin.effect(yield* PluginHost.make(plugin))
+  yield* DatabricksPlugin.effect(yield* PluginHost.make(plugin, "test"))
   return (yield* catalog.get(providerID))?.settings?.baseURL
 })
 

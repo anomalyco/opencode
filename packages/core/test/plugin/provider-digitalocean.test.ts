@@ -21,7 +21,7 @@ const methodID = Integration.MethodID.make("browser")
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* DigitalOceanPlugin.effect(host)
 })
 

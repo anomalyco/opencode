@@ -53,7 +53,7 @@ function activate(providers: Provider.Interface) {
 // two Locations that share a single models.dev snapshot instance.
 const owner = Effect.gen(function* () {
   const context = yield* Layer.build(PluginTestLayer)
-  const host = yield* PluginHost.make(Context.get(context, Plugin.Service)).pipe(Effect.provideContext(context))
+  const host = yield* PluginHost.make(Context.get(context, Plugin.Service), "test").pipe(Effect.provideContext(context))
   return {
     context,
     host,
@@ -358,7 +358,7 @@ describe("ModelsDevPlugin", () => {
           ] satisfies readonly ModelsDev.Snapshot[]),
         refresh: () => Effect.void,
       })
-      const pluginHost = yield* PluginHost.make(plugins)
+      const pluginHost = yield* PluginHost.make(plugins, "test")
       yield* ModelsDevPlugin.effect(pluginHost).pipe(Effect.provideService(ModelsDev.Service, modelsDev))
       yield* activate(providers)
 
