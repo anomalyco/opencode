@@ -129,7 +129,9 @@ it.effect("Cohere rejects incomplete streams", () =>
     const error = yield* LLMClient.generate(
       ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
     ).pipe(Effect.provide(fixedResponse(sseEvents({ type: "message-start" }))), Effect.flip)
-    expect(error.message).toContain("without message-end")
+    expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    expect(error.message).toContain("The provider response ended unexpectedly.")
+    expect(error.isRetryable).toBe(true)
   }),
 )
 
