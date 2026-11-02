@@ -26,7 +26,8 @@ export interface Events {
   readonly connecting: Effect.Effect<void>
   /** The attempt connected and listed its tools. */
   readonly connected: Effect.Effect<void>
-  readonly failed: (failure: Failure) => Effect.Effect<void>
+  /** `answered` is true when the server was reached but refused or broke the handshake. */
+  readonly failed: (failure: Failure, answered: boolean) => Effect.Effect<void>
   /** The attempt ended, however it ended. */
   readonly settled: Effect.Effect<void>
   /** The live connection closed on its own. Runs under the lock; the owner decides how to stop. */
@@ -159,7 +160,10 @@ export function make(input: Input): Connection {
       yield* input.events.connecting
       // Checked before the OAuth provider is built, which parses the URL too.
       if (input.config.type === "remote" && !URL.canParse(input.config.url))
-        return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${input.config.url}` })
+        return yield* input.events.failed(
+          { status: "failed", error: `Invalid MCP server URL: ${input.config.url}` },
+          false,
+        )
       const scope = yield* Scope.fork(input.scope)
       state.scope = scope
       const authProvider = yield* input.authProvider
@@ -199,6 +203,7 @@ export function make(input: Input): Connection {
         error instanceof McpClient.NeedsAuthError
           ? { status: "needs_auth", error: error.message }
           : { status: "failed", error: error instanceof Error ? error.message : String(error) },
+        error instanceof McpClient.ConnectError && error.answered === true,
       )
     }).pipe(
       Effect.ensuring(input.events.settled),

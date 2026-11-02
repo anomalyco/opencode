@@ -3160,6 +3160,25 @@ describe("MCP pool", () => {
   const makePool = Layer.build(poolLayer).pipe(Effect.map((context) => Context.get(context, McpPool.Service)))
   const directories = [import.meta.dir, path.join(import.meta.dir, "fixture")]
 
+  // A pool whose own spawns, the attempts at a shared local connection, are recorded.
+  const recordingPool = (spawns: Array<ChildProcess.Command>) =>
+    Layer.build(
+      McpPool.layer.pipe(
+        Layer.provide(
+          Layer.effect(
+            ChildProcessSpawner.ChildProcessSpawner,
+            Effect.gen(function* () {
+              const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+              return ChildProcessSpawner.make((command) => {
+                spawns.push(command)
+                return spawner.spawn(command)
+              })
+            }),
+          ).pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+        ),
+      ),
+    ).pipe(Effect.map((context) => Context.get(context, McpPool.Service)))
+
   // One Location's MCP service on the given pool; `shutdown` closes the Location as eviction would.
   const open = (
     config: typeof ConfigMCP.Server.Type,
@@ -3253,25 +3272,7 @@ describe("MCP pool", () => {
     Effect.gen(function* () {
       const probes: Array<ChildProcess.Command> = []
       const spawns: Array<ChildProcess.Command> = []
-      const pool = Context.get(
-        yield* Layer.build(
-          McpPool.layer.pipe(
-            Layer.provide(
-              Layer.effect(
-                ChildProcessSpawner.ChildProcessSpawner,
-                Effect.gen(function* () {
-                  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-                  return ChildProcessSpawner.make((command) => {
-                    probes.push(command)
-                    return spawner.spawn(command)
-                  })
-                }),
-              ).pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node))),
-            ),
-          ),
-        ),
-        McpPool.Service,
-      )
+      const pool = yield* recordingPool(probes)
       const config = new ConfigMCP.Local({
         type: "local",
         command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
@@ -3284,6 +3285,40 @@ describe("MCP pool", () => {
       // One discovery attempt through the pool, then each Location spawns its own, as it would unpooled.
       expect(probes).toHaveLength(1)
       expect(spawns).toHaveLength(2)
+    }),
+  )
+
+  live("connects on its own when a server refuses the pooled handshake", () =>
+    Effect.gen(function* () {
+      const probes: Array<ChildProcess.Command> = []
+      const spawns: Array<ChildProcess.Command> = []
+      const pool = yield* recordingPool(probes)
+      // Exits during initialize unless the client declares roots, which shared connections never do.
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+        environment: { MCP_REQUIRE_ROOTS: "1" },
+        pool: true,
+      })
+      const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      const b = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      expect(probes).toHaveLength(1)
+      expect(spawns).toHaveLength(2)
+    }),
+  )
+
+  live("fails a pooled server that can't be spawned after one attempt", () =>
+    Effect.gen(function* () {
+      const probes: Array<ChildProcess.Command> = []
+      const spawns: Array<ChildProcess.Command> = []
+      const pool = yield* recordingPool(probes)
+      const config = new ConfigMCP.Local({ type: "local", command: ["opencode-missing-mcp-server"], pool: true })
+      const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect((yield* status(a.mcp))?.status).toBe("failed")
+      expect(probes).toHaveLength(1)
+      expect(spawns).toHaveLength(0)
     }),
   )
 

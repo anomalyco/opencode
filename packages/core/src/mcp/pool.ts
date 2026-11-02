@@ -21,8 +21,9 @@ export interface Interface {
   /**
    * A Location's connection to a server that may be shared. Each start joins the connection other
    * Locations hold under the same key, or opens it, and each stop lets go of it; the last to let go
-   * closes it. A server that negotiates the legacy protocol is never shared: the Location connects on
-   * its own, exactly as it would unpooled, and every later start for that key skips straight to that.
+   * closes it. A server that negotiates the legacy protocol, or that answers but refuses or breaks the
+   * pooled handshake, is never shared: the Location connects on its own, exactly as it would unpooled,
+   * and every later start for that key skips straight to that.
    */
   readonly connection: (input: Input) => McpConnection.Connection
 }
@@ -83,7 +84,7 @@ interface Holder {
   readonly changed: (kind: McpConnection.Kind) => void
 }
 
-type Outcome = "connected" | "legacy" | McpConnection.Failure
+type Outcome = "connected" | "private" | McpConnection.Failure
 
 interface Slot {
   readonly connection: McpConnection.Connection
@@ -102,8 +103,8 @@ export const layer = Layer.effect(
     const driver = Environment.makeLocalDriver(yield* ChildProcessSpawner)
     const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
     const slots = new Map<string, Slot>()
-    // Keys whose server negotiated the legacy protocol. Kept for the life of the process.
-    const legacy = new Set<string>()
+    // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
+    const unpoolable = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
     const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
@@ -140,10 +141,13 @@ export const layer = Layer.effect(
           events: {
             connecting: Effect.void,
             connected: Effect.void,
-            failed: (failure) =>
+            // A server that answered but refused the pooled handshake, such as one that wants roots, may
+            // still accept the Location's own connection; anything unreachable would only fail again.
+            failed: (failure, answered) =>
               Effect.suspend(() => {
                 detach(key, slot)
-                return Deferred.succeed(slot.outcome, failure)
+                if (answered) unpoolable.add(key)
+                return Deferred.succeed(slot.outcome, answered ? "private" : failure)
               }),
             settled: Effect.void,
             closed: (reason) =>
@@ -172,10 +176,10 @@ export const layer = Layer.effect(
         // A failed start already settled the outcome.
         if (!client) return
         if (!client.modern) {
-          legacy.add(key)
+          unpoolable.add(key)
           detach(key, slot)
           yield* slot.connection.stop
-          yield* Deferred.succeed(slot.outcome, "legacy")
+          yield* Deferred.succeed(slot.outcome, "private")
           return
         }
         slot.connected = true
@@ -208,7 +212,7 @@ export const layer = Layer.effect(
       })
 
     const acquire = Effect.fnUntraced(function* (key: string, input: Input, holder: Holder) {
-      if (legacy.has(key)) return "legacy" as const
+      if (unpoolable.has(key)) return "private" as const
       const slot =
         slots.get(key) ??
         open(key, { name: input.name, config: input.config, directory: input.directory, clientInfo: input.clientInfo })
@@ -245,7 +249,7 @@ export const layer = Layer.effect(
         return claim ? Scope.close(claim, Exit.void) : Effect.void
       })
 
-      // Resolves false when the server negotiated legacy, leaving the start to the Location's own connection.
+      // Resolves false when the key can't be shared, leaving the start to the Location's own connection.
       const join = (key: string) =>
         Effect.gen(function* () {
           yield* input.events.connecting
@@ -262,13 +266,13 @@ export const layer = Layer.effect(
             Scope.provide(claim),
             Effect.onInterrupt(() => clear),
           )
-          if (outcome === "legacy") {
+          if (outcome === "private") {
             yield* clear
             return false
           }
           if ("status" in outcome) {
             yield* clear
-            yield* input.events.failed(outcome)
+            yield* input.events.failed(outcome, false)
             return true
           }
           state.shared = outcome
@@ -296,7 +300,7 @@ export const layer = Layer.effect(
         },
         start: Effect.gen(function* () {
           const key = yield* input.key
-          if (!legacy.has(key) && (yield* join(key))) return
+          if (!unpoolable.has(key) && (yield* join(key))) return
           yield* own.start
         }),
         stop: Effect.gen(function* () {

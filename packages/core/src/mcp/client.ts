@@ -26,7 +26,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
+import { Cause, Clock, Duration, Effect, Exit, PlatformError, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
@@ -89,6 +89,8 @@ export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.Ne
 export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
   server: Schema.String,
   message: Schema.String,
+  /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
+  answered: Schema.optional(Schema.Boolean),
 }) {}
 
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
@@ -564,8 +566,20 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: explain(error) })
+  return yield* new ConnectError({ server, message: explain(error), answered: !unreachable(error) })
 })
+
+// Connecting again would fail the same way: the server could not be spawned or reached, or did not answer
+// in time. A failed auto probe wraps the error it hit.
+function unreachable(error: unknown): boolean {
+  if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed) return unreachable(error.cause)
+  return (
+    (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
+    // Fetch reports network failures as a TypeError carrying a system error code.
+    (error instanceof TypeError && "code" in error) ||
+    PlatformError.isPlatformError(error)
+  )
+}
 
 // These servers reject any unknown query parameter and have no Code Mode of their own, so adding
 // ?codemode=false only costs a failed request before the retry at the configured URL.
