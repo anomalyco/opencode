@@ -198,6 +198,30 @@ describe("ClaudeAgentPlugin models", () => {
     }),
   )
 
+  it.live("checks a connected saved catalog when one model has no context window", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      yield* store.set("models", {
+        models: [
+          { id: "haiku", name: "Haiku", efforts: [], contextWindow: 200_000 },
+          { id: "sonnet", name: "Sonnet", efforts: ["high"] },
+        ],
+      })
+      yield* connect
+      const atStart = FakeClaude.expectStartup()
+      const claude = FakeClaude.make([atStart])
+      yield* addPlugin(FakeIO.make({ claude }))
+      const models = yield* eventually(claudeModels, (models) =>
+        models.some((model) => model.id === "sonnet" && model.limit.context === 1_000_000),
+      )
+      expect(find(models, "sonnet").limit.context).toBe(1_000_000)
+      expect(yield* store.get("models")).toMatchObject({
+        models: expect.arrayContaining([expect.objectContaining({ id: "sonnet", contextWindow: 1_000_000 })]),
+      })
+      claude.check()
+    }),
+  )
+
   it.live("shows no cost for a subscription", () =>
     Effect.gen(function* () {
       yield* listPrice(Provider.ID.anthropic, "claude-sonnet-5-5")
@@ -240,44 +264,58 @@ describe("ClaudeAgentPlugin models", () => {
     }),
   )
 
-  it.live("binds chats to plugin storage, and a chat's startup report keeps saved context sizes", () =>
-    Effect.gen(function* () {
-      const store = yield* storage
-      yield* store.set("models", { models: [{ id: "haiku", name: "Haiku", efforts: [], contextWindow: 123_456 }] })
-      yield* connect
-      const claude = FakeClaude.make([
-        FakeClaude.expectStartup(),
-        FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
-      ])
-      const registry = yield* addPlugin(FakeIO.make({ claude }))
+  for (const updated of ["unchanged", "newer", "missing"]) {
+    it.live(`binds chats to storage and keeps context sizes with ${updated} stored windows`, () =>
+      Effect.gen(function* () {
+        const store = yield* storage
+        yield* store.set("models", { models: [{ id: "haiku", name: "Haiku", efforts: [], contextWindow: 123_456 }] })
+        yield* connect
+        const claude = FakeClaude.make([
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn(),
+          FakeClaude.expectInterrupt(),
+        ])
+        const registry = yield* addPlugin(FakeIO.make({ claude }))
 
-      const aisdk = yield* AISDK.Service
-      const sdk = yield* aisdk.runSDK({
-        model: Model.Info.make({
-          ...Model.Info.default(ClaudeProvider.ID, haiku.id),
-          modelID: haiku.id,
-          package: Provider.aisdk(ClaudeProvider.PACKAGE),
-        }),
-        package: ClaudeProvider.PACKAGE,
-        options: {},
-      })
-      const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
-      const result = yield* Effect.promise(() =>
-        model.doStream({
-          prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
-          headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
-        }),
-      )
-      expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
-      expect(yield* store.get("sessions/session-a")).toMatchObject({ claudeSessionID: expect.any(String) })
+        if (updated !== "unchanged") {
+          const model = { id: "haiku", name: "Haiku", efforts: [] }
+          yield* store.set("models", {
+            models: [updated === "newer" ? { ...model, contextWindow: 1_000_000 } : model],
+          })
+        }
 
-      const models = yield* eventually(claudeModels, (models) => models.length > 1)
-      expect(find(models, "haiku").limit.context).toBe(123_456)
-      yield* registry.close()
-      claude.check()
-    }),
-  )
+        const aisdk = yield* AISDK.Service
+        const sdk = yield* aisdk.runSDK({
+          model: Model.Info.make({
+            ...Model.Info.default(ClaudeProvider.ID, haiku.id),
+            modelID: haiku.id,
+            package: Provider.aisdk(ClaudeProvider.PACKAGE),
+          }),
+          package: ClaudeProvider.PACKAGE,
+          options: {},
+        })
+        const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
+        const result = yield* Effect.promise(() =>
+          model.doStream({
+            prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+            headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
+          }),
+        )
+        expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
+        expect(yield* store.get("sessions/session-a")).toMatchObject({ claudeSessionID: expect.any(String) })
+
+        const models = yield* eventually(claudeModels, (models) => models.length > 1)
+        expect(find(models, "haiku").limit.context).toBe(updated === "newer" ? 1_000_000 : 123_456)
+        expect(yield* store.get("models")).toMatchObject({
+          models: expect.arrayContaining([
+            expect.objectContaining({ id: "haiku", contextWindow: updated === "newer" ? 1_000_000 : 123_456 }),
+          ]),
+        })
+        yield* registry.close()
+        claude.check()
+      }),
+    )
+  }
 })
 
 describe("ClaudeAgentPlugin connection", () => {
