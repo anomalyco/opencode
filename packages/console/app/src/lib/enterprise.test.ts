@@ -29,6 +29,24 @@ test("the sales inbox email escapes submitted HTML", () => {
   expect(content.html).toContain("&lt;b&gt;Name&lt;/b&gt;<br>")
 })
 
+test("the sales inbox email lists the country and compliance requirements under the spend", () => {
+  const content = enterpriseEmailContent(
+    { ...submission, country: "Germany", inRegionRouting: true, dpa: true, alias: "" },
+    "$10k+",
+  )
+  expect(content.text.split("\n").slice(0, 6)).toEqual([
+    submission.message,
+    "",
+    "Current monthly inference spend: $10k+",
+    "Country: Germany",
+    "Compliance requirements: In-region routing (EU or US), Data Processing Agreement (DPA)",
+    "",
+  ])
+  expect(content.html).toContain(
+    "Current monthly inference spend: $10k+<br>Country: Germany<br>Compliance requirements: In-region routing (EU or US), Data Processing Agreement (DPA)<br><br>",
+  )
+})
+
 test("the sales inbox plain-text email is not HTML-escaped", () => {
   const content = enterpriseEmailContent(
     { ...submission, name: "Ada <CTO>", message: "Pricing & SSO?", phone: "+1 555 0100", alias: "" },
@@ -125,4 +143,17 @@ test("a contact email that fails to send is reported", async () => {
     },
   )
   expect(response.status).toBe(500)
+})
+
+test("an inquiry with a malformed country or requirement is rejected before anything is sent", async () => {
+  expect(await contact({ name: "Ada", role: "CTO", country: "x".repeat(81) })).toEqual({
+    status: 400,
+    sent: [],
+    leads: [],
+  })
+  expect(await contact({ name: "Ada", role: "CTO", dpa: "yes" })).toEqual({
+    status: 400,
+    sent: [],
+    leads: [],
+  })
 })

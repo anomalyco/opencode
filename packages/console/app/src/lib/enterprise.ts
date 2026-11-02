@@ -14,7 +14,11 @@ interface EnterpriseFormData {
   company?: string
   email: string
   phone?: string
+  /** A country name; the Lead's Country is a text field. */
+  country?: string
   inferenceSpend?: string
+  inRegionRouting?: boolean
+  dpa?: boolean
   /** Set only for an inquiry that isn't for sales; its `contactReasons` value. */
   reason?: string
   alias?: string
@@ -48,10 +52,19 @@ function escapeHtml(value: unknown) {
 
 export function enterpriseEmailContent(body: EnterpriseFormData, inferenceSpend?: string) {
   const field = (value?: unknown) => (value ? `${escapeHtml(value)}<br>` : "")
+  const requirements = [
+    body.inRegionRouting && "In-region routing (EU or US)",
+    body.dpa && "Data Processing Agreement (DPA)",
+  ].filter((item) => typeof item === "string")
+  const details = [
+    inferenceSpend && `Current monthly inference spend: ${inferenceSpend}`,
+    body.country && `Country: ${body.country}`,
+    requirements.length > 0 && `Compliance requirements: ${requirements.join(", ")}`,
+  ].filter((item) => typeof item === "string")
   return {
     html: `
 ${escapeHtml(body.message)}<br><br>
-${inferenceSpend ? `Current monthly inference spend: ${escapeHtml(inferenceSpend)}<br><br>` : ""}
+${details.length > 0 ? `${details.map(escapeHtml).join("<br>")}<br><br>` : ""}
 --<br>
 ${field(body.name)}
 ${field(body.role)}
@@ -60,7 +73,7 @@ ${field(body.phone)}`.trim(),
     text: [
       body.message,
       "",
-      ...(inferenceSpend ? [`Current monthly inference spend: ${inferenceSpend}`, ""] : []),
+      ...(details.length > 0 ? [...details, ""] : []),
       "--",
       ...[body.name, body.role, body.company, body.email, body.phone].filter(Boolean),
     ].join("\n"),
@@ -129,6 +142,16 @@ export async function handleEnterpriseRequest(
       return Response.json({ error: dict["enterprise.form.error.invalidEmailFormat"] }, { status: 400 })
     }
 
+    // The Lead's Country holds up to 80 characters.
+    const structured =
+      (body.country === undefined || (typeof body.country === "string" && body.country.trim().length <= 80)) &&
+      (body.inRegionRouting === undefined || typeof body.inRegionRouting === "boolean") &&
+      (body.dpa === undefined || typeof body.dpa === "boolean")
+    if (!structured) {
+      return Response.json({ error: dict["enterprise.form.error.allFieldsRequired"] }, { status: 400 })
+    }
+    const country = body.country?.trim() || undefined
+
     const inferenceSpend = inferenceSpendOptions.find((option) => option.value === body.inferenceSpend)
     if (body.inferenceSpend && !inferenceSpend) {
       return Response.json({ error: dict["enterprise.form.error.invalidInferenceSpend"] }, { status: 400 })
@@ -175,7 +198,7 @@ export async function handleEnterpriseRequest(
       return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
     }
 
-    const emailContent = enterpriseEmailContent(body, inferenceSpend?.salesforceValue)
+    const emailContent = enterpriseEmailContent({ ...body, country }, inferenceSpend?.salesforceValue)
 
     const [lead, mail, octopus] = await Promise.all([
       createLead(
@@ -185,7 +208,10 @@ export async function handleEnterpriseRequest(
           company: body.company,
           email: body.email,
           phone: body.phone,
+          country,
           inferenceSpend: inferenceSpend?.salesforceValue,
+          inRegionRouting: body.inRegionRouting === true,
+          dpa: body.dpa === true,
           message: body.message,
         },
         options.salesforceSubmit,
