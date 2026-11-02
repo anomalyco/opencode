@@ -78,8 +78,7 @@ export function MenuScroll(
         }}
         // Kobalte menus focus items without scrolling and scroll their own content, which no longer overflows here.
         onFocusIn={(event) => {
-          if (event.target !== viewport && event.target instanceof HTMLElement)
-            event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+          if (event.target !== viewport) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
         }}
       >
         <div ref={content} data-slot="menu-scroll-content">
