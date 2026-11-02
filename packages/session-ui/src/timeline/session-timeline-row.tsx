@@ -90,6 +90,7 @@ export function createSessionTimelineRowRenderer(input: {
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
+  foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -937,6 +938,7 @@ export function createSessionTimelineRowRenderer(input: {
       })
 
       const context = createMemo(() => input.projection.userContextByID().get(current().userMessageID))
+      const previous = createMemo(() => input.projection.previousSelectionByID().get(current().userMessageID))
       const joined = run(current().userMessageID)
       const grow = arriving(current().userMessageID)
 
@@ -958,8 +960,12 @@ export function createSessionTimelineRowRenderer(input: {
                       voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
+                      previousSelection={previous()}
                       actions={input.actions}
                       run={joined()}
+                      fold={input.foldUserMessages?.()}
+                      expanded={input.disclosure.value(`user-expanded:${message().id}`)}
+                      onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
                   </div>
                 </div>
@@ -1167,12 +1173,19 @@ export function createSessionTimelineRowRenderer(input: {
       return value
     }
 
-    const freeLimit = createMemo(() => {
-      if (current().kind !== "free-limit") return
+    const usageLimit = createMemo(() => {
+      const kind = current().kind
+
+      if (kind !== "free-limit" && kind !== "go-limit") return
+
+      const keys =
+        kind === "go-limit"
+          ? ({ title: "ui.sessionTurn.goLimit.title", lineReset: "ui.sessionTurn.goLimit.lineReset" } as const)
+          : ({ title: "ui.sessionTurn.freeLimit.title", lineReset: "ui.sessionTurn.freeLimit.lineReset" } as const)
+
       const at = current().resetAt
 
-      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime()))
-        return i18n.t("ui.sessionTurn.freeLimit.title")
+      if (at === undefined || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime())) return i18n.t(keys.title)
 
       const now = Date.now()
       const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < 86_400_000
@@ -1182,7 +1195,7 @@ export function createSessionTimelineRowRenderer(input: {
         sameDay ? { timeStyle: "short" } : { dateStyle: "medium", timeStyle: "short" },
       ).format(at)
 
-      return i18n.t("ui.sessionTurn.freeLimit.lineReset", { time })
+      return i18n.t(keys.lineReset, { time })
     })
 
     // A budget pauses paid models, or only the ones it covers, until it resets at the start of a month.
@@ -1247,7 +1260,7 @@ export function createSessionTimelineRowRenderer(input: {
                 </div>
               )}
             </Match>
-            <Match when={freeLimit()}>
+            <Match when={usageLimit()}>
               {(text) => (
                 <div
                   role="status"

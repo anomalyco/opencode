@@ -210,6 +210,7 @@ export function normalize(input: unknown): Result {
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
+    timezone: Info.fields.timezone,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
@@ -493,6 +494,33 @@ function normalizeExperimental(
           diagnostics,
         )
         if (value !== undefined) result.media_blob = value
+      }
+      if (own(experimental, "image_generate")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.image_generate,
+          experimental.image_generate,
+          ["experimental", "image_generate"],
+          diagnostics,
+        )
+        if (value !== undefined) result.image_generate = value
+      }
+      if (own(experimental, "schedules")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.schedules,
+          experimental.schedules,
+          ["experimental", "schedules"],
+          diagnostics,
+        )
+        if (value !== undefined) result.schedules = value
+      }
+      if (own(experimental, "artifacts")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.artifacts,
+          experimental.artifacts,
+          ["experimental", "artifacts"],
+          diagnostics,
+        )
+        if (value !== undefined) result.artifacts = value
       }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(

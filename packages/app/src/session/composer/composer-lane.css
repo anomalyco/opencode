@@ -1,0 +1,86 @@
+/* Every pill in the composer lane shares one capsule: its surface, overlays, focus ring and touch size. */
+[data-composer-pill] {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 10px;
+  /* The elevation draws the hairline; a second border would double it. */
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  white-space: nowrap;
+  color: var(--v2-text-text-base);
+  outline: none;
+
+  [data-color-scheme="dark"] & {
+    background: var(--v2-background-bg-layer-01);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2.5px;
+  }
+
+  /* Overlays layer over the capsule's own surface. */
+  @media (hover: hover) {
+    &:hover:not(:active, [data-expanded]) {
+      background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+    }
+  }
+
+  &:active:not([data-expanded]) {
+    background-image: linear-gradient(
+      var(--v2-overlay-simple-overlay-pressed),
+      var(--v2-overlay-simple-overlay-pressed)
+    );
+  }
+
+  /* While its popover is open, the pill steps onto the popover's layer. */
+  &[data-expanded] {
+    background: var(--v2-background-bg-layer-01);
+
+    [data-color-scheme="dark"] & {
+      background: var(--v2-background-bg-layer-02);
+    }
+  }
+
+  @media (hover: none) {
+    min-height: 44px;
+  }
+}
+
+/* The popover a pill opens, just above it. */
+[data-composer-pill-panel] {
+  max-width: calc(100vw - 56px);
+  border: 0.5px solid transparent;
+  border-radius: 10px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+  outline: none;
+  transform-origin: var(--kb-popover-content-transform-origin);
+  animation: composer-pill-panel-in 150ms ease-out;
+
+  :root[data-motion="reduce"] & {
+    animation: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes composer-pill-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}

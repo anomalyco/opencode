@@ -1,6 +1,6 @@
 name: Process daemon release
 
-# Publishes the opencode-pty binaries and the @opencode-ai/pty npm packages from packages/process-daemon.
+# Publishes the opencode-pty binaries and the @opencode/pty npm packages from packages/process-daemon.
 # Only process-daemon-v<version> tags publish; pull requests that touch the release pipeline build and pack
 # without publishing.
 
@@ -301,7 +301,7 @@ jobs:
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --latest=false \
               --title "process-daemon v$version" \
-              --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode-ai/pty@$version."
+              --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode/pty@$version."
           gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/release-manifest.json --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"
       - name: Publish npm packages
@@ -314,7 +314,7 @@ jobs:
               npm publish "$package" --access public --provenance
             fi
           done
-          name="@opencode-ai/pty"
+          name="@opencode/pty"
           if ! npm view "$name@$version" version >/dev/null 2>&1; then
             npm publish dist/npm/opencode-pty --access public --provenance
           fi

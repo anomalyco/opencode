@@ -121,7 +121,13 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
   const request = input.request ?? { app: () => local.app, set: (app: OpenApp | undefined) => setLocal("app", app) }
 
-  const canOpen = createMemo(() => !!desktop && input.session.server.local)
+  const canOpen = createMemo(
+    () =>
+      !!desktop &&
+      input.session.server.local &&
+      !input.path().startsWith("skill://") &&
+      !input.path().startsWith("/builtin/"),
+  )
 
   const current = createMemo(
     () =>

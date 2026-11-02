@@ -5,12 +5,13 @@ Inline keybind indicator that renders one or more keyboard keys in a compact row
 
 ### API
 - \`keys\`: Array of key labels to display (e.g. \`["⌘", "K"]\`).
-- \`variant\`: "neutral" (gray background) | "ghost" (no background).
+- \`variant\`: "neutral" (gray background) | "ghost" (no background) | "outline" (border, no background).
 - Inherits native div attributes.
 
 ### Variants
 - **Neutral** — each key sits on a \`#D4D4D4\` pill with darker text.
 - **Ghost** — keys render without a background, lighter text color.
+- **Outline** — each key has an inset border and no background, with the same dimensions as Neutral.
 `
 
 export default {
@@ -37,7 +38,7 @@ export default {
     },
     variant: {
       control: "select",
-      options: ["neutral", "ghost"],
+      options: ["neutral", "ghost", "outline"],
     },
   },
 }
@@ -49,6 +50,7 @@ export const Variants = {
     <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
       <Keybind keys={["⌘"]} variant="neutral" />
       <Keybind keys={["⌘"]} variant="ghost" />
+      <Keybind keys={["⌘"]} variant="outline" />
     </div>
   ),
 }
@@ -58,6 +60,7 @@ export const MultipleKeys = {
     <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
       <Keybind keys={["⌘", "K"]} variant="neutral" />
       <Keybind keys={["⌘", "K"]} variant="ghost" />
+      <Keybind keys={["⌘", "K"]} variant="outline" />
       <Keybind keys={["Ctrl", "B"]} variant="neutral" />
       <Keybind keys={["Ctrl", "B"]} variant="ghost" />
     </div>
@@ -80,6 +83,13 @@ export const AllExamples = {
         <Keybind keys={["⌘", "K"]} variant="ghost" />
         <Keybind keys={["⌘", "⇧", "P"]} variant="ghost" />
         <Keybind keys={["Ctrl", "Shift", "B"]} variant="ghost" />
+      </div>
+      <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
+        <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Outline</span>
+        <Keybind keys={["⌘"]} variant="outline" />
+        <Keybind keys={["⌘", "K"]} variant="outline" />
+        <Keybind keys={["⌘", "⇧", "P"]} variant="outline" />
+        <Keybind keys={["Ctrl", "Shift", "B"]} variant="outline" />
       </div>
     </div>
   ),

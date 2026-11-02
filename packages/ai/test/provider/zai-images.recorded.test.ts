@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -16,7 +16,7 @@ const recorded = recordedTests({
 describe("Z.ai Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
         aspect: "1:1",

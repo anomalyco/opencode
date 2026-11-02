@@ -285,6 +285,36 @@ describe("CodeMode call hooks", () => {
     })
   })
 
+  test("a before hook runs before the host function, so a denied call never reaches the host", async () => {
+    const called: Array<string> = []
+    const record = <A>(name: string, result: () => A) => {
+      called.push(name)
+      return result()
+    }
+    const runtime = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "host",
+          globals: {
+            value: () => record("value", () => 1),
+            asyncFn: async () => record("asyncFn", () => 1),
+            promise: Extension.async(() => record("promise", () => Promise.resolve(1))),
+            effect: Extension.async(() => Effect.sync(() => record("effect", () => 1))),
+          },
+        }),
+      ],
+      hooks: { "extension.before": (call) => Effect.fail(new Error(`${call.name} is not allowed`)) },
+    })
+    const run = async (code: string) => (await Effect.runPromise(runtime.execute(code))) as { value?: unknown }
+
+    // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+    expect(
+      await run(`return (await Promise.allSettled([asyncFn(), promise(), effect()])).map((r) => r.reason.message)`),
+    ).toMatchObject({ value: ["asyncFn is not allowed", "promise is not allowed", "effect is not allowed"] })
+    expect(await run(`try { value() } catch (e) { return e.message }`)).toMatchObject({ value: "value is not allowed" })
+    expect(called).toEqual([])
+  })
+
   test("see a tool defect as the failure the program gets, and an interrupted extension call", async () => {
     const events: Array<string> = []
     const broken = Tool.make({

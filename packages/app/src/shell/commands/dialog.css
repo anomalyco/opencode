@@ -147,7 +147,7 @@
   max-height: min(calc(100vh - 96px), 480px);
   min-height: 0;
   margin-top: max(48px, calc((100vh - 480px) / 2));
-  background: var(--v2-background-bg-layer-01);
+  background: var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-overlay);
 }
 
@@ -202,11 +202,6 @@
 
   [data-slot="search-list-header"] {
     padding-inline: 12px;
-    background: var(--v2-background-bg-layer-01);
-  }
-
-  [data-slot="search-list-fade"]::before {
-    background: linear-gradient(var(--v2-background-bg-layer-01), transparent);
   }
 
   [data-slot="search-list-row"] {

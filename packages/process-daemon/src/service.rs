@@ -4,6 +4,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock, mpsc as std_mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -44,7 +45,11 @@ pub enum TerminalLifecycle {
 pub struct TerminalInfo {
     pub id: TerminalId,
     pub pid: Option<u32>,
+    /// Effective title: the user title, else the latest non-empty OSC title,
+    /// else the title given at creation.
     pub title: String,
+    #[serde(default)]
+    pub user_title: Option<String>,
     pub foreground_process: Option<String>,
     pub group_id: String,
     pub command: Vec<String>,
@@ -169,6 +174,7 @@ impl CreateTerminal {
 
 pub struct TerminalService {
     terminals: Mutex<HashMap<TerminalId, Arc<TerminalHandle>>>,
+    created: AtomicU64,
     replay_capacity: usize,
 }
 
@@ -182,6 +188,7 @@ impl TerminalService {
     pub fn new(replay_capacity: usize) -> Self {
         Self {
             terminals: Mutex::new(HashMap::new()),
+            created: AtomicU64::new(0),
             replay_capacity,
         }
     }
@@ -205,7 +212,8 @@ impl TerminalService {
                 break id;
             }
         };
-        let handle = TerminalHandle::spawn(id, request, self.replay_capacity)?;
+        let order = self.created.fetch_add(1, Ordering::Relaxed);
+        let handle = TerminalHandle::spawn(id, order, request, self.replay_capacity)?;
         let info = handle.info();
         self.terminals
             .lock()
@@ -215,13 +223,14 @@ impl TerminalService {
     }
 
     pub fn list(&self) -> Result<Vec<TerminalInfo>> {
-        let handles = self
+        let mut handles = self
             .terminals
             .lock()
             .map_err(|_| anyhow!("terminal registry lock poisoned"))?
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        handles.sort_by_key(|terminal| terminal.order);
         let mut terminals = Vec::with_capacity(handles.len());
         for terminal in handles {
             // Windows has no foreground query; do not wait behind actor
@@ -230,7 +239,6 @@ impl TerminalService {
             terminal.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
             terminals.push(terminal.info());
         }
-        terminals.sort_by_key(|terminal| terminal.id);
         Ok(terminals)
     }
 
@@ -322,6 +330,13 @@ impl TerminalService {
             .request(|reply| ActorMessage::ReadRows { rows, reply })
     }
 
+    /// Sets or clears (`None` or empty) the user title, which takes precedence
+    /// over titles set by the terminal's programs.
+    pub fn rename(&self, id: TerminalId, title: Option<String>) -> Result<()> {
+        self.get(id)?
+            .request(|reply| ActorMessage::Rename { title, reply })
+    }
+
     pub fn replay(&self, id: TerminalId, offset: u64) -> Result<RawReplay> {
         self.get(id)?
             .request(|reply| ActorMessage::Replay { offset, reply })
@@ -409,6 +424,8 @@ impl Drop for TerminalService {
 }
 
 struct TerminalHandle {
+    /// Creation sequence number; orders `list` results.
+    order: u64,
     actor_tx: Sender<ActorMessage>,
     /// Disconnects when the actor thread exits; never carries a message.
     actor_done: Receiver<()>,
@@ -419,7 +436,12 @@ struct TerminalHandle {
 }
 
 impl TerminalHandle {
-    fn spawn(id: TerminalId, request: CreateTerminal, replay_capacity: usize) -> Result<Self> {
+    fn spawn(
+        id: TerminalId,
+        order: u64,
+        request: CreateTerminal,
+        replay_capacity: usize,
+    ) -> Result<Self> {
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -459,6 +481,7 @@ impl TerminalHandle {
             id,
             pid,
             title: request.title,
+            user_title: None,
             foreground_process: None,
             group_id: request.group_id,
             command: std::iter::once(request.program)
@@ -589,6 +612,7 @@ impl TerminalHandle {
             .context("failed to spawn terminal child waiter")?;
 
         Ok(Self {
+            order,
             actor_tx,
             actor_done,
             shutdown_tx: Mutex::new(Some(shutdown_tx)),
@@ -691,6 +715,10 @@ enum ActorMessage {
     ReadRows {
         rows: Option<u16>,
         reply: Reply<Result<TerminalRows>>,
+    },
+    Rename {
+        title: Option<String>,
+        reply: Reply<Result<()>>,
     },
     Replay {
         offset: u64,
@@ -803,6 +831,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
         max_scrollback: replay_capacity,
     })?;
 
+    let create_title = info
+        .read()
+        .map_err(|_| anyhow!("terminal info lock poisoned"))?
+        .title
+        .clone();
+    let mut osc_title = None::<String>;
     let mut replay = ReplayBuffer::new(replay_capacity);
     let mut subscribers = HashMap::<String, Subscriber>::new();
     let mut controller = None::<String>;
@@ -853,17 +887,10 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     StreamEvent::Output { start, end, bytes },
                 );
                 if let Some(title) = terminal.take_title() {
-                    let changed = if let Ok(mut value) = info.write() {
-                        if value.title == title {
-                            false
-                        } else {
-                            value.title = title.clone();
-                            true
-                        }
-                    } else {
-                        false
-                    };
-                    if changed {
+                    osc_title = Some(title).filter(|title| !title.is_empty());
+                    if let Ok(Some(title)) =
+                        refresh_title(&info, None, osc_title.as_deref(), &create_title)
+                    {
                         broadcast(
                             &shutdown,
                             &mut subscribers,
@@ -1019,6 +1046,26 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     })
                 })();
                 let _ = reply.send(result);
+            }
+            Ok(ActorMessage::Rename { title, reply }) => {
+                let result = refresh_title(
+                    &info,
+                    Some(title.filter(|title| !title.is_empty())),
+                    osc_title.as_deref(),
+                    &create_title,
+                );
+                if let Ok(Some(title)) = &result {
+                    broadcast(
+                        &shutdown,
+                        &mut subscribers,
+                        &mut controller,
+                        &mut controller_generation,
+                        StreamEvent::TitleChanged {
+                            title: title.clone(),
+                        },
+                    );
+                }
+                let _ = reply.send(result.map(|_| ()));
             }
             Ok(ActorMessage::Replay { offset, reply }) => {
                 let _ = reply.send(replay.read_from(offset));
@@ -1387,6 +1434,33 @@ fn run_writer(
     }
 }
 
+/// Applies an optional user-title update and stores the effective title under
+/// one write guard, returning the title only when it changed.
+fn refresh_title(
+    info: &Arc<RwLock<TerminalInfo>>,
+    user_title: Option<Option<String>>,
+    osc_title: Option<&str>,
+    create_title: &str,
+) -> Result<Option<String>> {
+    let mut value = info
+        .write()
+        .map_err(|_| anyhow!("terminal info lock poisoned"))?;
+    if let Some(user_title) = user_title {
+        value.user_title = user_title;
+    }
+    let title = value
+        .user_title
+        .as_deref()
+        .or(osc_title)
+        .unwrap_or(create_title)
+        .to_string();
+    if value.title == title {
+        return Ok(None);
+    }
+    value.title = title.clone();
+    Ok(Some(title))
+}
+
 fn make_snapshot(
     terminal: &Terminal,
     info: &Arc<RwLock<TerminalInfo>>,
@@ -1664,6 +1738,7 @@ mod tests {
             id: 1,
             pid: None,
             title: "test".into(),
+            user_title: None,
             foreground_process: None,
             group_id: "test".into(),
             command: vec![],
@@ -1716,6 +1791,7 @@ mod tests {
         init_rx.recv().unwrap().unwrap();
         (
             TerminalHandle {
+                order: 0,
                 actor_tx,
                 actor_done,
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
@@ -1977,6 +2053,69 @@ mod tests {
         actor.shutdown().unwrap();
         assert!(replacement.is_ok());
         assert!(detached.is_err());
+    }
+
+    #[test]
+    fn user_title_overrides_osc_titles_until_cleared() {
+        let (actor, _writer) = test_actor();
+        let observer = actor
+            .request(|reply| ActorMessage::Attach {
+                offset: 0,
+                attachment_id: "observer".into(),
+                role: AttachmentRole::Observer,
+                takeover: false,
+                reply,
+            })
+            .unwrap();
+        let rename = |title: Option<&str>| {
+            actor
+                .request(|reply| ActorMessage::Rename {
+                    title: title.map(String::from),
+                    reply,
+                })
+                .unwrap()
+        };
+        let osc = |title: &str| {
+            actor
+                .actor_tx
+                .send(ActorMessage::Output(
+                    format!("\x1b]2;{title}\x07").into_bytes(),
+                ))
+                .unwrap()
+        };
+        let info = || {
+            actor
+                .request(|reply| ActorMessage::Snapshot { reply })
+                .unwrap()
+                .info
+        };
+
+        osc("shell");
+        rename(Some("mine"));
+        osc("prompt");
+        let renamed = info();
+        assert_eq!(renamed.title, "mine");
+        assert_eq!(renamed.user_title.as_deref(), Some("mine"));
+        rename(Some("mine"));
+        rename(None);
+        let cleared = info();
+        assert_eq!(cleared.title, "prompt");
+        assert_eq!(cleared.user_title, None);
+        rename(Some(""));
+        assert_eq!(info().user_title, None);
+        osc("");
+        assert_eq!(info().title, "test");
+        actor.shutdown().unwrap();
+
+        let titles = observer
+            .events
+            .try_iter()
+            .filter_map(|event| match event {
+                StreamEvent::TitleChanged { title } => Some(title),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(titles, ["shell", "mine", "prompt", "test"]);
     }
 
     #[test]

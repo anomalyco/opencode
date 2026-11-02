@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "सेशन परिवर्तन",
   "ui.sessionReview.title.git": "Git परिवर्तन",
   "ui.sessionReview.title.branch": "शाखा परिवर्तन",
@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "$10/month में सर्वोत्तम ओपन-सोर्स मॉडलों तक विश्वसनीय पहुँच के लिए OpenCode Go की सदस्यता लें।",
   "dialog.usageExceeded.freeTier.actionLabel": "सदस्यता लें",
-  "dialog.usageExceeded.accountRateLimit.title": "Go सीमा पूरी हो गई",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "उपयोग सीमा पूरी हो गई। इस मॉडल का उपयोग अभी जारी रखने के लिए अपनी उपलब्ध शेष राशि से उपयोग सक्षम करें",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "सेटिंग्स खोलें",
   "ui.sessionTurn.status.delegating": "कार्य सौंपना",
   "ui.sessionTurn.status.planning": "अगले चरणों की योजना बनाना",
   "ui.sessionTurn.status.gatheringContext": "खोजबीन हो रही है",

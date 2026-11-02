@@ -28,7 +28,7 @@ use windows_sys::Win32::System::WindowsProgramming::{
 };
 
 use super::{LOCK_FILE, REGISTRATION_FILE, Registration, registration_path, sweep};
-use crate::protocol::PROTOCOL_VERSION;
+use crate::protocol::{PROTOCOL_VERSION, features};
 use crate::transport::Listener;
 use crate::transport::windows::{owned_handle, security::PrivateSecurity};
 
@@ -112,6 +112,7 @@ impl Runtime {
             pid: std::process::id(),
             protocol: PROTOCOL_VERSION,
             token: format!("{:032x}", rand::random::<u128>()),
+            features: features(),
         };
         let listener = Listener::bind(&registration.socket)?;
         write_registration(&directory, &directory_handle, &registration, &security)?;
@@ -364,6 +365,7 @@ mod tests {
             protocol: PROTOCOL_VERSION,
             socket: PathBuf::from(r"\\.\pipe\opencode-pty-first"),
             token: "secret".into(),
+            features: features(),
         };
         write_registration(&directory, &directory_handle, &registration, &security).unwrap();
         let path = directory.join(REGISTRATION_FILE);

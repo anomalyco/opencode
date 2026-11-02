@@ -87,8 +87,17 @@ type Factory = <R>(ctx: Interpreter<R>) => Value
 // A table rather than a list so the names are known before any runtime exists.
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
-  search: (ctx) =>
-    native(ctx.builtins, { name: "search", call: (_, args) => ctx.tool(ctx.tools.search, args), callback: false }),
+  search: (ctx) => native(ctx.builtins, { name: "search", call: (_, args) => ctx.search(args), callback: false }),
+  require: (ctx) =>
+    native(ctx.builtins, {
+      name: "require",
+      length: 1,
+      call: (_, args, site) => {
+        const specifier = args[0]
+        if (typeof specifier !== "string") throw typeError("require expects a module name string.")
+        return ctx.module(specifier, site)
+      },
+    }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,

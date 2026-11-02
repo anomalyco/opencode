@@ -2,11 +2,10 @@ import { Duration, Effect, Schedule, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import { RequestExecutorService, type Interface } from "./executor-service.js"
+import type { Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { Generation, isTerminal } from "../generation.js"
-import type { Media } from "../media.js"
 import { isRetryable } from "../provider-error.js"
 import {
   AIError,
@@ -189,8 +188,6 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   const encodeToken = Schema.encodeSync(protocol.token)
 
   const generationRoute = (token: Token, http: HttpOptions | undefined, execute: Execute) => {
-    const materialize = (asset: Media.Asset) =>
-      asset.materialize().pipe(Effect.provideService(RequestExecutorService, { execute }))
     // Only the GET exchange retries: a decoded terminal failure (`output.ended`) can be a `ProviderInternal` too, and
     // re-reading it would spin until the caller's deadline.
     const poll = <A>(operation: {
@@ -202,7 +199,7 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       transport.call("GET", operation.path(token), http, execute).pipe(
         Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth, materialize })),
+        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth })),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
@@ -393,7 +390,7 @@ const makeTransport = <Request extends MediaRequest>(
     }),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, http: HttpOptions | undefined, execute: Execute) => {
-      // Provider-issued absolute URLs (fal `status_url`) are used as-is; everything else resolves against the base.
+      // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
       const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), http?.query)
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       return send({ method, url, headers: Headers.fromInput(http?.headers), request: { http } }, execute)
