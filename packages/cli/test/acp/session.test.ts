@@ -112,6 +112,26 @@ describe("acp session lifecycle over the wire", () => {
     })
   })
 
+  test("session/list marks subagent sessions with their immediate parent in child-session metadata", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_root", makeSession("ses_root"))
+    acp.server.sessions.set("ses_child", makeSession("ses_child", { parentID: "ses_root" }))
+    acp.server.sessions.set("ses_grandchild", makeSession("ses_grandchild", { parentID: "ses_child" }))
+    await acp.initialize()
+
+    const response = await acp.request("session/list", { cwd: "/workspace" })
+
+    const entries = new Map(response.sessions.map((entry) => [entry.sessionId, entry]))
+    expect(entries.size).toBe(3)
+    expect(entries.get("ses_root")).not.toHaveProperty("_meta")
+    expect(entries.get("ses_child")?._meta).toEqual({
+      "opencode/child-session": { id: "ses_child", parentID: "ses_root", title: "Session ses_child" },
+    })
+    expect(entries.get("ses_grandchild")?._meta).toEqual({
+      "opencode/child-session": { id: "ses_grandchild", parentID: "ses_child", title: "Session ses_grandchild" },
+    })
+  })
+
   test("publishes a session's commands after the response that attaches it", async () => {
     await using acp = await startWire()
     acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
