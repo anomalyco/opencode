@@ -679,7 +679,24 @@ export function TitlebarTabStrip(props: {
 
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move"
-      event.dataTransfer.setDragImage(element, 12, 12)
+
+      const ghost = element.cloneNode(true)
+
+      if (ghost instanceof HTMLElement) {
+        ghost.removeAttribute("data-slot")
+        ghost.removeAttribute("data-action")
+        ghost.removeAttribute("data-server")
+        ghost.removeAttribute("data-drop")
+        ghost.dataset.dragging = "true"
+        ghost.setAttribute("aria-hidden", "true")
+        ghost.style.position = "fixed"
+        ghost.style.inset = "-1000px auto auto -1000px"
+        ghost.style.width = `${element.getBoundingClientRect().width}px`
+        ghost.style.pointerEvents = "none"
+        document.body.appendChild(ghost)
+        event.dataTransfer.setDragImage(ghost, 12, 12)
+        setTimeout(() => ghost.remove(), 0)
+      }
     }
 
     setDrag({ server, over: undefined, after: false })
@@ -891,7 +908,7 @@ export function TitlebarTabStrip(props: {
                             data-drop={drag.over === tab.server && drag.server !== tab.server ? "true" : undefined}
                             draggable={true}
                             title={language.t("session.tab.serverGroup.drag", { server: title() })}
-                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-v2-icon-icon-accent data-[drop=true]:bg-v2-overlay-simple-overlay-hover active:cursor-grabbing"
+                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent data-[drop=true]:bg-v2-overlay-simple-overlay-hover active:cursor-grabbing"
                             onDragStart={(event) => startGroupDrag(event, tab.server, event.currentTarget)}
                             onDragEnd={endGroupDrag}
                             onDragOver={(event) => dragOverGroup(event, tab.server, event.currentTarget)}
@@ -928,6 +945,7 @@ export function TitlebarTabStrip(props: {
                               </button>
                             </div>
                             <Show when={drag.server && drag.over === tab.server && drag.server !== tab.server}>
+                              <span class="pointer-events-none absolute inset-0 rounded-[6px] bg-v2-icon-icon-accent/15 ring-1 ring-inset ring-v2-icon-icon-accent" />
                               <span
                                 class="pointer-events-none absolute inset-x-1 h-0.5 rounded bg-v2-icon-icon-accent"
                                 classList={{ "top-0": !drag.after, "bottom-0": drag.after }}
