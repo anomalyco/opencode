@@ -109,7 +109,10 @@ function resourceServer(
      * malformed optional field of each kind, then one with every optional field valid.
      */
     malformedTool?: boolean
-    /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
+    /**
+     * Listed after the default tools. A call's `structured` argument comes back as structured content and
+     * its `text` argument as text content.
+     */
     tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
@@ -248,9 +251,9 @@ function resourceServer(
               progressToken: request.params._meta?.progressToken,
             })
             const structured = request.params.arguments?.structured
-            return Promise.resolve(
-              structured === undefined ? { content: [] } : { content: [], structuredContent: structured },
-            )
+            const text = request.params.arguments?.text
+            const content = typeof text === "string" ? [{ type: "text" as const, text }] : []
+            return Promise.resolve(structured === undefined ? { content } : { content, structuredContent: structured })
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -1259,7 +1262,7 @@ describe.each([
     )
   })
 
-  test("validates structured content against the called tool's output schema", async () => {
+  test("returns results that miss or break the called tool's output schema", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -1267,33 +1270,40 @@ describe.each([
             modern: era === "modern",
             resources: false,
             tools: [
+              // Zoom's meeting_delete declares an empty object and returns nothing for the REST API's 204.
+              { name: "delete", inputSchema: { type: "object" }, outputSchema: { type: "object", properties: {} } },
               {
-                name: "typed",
+                name: "collaborators",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+                outputSchema: {
+                  type: "object",
+                  properties: { role: { type: "string", enum: ["owner", "editor"] } },
+                  required: ["role"],
+                },
               },
             ],
           })
           const connection = yield* connect(
-            "typed",
+            "lenient",
             new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
             import.meta.dir,
           )
           yield* connection.tools()
 
-          expect(yield* connection.callTool({ name: "typed", args: { structured: { value: "ok" } } })).toMatchObject({
-            structured: { value: "ok" },
+          expect(yield* connection.callTool({ name: "delete", args: { text: "Meeting deleted." } })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [{ type: "text", text: "Meeting deleted." }],
+          })
+          expect(yield* connection.callTool({ name: "delete" })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [],
           })
           expect(
-            (yield* connection.callTool({ name: "typed", args: { structured: { value: 42 } } }).pipe(Effect.flip))
-              .message,
-          ).toContain("Structured content does not match the tool's output schema")
-          expect((yield* connection.callTool({ name: "typed" }).pipe(Effect.flip)).message).toContain(
-            "has an output schema but did not return structured content",
-          )
-          expect(yield* connection.callTool({ name: "echo", args: { structured: { value: 42 } } })).toMatchObject({
-            structured: { value: 42 },
-          })
+            yield* connection.callTool({ name: "collaborators", args: { structured: { role: "commenter" } } }),
+          ).toMatchObject({ isError: false, structured: { role: "commenter" } })
+          expect(server.state.toolCalls.map((call) => call.name)).toEqual(["delete", "delete", "collaborators"])
         }),
       ),
     )
