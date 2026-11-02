@@ -504,21 +504,25 @@ export const layer = Layer.effect(
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
-          ? yield* models.get(requested.providerID, requested.id)
-          : yield* models
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && hasPackage(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) =>
-                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
-                      ),
-                ),
-              )
+        if (requested) {
+          const selected = yield* models.get(requested.providerID, requested.id)
+          if (!selected) return undefined
+          return yield* load(selected, requested.variant)
+        }
+        const model = yield* models.default()
+        // A configured default is used as it is, so a model without a package fails the same way `--model` does
+        // instead of running on another provider. Only an unconfigured default may pick a loadable model.
+        const configured = yield* models.configuredDefault()
+        if (configured) {
+          if (!model) return undefined
+          return yield* load(model)
+        }
+        const selected =
+          model && hasPackage(model)
+            ? model
+            : (yield* models.available()).find((model) => hasPackage(model) && Model.supportsText(model))
         if (!selected) return undefined
-        return yield* load(selected, requested?.variant)
+        return yield* load(selected)
       }),
       resolveModel: load,
       resolveImage: Effect.fn("ModelResolver.resolveImage")(function* (ref) {
