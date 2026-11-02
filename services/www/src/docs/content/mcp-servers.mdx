@@ -119,6 +119,7 @@ Use configuration for other process options such as a working directory:
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
 | `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
+| `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
 
 Use `{env:NAME}` for environment substitution. Shell expressions such as `$NAME` are not expanded in JSON strings:
 
@@ -174,6 +175,7 @@ Use configuration for other options. Store secrets in environment variables rath
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
 | `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
+| `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
 
 Use `oauth: false` only when the server exclusively uses an API key or another header credential:
 
@@ -346,6 +348,31 @@ OpenCode opens every server with the classic MCP `initialize` handshake by defau
 | `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers. |
 
 Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
+
+## Shared connections
+
+One OpenCode server can have many directories open, and each one connects to every MCP server on its own. Set `pool` to `true` to let directories with the same server settings share one connection and one tool list:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}
+```
+
+- Only connections on the 2026-07-28 revision are shared. With `pool` set, an unset `protocol` means `auto`. A server that answers with an older revision, or one set to `legacy`, keeps one connection per directory.
+- Directories share a connection only when everything that changes it matches: the URL, headers, OAuth settings and signed-in account for a remote server, and the command, working directory and environment for a local one. Timeouts and `protocol` must match too. The server's name doesn't need to, but sign-ins are stored per name, so an OAuth server is shared only under the same name.
+- A local server is shared only between directories on this machine, not ones in a workspace. A relative or unset `cwd` resolves from each directory, so directories share the server only when it resolves to the same path.
+- A shared connection has no roots. When a tool asks for input, the request appears in the directory that called it.
+- The connection closes as soon as the last directory using it closes or disconnects the server.
 
 ## Names
 

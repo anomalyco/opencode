@@ -4,9 +4,17 @@ import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { Environment } from "../environment/index.js"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import type { McpClient } from "./client.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
+
+/** A catalog the server can change: its tools, prompts or resources. */
+export type Kind = "tools" | "prompts" | "resources"
+
+// Unshared connections to one remote endpoint, from any number of Locations, take turns at their
+// handshake so the endpoint does not receive a startup burst.
+const endpointLoads = KeyedMutex.makeUnsafe<string>()
 
 /**
  * What a connection reports to its owner. Each runs inline, in order, so the owner can keep its own
@@ -20,19 +28,21 @@ export interface Events {
   readonly failed: (failure: Failure) => Effect.Effect<void>
   /** The attempt ended, however it ended. */
   readonly settled: Effect.Effect<void>
-  /** A live connection was torn down. */
-  readonly stopped: Effect.Effect<void>
   /** The live connection closed on its own. Runs under the lock; the owner decides how to stop. */
   readonly closed: (reason: string) => Effect.Effect<void>
-  readonly toolsChanged: Effect.Effect<void>
-  readonly promptsChanged: Effect.Effect<void>
-  readonly resourcesChanged: Effect.Effect<void>
+  /** A catalog changed: the server said so, or the connection was torn down and every catalog emptied. */
+  readonly changed: (kind: Kind) => Effect.Effect<void>
 }
 
 export interface Input {
   readonly name: string
   readonly config: Mcp.ServerConfig
   readonly directory: string
+  /**
+   * Serves several Locations: it answers no `roots/list`, since no one directory owns it, and skips the
+   * per-endpoint handshake turn, since it is already the only connection for its key.
+   */
+  readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /** Read on every attempt, so a credential change applies to the next one. */
   readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
@@ -43,8 +53,6 @@ export interface Input {
   readonly scope: Scope.Scope
   /** Serializes lifecycle work. Callbacks and recovery take it; `start` and `stop` expect the caller to hold it. */
   readonly lock: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  /** Wraps the handshake and initial tool list. */
-  readonly handshake: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
@@ -107,7 +115,7 @@ export function make(input: Input): Connection {
       Effect.map((prompts) => {
         state.prompts = prompts
       }),
-      Effect.andThen(input.events.promptsChanged),
+      Effect.andThen(input.events.changed("prompts")),
     )
 
   // Re-establishes a connection whose HTTP session the server dropped, unless another path already
@@ -138,9 +146,9 @@ export function make(input: Input): Connection {
     // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
     // reconnect here for them. Foreground calls reconnect through `recovering`.
     client.onSessionExpired(() => input.fork(recover(client)))
-    client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.toolsChanged))))
+    client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
-    client.onResourcesChanged(() => live(input.events.resourcesChanged))
+    client.onResourcesChanged(() => live(input.events.changed("resources")))
   }
 
   const start: Effect.Effect<void> = Effect.suspend(() =>
@@ -155,18 +163,20 @@ export function make(input: Input): Connection {
       const { McpClient } = yield* Effect.promise(() => import("./client.js"))
       // List tools as part of connect so a failure here marks the server failed rather than
       // leaving it connected with a silently empty tool list and no path to recover.
-      const result = yield* McpClient.connect(
-        input.name,
-        input.config,
-        input.directory,
+      const config = input.config
+      const result = yield* McpClient.connect({
+        server: input.name,
+        config,
+        directory: input.directory,
         authProvider,
-        input.elicitation,
-        input.clientInfo,
-      ).pipe(
+        elicitation: input.elicitation,
+        clientInfo: input.clientInfo,
+        roots: !input.shared,
+      }).pipe(
         Effect.flatMap((client) => client.tools().pipe(Effect.map((tools) => ({ client, tools })))),
         Effect.provideService(Environment.Service, input.environment),
         Scope.provide(scope),
-        input.handshake,
+        (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
         Effect.exit,
       )
       if (Exit.isSuccess(result)) {
@@ -200,7 +210,9 @@ export function make(input: Input): Connection {
     state.tools = undefined
     state.prompts = undefined
     yield* Scope.close(scope, Exit.void)
-    yield* input.events.stopped
+    yield* input.events.changed("tools")
+    yield* input.events.changed("resources")
+    yield* input.events.changed("prompts")
   })
 
   return {

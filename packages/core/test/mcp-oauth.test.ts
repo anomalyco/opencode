@@ -267,10 +267,9 @@ describe("MCP OAuth", () => {
     const oauthProvider = await connectProvider(config, memoryCredentials([]))
 
     const exit = await Effect.runPromise(
-      Effect.scoped(McpClient.connect("test", config, import.meta.dir, oauthProvider)).pipe(
-        Effect.provide(hostEnvironmentLayer),
-        Effect.exit,
-      ),
+      Effect.scoped(
+        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: oauthProvider }),
+      ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     ).finally(() => server.stop(true))
 
     const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
