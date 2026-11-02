@@ -395,6 +395,7 @@ function resourceMcpLayer(
         }),
         Layer.mock(Integration.Service, {
           revision: () => 0,
+          transform: () => Effect.succeed({ dispose: Effect.void }),
           connection: {
             active: unusedIntegration,
             resolve: unusedIntegration,
@@ -417,7 +418,7 @@ function resourceMcpLayer(
             cancel: unusedIntegration,
           },
         }),
-        Layer.mock(Credential.Service, {}),
+        Layer.mock(Credential.Service, { list: () => Effect.succeed([]) }),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -1823,6 +1824,30 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
             ),
           ),
         )
+      }),
+    ),
+  )
+})
+
+test("marks a remote MCP server with an invalid URL as failed", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern: true, resources: false })
+        const config = { type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" } as const
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const status = (name: string) =>
+            service.servers().pipe(Effect.map((servers) => servers.find((server) => server.name === name)?.status))
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+
+          yield* service.add("broken", new ConfigMCP.Remote({ type: "remote", url: "not a url" }))
+          expect(yield* status("broken")).toEqual({ status: "failed", error: "Invalid MCP server URL: not a url" })
+          expect(yield* status("resources")).toEqual({ status: "connected" })
+
+          yield* service.add("broken", new ConfigMCP.Remote(config))
+          expect(yield* status("broken")).toEqual({ status: "connected" })
+        }).pipe(Effect.provide(resourceMcpLayer(new ConfigMCP.Remote(config))))
       }),
     ),
   )

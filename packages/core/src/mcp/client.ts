@@ -298,8 +298,6 @@ export const connect = Effect.fnUntraced(function* (
       })
       return yield* initialize(transport)
     }
-    if (!URL.canParse(config.url))
-      return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory })
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
