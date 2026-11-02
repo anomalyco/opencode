@@ -1,4 +1,4 @@
-import { formatEditorContext } from "../../component/prompt/editor-context"
+import { formatEditorContext } from "../../prompt/editor-context"
 import type { EditorSelection } from "../../context/editor"
 
 // session.generate exposes the session's tools but runs no tool loop, so a

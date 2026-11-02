@@ -24,8 +24,8 @@ import { useRoute } from "../../context/route"
 import { usePromptRef } from "../../context/prompt"
 import { useSessionTabs } from "../../context/session-tabs"
 import { useEvent } from "../../context/event"
-import { editorSelectionKey, useEditorContext } from "../../context/editor"
-import { formatEditorContext, getEditorRangeLabel, hasEditorRangeSelection } from "./editor-context"
+import { useEditorContext } from "../../context/editor"
+import { formatEditorContext, getEditorRangeLabel, hasEditorRangeSelection } from "../../prompt/editor-context"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
@@ -198,13 +198,7 @@ export function Prompt(props: PromptProps) {
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const fileContextEnabled = createMemo(() => config.prompt?.editor ?? true)
-  const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
-  const editorContext = createMemo(() => {
-    const selection = fileContextEnabled() ? editor.selection() : undefined
-    if (!selection) return
-    return editorSelectionKey(selection) === dismissedEditorSelectionKey() ? undefined : selection
-  })
+  const editorContext = createMemo(() => editor.attachedSelection())
   const editorPath = createMemo(() => editorContext()?.filePath)
   const editorSelectionLabel = createMemo(() => {
     const ranges = editorContext()?.ranges
@@ -303,8 +297,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function dismissEditorContext() {
-    setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
-    editor.clearSelection()
+    editor.dismissSelection()
   }
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
@@ -1131,8 +1124,7 @@ export function Prompt(props: PromptProps) {
     const isCommand =
       slashHead !== undefined &&
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
-    const editorSelection = editorContext()
-    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
+    const pendingEditorSelection = editor.pendingSelection()
     if (delivery === "queue" && pendingEditorSelection) {
       toast.show({ message: "Editor context cannot be queued", variant: "warning" })
       return false

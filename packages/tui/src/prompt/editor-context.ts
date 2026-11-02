@@ -1,4 +1,43 @@
-import type { EditorSelection } from "../../context/editor"
+import type { EditorSelection } from "../context/editor"
+
+export function editorSelectionKey(selection: EditorSelection | undefined) {
+  if (!selection) return ""
+  return [
+    selection.filePath,
+    ...selection.ranges.flatMap((range) => [
+      range.selection.start.line,
+      range.selection.start.character,
+      range.selection.end.line,
+      range.selection.end.character,
+      range.text,
+    ]),
+  ].join("\0")
+}
+
+/**
+ * The one place that decides which editor selection is attached to the composer. The footer and
+ * the sent context both read it, so they cannot drift apart.
+ */
+export function attachedEditorSelection(input: {
+  selection: EditorSelection | undefined
+  enabled: boolean
+  dismissed: string | undefined
+}): EditorSelection | undefined {
+  if (!input.enabled || !input.selection) return
+  if (editorSelectionKey(input.selection) === input.dismissed) return
+  return input.selection
+}
+
+/** The attached selection that a request should carry: an already-sent one is not resent. */
+export function pendingEditorSelection(input: {
+  selection: EditorSelection | undefined
+  enabled: boolean
+  sent: boolean
+  dismissed: string | undefined
+}): EditorSelection | undefined {
+  if (input.sent) return
+  return attachedEditorSelection(input)
+}
 
 export function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
   return (

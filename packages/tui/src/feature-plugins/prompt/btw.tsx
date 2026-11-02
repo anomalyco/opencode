@@ -61,7 +61,7 @@ export default Plugin.define({
                 if (!question) return
                 // `/btw` never enters the session, so the selection attached to the composer
                 // has to be part of this one-shot prompt or the model never sees it.
-                const selection = editor.labelState() === "pending" ? editor.selection() : undefined
+                const selection = editor.pendingSelection()
                 setPending((count) => count + 1)
                 await context.client.session
                   .generate({ sessionID: route.sessionID, prompt: btwPrompt(question, selection) })
