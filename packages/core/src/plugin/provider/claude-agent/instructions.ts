@@ -28,7 +28,13 @@ export const register = Effect.fn("ClaudeInstructions.register")(function* (ctx:
             const agent = yield* ctx.agent.get({ agentID: event.agent }).pipe(Effect.orDie)
             // Read the role from the resolved agent, not by guessing which prompt text is a built-in.
             event.options[ClaudeSystemPrompt.AGENT_OPTION] = agent.data.system ?? ""
-            event.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION] = instructions(event.system)
+            // Built-in providers register before user plugins, so `event.system` still grows after this hook
+            // returns. Read it when the request is built instead of folding it into a string here.
+            Object.defineProperty(event.options, ClaudeSystemPrompt.INSTRUCTIONS_OPTION, {
+              enumerable: true,
+              configurable: true,
+              get: () => instructions(event.system),
+            })
           }),
         { providerID: ClaudeProvider.ID },
       ),

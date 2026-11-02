@@ -435,6 +435,28 @@ describe("ClaudeAgentPlugin session hooks", () => {
     }),
   )
 
+  // Built-in provider hooks register before user plugins, so a plugin's `context` hook runs after the
+  // provider has already read `event.system`. Instructions added there must still reach Claude.
+  it.live("keeps system text a plugin adds after the provider's context hook", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      yield* addAgents
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register(
+        "session",
+        "context",
+        (event) =>
+          Effect.sync(() => {
+            event.system.push(SystemPart.make("The project codename is ZEBRA-4417."))
+          }),
+      )
+      const event = hookEvent((yield* newSession).id)
+      event.system = [SystemPart.make("OPENCODE-PROMPT")]
+      const context = yield* hooks.trigger("session", "context", event)
+      expect(context.options[ClaudeSystemPrompt.INSTRUCTIONS_OPTION]).toContain("ZEBRA-4417")
+    }),
+  )
+
   it.live("never retries a turn, since Claude Code already retries API failures", () =>
     Effect.gen(function* () {
       yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
