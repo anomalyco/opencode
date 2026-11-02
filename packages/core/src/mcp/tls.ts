@@ -149,7 +149,8 @@ export function withTls(
  * True when a connection failure is a TLS certificate verification error rather than a network,
  * protocol, or HTTP failure. Current runtimes report these as message-only errors ("self signed
  * certificate", "ERR_TLS_CERT_ALTNAME_INVALID", "certificate has expired"); Node-style codes are
- * matched as well for the runtimes that expose them.
+ * matched as well for the runtimes that expose them. The failure may arrive as a flattened
+ * message string instead of an Error, in which case only that text is matched.
  */
 export function isTlsCertificateError(error: unknown): boolean {
   const patterns = [
@@ -161,6 +162,10 @@ export function isTlsCertificateError(error: unknown): boolean {
   ]
   let current: unknown = error
   for (let depth = 0; depth < 5; depth++) {
+    if (typeof current === "string") {
+      const text = current
+      return patterns.some((pattern) => pattern.test(text))
+    }
     if (!(current instanceof Error)) break
     const code = (current as { code?: unknown }).code
     const text = `${code === undefined ? "" : `${code} `}${current.message}`

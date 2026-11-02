@@ -10,6 +10,7 @@ import { XAIImages } from "../protocols/xai-images.js"
 import { XAIVideo } from "../protocols/xai-video.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("xai")
 const baseURL = "https://api.x.ai/v1"
@@ -108,20 +109,10 @@ export const provider = configure()
 export const model: ProviderPackage.Model<Settings, XAIProviderOptionsInput, typeof responsesRoute.compact> = (
   modelID,
   settings,
-) => configure(config(settings)).model(modelID)
+) => configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 export const responses = provider.responses
 export const chat = provider.chat

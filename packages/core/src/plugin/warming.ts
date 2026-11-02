@@ -4,9 +4,12 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
-import { Clock, Duration, Effect, Scope, Stream } from "effect"
+import { ConfigWarming } from "@opencode/schema/config/warming"
+import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
 import { Config } from "../config.js"
 import { resolveModel } from "./optimize.js"
+
+const decodeWarming = Schema.decodeUnknownOption(ConfigWarming.Warming)
 
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
@@ -18,16 +21,24 @@ export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const modelTTL = (event: SessionHooks["context"]) =>
-      resolveModel(ctx, event).pipe(
-        Effect.map((model) => model.settings?.cache?.ttl),
-        Effect.orElseSucceed(() => undefined),
-      )
+    // A model's or provider's `cache.warming` overrides the top-level `warming`.
     const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
-      const warming = Config.latest(yield* config.entries(), "warming")
-      if (!warming) return
-      const settings = warming === true ? defaults : { ...defaults, ...warming }
-      const interval = settings.interval === "auto" ? autoInterval(yield* modelTTL(event)) : settings.interval
+      // Warming must never fail the request it hooks, so an unreadable catalog falls back to the top-level setting.
+      const cache = (yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined)))?.settings?.cache
+      const local = cache?.warming === undefined ? undefined : Option.getOrUndefined(decodeWarming(cache.warming))
+      if (cache?.warming !== undefined && local === undefined)
+        yield* Effect.logWarning("invalid cache.warming setting; using the top-level warming setting", {
+          model: event.model,
+        })
+      const global = Config.latest(yield* config.entries(), "warming")
+      if (!(local ?? global)) return
+      // The keep-alive prompt is only set at the top level; a model's setting changes timing.
+      const settings = {
+        ...defaults,
+        ...(typeof global === "object" ? global : {}),
+        ...(typeof local === "object" ? local : {}),
+      }
+      const interval = settings.interval === "auto" ? autoInterval(cache?.ttl) : settings.interval
       // "auto" doesn't warm a model without a cache.ttl.
       if (interval === undefined) return
       const { duration } = settings

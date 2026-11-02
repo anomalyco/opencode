@@ -322,6 +322,7 @@ describe("isTlsCertificateError", () => {
     ["node self-signed-in-chain code", Object.assign(new Error("unable to verify the first certificate"), { code: "SELF_SIGNED_CERT_IN_CHAIN" })],
     ["caused by a self-signed error", Object.assign(new TypeError("fetch failed"), { cause: new Error("self signed certificate") })],
     ["nested cause", Object.assign(new Error("connect failed"), { cause: Object.assign(new Error("tls error"), { cause: new Error("certificate has expired") }) })],
+    ["flattened message string", "self signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT)"],
   ]
   for (const [name, error] of tlsErrors) test(`matches ${name}`, () => expect(McpTls.isTlsCertificateError(error)).toBe(true))
 
@@ -330,7 +331,7 @@ describe("isTlsCertificateError", () => {
     ["http failure", new Error("HTTP error: 500 Internal Server Error")],
     ["bare fetch failed", new TypeError("fetch failed")],
     ["timeout", new Error("Request timed out after 30000ms")],
-    ["non-error value", "self signed certificate is not the issue"],
+    ["unrelated message string", "connection refused is not the issue"],
     ["null", null],
   ]
   for (const [name, error] of otherErrors) test(`rejects ${name}`, () => expect(McpTls.isTlsCertificateError(error)).toBe(false))

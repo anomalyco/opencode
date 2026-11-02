@@ -5,7 +5,7 @@ import {
   DecisionModelCompatibility,
   type DecisionOptions,
   type DecisionPart,
-  type DecisionRequestFor,
+  type DecisionRequest,
   type DecisionResponse,
 } from "../decision.js"
 import { HttpOptions, ProviderID, type AIError, type ProviderOptions } from "../schema/index.js"
@@ -21,11 +21,11 @@ export interface Protocol {
   readonly name: string
   /** The host only takes inline data, so URL media is downloaded before `body.from`. */
   readonly inlineMedia?: boolean
-  readonly body: { readonly from: (request: DecisionRequestFor) => Effect.Effect<Record<string, unknown>, AIError> }
+  readonly body: { readonly from: (request: DecisionRequest) => Effect.Effect<Record<string, unknown>, AIError> }
   readonly response: {
     readonly decode: (
       response: HttpClientResponse.HttpClientResponse,
-      context: { readonly request: DecisionRequestFor; readonly providerMetadataKey: string },
+      context: { readonly request: DecisionRequest; readonly providerMetadataKey: string },
     ) => Effect.Effect<DecisionResponse, AIError>
   }
 }
@@ -37,7 +37,7 @@ export interface Patch {
   readonly provider?: string | ProviderID
   /** ProviderMetadata namespace for responses; defaults to the provider. */
   readonly providerMetadataKey?: string
-  readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, DecisionRequestFor>
+  readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, DecisionRequest>
   readonly auth?: Auth.Definition
   readonly headers?: Record<string, string>
   readonly http?: HttpOptions.Input
@@ -48,7 +48,7 @@ export interface Route {
   readonly provider: ProviderID
   readonly providerMetadataKey: string
   readonly protocol: Protocol
-  readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequestFor>
+  readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequest>
   readonly auth: Auth.Definition
   readonly headers?: Record<string, string>
   readonly http?: HttpOptions
@@ -64,7 +64,7 @@ export interface MakeInput extends Omit<Patch, "endpoint"> {
   readonly id: string
   readonly provider: string | ProviderID
   readonly protocol: Protocol
-  readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequestFor>
+  readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequest>
 }
 
 export const make = (input: MakeInput): Route => {
@@ -115,7 +115,7 @@ export const make = (input: MakeInput): Route => {
 const transport = (route: Omit<Route, "with" | "model">) => {
   const identity = MediaProtocol.identity({ id: route.id, name: route.protocol.name, provider: route.provider })
   const composed = MediaRoute.inline({
-    protocol: MediaProtocol.inline<DecisionRequestFor, DecisionResponse>(identity, {
+    protocol: MediaProtocol.inline<DecisionRequest, DecisionResponse>(identity, {
       body: {
         from: (request) => route.protocol.body.from(request).pipe(Effect.map((body) => MediaProtocol.json(body))),
       },
@@ -131,7 +131,7 @@ const transport = (route: Omit<Route, "with" | "model">) => {
     auth: route.auth,
     headers: route.headers,
   })
-  return Effect.fnUntraced(function* (request: DecisionRequestFor, execute: Execute) {
+  return Effect.fnUntraced(function* (request: DecisionRequest, execute: Execute) {
     if (!route.protocol.inlineMedia) return yield* composed.generate(request, execute)
     const input = yield* Effect.forEach(request.input, (part) => materialize(part, execute))
     return yield* composed.generate({ ...request, input }, execute)

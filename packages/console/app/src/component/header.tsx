@@ -13,11 +13,12 @@ import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
 import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
-import { A, useNavigate } from "@solidjs/router"
+import { A, useLocation, useNavigate } from "@solidjs/router"
 import { Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
+import { strip } from "~/lib/language"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
@@ -39,6 +40,8 @@ export function Header() {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
+  const location = useLocation()
+  const onDownload = () => strip(location.pathname) === "/download"
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
@@ -177,15 +180,32 @@ export function Header() {
             </a>
           </li>
           <li>
-            <a href="/console/enterprise" target="_self">
-              {i18n.t("nav.enterprise")}
-            </a>
-          </li>
-          <li>
             <a href="/console" target="_self">
               {i18n.t("nav.console")}
             </a>
           </li>
+          <Show when={!onDownload()}>
+            <li>
+              <A href={language.route("/download")} data-slot="cta-button">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style="flex-shrink: 0;"
+                >
+                  <path
+                    d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="square"
+                  />
+                </svg>
+                {i18n.t("nav.free")}
+              </A>
+            </li>
+          </Show>
         </ul>
       </nav>
       <nav data-component="nav-mobile">
@@ -262,15 +282,17 @@ export function Header() {
                   </a>
                 </li>
                 <li>
-                  <a href="/console/enterprise" target="_self">
-                    {i18n.t("nav.enterprise")}
-                  </a>
-                </li>
-                <li>
                   <a href="/console" target="_self">
                     {i18n.t("nav.console")}
                   </a>
                 </li>
+                <Show when={!onDownload()}>
+                  <li>
+                    <A href={language.route("/download")} data-slot="cta-button">
+                      {i18n.t("nav.getStartedFree")}
+                    </A>
+                  </li>
+                </Show>
               </ul>
             </nav>
           </div>

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Moonshot } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -118,7 +118,8 @@ for (const item of [
         expect(first.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])
         expect(first.reasoning.length).toBeGreaterThan(0)
         expectUsage(first)
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
@@ -126,7 +127,7 @@ for (const item of [
               Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
             ),
           ],
-        })
+        }
         const compiled = yield* compileRequest(continuation)
         if (item.api === "chat")
           expect(compiled.body.messages).toEqual(
@@ -166,15 +167,14 @@ for (const item of [
         expect(second.toolCalls).toHaveLength(0)
         expect(second.finishReason.normalized).toBe("stop")
         expectUsage(second)
-        const third = yield* LLMClient.generate(
-          LLMRequest.update(continuation, {
-            messages: [
-              ...continuation.messages,
-              second.message,
-              Message.user("What temperature did the tool report? Reply with only the temperature."),
-            ],
-          }),
-        )
+        const third = yield* LLMClient.generate({
+          ...continuation,
+          messages: [
+            ...continuation.messages,
+            second.message,
+            Message.user("What temperature did the tool report? Reply with only the temperature."),
+          ],
+        })
         expect(third.text).toContain("18")
         expect(third.toolCalls).toHaveLength(0)
         expect(third.finishReason.normalized).toBe("stop")

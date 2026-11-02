@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, ImageClient, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, ImageClient, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
@@ -177,9 +177,10 @@ for (const streamed of [false, true]) {
           type: "content",
           value: [{ type: "file", mime: "image/png", uri: "data:image/png;base64,iVBORw0KGgo=" }],
         })
-        const replay = yield* compileRequest(
-          LLMRequest.update(request, { messages: [...request.messages, response.message, Message.user("Edit")] }),
-        )
+        const replay = yield* compileRequest({
+          ...request,
+          messages: [...request.messages, response.message, Message.user("Edit")],
+        })
         expect(replay.body.input).toContainEqual({
           type: "image_generation_call",
           id: "ig_signed",

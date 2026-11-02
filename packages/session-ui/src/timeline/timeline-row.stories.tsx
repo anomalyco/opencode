@@ -545,6 +545,31 @@ export const PromptWithAttachments = {
   ),
 }
 
+export const QuoteAttachments = {
+  render: () => (
+    <div
+      style={{
+        padding: "24px",
+        display: "grid",
+        "grid-template-columns": "minmax(0, 1fr)",
+        gap: "8px",
+        width: "360px",
+        "max-width": "100%",
+      }}
+    >
+      <CommentCard comment="Remove this" target={{ type: "quote", text: "The menu is hovered." }} wide />
+      <CommentCard
+        comment="Can we make this smaller?"
+        target={{
+          type: "quote",
+          text: "It has a 32px minimum, capped at the track height. The remaining space is reserved for the timeline content.",
+        }}
+        wide
+      />
+    </div>
+  ),
+}
+
 export const NoteAttachments = {
   render: () => {
     const [state, setState] = createStore({ selected: "None" })

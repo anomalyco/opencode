@@ -1,37 +1,21 @@
 export { VideoClient } from "./video-client.js"
-export {
-  VideoAspectRatio,
-  VideoEvent,
-  VideoFrames,
-  VideoModel,
-  VideoModelSchema,
-  VideoRequest,
-  VideoResponse,
-} from "./video.js"
+export { VideoAspectRatio, VideoEvent, VideoFrames, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
 export type {
   VideoModelOptions,
   VideoOptions,
-  VideoRequestFor,
+  VideoRequest,
   VideoRequestInput,
   VideoResolution,
   VideoRoute,
 } from "./video.js"
 export { Video } from "./video.js"
 export { SpeechClient } from "./speech-client.js"
-export {
-  SpeechEvent,
-  SpeechModel,
-  SpeechModelSchema,
-  SpeechRequest,
-  SpeechResponse,
-  SpeechTimestamp,
-  SpeechVoice,
-} from "./speech.js"
+export { SpeechEvent, SpeechModel, SpeechModelSchema, SpeechResponse, SpeechTimestamp, SpeechVoice } from "./speech.js"
 export type {
   SpeechFormat,
   SpeechModelOptions,
   SpeechOptions,
-  SpeechRequestFor,
+  SpeechRequest,
   SpeechRequestInput,
   SpeechRoute,
 } from "./speech.js"
@@ -41,7 +25,6 @@ export {
   TranscriptionEvent,
   TranscriptionModel,
   TranscriptionModelSchema,
-  TranscriptionRequest,
   TranscriptionResponse,
   TranscriptionSegment,
   TranscriptionTimestamps,
@@ -50,12 +33,12 @@ export {
 export type {
   TranscriptionModelOptions,
   TranscriptionOptions,
-  TranscriptionRequestFor,
+  TranscriptionRequest,
   TranscriptionRequestInput,
   TranscriptionRoute,
 } from "./transcription.js"
 export { Transcription } from "./transcription.js"
-export { Extraction, ExtractionModel, ExtractionRequest, ExtractionResponse } from "./experimental/extraction.js"
+export { Extraction, ExtractionModel, ExtractionResponse } from "./experimental/extraction.js"
 export type {
   ExtractionAnswerFor,
   ExtractionAnswersFor,
@@ -63,7 +46,7 @@ export type {
   ExtractionFields,
   ExtractionModelOptions,
   ExtractionOptions,
-  ExtractionRequestFor,
+  ExtractionRequest,
   ExtractionRequestInput,
   ExtractionResponseFor,
   ExtractionRoute,
