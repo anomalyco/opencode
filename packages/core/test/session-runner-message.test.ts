@@ -172,7 +172,6 @@ describe("toLLMMessages", () => {
           { type: "text", text: "Inspect this image" },
           { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "hello.png" },
         ],
-        metadata: { agents: [{ name: "build" }] },
       }),
     )
     expect(messages.slice(3).map((message) => message.content)).toEqual([
@@ -298,7 +297,6 @@ Earlier work
         {
           type: "text",
           text: "\n\nAttached file: main.ts\n\nexport const value = 1",
-          metadata: { attachment: { source: file.source, name: "main.ts" } },
         },
       ],
     })
@@ -337,7 +335,6 @@ Earlier work
           { type: "text", text: "<skill_content>Design APIs</skill_content>" },
           { type: "text", text: "Use @effect and @api-design" },
         ],
-        metadata: {},
       }),
     ])
   })
@@ -428,7 +425,6 @@ Earlier work
         {
           type: "text",
           text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
-          metadata: { attachment: { source: directory.source, name: "harness-engineering" } },
         },
       ],
     })
@@ -591,12 +587,6 @@ Earlier work
       {
         type: "text",
         text: "\n\nAttached directory: src/\n\nindex.ts",
-        metadata: {
-          attachment: {
-            source: { type: "uri", uri: "file:///project/src%2Flib" },
-            name: "src/",
-          },
-        },
       },
       { type: "media", media: Media.base64(data, "image/png"), filename: "preview.png" },
     ])
@@ -675,7 +665,6 @@ Earlier work
         type: "media",
         media: Media.base64(data, "image/png"),
         filename: "image.png",
-        metadata: { description: "alternate use" },
       },
     ])
   })
@@ -998,7 +987,6 @@ Earlier work
         result: { type: "text", value: '{"found":true}' },
         providerExecuted: true,
         cache: undefined,
-        metadata: undefined,
         providerMetadata: { provider: { itemId: "hosted_completed" } },
       },
       {
@@ -1022,7 +1010,6 @@ Earlier work
         },
         providerExecuted: true,
         cache: undefined,
-        metadata: undefined,
         providerMetadata: { provider: { itemId: "hosted_failed" } },
       },
     ])
@@ -1123,7 +1110,6 @@ Earlier work
         result: { type: "text", value: '{"status":"completed"}' },
         providerExecuted: true,
         cache: undefined,
-        metadata: undefined,
         // Hosted result payloads are provider-format state and must survive a
         // model switch within the same provider for replay to stay valid.
         providerMetadata: { provider: { itemId: "hosted-old-model", result: { signature: "result-sig" } } },
@@ -1145,7 +1131,6 @@ Earlier work
         result: { type: "text", value: "Hello" },
         providerExecuted: false,
         cache: undefined,
-        metadata: undefined,
         providerMetadata: undefined,
       },
     ])

@@ -206,15 +206,12 @@ test("a native window round-trips tools, opaque checkpoints and binary media thr
   const optionalMetadata = stored([
     Message.make({
       role: "user",
-      content: [
-        { type: "text", text: "attachment", metadata: { attachment: { name: undefined, source: { type: "inline" } } } },
-      ],
+      content: [{ type: "text", text: "attachment" }],
       providerMetadata: { openai: { itemId: undefined, type: "message", status: undefined, phase: undefined } },
     }),
   ])
   expect(decode({ native: optionalMetadata })[0]).toMatchObject({
     providerMetadata: { openai: { type: "message" } },
-    content: [{ metadata: { attachment: { source: { type: "inline" } } } }],
   })
   expect(() =>
     decode({
