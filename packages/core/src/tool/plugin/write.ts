@@ -9,13 +9,7 @@ export * as WriteTool from "./write.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
-import { Bom } from "@opencode/util/bom"
-import { Environment } from "../../environment/index.js"
-import { FileMutation } from "../../file-mutation.js"
-import { Formatter } from "../../formatter.js"
-import { FileAccess } from "../../file-access.js"
-import { Permission } from "../../permission.js"
-import { fileDiff } from "./file-diff.js"
+import { FileWrite } from "../../file-write.js"
 
 export const name = "write"
 
@@ -46,11 +40,7 @@ export const toModelContent = (output: Output) =>
 export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
-    const access = yield* FileAccess.Service
-    const fileMutation = yield* FileMutation.Service
-    const environment = yield* Environment.Service
-    const formatter = yield* Formatter.Service
-    const permission = yield* Permission.Service
+    const fileWrite = yield* FileWrite.Service
 
     yield* ctx.tool
       .transform((editor) =>
@@ -63,29 +53,7 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = {
-                type: "tool" as const,
-                messageID: context.messageID,
-                id: context.id,
-              }
-              const target = yield* access.resolve({ path: input.path, kind: "file" })
-              yield* access.authorizeExternal([target], context)
-              const current = yield* FileMutation.readOptionalText(environment.files, target.absolute)
-              const next = Bom.split(input.content)
-              const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
-              yield* permission.assert({
-                action: "edit",
-                resources: [target.resource],
-                save: ["*"],
-                metadata: { files: [preview] },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
-              })
-              const written = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              if (yield* formatter.file(target.absolute)) {
-                yield* FileMutation.syncTextBom(environment.files, target.absolute, written.bom)
-              }
+              const written = yield* fileWrite.write(input, context)
               return {
                 operation: written.operation,
                 target: written.target,

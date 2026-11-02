@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
-import { AIError, HttpContext } from "../src/schema/index.js"
+import { AIError, HttpContext, RateLimitError, TransportError } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -714,5 +714,54 @@ describe("provider error messages", () => {
         "invalid parameter",
       ].map(providerErrorMessage),
     ).toEqual([undefined, undefined, undefined, undefined])
+  })
+})
+
+describe("AIError getters", () => {
+  const rateLimit = new AIError({
+    reason: new RateLimitError({
+      message: "Rate limit reached",
+      http: new HttpContext({ url: "https://api.test/v1", status: 429, headers: { "retry-after": "2" } }),
+      retryAfterMs: 2000,
+    }),
+  })
+  const invalidBody = '{"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found"}}'
+  const invalidRequest = new AIError({
+    reason: classifyProviderFailure({
+      message: providerErrorMessage(invalidBody),
+      status: 404,
+      rawBody: invalidBody,
+      http: new HttpContext({ url: "https://api.test/v1", status: 404, headers: {} }),
+    }),
+  })
+  const transport = new AIError({
+    reason: new TransportError({ message: "socket hang up", transport: "http", operation: "request" }),
+  })
+
+  test("status", () => {
+    expect([rateLimit.status, invalidRequest.status, transport.status]).toEqual([429, 404, undefined])
+  })
+
+  test("code", () => {
+    expect([rateLimit.code, invalidRequest.code, transport.code]).toEqual([undefined, "model_not_found", undefined])
+    expect(
+      new AIError({
+        reason: new TransportError({ message: "reset", transport: "http", operation: "read", code: "ECONNRESET" }),
+      }).code,
+    ).toBe("ECONNRESET")
+  })
+
+  test("isRetryable", () => {
+    expect(invalidRequest.reason._tag).toBe("InvalidRequest")
+    expect([rateLimit.isRetryable, invalidRequest.isRetryable, transport.isRetryable]).toEqual([true, false, true])
+    expect([rateLimit, invalidRequest, transport].map(isRetryable)).toEqual([true, false, true])
+  })
+
+  test("retryAfterMs", () => {
+    expect([rateLimit.retryAfterMs, invalidRequest.retryAfterMs, transport.retryAfterMs]).toEqual([
+      2000,
+      undefined,
+      undefined,
+    ])
   })
 })

@@ -54,11 +54,16 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs (an error result when
+it fails). Each step ends with its own `step-finish`; one `finish` ends the loop, carrying the final step's reason
+and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
-`name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
-goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
+`name`, and two tools with the same name fail the request. Tool arguments that are not valid JSON go back to the model
+as an error result so it can retry. A step that hits the output token limit ends the loop without running its tool
+calls, which may be cut off. A forced `toolChoice` applies to the first step only; later steps use `auto`. `tool` takes
+a plain `async` execute; a throw or rejection goes back to the model as an error result, and `signal` aborts when the
+loop is interrupted.
 `input` is an Effect Schema that decodes and types the arguments, or a raw JSON Schema object, such as an MCP tool's,
 whose arguments arrive as `unknown` (pair it with an optional JSON Schema `outputSchema`). `tool` from
 `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
@@ -84,6 +89,17 @@ const events = ai.loop({
 for await (const event of events) {
   if (event.type === "text-delta") process.stdout.write(event.text)
 }
+```
+
+The terminal `finish` carries the final assistant `message` and `usage`. To skip the events, `ai.collect` folds a
+stream from `stream` or `loop` into one result: `text` of the final step, `steps` (one `LLMResponse` per call),
+`messages` (each step's assistant message and its tool results, ready to append to the next request), the total
+`usage`, `finishReason`, and `object` with `schema`.
+
+```ts
+const result = await ai.collect(ai.loop({ model, prompt: "Summarize package.json.", tools: { read_file } }))
+// Effect: const result = yield* ai.collect(ai.loop({ ... }))
+console.log(result.text, result.usage?.totalTokens)
 ```
 
 ### Freeform tools
@@ -118,18 +134,36 @@ const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.St
 res.object.city
 ```
 
-`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the loop's `finish`. A
 decode failure is an `AIError` whose `partial` holds the response.
+
+### Errors
+
+Every failure is an `AIError`. `reason._tag` names the kind (`RateLimit`, `InvalidRequest`, `Transport`, ...), and
+getters read the common fields without digging into `reason` or the raw body:
+
+```ts
+try {
+  await ai.generate({ model, prompt: "Hi" })
+} catch (error) {
+  if (!(error instanceof AIError)) throw error
+  error.status // HTTP status, when the failure came from a response
+  error.code // provider error code such as "model_not_found", when known
+  error.isRetryable // whether sending the same request again may succeed
+  error.retryAfterMs // delay the provider asked for, when known
+}
+```
 
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
 before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
-are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+are visible too. Raw events are off by default, and `generate` ignores them. `RawEvent` is the event's type. Act on a
+frame with a stream map:
 
 ```ts
-import { Stream } from "effect"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { Effect, Stream } from "effect"
+import { ai, AIError, ContentPolicyError } from "@opencode/ai/effect"
 
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
@@ -137,10 +171,10 @@ const flagged = (data: unknown) =>
 const events = ai
   .stream({ model, prompt: "Say hello.", includeRaw: true })
   .pipe(
-    Stream.map((event) =>
+    Stream.mapEffect((event) =>
       event.type === "raw" && flagged(event.data)
-        ? LLMEvent.providerError({ message: "Flagged by moderation" })
-        : event,
+        ? Effect.fail(new AIError({ reason: new ContentPolicyError({ message: "Flagged by moderation" }) }))
+        : Effect.succeed(event),
     ),
   )
 ```
@@ -896,9 +930,10 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
 
-- **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`ai.request({...})`** — build a provider-neutral `LLMRequest`, a plain object. Accepts ergonomic inputs (`system: string`, `prompt: string`) and normalizes them into `system`, `messages` and `tools` arrays. Edit it with a spread, or pass the edited object back to `ai.request`.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
+- **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
@@ -1273,9 +1308,7 @@ Prefer this operation, where supported, when the application owns compaction pol
 ```ts
 const compacted = Effect.gen(function* () {
   const result = yield* ai.compact(request)
-  const next = LLMRequest.update(request, {
-    messages: result.replacement,
-  })
+  const next = { ...request, messages: result.replacement }
   return yield* ai.generate(next)
 })
 ```
@@ -1335,7 +1368,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { ai, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMClient, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = ai.request({
@@ -1347,9 +1380,7 @@ const request = ai.request({
 })
 const continued = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
-  return LLMRequest.update(request, {
-    messages: [...request.messages, response.message, Message.user("Continue")],
-  })
+  return { ...request, messages: [...request.messages, response.message, Message.user("Continue")] }
 })
 ```
 

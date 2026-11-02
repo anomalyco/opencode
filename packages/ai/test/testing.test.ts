@@ -8,7 +8,7 @@ import {
   LanguageModel,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   ProviderID,
   RateLimitError,
@@ -92,10 +92,10 @@ describe("TestLLM first-class client", () => {
       expect(fiber.pollUnsafe()).toBeUndefined()
       yield* gate.release
       expect(yield* Fiber.join(fiber)).toBe(compacted)
-      const next = LLMRequest.update(request, { messages: compacted.replacement })
+      const next = { ...request, messages: compacted.replacement }
       expect((yield* LLMClient.generate(next)).text).toBe("continued")
       yield* client.serve((observed) => {
-        expect(observed).toBe(next)
+        expect(observed).toEqual(next)
         return compacted
       })
       expect(yield* ai.compact(next)).toBe(compacted)
@@ -137,7 +137,7 @@ describe("TestLLM first-class client", () => {
       expect((yield* LLMClient.generate(request)).text).toBe("first")
       expect((yield* LLMClient.generate(request)).text).toBe("second")
       expect(served).toEqual([])
-      const selected = LLMRequest.update(request, { promptCacheKey: "selected" })
+      const selected = { ...request, promptCacheKey: "selected" }
       expect((yield* LLMClient.generate(selected)).text).toBe("selected")
       expect((yield* LLMClient.generate(request)).text).toBe("default")
       expect(served).toEqual([selected, request])
@@ -153,7 +153,7 @@ describe("TestLLM first-class client", () => {
 
   testEffect(
     TestLLM.testLayer({
-      transformRequest: (request) => LLMRequest.update(request, { promptCacheKey: "observation" }),
+      transformRequest: (request) => ({ ...request, promptCacheKey: "observation" }),
     }),
   ).effect("transforms observations without changing the request passed to the responder", () =>
     Effect.gen(function* () {
@@ -165,7 +165,7 @@ describe("TestLLM first-class client", () => {
       const generate = llm.generate(request)
       expect(yield* llm.requests()).toEqual([])
       expect((yield* generate).text).toBe("original")
-      expect(yield* llm.requests()).toEqual([LLMRequest.update(request, { promptCacheKey: "observation" })])
+      expect(yield* llm.requests()).toEqual([{ ...request, promptCacheKey: "observation" }])
     }),
   )
 

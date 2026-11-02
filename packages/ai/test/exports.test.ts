@@ -9,8 +9,11 @@ import {
   ImageClient,
   LanguageModel,
   LLMClient,
+  LLMEvent,
   Media,
+  RawEvent,
 } from "@opencode/ai/effect"
+import { AI } from "@opencode/ai"
 import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
@@ -84,6 +87,13 @@ describe("public exports", () => {
     expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
+  })
+
+  test("both entry points export the raw event type", () => {
+    const event: RawEvent = LLMEvent.raw({ data: { type: "ping" } })
+    const promiseEvent: AI.RawEvent = event
+    expect(RawEvent).toBe(AI.RawEvent)
+    expect(LLMEvent.is.raw(promiseEvent)).toBe(true)
   })
 
   test("AIClient.layerWith shares one executor across every client", async () => {

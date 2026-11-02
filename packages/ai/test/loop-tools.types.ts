@@ -70,3 +70,10 @@ const inspect = tool({
   execute: () => Effect.succeed<unknown>(1),
 })
 AI.ai.loop({ model, prompt: "Fail.", tools: [fail, parse, inspect] })
+
+// A built text request is a plain object: spread it into `loop`, or add `schema` to `generate`.
+const built = ai.request({ model, prompt: "Add 1 and 2." })
+ai.loop({ ...built, tools: [add] })
+ai.generate({ ...built, schema: Schema.Struct({ sum: Schema.Number }) }).pipe(
+  Effect.map((response) => response.object.sum satisfies number),
+)

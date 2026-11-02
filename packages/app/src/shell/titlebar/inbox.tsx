@@ -46,12 +46,15 @@ export function SidebarInbox() {
       })
       .toSorted((a, b) => (b.session.time.idle ?? 0) - (a.session.time.idle ?? 0))
 
+    // Archived sessions, such as scripted `opencode run --archived` runs, only show in the Archived section.
+    const active = list.filter((entry) => !inboxArchived(entry))
+
     return {
-      needs: list.filter((entry) => entry.status === "approval" || entry.status === "input"),
+      needs: active.filter((entry) => entry.status === "approval" || entry.status === "input"),
       inbox: finished.filter((entry) => !inboxArchived(entry)),
       archived: finished.filter(inboxArchived),
       // `time.updated` moves with every message of a run, so order by when each run started to keep rows in place.
-      working: list.filter((entry) => entry.status === "working").toSorted(compareWorking),
+      working: active.filter((entry) => entry.status === "working").toSorted(compareWorking),
     }
   })
 

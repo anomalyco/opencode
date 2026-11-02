@@ -25,6 +25,8 @@ export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
 export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
 
+export type ProviderCacheWarming = boolean | { interval?: "auto" | (string & {}); duration?: string }
+
 export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
@@ -393,7 +395,7 @@ export type LocationPublicInfo = {
 
 export type ModelRef = { id: string; providerID: ProviderID; variant?: string }
 
-export type ProviderCache = { ttl?: ProviderCacheTTL }
+export type ProviderCache = { ttl?: ProviderCacheTTL; warming?: ProviderCacheWarming }
 
 export type ModelVariantSettings = { compaction?: ProviderCompaction; encoding?: ProviderEncoding } & {
   [x: string]: any

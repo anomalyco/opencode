@@ -180,7 +180,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    // Built-in skills register virtual `/builtin/*.md` paths whose content is inline in `/api/skill`.
+    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths whose content is inline in `/api/skill`.
+    const isVirtualSkill = (file: string) => file.startsWith("skill://") || file.startsWith("/builtin/")
+
     const builtinSkill = async (file: string, directory: string) => {
       if (data.location.skill.list({ directory }) === undefined) {
         await data.location.skill.sync({ directory })
@@ -225,7 +227,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       // Files outside the workspace are read from their own directory, like markdown images.
       // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
-      const source = file.startsWith("/builtin/")
+      const source = isVirtualSkill(file)
         ? readBuiltin(file, directory)
         : read(
             file,
@@ -272,7 +274,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       if (!file) return Promise.resolve(false)
 
-      if (file.startsWith("/builtin/")) {
+      if (isVirtualSkill(file)) {
         return builtinSkill(file, scope()).then(Boolean, () => false)
       }
 

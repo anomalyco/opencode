@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
-import { ai, LLMRequest, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
+import { ai, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -84,15 +84,14 @@ describe("request option precedence", () => {
         model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
         prompt: "Use a tool.",
       })
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
-            ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
-            ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
-          ],
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [
+          ToolDefinition.make({ name: "lookup", description: "old", inputSchema: { type: "object" } }),
+          ToolDefinition.make({ name: "search", description: "search", inputSchema: { type: "object" } }),
+          ToolDefinition.make({ name: "lookup", description: "new", inputSchema: { type: "object" } }),
+        ],
+      })
 
       expect(prepared.body.tools).toEqual([
         {

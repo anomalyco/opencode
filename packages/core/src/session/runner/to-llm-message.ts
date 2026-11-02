@@ -21,7 +21,6 @@ const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   media: Media.base64(file.data, file.mime),
   filename: file.name,
-  metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
 const attachmentLocation = (file: FileAttachment) => {
@@ -45,13 +44,6 @@ const textAttachment = (file: FileAttachment): ContentPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
-  metadata: {
-    attachment: {
-      source: file.source,
-      name: file.name,
-      description: file.description,
-    },
-  },
 })
 
 const directoryAttachment = (file: FileAttachment): ContentPart => ({
@@ -64,13 +56,6 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
-  metadata: {
-    attachment: {
-      source: file.source,
-      name: file.name,
-      description: file.description,
-    },
-  },
 })
 
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
@@ -215,10 +200,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results
-  return [
-    Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
-    ...results,
-  ]
+  return [Message.make({ id: message.id, role: "assistant", content: meaningful }), ...results]
 }
 
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
@@ -252,7 +234,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content: `The working directory has been changed to ${message.location.directory}.`,
-          metadata: message.metadata,
         }),
       ]
     case "user":
@@ -267,16 +248,12 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content,
-          metadata: {
-            ...message.metadata,
-            ...(message.agents?.length ? { agents: message.agents } : {}),
-          },
         }),
       ]
     case "synthetic":
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
-      return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
+      return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "system":
       return [Message.system(message.text)]
     case "shell":
@@ -287,7 +264,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
-          metadata: message.metadata,
         }),
       ]
     case "assistant":
@@ -309,7 +285,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
             ...(kept ? ["", `<recent-context>\n${kept}\n</recent-context>`] : []),
             "</conversation-checkpoint>",
           ].join("\n"),
-          metadata: message.metadata,
         }),
       ]
     }

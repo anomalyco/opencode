@@ -228,52 +228,32 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     return { start, append, end, flush, publishPending, has: (id: string) => chunks.has(id) }
   }
 
-  const text = fragments(
-    "text",
-    (_textID, value, ordinal, native) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Text.Ended, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          text: value,
-          native,
-        })
-      }),
-    (_textID, value, ordinal) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Text.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          delta: value,
-        })
-      }),
-    true,
-  )
-  const reasoning = fragments(
-    "reasoning",
-    (_reasoningID, value, ordinal, native) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Reasoning.Ended, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          text: value,
-          native,
-        })
-      }),
-    (_reasoningID, value, ordinal) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Reasoning.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal,
-          delta: value,
-        })
-      }),
-    true,
-  )
+  const contentFragments = (name: string, events: typeof SessionEvent.Text | typeof SessionEvent.Reasoning) =>
+    fragments(
+      name,
+      (_id, value, ordinal, native) =>
+        Effect.gen(function* () {
+          yield* bus.publish(events.Ended, {
+            sessionID: input.sessionID,
+            assistantMessageID: yield* currentAssistantMessageID(),
+            ordinal,
+            text: value,
+            native,
+          })
+        }),
+      (_id, value, ordinal) =>
+        Effect.gen(function* () {
+          yield* bus.publish(events.Delta, {
+            sessionID: input.sessionID,
+            assistantMessageID: yield* currentAssistantMessageID(),
+            ordinal,
+            delta: value,
+          })
+        }),
+      true,
+    )
+  const text = contentFragments("text", SessionEvent.Text)
+  const reasoning = contentFragments("reasoning", SessionEvent.Reasoning)
   const toolInput = fragments("tool input", (id, value) =>
     Effect.gen(function* () {
       const tool = tools.get(id)
@@ -545,27 +525,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       }
-      case "tool-error": {
-        const tool = tools.get(event.id)
-        if (!tool?.called) return yield* Effect.die(new Error(`Tool error before call: ${event.id}`))
-        if (tool.name !== event.name)
-          return yield* Effect.die(new Error(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool error: ${event.id}`))
-        tool.settled = true
-        yield* bus.publish(SessionEvent.Tool.Failed, {
-          sessionID: input.sessionID,
-          assistantMessageID,
-          id: event.id,
-          error:
-            event.message === `Unknown tool: ${event.name}`
-              ? { type: "tool.unknown", message: event.message }
-              : { type: "tool.execution", message: event.message },
-          ...failureSnapshot(tool),
-          executed: tool.providerExecuted,
-          native: native(event.providerMetadata),
-        })
-        return
-      }
       case "step-finish":
         yield* flushFragments()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
@@ -582,10 +541,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         return
       case "finish":
-        return
-      case "provider-error":
-        providerFailed = true
-        yield* failAssistant({ type: "provider.unknown", message: event.message })
         return
     }
   }, Effect.uninterruptible)
@@ -632,7 +587,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     publishStepFailure,
     failUnsettledTools,
     failIncompleteTools,
-    hasProviderError: () => providerFailed,
     hasStarted: () => stepStarted,
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({

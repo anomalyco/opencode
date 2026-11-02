@@ -7,7 +7,7 @@ import {
   HttpOptions,
   LanguageModel,
   type LLM,
-  LLMRequest,
+  type LLMRequest,
   type Media,
   Message,
   SystemPart,
@@ -80,7 +80,7 @@ export interface Input {
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
   readonly messages: Array<Message>
-  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
@@ -324,13 +324,14 @@ export const layer = Layer.effect(
         modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
           ? base.model.route.with({ endpoint: { baseURL: modelHook.baseURL } })
           : base.model.route
-      const request = LLMRequest.update(base, {
+      const request = {
+        ...base,
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         http: new HttpOptions({
           ...base.http,
           headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
         }),
-      })
+      }
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", model.ref.providerID))

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
-import { ai, LanguageModel, LLMRequest } from "../src/effect.js"
+import { ai, LanguageModel } from "../src/effect.js"
 import { OpenAI, Anthropic } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
 import { fixedResponse } from "./lib/http.js"
@@ -11,8 +11,8 @@ test("runtime capability checks follow model and route updates", () => {
   const unsupported = Anthropic.configure({ apiKey: "test" }).model("fixture")
   const request = ai.request({ model: supported, prompt: "hello" })
   expect(ai.canCompact(request)).toBe(true)
-  expect(ai.canCompact(LLMRequest.update(request, { messages: [] }))).toBe(true)
-  expect(ai.canCompact(LLMRequest.update(request, { model: unsupported }))).toBe(false)
+  expect(ai.canCompact({ ...request, messages: [] })).toBe(true)
+  expect(ai.canCompact({ ...request, model: unsupported })).toBe(false)
   expect(
     ai.canCompact(
       ai.request({ model: LanguageModel.update(supported, { route: unsupported.route }), prompt: "Hello" }),
@@ -21,6 +21,10 @@ test("runtime capability checks follow model and route updates", () => {
   expect(
     ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: undefined }), prompt: "Hello" })),
   ).toBe(true)
+  expect(ai.canCompact(supported)).toBe(true)
+  expect(ai.canCompact(supported, { mechanism: "trigger" })).toBe(true)
+  expect(ai.canCompact(unsupported)).toBe(false)
+  expect(ai.canCompact({ model: supported, messages: [Message.user("hello")] })).toBe(true)
 })
 
 test("explicit compaction serializes a replacement window without a messages alias", () => {

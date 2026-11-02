@@ -60,8 +60,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
     // Exit completion can precede descendant cleanup after the capture deadline.
     yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE).pipe(Effect.ignore)
-    const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
-    if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
+    yield* handle.kill({ killSignal: "SIGTERM", forceKillAfter: FORCE_KILL_AFTER })
   }, Effect.ignore())
 
   const close = () =>
