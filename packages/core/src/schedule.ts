@@ -103,6 +103,7 @@ const FAILED_RETRY = 5 * MINUTE
 const CHECK_FAILED_RETRY = MINUTE
 const MAX_CHECK_FAILURES = 3
 const TICK_CONCURRENCY = 4
+const UNSEEDED = { matched: false as const, state: null as Schema.Json, checks: 0 }
 
 const duration = (value: string) =>
   Option.match(durationMillis(value), {
@@ -288,132 +289,50 @@ const layer = Layer.effect(
       const late = now - due >= LATE_AFTER
       const next = following(row, now)
 
-      if (row.check !== null) {
-        const check = row.check
-        const checkMessageID = SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`)
-        const outcome = yield* ScheduleCheck.evaluate(session, check, row.state ?? null, {
-          messageID: checkMessageID,
-          now,
-          checks: row.checks,
-        }).pipe(instances.provide(session))
+      const check = row.check
+      const outcome: ScheduleCheck.Outcome =
+        check === null
+          ? { ok: true, wake: true, state: null }
+          : yield* ScheduleCheck.evaluate(session, check, row.state ?? null, {
+              messageID: SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`),
+              now,
+              checks: row.checks,
+            }).pipe(instances.provide(session))
 
-        if (!outcome.ok) {
-          const strikes = row.failures + 1
-          if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
-            yield* update(row, {
-              failures: strikes,
-              last_outcome: "failed",
-              retry_at: now + CHECK_FAILED_RETRY,
-              time_updated: now,
-            })
-            return
-          }
-          const run = row.run_count + 1
-          const note = outcome.invalid
-            ? `[Schedule paused after invalid check: ${outcome.error}]`
-            : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
-          const id = yield* admitWake(
-            row,
-            session.id,
-            run,
-            due,
-            late,
-            `${row.action.prompt}\n\n${note}`,
-            { error: outcome.error, failures: strikes },
-          )
-          yield* db
-            .update(ScheduleTable)
-            .set({
-              status: "paused",
-              failures: strikes,
-              run_count: run,
-              last_message_id: id,
-              last_fired_at: now,
-              last_outcome: "failed",
-              retry_at: null,
-              time_updated: now,
-            })
-            .where(eq(ScheduleTable.id, row.id))
-            .run()
-            .pipe(Effect.orDie)
-          return
-        }
-
-        if (!outcome.wake) {
-          const checks = row.checks + 1
-          const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
-          if (check.mode === "until" && ended) {
-            const run = row.run_count + 1
-            const id = yield* admitWake(
-              row,
-              session.id,
-              run,
-              due,
-              late,
-              `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
-              { expired: true },
-            )
-            yield* db
-              .update(ScheduleTable)
-              .set({
-                status: "done",
-                checks,
-                failures: 0,
-                state: outcome.state,
-                run_count: run,
-                last_message_id: id,
-                last_fired_at: now,
-                last_outcome: "expired",
-                next_due_at: null,
-                remaining_runs: 0,
-                retry_at: null,
-                time_updated: now,
-              })
-              .where(eq(ScheduleTable.id, row.id))
-              .run()
-              .pipe(Effect.orDie)
-            return
-          }
+      if (!outcome.ok) {
+        const strikes = row.failures + 1
+        if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
           yield* update(row, {
-            checks,
-            failures: 0,
-            state: outcome.state,
-            last_outcome: "checked",
-            retry_at: null,
-            ...(ended ? { status: "done" as const, next_due_at: null } : { next_due_at: next }),
+            failures: strikes,
+            last_outcome: "failed",
+            retry_at: now + CHECK_FAILED_RETRY,
             time_updated: now,
           })
           return
         }
-
         const run = row.run_count + 1
+        const note = outcome.invalid
+          ? `[Schedule paused after invalid check: ${outcome.error}]`
+          : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
         const id = yield* admitWake(
           row,
           session.id,
           run,
           due,
           late,
-          promptText(row.action.prompt, outcome.message),
-          outcome.message === undefined ? {} : { message: outcome.message },
+          `${row.action.prompt}\n\n${note}`,
+          { error: outcome.error, failures: strikes },
         )
-        const remaining =
-          check.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
-        const done = check.mode === "until" || finished(row, next, remaining)
-        // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
         yield* db
           .update(ScheduleTable)
           .set({
+            status: "paused",
+            failures: strikes,
             run_count: run,
-            checks: row.checks + 1,
-            failures: 0,
-            state: outcome.state,
             last_message_id: id,
             last_fired_at: now,
-            last_outcome: late ? "late" : "fired",
+            last_outcome: "failed",
             retry_at: null,
-            remaining_runs: remaining,
-            ...(done ? { status: "done" as const } : {}),
-            next_due_at: done ? null : next,
             time_updated: now,
           })
           .where(eq(ScheduleTable.id, row.id))
@@ -422,14 +341,71 @@ const layer = Layer.effect(
         return
       }
 
+      if (check !== null && !outcome.wake) {
+        const checks = row.checks + 1
+        const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
+        if (check.mode === "until" && ended) {
+          const run = row.run_count + 1
+          const id = yield* admitWake(
+            row,
+            session.id,
+            run,
+            due,
+            late,
+            `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
+            { expired: true },
+          )
+          yield* db
+            .update(ScheduleTable)
+            .set({
+              status: "done",
+              checks,
+              failures: 0,
+              state: outcome.state,
+              run_count: run,
+              last_message_id: id,
+              last_fired_at: now,
+              last_outcome: "expired",
+              next_due_at: null,
+              remaining_runs: 0,
+              retry_at: null,
+              time_updated: now,
+            })
+            .where(eq(ScheduleTable.id, row.id))
+            .run()
+            .pipe(Effect.orDie)
+          return
+        }
+        yield* update(row, {
+          checks,
+          failures: 0,
+          state: outcome.state,
+          last_outcome: "checked",
+          retry_at: null,
+          ...(ended ? { status: "done" as const, next_due_at: null } : { next_due_at: next }),
+          time_updated: now,
+        })
+        return
+      }
+
       const run = row.run_count + 1
-      const id = yield* admitWake(row, session.id, run, due, late, row.action.prompt)
-      const remaining = row.remaining_runs === null ? null : row.remaining_runs - 1
-      const done = finished(row, next, remaining)
+      const id = yield* admitWake(
+        row,
+        session.id,
+        run,
+        due,
+        late,
+        promptText(row.action.prompt, outcome.message),
+        check === null ? undefined : outcome.message === undefined ? {} : { message: outcome.message },
+      )
+      const remaining = check?.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
+      const done = check?.mode === "until" || finished(row, next, remaining)
+      // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
       yield* db
         .update(ScheduleTable)
         .set({
           run_count: run,
+          ...(check === null ? {} : { checks: row.checks + 1, failures: 0, state: outcome.state }),
           last_message_id: id,
           last_fired_at: now,
           last_outcome: late ? "late" : "fired",
@@ -701,10 +677,10 @@ const layer = Layer.effect(
     return Service.of({
       create: Effect.fn("Schedule.create")(function* (input) {
         const session = yield* sessions.get(input.sessionID)
+        const missingDirectory = () =>
+          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }))
         const config = yield* settings(session).pipe(
-          Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-            Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` })),
-          ),
+          Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
         if (!config.enabled) return yield* new DisabledError()
         const check = yield* resolveStoredCheck(input)
@@ -723,74 +699,36 @@ const layer = Layer.effect(
         const scheduleID = ID.create()
         const seeded =
           check === undefined
-            ? { matched: false as const, state: null as Schema.Json, checks: 0 }
+            ? UNSEEDED
             : yield* Effect.gen(function* () {
                 yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
                   instances.provide(session),
                   Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
+                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
                 )
                 const shouldSeed =
                   check.mode === "until" ||
                   check.condition.type === "code" ||
                   (check.condition.type === "shell" && check.condition.changes === true)
-                if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
+                if (!shouldSeed) return UNSEEDED
                 const init = yield* ScheduleCheck.evaluate(session, check, null, {
                   messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
                   now,
                   checks: 0,
                 }).pipe(
                   instances.provide(session),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
+                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
                 )
                 if (!init.ok) {
                   // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
                   if (init.invalid || check.condition.type === "code") return yield* new InvalidError({ reason: init.error })
-                  return { matched: false as const, state: null as Schema.Json, checks: 0 }
+                  return UNSEEDED
                 }
                 if (check.mode === "until" && init.wake)
-                  return { matched: true as const, state: init.state, message: init.message }
+                  return { matched: true as const, state: init.state, checks: 1, message: init.message }
                 return { matched: false as const, state: init.state, checks: 1 }
               })
 
-        if (seeded.matched) {
-          const row = yield* db
-            .insert(ScheduleTable)
-            .values({
-              id: scheduleID,
-              session_id: session.id,
-              name: input.name ?? null,
-              check: check ?? null,
-              state: seeded.state,
-              checks: 1,
-              action: input.action,
-              when,
-              tz: DateTime.zoneToString(zone),
-              status: "done",
-              next_due_at: null,
-              ends_at: ends,
-              remaining_runs: 0,
-              run_count: 1,
-              last_fired_at: now,
-              last_outcome: "fired",
-              time_created: now,
-              time_updated: now,
-            })
-            .returning()
-            .get()
-            .pipe(Effect.orDie)
-          return toInfo(row, seeded.message)
-        }
-
-        const remaining = check?.mode === "until" ? 1 : (input.ends?.times ?? null)
         const row = yield* db
           .insert(ScheduleTable)
           .values({
@@ -805,13 +743,24 @@ const layer = Layer.effect(
             tz: DateTime.zoneToString(zone),
             next_due_at: due,
             ends_at: ends,
-            remaining_runs: remaining,
+            remaining_runs: check?.mode === "until" ? 1 : (input.ends?.times ?? null),
             time_created: now,
             time_updated: now,
+            ...(seeded.matched
+              ? {
+                  status: "done" as const,
+                  next_due_at: null,
+                  remaining_runs: 0,
+                  run_count: 1,
+                  last_fired_at: now,
+                  last_outcome: "fired" as const,
+                }
+              : {}),
           })
           .returning()
           .get()
           .pipe(Effect.orDie)
+        if (seeded.matched) return toInfo(row, seeded.message)
         yield* doorbell.open
         return toInfo(row)
       }),
