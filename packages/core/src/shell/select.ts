@@ -170,7 +170,7 @@ export function args(file: string, command: string) {
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
 export function environment(bin?: string, filter?: { compatible?: boolean }) {
-  return select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+  return select(process.env.SHELL, undefined, filter, bin)
 }
 
 let defaultConfigured: { bin?: string; value: string } | undefined

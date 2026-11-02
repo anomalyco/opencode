@@ -10,8 +10,6 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
-const POWERSHELL_PATH_FLAG_RE =
-  /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 
@@ -504,8 +502,8 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
         complete = false
         return { directories, complete }
       }
-      pathFlag = POWERSHELL_PATH_FLAG_RE.test(part.text)
       literalFlag = POWERSHELL_LITERAL_FLAG_RE.test(part.text)
+      pathFlag = literalFlag || /^-p(?:ath|at|a)?:?$/i.test(part.text)
       continue
     }
     sawOperand = true
