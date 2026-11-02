@@ -9,14 +9,13 @@ export * as EditTool from "./edit.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
-import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
 import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
-import { Formatter } from "../../formatter.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
+import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -261,10 +260,9 @@ const countBefore = (positions: number[], offset: number) => {
 export const Plugin = {
   id: "opencode.tool.edit",
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
-    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
+    const fileWrite = yield* FileWrite.Service
     const environment = yield* Environment.Service
-    const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -295,8 +293,7 @@ export const Plugin = {
                 })
               }
 
-              const target = yield* access.resolve({ path: input.path, kind: "file" })
-              yield* access.authorizeExternal([target], context)
+              const target = yield* fileWrite.target(input.path, context)
 
               const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
@@ -326,15 +323,7 @@ export const Plugin = {
                 replacements > 0 && (replacements === 1 || input.replaceAll === true)
                   ? fileDiff(target.resource, source, replaced)
                   : undefined
-              yield* permission.assert({
-                action: "edit",
-                resources: [target.resource],
-                save: ["*"],
-                metadata: preview ? { files: [preview] } : undefined,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: permissionSource,
-              })
+              yield* fileWrite.authorize(target, context, preview)
               if (replacements === 0) {
                 // The hint shows file contents, so only when reading this file is already allowed.
                 const readable = yield* permission.allows({
@@ -362,15 +351,9 @@ export const Plugin = {
                     : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
                 })
               }
-              const replacementBom = replaced.startsWith("\uFEFF")
-              const result = yield* fileMutation.write({
-                target,
-                content: Bom.join(replaced, original.bom || replacementBom),
-              })
-              const bom = original.bom || replacementBom
-              const formatted = (yield* formatter.file(target.absolute))
-                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
-                : (yield* FileMutation.readText(environment.files, target.absolute)).text
+              const result = yield* fileWrite.commit(target, replaced)
+              const formatted =
+                result.formatted ?? (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
                 files: [fileDiff(result.resource, source, formatted)],
                 replacements,

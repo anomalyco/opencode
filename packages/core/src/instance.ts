@@ -9,6 +9,7 @@ import { Config } from "./config.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
+import { FileWrite } from "./file-write.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
@@ -89,6 +90,7 @@ const nodes = [
   InstructionDiscovery.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
   Formatter.node,
   Mcp.node,
   Permission.node,

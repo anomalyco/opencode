@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Tracer } from "effect"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -25,7 +26,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, FileAccess.node, FileMutation.node, Environment.node, Formatter.node, Permission.node],
+  deps: [Tool.node, FileWrite.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
