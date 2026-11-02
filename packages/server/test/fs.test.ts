@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -364,3 +364,31 @@ it.live("confines watch requests like read and reports a disabled watcher", () =
     expect(yield* watch("DELETE", "a.ts")).toBe(204)
   }),
 )
+
+// chmod cannot make a directory unreadable on Windows, and root reads it anyway.
+describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)("unreadable directories", () => {
+  it.live("lists an unreadable directory as 403 instead of 500", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const current = path.join(tmp.path, "project")
+      const secret = path.join(current, "secret")
+      yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          await fs.mkdir(secret, { recursive: true })
+          await fs.chmod(secret, 0o000)
+        }),
+        () => Effect.promise(() => fs.chmod(secret, 0o755)),
+      )
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const url = new URL("/api/fs/list", server.base)
+      url.searchParams.set("location[directory]", current)
+      url.searchParams.set("path", "secret")
+      const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(response.status).toBe(403)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        _tag: "ForbiddenError",
+        message: `Access denied to directory: ${secret}`,
+      })
+    }),
+  )
+})

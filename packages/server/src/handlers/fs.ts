@@ -2,7 +2,7 @@ import { FileSystem } from "@opencode/core/filesystem"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { Location } from "@opencode/core/location"
 import { RelativePath } from "@opencode/core/schema"
-import { FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { FileNotFoundError, ForbiddenError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -32,13 +32,16 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs
-              .list(ctx.query)
-              .pipe(
-                Effect.mapError(
-                  (error) => new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
-                ),
-              )
+            return yield* fs.list(ctx.query).pipe(
+              Effect.catchTags({
+                "FileSystem.NotFoundError": (error) =>
+                  Effect.fail(
+                    new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
+                  ),
+                "FileSystem.DirectoryAccessDeniedError": (error) =>
+                  Effect.fail(new ForbiddenError({ message: error.message })),
+              }),
+            )
           }),
         ),
       )

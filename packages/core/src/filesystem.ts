@@ -96,8 +96,11 @@ export interface File {
 
 export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError>
-  /** Fails with `NotFoundError` when the path is missing or is not a directory. */
-  readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
+  /**
+   * Fails with `NotFoundError` when the path is missing or is not a directory,
+   * and with `DirectoryAccessDeniedError` when the server user cannot read it.
+   */
+  readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError | DirectoryAccessDeniedError>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
   readonly write: (input: WriteInput) => Effect.Effect<Write>
@@ -174,12 +177,12 @@ const baseLayer = Layer.effect(
             "PlatformError",
             "NotFound",
             () => Effect.fail(missing),
-            (_, error) => Effect.die(error),
+            (_, error) => accessDenied(directory, error),
           ),
         )
         if (info.type !== "Directory") return yield* missing
         return yield* fs.readDirectoryEntries(directory).pipe(
-          Effect.orDie,
+          Effect.catch((cause) => accessDenied(directory, cause)),
           Effect.map((items) =>
             items
               .flatMap((item) => {
@@ -208,6 +211,15 @@ const baseLayer = Layer.effect(
     })
   }),
 )
+
+function accessDenied(
+  directory: string,
+  cause: PlatformError.PlatformError,
+): Effect.Effect<never, DirectoryAccessDeniedError> {
+  if (FSUtil.isAccessDenied(cause))
+    return Effect.fail(new DirectoryAccessDeniedError({ directory: AbsolutePath.make(directory), cause }))
+  return Effect.die(cause)
+}
 
 export const node = makeLocationNode({
   service: Service,
