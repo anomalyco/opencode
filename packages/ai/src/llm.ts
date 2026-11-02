@@ -19,6 +19,7 @@ import {
   AIError,
   LLMEvent,
   LLMResponse,
+  ResponseFold,
   Message,
   LanguageModel,
   SystemPart,
@@ -173,7 +174,7 @@ const stepStream = (
   after: (step: Step) => Stream.Stream<LLMEvent, AIError, Service>,
 ): Stream.Stream<LLMEvent, AIError, Service> =>
   Stream.suspend(() => {
-    let state = LLMResponse.empty()
+    let state = ResponseFold.empty()
     let finish: Finish | undefined
     return LLMClient.stream(request, options).pipe(
       Stream.map((event) =>
@@ -183,15 +184,15 @@ const stepStream = (
       ),
       Stream.tap((event) =>
         Effect.sync(() => {
-          state = LLMResponse.reduce(state, event)
+          state = ResponseFold.reduce(state, event)
           if (event.type === "finish") finish = event
         }),
       ),
       Stream.filter((event) => event.type !== "finish"),
-      Stream.mapError((error) => withPartial(error, LLMResponse.partial(state))),
+      Stream.mapError((error) => withPartial(error, ResponseFold.partial(state))),
       Stream.concat(
         Stream.suspend(() => {
-          const response = LLMResponse.complete(state)
+          const response = ResponseFold.complete(state)
           return response && finish ? after({ response, finish }) : Stream.empty
         }),
       ),

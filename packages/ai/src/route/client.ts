@@ -22,6 +22,7 @@ import {
   GenerationOptions,
   HttpOptions,
   LLMResponse,
+  ResponseFold,
   LanguageModel,
   Message,
   LLMEvent,
@@ -662,16 +663,16 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
 
 export const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    let state = LLMResponse.empty()
+    let state = ResponseFold.empty()
     yield* stream(request, options).pipe(
-      Stream.runForEach((event) => Effect.sync(() => (state = LLMResponse.reduce(state, event)))),
-      Effect.mapError((error) => withPartial(error, LLMResponse.partial(state))),
+      Stream.runForEach((event) => Effect.sync(() => (state = ResponseFold.reduce(state, event)))),
+      Effect.mapError((error) => withPartial(error, ResponseFold.partial(state))),
     )
-    const response = LLMResponse.complete(state)
+    const response = ResponseFold.complete(state)
     if (response) return response
     return yield* withPartial(
       incompleteStreamError(`${request.model.provider}/${request.model.route.id}`),
-      LLMResponse.partial(state),
+      ResponseFold.partial(state),
     )
   })
 

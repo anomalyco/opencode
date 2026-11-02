@@ -3,6 +3,7 @@ import {
   AIError,
   InvalidProviderOutputError,
   LLMResponse,
+  ResponseFold,
   Message,
   Usage,
   LLMEvent,
@@ -138,7 +139,7 @@ export function collect<E, R>(
   return Effect.suspend(() => {
     const steps: LLMResponse[] = []
     const messages: Message[] = []
-    let step = LLMResponse.empty()
+    let step = ResponseFold.empty()
     // Between a `step-finish` and the next `step-start`, tool results come from the loop running tools.
     let betweenSteps = false
     // The last step's assistant message, and its calls with invalid input that the loop may answer.
@@ -156,7 +157,7 @@ export function collect<E, R>(
       steps.push(response)
       assistant = messages.push(response.message) - 1
       invalid = step.events.filter(LLMEvent.is.toolInputError).map(invalidCall)
-      step = LLMResponse.empty()
+      step = ResponseFold.empty()
     }
     return Stream.runForEach(events, (event) =>
       Effect.sync(() => {
@@ -180,7 +181,7 @@ export function collect<E, R>(
           return
         }
         if (event.type === "step-start") betweenSteps = false
-        step = LLMResponse.reduce(step, event)
+        step = ResponseFold.reduce(step, event)
         if (event.type !== "step-finish") return
         close(event.reason, event.usage)
         betweenSteps = true
