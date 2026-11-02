@@ -14,6 +14,7 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -292,28 +293,18 @@ export const image = provider.image
 export const chat = provider.chat
 export const responses = provider.responses
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const responsesModel: ProviderPackage.Model<
   Settings<OpenRouterResponsesProviderOptionsInput>,
   OpenRouterResponsesProviderOptionsInput
-> = (modelID, settings) => configure(config(settings)).responses(modelID)
+> = (modelID, settings) => configure(toConfig(settings)).responses(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 
 export * as OpenRouter from "./openrouter.js"

@@ -2,6 +2,7 @@ import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../
 import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("opencode")
 const baseURL = "https://opencode.ai/inference/systemone/v1"
@@ -32,10 +33,9 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 
-export const decisionModel = (modelID: string, { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) =>
-  configure({ apiKey, baseURL, headers, http: body === undefined ? undefined : { body } }).decision(
-    modelID,
-    providerOptions,
-  )
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
 export * as OpenCode from "./opencode.js"

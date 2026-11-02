@@ -5,6 +5,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("cerebras")
 const baseURL = "https://api.cerebras.ai/v1"
@@ -56,14 +57,5 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)

@@ -10,6 +10,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("meta")
 const baseURL = "https://api.meta.ai/v1"
@@ -151,24 +152,14 @@ export const messages = provider.messages
 export const image = provider.image
 
 export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).responses(modelID)
+  configure(toConfig(settings)).responses(modelID)
 
 export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).chat(modelID)
+  configure(toConfig(settings)).chat(modelID)
 
 export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).messages(modelID)
+  configure(toConfig(settings)).messages(modelID)
 
-export const imageModel = (modelID: string, settings?: Settings) => fromSettings(settings).image(modelID)
-
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  })
-}
+export const imageModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).image(modelID)
 
 export * as Meta from "./meta.js"

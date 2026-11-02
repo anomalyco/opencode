@@ -3,6 +3,7 @@ import { MistralChat } from "../protocols/mistral-chat.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("mistral")
 
@@ -39,16 +40,7 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ProviderOptions> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Mistral from "./mistral.js"

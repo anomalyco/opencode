@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("cohere")
 const COMPATIBILITY_BASE_URL = "https://api.cohere.ai/compatibility/v1"
@@ -51,15 +52,6 @@ export const configure = (input: Config = {}) => {
 }
 export const provider = configure()
 export const chat = provider.chat
-export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsInput> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 export * as Cohere from "./cohere.js"

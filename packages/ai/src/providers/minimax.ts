@@ -12,6 +12,7 @@ import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("minimax")
 
@@ -137,9 +138,9 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 
 export const model: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings<MiniMaxImageOptions>) => {
-  const input = config(settings)
+  const input = toConfig<Settings<{}>>(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 
@@ -147,15 +148,5 @@ export const messages = provider.messages
 export const chat = provider.chat
 export const responses = provider.responses
 export const image = provider.image
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<{}> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
 
 export * as MiniMax from "./minimax.js"
