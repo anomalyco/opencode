@@ -35,21 +35,24 @@ test("uses the last configured model and variant ahead of recents", async () => 
 })
 
 test.each(["build", "reviewer"])(
-  "an explicit CLI model overrides the %s agent default until the user selects another model",
+  "an explicit CLI model initializes only the starting %s agent and preserves manual choices",
   async (id) => {
     await using setup = await renderLocal({
-      models: [model("first"), model("second"), model("third")],
+      models: [model("first"), model("second"), model("third"), model("fourth")],
       args: { model: "provider/second" },
-      agents: [agent(id, { providerID: "provider", id: "first" }), agent("plan")],
+      agents: [
+        agent(id, { providerID: "provider", id: "first" }),
+        agent("plan", { providerID: "provider", id: "third" }),
+      ],
     })
     expect(setup.local.agent.current()?.id).toBe(id)
     expect(setup.local.model.current()?.modelID).toBe("second")
-    setup.local.model.set({ providerID: "provider", modelID: "third" })
-    expect(setup.local.model.current()?.modelID).toBe("third")
+    setup.local.model.set({ providerID: "provider", modelID: "fourth" })
+    expect(setup.local.model.current()?.modelID).toBe("fourth")
     setup.local.agent.set("plan")
-    expect(setup.local.model.current()?.modelID).toBe("second")
-    setup.local.agent.set(id)
     expect(setup.local.model.current()?.modelID).toBe("third")
+    setup.local.agent.set(id)
+    expect(setup.local.model.current()?.modelID).toBe("fourth")
     expect(setup.local.agent.current()?.model).toEqual({ providerID: "provider", id: "first" })
   },
 )
@@ -66,13 +69,15 @@ test.each([undefined, "provider/missing"])("retains the agent model when the CLI
 test("an explicit CLI model preserves the model of a resumed session", async () => {
   await using setup = await renderLocal({
     models: [model("first"), model("second")],
-    args: { model: "provider/second" },
+    args: { model: "provider/second", sessionID: "ses_first" },
     sessions: [session("ses_first", { providerID: "provider", id: "first" })],
   })
   await setup.data.session.sync("ses_first")
   setup.route.navigate({ type: "session", sessionID: "ses_first" })
   expect(setup.local.model.current()?.modelID).toBe("first")
   expect(setup.data.session.get("ses_first")?.model).toEqual({ providerID: "provider", id: "first" })
+  setup.route.navigate({ type: "home" })
+  expect(setup.local.model.current()?.modelID).toBe("first")
 })
 
 test("switching agents restores their model and variant within the session", async () => {

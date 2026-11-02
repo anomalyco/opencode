@@ -332,6 +332,7 @@ export function Session(props: {
 
   createEffect(() => {
     if (client.connection.status() !== "connected") return
+    if (args.continue && route.sessionID === "dummy") return
     setSynced(false)
     const sessionID = route.sessionID
     void (async () => {

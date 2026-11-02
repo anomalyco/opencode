@@ -668,14 +668,12 @@ function App() {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)
-        const valid = providerID.length > 0 && modelID.length > 0
-        if (!valid)
+        if (!providerID || !modelID)
           toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
           })
-        if (valid) local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID && !args.fork) {
         route.navigate({
@@ -701,7 +699,10 @@ function App() {
       })
       .then((response) => {
         const match = response.data[0]?.id
-        if (!match) return
+        if (!match) {
+          route.navigate({ type: "home" })
+          return
+        }
         if (!args.fork) {
           route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
