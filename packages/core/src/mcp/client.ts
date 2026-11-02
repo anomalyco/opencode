@@ -566,16 +566,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: explain(error), answered: !unreachable(error) })
+  return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
-// time, or is overloaded or down for now. A failed auto probe wraps the error it hit.
-function unreachable(error: unknown): boolean {
+// time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.
+function repeats(error: unknown): boolean {
   if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed && error.cause !== undefined)
-    return unreachable(error.cause)
+    return repeats(error.cause)
   return (
     (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
+    (error instanceof SdkHttpError && error.status === 403) ||
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )

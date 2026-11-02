@@ -3314,23 +3314,34 @@ describe("MCP pool", () => {
     }),
   )
 
-  live("keeps pooling a server that was down when first tried", () =>
-    Effect.gen(function* () {
-      const down = { value: true }
-      const server = yield* resourceServer({
-        modern: true,
-        resources: false,
-        respond: () => (down.value ? new Response(null, { status: 503 }) : undefined),
-      })
-      const pool = yield* makePool
-      const a = yield* open(pooled(server.url), pool, directories[0])
-      expect((yield* status(a.mcp))?.status).toBe("failed")
-      down.value = false
-      yield* a.mcp.connect("resources")
-      yield* open(pooled(server.url), pool, directories[1])
-      expect(server.state.toolLists).toBe(1)
-    }),
-  )
+  // A server that is down, or that refuses this client, would refuse a private connection too.
+  for (const [code, what, attempts] of [
+    [503, "was down", 3],
+    [403, "refused access", 1],
+  ] as const)
+    live(`keeps pooling a server that ${what} when first tried`, () =>
+      Effect.gen(function* () {
+        const refusing = { value: true, count: 0 }
+        const server = yield* resourceServer({
+          modern: true,
+          resources: false,
+          respond: () => {
+            if (!refusing.value) return undefined
+            refusing.count += 1
+            return new Response(null, { status: code })
+          },
+        })
+        const pool = yield* makePool
+        const a = yield* open(pooled(server.url), pool, directories[0])
+        expect((yield* status(a.mcp))?.status).toBe("failed")
+        // The startup retries transient failures, and nothing tries a private connection afterwards.
+        expect(refusing.count).toBe(attempts)
+        refusing.value = false
+        yield* a.mcp.connect("resources")
+        yield* open(pooled(server.url), pool, directories[1])
+        expect(server.state.toolLists).toBe(1)
+      }),
+    )
 
   live("fails a pooled server that can't be spawned after one attempt", () =>
     Effect.gen(function* () {
