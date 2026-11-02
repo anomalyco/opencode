@@ -9,43 +9,16 @@ import path from "path"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
-// The changelog covers OpenCode itself and its clients. Commits that only touch these paths, such as the console, stats,
-// cloud functions, docs, websites, infra, release tooling, and root files, are left out.
+// Commits that only touch these folders, such as the console, stats, cloud functions, docs, websites, and infra, are
+// left out of the changelog.
 const changelogExclusions = [
   ":(exclude)packages/console",
-  ":(exclude)packages/effect-drizzle-sqlite",
   ":(exclude)packages/function",
-  ":(exclude)packages/http-recorder",
-  ":(exclude)packages/httpapi-codegen",
-  ":(exclude)packages/identity",
   ":(exclude)packages/posts",
-  ":(exclude)packages/script",
-  ":(exclude)packages/simulation",
   ":(exclude)packages/stats",
-  ":(exclude)packages/stories",
   ":(exclude)packages/web",
   ":(exclude)services",
   ":(exclude)infra",
-  ":(exclude)salesforce",
-  ":(exclude)nix",
-  ":(exclude)specs",
-  ":(exclude)perf",
-  ":(exclude)script",
-  ":(exclude).github",
-  ":(exclude).husky",
-  ":(exclude).opencode",
-  ":(exclude).vscode",
-  ":(exclude).zed",
-  // In glob pathspecs * does not match /, so these only cover root files. The install script is a root file and counts.
-  ":(exclude,glob).*",
-  ":(exclude,glob)*.json",
-  ":(exclude,glob)*.lock",
-  ":(exclude,glob)*.md",
-  ":(exclude,glob)*.nix",
-  ":(exclude,glob)*.png",
-  ":(exclude,glob)*.toml",
-  ":(exclude,glob)*.ts",
-  ":(exclude)LICENSE",
 ]
 const review = path.join(root, "RELEASE_REVIEW.md")
 const { values, positionals } = parseArgs({
@@ -212,15 +185,14 @@ The previous stable V2 release is ${base}. These commits from
 
 ${commits}
 
-Inspect every relevant commit and read its actual diff with \`git show <commit> -- ${pathspec}\`. The excluded paths
-are not part of OpenCode or its clients. Ignore any part of a commit in them, such as the console, stats, cloud
-functions, docs, websites, infra, and release tooling. Do not use a whole-tree \`git diff\` between the endpoints, which includes
-V1 history merged into dev. Do not compare against V1 release tags or commits outside that range. Do not rely only on
-commit titles. Write a user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty
-sections and changes that are entirely internal. Group bug fixes separately from improvements. Preserve community
-contributor attribution when it is available from merged pull requests, but never thank authors listed in
-.github/TEAM_MEMBERS. Leave out changes to the @opencode/ai package in packages/ai unless they change how OpenCode itself
-behaves for users; then describe only that OpenCode behavior.
+Inspect every relevant commit and read its actual diff with \`git show <commit> -- ${pathspec}\`. The excluded folders
+are not part of OpenCode or its clients, so ignore any part of a commit in them. Do not use a whole-tree \`git diff\`
+between the endpoints, which includes V1 history merged into dev. Do not compare against V1 release tags or commits
+outside that range. Do not rely only on commit titles. Write a user-facing changelog with sections for Core, TUI,
+Desktop, SDK, and Extensions, omitting empty sections and changes that are entirely internal. Group bug fixes separately
+from improvements. Preserve community contributor attribution when it is available from merged pull requests, but never
+thank authors listed in .github/TEAM_MEMBERS. Leave out changes to the @opencode/ai package in packages/ai unless they
+change how OpenCode itself behaves for users; then describe only that OpenCode behavior.
 
 Start the changelog with a "### Highlights" section: the few changes worth telling people about, written for humans.
 Pick 2 to 5 user-visible changes a user would notice, try, or share: new capabilities, clearly better workflows, or fixes
