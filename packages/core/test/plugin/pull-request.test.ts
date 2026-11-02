@@ -135,6 +135,13 @@ it.effect("reads the selected checkout without writes and preserves each artifac
   }),
 )
 
+it.effect("reads a pull request when the local branch has a different name", () =>
+  Effect.gen(function* () {
+    const run = yield* fixture([git(head, "mywork"), identity, result(JSON.stringify(snapshot())), git(head, "mywork")])
+    expect(yield* run.read).toMatchObject({ status: "available", branch: "mywork", localHead: head, head })
+  }),
+)
+
 for (const entry of [
   { status: "COMPLETED", conclusion: "FAILURE", expected: "failure" },
   { status: "IN_PROGRESS", conclusion: "SUCCESS", expected: "pending" },

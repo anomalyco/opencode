@@ -138,8 +138,7 @@ export const read = Effect.fn("PullRequest.read")(
     const data = (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Response))(response.stdout.toString("utf8")))
       .data.node
     const after = yield* run(gitExecutable(), ["rev-parse", "HEAD", "--abbrev-ref", "HEAD"])
-    if (after.exitCode !== 0 || !before.stdout.equals(after.stdout) || data.headRefName !== branch)
-      return unavailable("changed")
+    if (after.exitCode !== 0 || !before.stdout.equals(after.stdout)) return unavailable("changed")
     const commit = data.commits.nodes[0]?.commit
     const checks = commit?.statusCheckRollup?.contexts
 
