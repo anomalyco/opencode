@@ -1013,6 +1013,9 @@ test("server groups can be reordered by dragging their headers", async ({ page }
 
   await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
   await page.mouse.up()
+  await expect(
+    page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`),
+  ).not.toHaveAttribute("data-dragging", "true")
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1027,6 +1030,9 @@ test("server groups can be reordered by dragging their headers", async ({ page }
     .locator(`[data-action="tab-server-group-drag"][data-server="${SERVER}"]`)
     .dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`))
   await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+  await expect(
+    page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`),
+  ).not.toHaveAttribute("data-dragging", "true")
 })
 
 test("a remote tab stays busy while a child session runs", async ({ page }) => {

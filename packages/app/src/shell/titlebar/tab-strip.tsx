@@ -726,12 +726,27 @@ export function TitlebarTabStrip(props: {
   function dropGroup(event: DragEvent) {
     event.preventDefault()
     event.stopPropagation()
-    setDrag({})
+    setDrag("server", undefined)
   }
 
   function endGroupDrag() {
-    setDrag({})
+    setDrag("server", undefined)
   }
+
+  // The dragged header can move while groups reorder, so its own dragend is not
+  // guaranteed to reach this component. Clear from the window instead.
+  createEffect(() => {
+    if (!drag.server) return
+
+    const clear = () => setDrag("server", undefined)
+    const events = ["dragend", "drop", "mouseup", "pointerup", "blur"] as const
+
+    for (const event of events) window.addEventListener(event, clear, true)
+
+    onCleanup(() => {
+      for (const event of events) window.removeEventListener(event, clear, true)
+    })
+  })
 
   return (
     <div
@@ -895,7 +910,7 @@ export function TitlebarTabStrip(props: {
                             data-slot="tab-server-group"
                             data-server={tab.server}
                             data-action="tab-server-group-drag"
-                            data-dragging={drag.server === tab.server ? "true" : undefined}
+                            data-dragging={drag.server === tab.server ? "true" : "false"}
                             draggable={true}
                             title={language.t("session.tab.serverGroup.drag", { server: title() })}
                             class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent active:cursor-grabbing"
