@@ -9,7 +9,12 @@ import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
+import type { CodeModeFs } from "./codemode/fs.js"
 import { CodeModeTool } from "./codemode/tool.js"
+import { Environment } from "./environment/index.js"
+import { FileAccess } from "./file-access.js"
+import { FileMutation } from "./file-mutation.js"
+import { FileWrite } from "./file-write.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -87,6 +92,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const files = yield* Effect.context<CodeModeFs.Services>()
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -274,6 +280,7 @@ const layer = Layer.effect(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
+                files,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -415,5 +422,13 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node],
+  deps: [
+    PluginHooks.node,
+    Image.node,
+    Permission.node,
+    Environment.node,
+    FileAccess.node,
+    FileMutation.node,
+    FileWrite.node,
+  ],
 })

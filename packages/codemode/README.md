@@ -114,8 +114,9 @@ that returns a Promise or an Effect, so a denied call rejects its promise like a
 Extension.make({ name: "web", globals: { fetch: Extension.async((url: string) => globalThis.fetch(url)) } })
 ```
 
-A global may return a value, a Promise, or an Effect. An Effect's requirements join the runtime's environment the same
-way a tool's do, so the host can provide per-execution services such as the calling session:
+A global may return a value, a Promise, or an Effect. A synchronous global's Effect runs to completion before the call
+returns, so the host can offer blocking calls such as `fs.readFileSync`. An Effect's requirements join the runtime's
+environment the same way a tool's do, so the host can provide per-execution services such as the calling session:
 
 ```ts
 const web = Extension.make({

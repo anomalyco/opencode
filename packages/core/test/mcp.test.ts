@@ -68,7 +68,7 @@ import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { imagePassthrough } from "./lib/image"
-import { location } from "./fixture/location"
+import { location, tempLocationLayer } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
@@ -586,6 +586,7 @@ const it = testEffect(
     Permission.node.replace(permissions),
     Bus.node.replace(events),
     Image.node.replace(imagePassthrough),
+    Location.node.replace(tempLocationLayer),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ]),
 )
@@ -2534,6 +2535,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            Location.node.replace(tempLocationLayer),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2586,6 +2588,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        Location.node.replace(tempLocationLayer),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -2626,6 +2629,7 @@ const startupRegistry = (url: string) =>
     Bus.node.replace(events),
     Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
+    Location.node.replace(tempLocationLayer),
   ])
 
 testEffect(Layer.empty).effect("flush waits for a server that connects within its startup window", () =>
