@@ -304,13 +304,14 @@ const layer = Layer.effect(
               retry: proposed,
             }),
           recoverContinuation,
-          recoverOverflow: Effect.suspend(() =>
-            recoverOverflow
-              ? compaction
-                  .compact({ reason: "overflow", context: loaded, estimate })
-                  .pipe(Effect.map((result) => result.status === "completed"))
-              : Effect.succeed(false),
-          ),
+          recoverOverflow: (reason) =>
+            Effect.suspend(() =>
+              recoverOverflow
+                ? compaction
+                    .compact({ reason, context: loaded, estimate })
+                    .pipe(Effect.map((result) => result.status === "completed"))
+                : Effect.succeed(false),
+            ),
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
