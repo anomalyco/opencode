@@ -7,3 +7,4 @@ These packages are not bundled with OpenCode or loaded automatically. Do not add
 | Plugin                   | Directory                |
 | ------------------------ | ------------------------ |
 | [Figma](figma/README.md) | `packages/plugins/figma` |
+| [Ralph Loop](ralph-loop/README.md) | `packages/plugins/ralph-loop` |

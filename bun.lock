@@ -571,6 +571,13 @@
         "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
       },
     },
+    "packages/plugins/ralph-loop": {
+      "name": "@opencode/plugin-ralph-loop",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
+      },
+    },
     "packages/posts": {
       "name": "@opencode/posts",
       "dependencies": {
@@ -1934,6 +1941,8 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
+
+    "@opencode/plugin-ralph-loop": ["@opencode/plugin-ralph-loop@workspace:packages/plugins/ralph-loop"],
 
     "@opencode/posts": ["@opencode/posts@workspace:packages/posts"],
 
