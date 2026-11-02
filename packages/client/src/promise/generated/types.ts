@@ -2506,6 +2506,7 @@ export type ConfigEntry =
           media_blob?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
+          codemode_fs?: boolean
           artifacts?: boolean
           subagent_depth?: number
           location_idle_timeout?: string | false
