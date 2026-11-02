@@ -77,7 +77,6 @@
   "devDependencies": {
     "@ai-sdk/openai-compatible": "2.0.41",
     "@anthropic-ai/claude-agent-sdk": "0.3.301",
-    "@effect/platform-node": "catalog:",
     "@opencode/http-recorder": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -97,6 +96,7 @@
   "dependencies": {
     "@ai-sdk/provider": "3.0.19",
     "@ai-sdk/provider-utils": "4.0.62",
+    "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "@ff-labs/fff-bun": "0.10.5",
