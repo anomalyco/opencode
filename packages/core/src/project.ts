@@ -126,6 +126,10 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
   }
 }
 
+function directoryIdentity(directory: AbsolutePath) {
+  return ID.make(Hash.fast(`directory:${directory}`))
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -242,6 +246,20 @@ const layer = Layer.effect(
                   .pipe(Effect.orDie, Effect.asVoid),
             },
           )
+          // An unborn repository starts with a directory-derived id. Once a remote or
+          // root commit upgrades it, that placeholder would linger as a second project
+          // for the same directory, so archive it after its sessions have moved.
+          if (item.directory !== project.canonical) return
+          if (project.previous === undefined || project.previous === project.id) return
+          if (project.previous !== directoryIdentity(directory)) return
+          const archived = yield* db
+            .update(ProjectTable)
+            .set({ time_archived: Date.now(), time_updated: sql`${ProjectTable.time_updated}` })
+            .where(and(eq(ProjectTable.id, project.previous), isNull(ProjectTable.time_archived)))
+            .returning()
+            .get()
+            .pipe(Effect.orDie)
+          if (archived) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(archived))
         }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
       }
       return project
@@ -361,7 +379,12 @@ const layer = Layer.effect(
           return value
         })
       const previous = yield* cached(repo.commonDirectory)
-      const id =
+      // An unborn repository has neither a remote nor a root commit. Give it a
+      // directory-derived identity instead of the shared global project so unrelated
+      // fresh repositories never share sessions. When an identity appears later, the
+      // directory id becomes `previous`, moving existing sessions onto the new id.
+      const directoryID = directoryIdentity(AbsolutePath.make(yield* fs.resolve(repo.worktree)))
+      const identity =
         (yield* remote(repo).pipe(fallback(undefined))) ??
         previous ??
         (yield* rootCommit(repo).pipe(fallback(undefined)))
@@ -373,8 +396,8 @@ const layer = Layer.effect(
               fallback(repo.worktree),
             )
       const resolved: Resolved = {
-        previous,
-        id: id ?? ID.global,
+        previous: previous ?? (identity ? directoryID : undefined),
+        id: identity ?? directoryID,
         directory: repo.worktree,
         canonical,
         vcs: { type: "git" as const, store: repo.commonDirectory },
@@ -451,7 +474,7 @@ const layer = Layer.effect(
       }
 
       return yield* save({
-        id: ID.make(Hash.fast(`directory:${directory}`)),
+        id: directoryIdentity(directory),
         directory,
         canonical: directory,
         vcs: undefined,
