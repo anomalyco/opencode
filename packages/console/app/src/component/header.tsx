@@ -18,6 +18,7 @@ import { Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
+import { strip } from "~/lib/language"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
@@ -40,7 +41,7 @@ export function Header() {
   const i18n = useI18n()
   const language = useLanguage()
   const location = useLocation()
-  const onDownload = () => location.pathname.replace(/\/$/, "") === language.route("/download")
+  const onDownload = () => strip(location.pathname) === "/download"
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
