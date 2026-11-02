@@ -58,14 +58,14 @@ export const make = Effect.fn("PluginModule.make")(function* () {
   }
 })
 
-// A missing dependency may have missing parents too. Watch the nearest existing
-// ancestor recursively so creating the rest of the path can trigger recovery.
 // A local plugin's directory (or legacy standalone file), where clients resolve its other parts.
 export function source(target: string, version?: string): Source {
   if (path.isAbsolute(target)) return { type: "local", path: target }
   return { type: "package", target, ...(version ? { version } : {}) }
 }
 
+// A missing dependency may have missing parents too. Watch the nearest existing
+// ancestor recursively so creating the rest of the path can trigger recovery.
 function watchTarget(file: string): Promise<Watcher.WatchInput> {
   return stat(file).then(
     (info) => ({ path: file, type: info.isDirectory() ? "directory" : "file" }),
