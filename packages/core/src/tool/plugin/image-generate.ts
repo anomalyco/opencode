@@ -156,46 +156,54 @@ export const Plugin = {
     const readImage = Effect.fn("ImageGenerateTool.readImage")(function* (
       source: string,
       context: FileAccess.Invocation,
-      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
     ) {
-      const bytes = yield* readBytes(source, context, fetchAllowed)
+      const bytes = /^https?:\/\//i.test(source)
+        ? yield* Effect.gen(function* () {
+            // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
+            yield* permission.assert({
+              action: "webfetch",
+              resources: [source],
+              save: ["*"],
+              metadata: { url: source },
+              sessionID: context.sessionID,
+              agent: context.agent,
+              source: { type: "tool", messageID: context.messageID, id: context.id },
+            })
+            return yield* Effect.gen(function* () {
+              const response = yield* http
+                .execute(HttpClientRequest.get(source))
+                .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
+              return yield* collectBoundedResponseBody(
+                response,
+                MAX_INPUT_BYTES,
+                () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
+              )
+            }).pipe(
+              Effect.timeoutOrElse({
+                duration: DOWNLOAD_TIMEOUT,
+                orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
+              }),
+              Effect.mapError(toolFailure(`Unable to download ${source}`)),
+            )
+          })
+        : yield* Effect.gen(function* () {
+            const target = yield* access.authorizeRead(source, context)
+            const info = yield* environment.files
+              .stat(target.absolute)
+              .pipe(
+                Effect.catchTag(
+                  "Environment.NotFound",
+                  () => new ToolFailure({ message: `File not found: ${source}` }),
+                ),
+              )
+            if (info.size > MAX_INPUT_BYTES)
+              return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
+            return (yield* environment.files.read(target.absolute)).bytes
+          })
       const mime = Mime.detect(bytes)
       if (!INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
       return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
-    })
-
-    const readBytes = Effect.fn("ImageGenerateTool.readBytes")(function* (
-      source: string,
-      context: FileAccess.Invocation,
-      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
-    ) {
-      if (/^https?:\/\//i.test(source)) {
-        // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
-        yield* fetchAllowed(source)
-        return yield* Effect.gen(function* () {
-          const response = yield* http
-            .execute(HttpClientRequest.get(source))
-            .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
-          return yield* collectBoundedResponseBody(
-            response,
-            MAX_INPUT_BYTES,
-            () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
-          )
-        }).pipe(
-          Effect.timeoutOrElse({
-            duration: DOWNLOAD_TIMEOUT,
-            orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
-          }),
-          Effect.mapError(toolFailure(`Unable to download ${source}`)),
-        )
-      }
-      const target = yield* access.authorizeRead(source, context)
-      const info = yield* environment.files
-        .stat(target.absolute)
-        .pipe(Effect.catchTag("Environment.NotFound", () => new ToolFailure({ message: `File not found: ${source}` })))
-      if (info.size > MAX_INPUT_BYTES) return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
-      return (yield* environment.files.read(target.absolute)).bytes
     })
 
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
@@ -288,19 +296,7 @@ export const Plugin = {
                 })
               }
               const images = input.images
-                ? yield* Effect.forEach(input.images, (image) =>
-                    readImage(image, context, (url) =>
-                      permission.assert({
-                        action: "webfetch",
-                        resources: [url],
-                        save: ["*"],
-                        metadata: { url },
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      }),
-                    ),
-                  )
+                ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
                 : undefined
 
               // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.

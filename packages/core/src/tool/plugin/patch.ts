@@ -231,22 +231,17 @@ export const Plugin = {
                 prepared,
                 (change) =>
                   Effect.gen(function* () {
-                    if (change.type === "delete") {
+                    const moveTarget = change.type === "update" ? change.moveTarget : undefined
+                    const target = moveTarget ?? change.target
+                    if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
-                      applied.push({
-                        type: change.type,
-                        resource: change.target.resource,
-                        target: change.target.absolute,
-                      })
-                      return
-                    }
-                    if (change.type === "update" && change.moveTarget) {
-                      const moveTarget = change.moveTarget
+                    if (change.type !== "delete")
                       yield* environment.files
-                        .write(moveTarget.absolute, new TextEncoder().encode(change.content))
-                        .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
+                        .write(target.absolute, new TextEncoder().encode(change.content))
+                        .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
+                    if (moveTarget)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
@@ -254,21 +249,7 @@ export const Plugin = {
                             fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
                           ),
                         )
-                      applied.push({
-                        type: change.type,
-                        resource: change.moveTarget.resource,
-                        target: change.moveTarget.absolute,
-                      })
-                      return
-                    }
-                    yield* environment.files
-                      .write(change.target.absolute, new TextEncoder().encode(change.content))
-                      .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                    applied.push({
-                      type: change.type,
-                      resource: change.target.resource,
-                      target: change.target.absolute,
-                    })
+                    applied.push({ type: change.type, resource: target.resource, target: target.absolute })
                   }),
                 { discard: true },
               )

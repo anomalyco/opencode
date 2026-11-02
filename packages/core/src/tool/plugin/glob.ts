@@ -5,6 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { toolFailure } from "../runtime.js"
+import { ToolSearch } from "../search.js"
 import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
@@ -80,44 +81,24 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const type = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
-                Effect.catchTag("Environment.NotFound", () =>
-                  Effect.fail(new ToolFailure({ message: `Search path does not exist: ${searchPath ?? "."}` })),
-                ),
-              )
+              const type = yield* ToolSearch.pathType(environment.files, target.absolute, searchPath ?? ".")
               if (type !== "directory")
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
               const root = target.absolute
-              const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
-              const entries = yield* ripgrep
-                .glob({
-                  cwd: root,
-                  pattern: input.pattern,
-                  hidden: input.hidden,
-                  limit: limit + 1,
-                })
-                .pipe(
-                  Effect.timeoutOrElse({
-                    duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
-                    orElse: () =>
-                      Effect.fail(
-                        new ToolFailure({
-                          message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
-                        }),
-                      ),
+              const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
+                ripgrep.glob({ cwd: root, pattern: input.pattern, hidden: input.hidden, limit }),
+              )
+              return {
+                entries: result.items.map((entry) =>
+                  FileSystem.Entry.make({
+                    ...entry,
+                    path: RelativePath.make(path.relative(location.directory, path.resolve(root, entry.path))),
                   }),
-                  Effect.map((result) =>
-                    result.map((entry) =>
-                      FileSystem.Entry.make({
-                        ...entry,
-                        path: RelativePath.make(path.relative(location.directory, path.resolve(root, entry.path))),
-                      }),
-                    ),
-                  ),
-                )
-              return { entries: entries.slice(0, limit), truncated: entries.length > limit }
+                ),
+                truncated: result.truncated,
+              }
             }).pipe(
               Effect.map((result) => ({
                 output: result.entries,
