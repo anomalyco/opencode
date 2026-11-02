@@ -256,6 +256,11 @@ export const layer = (options?: Options) =>
         if (!entry) return yield* new NotFoundError({ server: name })
         return entry
       })
+      const connected = Effect.fnUntraced(function* (name: ServerName) {
+        const entry = yield* requireServer(name)
+        yield* entry.startup.await
+        return { entry, client: entry.connection.client }
+      })
 
       const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
@@ -754,12 +759,14 @@ export const layer = (options?: Options) =>
           const client = attached.get(server)?.at(-1)
           if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server)))
             return yield* call(client.client).pipe(failed("client"))
-          const entry = yield* requireServer(server)
-          yield* entry.startup.await
-          const connected = entry.connection.client
-          if (!connected)
-            return yield* new ToolCallError({ server, tool: input.name, message: unavailable(server, entry.status) })
-          return yield* entry.connection.recovering(connected, call).pipe(failed("server"))
+          const target = yield* connected(server)
+          if (!target.client)
+            return yield* new ToolCallError({
+              server,
+              tool: input.name,
+              message: unavailable(server, target.entry.status),
+            })
+          return yield* target.entry.connection.recovering(target.client, call).pipe(failed("server"))
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
           return Array.from(entries)
@@ -778,12 +785,10 @@ export const layer = (options?: Options) =>
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
-          const entry = yield* requireServer(ServerName.make(input.server))
-          yield* entry.startup.await
-          const client = entry.connection.client
-          if (!client) return undefined
-          return yield* entry.connection
-            .recovering(client, (connection) => connection.prompt({ name: input.name, args: input.args }))
+          const target = yield* connected(ServerName.make(input.server))
+          if (!target.client) return undefined
+          return yield* target.entry.connection
+            .recovering(target.client, (connection) => connection.prompt({ name: input.name, args: input.args }))
             .pipe(Effect.orElseSucceed(() => undefined))
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
@@ -803,19 +808,15 @@ export const layer = (options?: Options) =>
         }),
         resources: Effect.fn("MCP.resources")(function* (input) {
           const name = ServerName.make(input.server)
-          const entry = yield* requireServer(name)
-          yield* entry.startup.await
-          const client = entry.connection.client
-          if (!client) return ResourceCatalog.make({ resources: [], templates: [] })
-          return mergeCatalogs([toCatalog(name, yield* entry.connection.catalog(client))])
+          const target = yield* connected(name)
+          if (!target.client) return ResourceCatalog.make({ resources: [], templates: [] })
+          return mergeCatalogs([toCatalog(name, yield* target.entry.connection.catalog(target.client))])
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
           const name = ServerName.make(input.server)
-          const entry = yield* requireServer(name)
-          yield* entry.startup.await
-          const client = entry.connection.client
-          if (!client) return undefined
-          const result = yield* entry.connection.recovering(client, (connection) =>
+          const target = yield* connected(name)
+          if (!target.client) return undefined
+          const result = yield* target.entry.connection.recovering(target.client, (connection) =>
             connection.readResource({ uri: input.uri }),
           )
           if (!result) return undefined
