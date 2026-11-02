@@ -4,6 +4,7 @@ import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createLead } from "~/lib/salesforce"
 import { inferenceSpendOptions } from "~/lib/inference-spend"
+import { contactReasons } from "~/lib/contact-reason"
 import { ENTERPRISE_SPAM_THRESHOLD, enterpriseSpamProbability } from "~/lib/enterprise-spam"
 import { verifyHcaptcha } from "~/lib/hcaptcha"
 
@@ -14,12 +15,17 @@ interface EnterpriseFormData {
   email: string
   phone?: string
   inferenceSpend?: string
+  /** Set only for an inquiry that isn't for sales; its `contactReasons` value. */
+  reason?: string
   alias?: string
   message: string
   captcha?: string
 }
 
 const EMAIL_OCTOPUS_LIST_ID = "1b381e5e-39bd-11f1-ba4a-cdd4791f0c43"
+// An inquiry that isn't for sales skips Salesforce and EmailOctopus. It's emailed here, titled with its reason, to be
+// forwarded to the team that handles it.
+const CONTACT_INBOX_EMAIL = "stefan@anoma.ly"
 
 function splitFullName(fullName: string) {
   const parts = fullName
@@ -97,6 +103,7 @@ export async function handleEnterpriseRequest(
   options: {
     salesforceSubmit?: (payload: Record<string, unknown>) => Promise<boolean>
     notifications?: boolean
+    send?: typeof sendEmail
     spam?: Parameters<typeof enterpriseSpamProbability>[1]
     captcha?: Parameters<typeof verifyHcaptcha>[1]
   } = {},
@@ -110,7 +117,10 @@ export async function handleEnterpriseRequest(
       return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
     }
 
-    if (!body.name || !body.role || !body.email || !body.message) {
+    // A sales inquiry names its sender and their role; any other inquiry only needs its reason.
+    const reason = body.reason === undefined ? undefined : contactReasons.find((item) => item.value === body.reason)
+    const complete = body.reason === undefined ? Boolean(body.name && body.role) : reason !== undefined
+    if (!body.email || !body.message || !complete) {
       return Response.json({ error: dict["enterprise.form.error.allFieldsRequired"] }, { status: 400 })
     }
 
@@ -145,6 +155,26 @@ export async function handleEnterpriseRequest(
       return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
     }
 
+    const send = options.send ?? sendEmail
+
+    if (reason) {
+      const sent = await send({
+        to: CONTACT_INBOX_EMAIL,
+        subject: reason.label,
+        body: `${escapeHtml(body.message)}<br><br>--<br>${escapeHtml(body.email)}`,
+        text: [body.message, "", "--", body.email].join("\n"),
+        replyTo: body.email,
+      }).then(
+        () => true,
+        (err) => {
+          console.error("Failed to send contact email:", err)
+          return false
+        },
+      )
+      if (!sent) return Response.json({ error: dict["enterprise.form.error.internalServer"] }, { status: 500 })
+      return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
+    }
+
     const emailContent = enterpriseEmailContent(body, inferenceSpend?.salesforceValue)
 
     const [lead, mail, octopus] = await Promise.all([
@@ -165,7 +195,7 @@ export async function handleEnterpriseRequest(
       }),
       options.notifications === false
         ? Promise.resolve(false)
-        : sendEmail({
+        : send({
             to: Resource.ENTERPRISE_SALES_INBOX_EMAIL.value,
             subject: `Enterprise Inquiry from ${body.name}`,
             body: emailContent.html,
