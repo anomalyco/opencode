@@ -227,6 +227,15 @@ function createServerController(
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
 
+  // The active index can arrive before session metadata. Load missing ancestors so a
+  // descendant still keeps its root busy after reconnecting, without reading transcripts.
+  createEffect(() => {
+    new Set(data.session.active().map((id) => data.session.root(id))).forEach((id) => {
+      if (data.session.get(id)) return
+      void data.session.sync(id).catch(() => undefined)
+    })
+  })
+
   // Transcripts otherwise stay loaded for every session this window ever opened. Open tabs and the three most
   // recently viewed sessions keep theirs; any other session reloads its transcript when it is opened again.
   createSessionRetention({

@@ -42,10 +42,7 @@ export function useSessionTabAvatarState(
 
     if (needsAttention()) return false
 
-    if (root?.())
-      return data.session
-        .list()
-        .some((session) => data.session.root(session.id) === sessionId() && sessionBusy(data, session.id))
+    if (root?.()) return [sessionId(), ...data.session.family(sessionId())].some((id) => sessionBusy(data, id))
 
     return sessionBusy(data, sessionId())
   })

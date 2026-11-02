@@ -478,6 +478,9 @@ export function SidebarSessions(props: {
   const sidebarOrder = props.grouping
     ? persisted(Persist.window("sidebar.order"), Schema.Array(Schema.String), [])
     : undefined
+  const collapsed = props.grouping
+    ? persisted(Persist.window("sidebar.collapsedProjects"), Schema.Array(Schema.String), [])
+    : undefined
   const indexed = createMemo(
     () =>
       new Map(
@@ -627,6 +630,7 @@ export function SidebarSessions(props: {
     () =>
       new Map(
         groups().map((group) => {
+          if (collapsed?.[0].includes(group.key)) return [group.key, [] as Tab[]] as const
           if (expanded[group.key]) return [group.key, group.tabs] as const
           const current = props.currentTab
           const active = current && group.tabs.find((tab) => tabKey(tab) === tabKey(current))
@@ -801,7 +805,7 @@ export function SidebarSessions(props: {
     <div
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
       data-orientation={vertical() ? "vertical" : "horizontal"}
-      class="relative min-w-0"
+      class="sidebar-sessions relative min-w-0"
       classList={{ "min-h-0 overflow-hidden": vertical() }}
     >
       <Show when={vertical() && props.grouping}>
@@ -922,10 +926,32 @@ export function SidebarSessions(props: {
                       >
                         <div class="flex min-w-0 items-center gap-2">
                           <h3
-                            dir="auto"
-                            class="min-w-0 flex-1 truncate text-[13px] leading-4 font-medium text-v2-text-text-base"
+                            aria-label={group().name}
+                            class="min-w-0 flex-1 text-[13px] leading-4 font-medium text-v2-text-text-base"
                           >
-                            {group().name}
+                            <button
+                              type="button"
+                              class="flex w-full min-w-0 items-center gap-1 rounded-sm text-start outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
+                              aria-label={language.t(
+                                collapsed?.[0].includes(key) ? "sidebar.project.expand" : "sidebar.project.collapse",
+                                { project: group().name },
+                              )}
+                              aria-expanded={!collapsed?.[0].includes(key)}
+                              onClick={() => {
+                                if (!collapsed?.[3]()) return
+                                collapsed[1]((keys) =>
+                                  keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key],
+                                )
+                              }}
+                            >
+                              <Icon
+                                name={collapsed?.[0].includes(key) ? "chevron-right" : "chevron-down"}
+                                class="shrink-0"
+                              />
+                              <span dir="auto" class="min-w-0 flex-1 truncate">
+                                {group().name}
+                              </span>
+                            </button>
                           </h3>
                           <span class="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-v2-text-text-faint">
                             {group().recent}/{group().total}
@@ -939,6 +965,7 @@ export function SidebarSessions(props: {
                                 aria-label={language.t("sidebar.project.newSession", { project: group().name })}
                                 title={language.t("sidebar.project.newSession", { project: group().name })}
                                 onClick={() => {
+                                  collapsed?.[1]((keys) => keys.filter((item) => item !== key))
                                   global.serverCtx(group().connection)?.projects.touch(directory())
                                   void tabs.newDraft({ server: group().connection, directory: directory() })
                                 }}
@@ -961,7 +988,7 @@ export function SidebarSessions(props: {
                   </Show>
                   <Show when={grouped() && groupsByKey().get(key)}>
                     {(group) => (
-                      <Show when={group().tabs.length > PROJECT_SESSION_LIMIT}>
+                      <Show when={!collapsed?.[0].includes(key) && group().tabs.length > PROJECT_SESSION_LIMIT}>
                         <Button
                           variant="ghost-muted"
                           size="small"

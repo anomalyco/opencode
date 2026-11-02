@@ -156,6 +156,15 @@
   gap: 2px;
 }
 
+/* Titles keep dir="auto", but align with the row so the close-button mask stays clear of their start. */
+.sidebar-sessions:dir(ltr) [data-titlebar-tab-title] {
+  text-align: left;
+}
+
+.sidebar-sessions:dir(rtl) [data-titlebar-tab-title] {
+  text-align: right;
+}
+
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-list][data-orientation="vertical"] {
   gap: 4px;
 }

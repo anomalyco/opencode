@@ -28,6 +28,33 @@ const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
 
+for (const locale of ["en", "ar"] as const) {
+  test(`Side bar keeps opposite-direction titles clear of the close affordance in ${locale}`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Mixed direction",
+      sessions: [{ ...a, title: locale === "ar" ? "Project task" : "مهمة المشروع" }],
+      seed: { locale, tabs: [a.id], settings: { appearance: { tabLayout: "sidebar" } } },
+    })
+    await page.goto(sessionHref(a.id))
+    const link = page.locator(`[data-slot="vertical-tabs-sidebar"] a[href="${sessionHref(a.id)}"]`)
+    await expect(link).toBeVisible()
+    await link.hover()
+    await expect
+      .poll(() =>
+        link.evaluate((element) => {
+          const title = element.querySelector("[data-titlebar-tab-title]")
+          if (!title) throw new Error("Missing session title")
+          const range = document.createRange()
+          range.selectNodeContents(title)
+          const text = range.getBoundingClientRect()
+          const row = element.getBoundingClientRect()
+          return getComputedStyle(element).direction === "rtl" ? text.left - row.left : row.right - text.right
+        }),
+      )
+      .toBeGreaterThan(40)
+  })
+}
+
 test("Side bar keeps project history and running sessions separate from the official interface modes", async ({
   page,
 }) => {
@@ -165,6 +192,149 @@ test("sidebar and Home share projects and history without opening session tabs",
   await expect(page.locator('[data-component="new-session"] [data-action="prompt-project"]')).toContainText(
     "Empty project",
   )
+})
+
+test("project headers collapse every session independently of the recent preview and preserve the choice", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Collapse project",
+    sessions: Array.from({ length: 7 }, (_, index) => ({ id: `ses_collapse_${index}`, title: `Task ${index}` })),
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const titles = sidebar.locator("[data-titlebar-tab-title]")
+  const collapse = sidebar.getByRole("button", { name: "Collapse project Collapse project", exact: true })
+  await expect(titles).toHaveCount(5)
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await collapse.focus()
+  await page.keyboard.press("Enter")
+  await expect(titles).toHaveCount(0)
+  await expect(sidebar.getByRole("button", { name: /Show 2 more sessions/ })).toHaveCount(0)
+  await expect(sidebar.getByRole("heading", { name: "Collapse project", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("region", { name: "Running sessions", exact: true })).toBeVisible()
+  await page.reload()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "Expand project Collapse project", exact: true }).click()
+  await expect(titles).toHaveCount(5)
+  await sidebar.getByRole("button", { name: "Show 2 more sessions in Collapse project", exact: true }).click()
+  await expect(titles).toHaveCount(7)
+  await collapse.click()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "Group sessions By project", exact: true }).click()
+  await page.getByRole("option", { name: "List", exact: true }).click()
+  await expect(titles).toHaveCount(7)
+  await sidebar.getByRole("button", { name: "Group sessions List", exact: true }).click()
+  await page.getByRole("option", { name: "By project", exact: true }).click()
+  await expect(titles).toHaveCount(0)
+  await sidebar.getByRole("button", { name: "New session in Collapse project", exact: true }).click()
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await expect(titles).toHaveCount(8)
+  await expect(page.locator('[data-component="new-session"] [data-action="prompt-project"]')).toContainText(
+    "Collapse project",
+  )
+})
+
+test("recent parents stay busy while descendants execute and busy icons resume after idle", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  const child = { id: "ses_busy_descendant", title: "Running child", parentID: a.id }
+  const grandchild = { id: "ses_busy_grandchild", title: "Running grandchild", parentID: child.id }
+  const workspace = await mockWorkspace(page, {
+    name: "Family status",
+    sessions: [
+      a,
+      child,
+      grandchild,
+      ...Array.from({ length: 24 }, (_, index) => ({ id: `ses_scroll_${index}`, title: `Scroll task ${index}` })),
+    ],
+    sessionStatus: { [grandchild.id]: { type: "running" } },
+    seed: { tabs: [], settings: { appearance: { tabLayout: "sidebar", tabGrouping: "none" } } },
+  })
+  await page.goto("/")
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const tab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
+  const spinner = tab.locator('[data-component="activity-ring"]')
+  await expect(tab.locator("[data-titlebar-tab]")).toHaveAttribute("data-status", "busy")
+  await expect(spinner).toBeVisible()
+  await spinner.scrollIntoViewIfNeeded()
+  await expect(
+    page
+      .locator('[data-component="home-session-row"]')
+      .filter({ hasText: a.title })
+      .locator('[data-component="activity-ring"]'),
+  ).toBeVisible()
+  const animations = (target = spinner) =>
+    target.evaluate((element) =>
+      element
+        .getAnimations({ subtree: true })
+        .map((animation) => ({ state: animation.playState, time: Number(animation.currentTime) })),
+    )
+  await expect.poll(async () => (await animations()).every((animation) => animation.state === "running")).toBe(true)
+  const childSpinner = sidebar
+    .getByRole("region", { name: "Running sessions", exact: true })
+    .getByRole("button")
+    .filter({ hasText: grandchild.title })
+    .locator('[data-component="activity-ring"]')
+  await expect
+    .poll(async () => {
+      const values = await animations(childSpinner)
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  await workspace.push([
+    {
+      id: "evt_family_finish",
+      created: 1700000002000,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: grandchild.id, seq: 1, version: 1 },
+      data: { sessionID: grandchild.id },
+    },
+  ])
+  await expect(tab.locator("[data-titlebar-tab]")).not.toHaveAttribute("data-status", "busy")
+  await workspace.push([
+    {
+      id: "evt_family_restart",
+      created: 1700000003000,
+      type: "session.execution.started",
+      durable: { aggregateID: grandchild.id, seq: 2, version: 1 },
+      data: { sessionID: grandchild.id },
+    },
+  ])
+  await expect(spinner).toBeVisible()
+  await expect
+    .poll(async () => {
+      const values = await animations()
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  const time = (await animations())[0]!.time
+  await expect.poll(async () => (await animations())[0]!.time).toBeGreaterThan(time)
+  const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+  await scroll.evaluate((element) => {
+    element.scrollTop = 0
+  })
+  await expect(spinner).toHaveAttribute("data-offscreen", "")
+  await spinner.scrollIntoViewIfNeeded()
+  await expect(spinner).not.toHaveAttribute("data-offscreen")
+  await expect.poll(async () => (await animations()).every((animation) => animation.state === "running")).toBe(true)
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduce")
+  await expect.poll(async () => (await animations()).length).toBe(0)
+  await expect.poll(async () => (await animations(childSpinner)).length).toBe(0)
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await expect
+    .poll(async () => {
+      const values = await animations()
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const values = await animations(childSpinner)
+      return values.length > 0 && values.every((animation) => animation.state === "running")
+    })
+    .toBe(true)
 })
 
 test("recent sessions caps each project at five and can reveal a selected overflow session", async ({ page }) => {

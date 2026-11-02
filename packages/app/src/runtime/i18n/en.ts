@@ -770,6 +770,8 @@ export const dict = {
   "sidebar.session.branch": "Branch: {{branch}}",
   "sidebar.session.worktree": "Worktree: {{path}}",
   "sidebar.project.newSession": "New session in {{project}}",
+  "sidebar.project.expand": "Expand project {{project}}",
+  "sidebar.project.collapse": "Collapse project {{project}}",
   "sidebar.recent.hide": "Hide from recent sessions",
   "sidebar.recent.more.one": "More ({{count}})",
   "sidebar.recent.more.other": "More ({{count}})",
