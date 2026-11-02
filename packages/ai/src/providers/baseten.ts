@@ -8,6 +8,7 @@ import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
@@ -84,20 +85,10 @@ export const provider = configure()
 export const decision = provider.decision
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 
 export * as Baseten from "./baseten.js"

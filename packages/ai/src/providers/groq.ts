@@ -8,6 +8,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("groq")
 const baseURL = "https://api.groq.com/openai/v1"
@@ -96,16 +97,7 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ProviderOptions> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Groq from "./groq.js"

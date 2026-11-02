@@ -23,6 +23,7 @@ import {
   type ProviderOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
 const baseURL = "https://ai-gateway.vercel.sh/v1"
@@ -269,30 +270,20 @@ export const chat = provider.chat
 export const image = provider.image
 
 export const model: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const messagesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).messages(modelID)
+  configure(toConfig(settings)).messages(modelID)
 export const responsesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).responses(modelID)
+  configure(toConfig(settings)).responses(modelID)
 export const chatModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+  configure(toConfig(settings)).chat(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"
