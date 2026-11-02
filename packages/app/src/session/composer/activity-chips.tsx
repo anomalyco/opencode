@@ -81,6 +81,7 @@ export function SessionActivityChips(props: {
 
   const alignment = useComposerLaneAlignment()
 
+
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
 

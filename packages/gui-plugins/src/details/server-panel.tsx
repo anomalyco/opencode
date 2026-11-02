@@ -791,7 +791,9 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
     Body: () => (
       <Show
         when={list().length}
-        fallback={<ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />}
+        fallback={
+          <ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />
+        }
       >
         <For each={list()}>
           {(item) => (

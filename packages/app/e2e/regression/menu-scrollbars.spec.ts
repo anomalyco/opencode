@@ -72,7 +72,6 @@ for (const surface of surfaces) {
     expect(overlaid.scrollbar).toBe(0)
     expect(overlaid.end).toBe(overlaid.start)
 
-    // High-contrast modes get the native scrollbar back, which follows the system colours.
     await page.emulateMedia({ forcedColors: "active" })
     await expect.poll(async () => (await geometry(list.viewport, list.row)).scrollbar).toBeGreaterThan(0)
   })

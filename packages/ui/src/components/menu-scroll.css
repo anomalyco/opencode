@@ -26,7 +26,6 @@
     display: none;
   }
 
-  /* Matches the shared native thumb in styles/scrollbar.css: a 4px pill in an 8px strip. */
   [data-slot="menu-scroll-thumb"] {
     position: absolute;
     z-index: 1;
