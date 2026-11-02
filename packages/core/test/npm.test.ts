@@ -2,8 +2,10 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Function, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { tmpdir } from "./fixture/tmpdir"
@@ -19,8 +21,11 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
     }),
   )
 
-const npmLayer = (cache: string) =>
-  AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
+const npmLayer = (cache: string, replacements: LayerNode.Replacements = []) =>
+  AppNodeBuilder.build(Npm.node, [
+    Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") })),
+    ...replacements,
+  ])
 
 async function createGitFixture(directory: string) {
   const repository = path.join(directory, "repository")
@@ -69,11 +74,11 @@ async function createRegistryFixture(directory: string) {
     await Bun.$`tar -czf package.tgz package`.cwd(root)
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
-  const state = { latest: "1.0.0", audits: 0 }
+  const state = { latest: "1.0.0", audits: 0, tarballs: 0, tarballDelay: 0 }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url)
       if (url.pathname.startsWith("/-/npm/v1/security/")) {
         state.audits++
@@ -91,7 +96,12 @@ async function createRegistryFixture(directory: string) {
           ),
         })
       const tarball = tarballs.get(url.pathname.slice(1).replace(".tgz", ""))
-      return tarball ? new Response(tarball) : new Response("missing", { status: 404 })
+      if (tarball) {
+        state.tarballs++
+        if (state.tarballDelay > 0) await Bun.sleep(state.tarballDelay)
+        return new Response(tarball)
+      }
+      return new Response("missing", { status: 404 })
     },
   })
   return {
@@ -166,6 +176,49 @@ describe("Npm.cacheKey", () => {
 })
 
 describe("Npm.add", () => {
+  test("coalesces concurrent installs across service instances", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@1.0.0"
+    await registry.configure(cache, spec)
+    registry.state.tarballDelay = 250
+
+    // Simulate independent location graphs. The instrumented lock deliberately
+    // does not serialize them: without process-wide coalescing both installs run.
+    const acquisitions = { count: 0 }
+    const withLock: EffectFlock.Interface["withLock"] = Function.dual(
+      (args) => Effect.isEffect(args[0]),
+      <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+        Effect.gen(function* () {
+          acquisitions.count++
+          return yield* body
+        }),
+    )
+    const lock = Layer.succeed(
+      EffectFlock.Service,
+      EffectFlock.Service.of({
+        acquire: () =>
+          Effect.sync(() => {
+            acquisitions.count++
+          }),
+        withLock,
+      }),
+    )
+    const replacements = [EffectFlock.node.replace(lock)]
+    const layers = [npmLayer(cache, replacements), npmLayer(cache, replacements)]
+    const add = (layer: (typeof layers)[number]) =>
+      Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* npm.add(spec)
+      }).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+
+    const [first, second] = await Promise.all(layers.map(add))
+    expect(first).toEqual(second)
+    expect(acquisitions.count).toBe(1)
+    expect(registry.state.tarballs).toBe(1)
+  })
+
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()
     const spec = "@fixture/provider@1.0.0"

@@ -2,7 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Clock, Deferred, Effect, Schema, Context, Layer, Option, FileSystem, Scope } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -128,6 +128,33 @@ const PackageLock = Schema.Struct({
 
 const retention = 7 * 24 * 60 * 60 * 1_000
 const stagingRetention = 60 * 60 * 1_000
+
+type InstallError = InstallFailedError | EffectFlock.LockError
+
+// Npm services belong to individual location graphs, so an instance-local map
+// cannot coordinate them. Share attempts across the whole process: the first
+// caller installs while the others await its result instead of entering their
+// own fixed-duration lock wait. The filesystem lock still coordinates processes.
+const installing = new Map<string, Deferred.Deferred<Package, InstallError>>()
+
+function singleFlight(key: string, effect: Effect.Effect<Package, InstallError, Scope.Scope>) {
+  return Effect.suspend(() => {
+    const existing = installing.get(key)
+    if (existing) return Deferred.await(existing)
+    const attempt = Deferred.makeUnsafe<Package, InstallError>()
+    installing.set(key, attempt)
+    return effect.pipe(
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          // Both success and failure are removed: later callers use the published
+          // generation after success, or get a fresh attempt after failure.
+          installing.delete(key)
+          Deferred.doneUnsafe(attempt, exit)
+        }),
+      ),
+    )
+  })
+}
 
 const layer = Layer.effect(
   Service,
@@ -343,7 +370,7 @@ const layer = Layer.effect(
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const dir = directory(pkg, target)
-      return yield* install(pkg, target, dir, false)
+      return yield* singleFlight(`add:${dir}`, install(pkg, target, dir, false))
     }, Effect.scoped)
 
     const resolve = Effect.fn("Npm.resolve")(function* (pkg: string) {
@@ -398,9 +425,14 @@ const layer = Layer.effect(
           cause: new Error("Package updates only support registry and Git package specs"),
         })
       if (!target.mutable) return yield* add(pkg)
-      const installed = yield* install(pkg, target, dir, true)
-      yield* collect(dir)
-      return installed
+      return yield* singleFlight(
+        `update:${dir}`,
+        Effect.gen(function* () {
+          const installed = yield* install(pkg, target, dir, true)
+          yield* collect(dir)
+          return installed
+        }),
+      )
     }, Effect.scoped)
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
