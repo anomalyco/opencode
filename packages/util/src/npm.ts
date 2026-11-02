@@ -371,8 +371,17 @@ const layer = Layer.effect(
       if (!installed)
         return yield* new InstallFailedError({ dir: root, cause: new Error(`Package is not installed: ${pkg}`) })
       const { manifest, resolve } = yield* Effect.promise(() => import("pacote"))
+      const { isReleaseAgeExcluded } = yield* Effect.promise(
+        // @ts-expect-error Arborist does not publish types for this internal module.
+        () => import("@npmcli/arborist/lib/release-age-exclude.js"),
+      )
+      const config = yield* NpmConfig.load(root)
       const options = {
-        ...(yield* NpmConfig.load(root)),
+        ...config,
+        // Arborist exempts min-release-age-exclude packages from `before` during installs, but pacote does not.
+        ...(target.type === "registry" && isReleaseAgeExcluded(target.name, config.minReleaseAgeExclude)
+          ? { before: null }
+          : {}),
         preferOnline: true,
         noGitRevCache: true,
         ignoreScripts: true,

@@ -70,6 +70,8 @@ async function createRegistryFixture(directory: string) {
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
   const state = { latest: "1.0.0", audits: 0 }
+  // 1.1.0 is published now, so a release-age window only allows 1.0.0.
+  const time = { "1.0.0": "2020-01-01T00:00:00.000Z", "1.1.0": new Date().toISOString() }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -83,6 +85,7 @@ async function createRegistryFixture(directory: string) {
         return Response.json({
           name: "@fixture/registry-plugin",
           "dist-tags": { latest: state.latest },
+          time,
           versions: Object.fromEntries(
             [...tarballs.keys()].map((version) => [
               version,
@@ -96,12 +99,12 @@ async function createRegistryFixture(directory: string) {
   })
   return {
     state,
-    async configure(cache: string, spec: string) {
+    async configure(cache: string, spec: string, npmrc = "") {
       const root = path.join(cache, "npm", await Npm.cacheKey(spec))
       await fs.mkdir(root, { recursive: true })
       await Bun.write(
         path.join(root, ".npmrc"),
-        `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=true\n`,
+        `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(directory, "npm-cache")}\nfetch-retries=0\naudit=true\n${npmrc}`,
       )
       return root
     },
@@ -442,5 +445,29 @@ describe("Npm.check and Npm.update", () => {
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
 
     expect(outdated).toBeFalse()
+  })
+
+  test.each([
+    { name: "holds back a release inside min-release-age", exclude: "", version: "1.0.0" },
+    {
+      name: "installs and checks a min-release-age-exclude package at its newest release",
+      exclude: "min-release-age-exclude[]=@fixture/*\n",
+      version: "1.1.0",
+    },
+  ])("$name", async (input) => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin@latest"
+    await registry.configure(cache, spec, `min-release-age=7\n${input.exclude}`)
+    registry.state.latest = "1.1.0"
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return { added: yield* npm.add(spec), outdated: yield* npm.check(spec) }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result.added.version).toBe(input.version)
+    expect(result.outdated).toBeFalse()
   })
 })
