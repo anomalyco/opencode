@@ -75,7 +75,7 @@ describe("InstructionBuiltIns", () => {
               scratch: directory,
               approval: "on-request",
               fullDiskRead: false,
-              status: () => ({ active: true, reads: "restricted", escalation: "on-request", writableRoots: [], readableRoots: [] }),
+              status: () => Effect.succeed({ active: true, reads: "restricted", escalation: "on-request", writableRoots: [], readableRoots: [] }),
             }),
           ),
         ])

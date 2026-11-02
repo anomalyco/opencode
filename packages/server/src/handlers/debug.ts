@@ -64,7 +64,7 @@ export const SandboxHandler = HttpApiBuilder.group(Api, "server.sandbox", (handl
       .handle("sandbox.status", (ctx) =>
         Effect.gen(function* () {
           const sandbox = yield* Sandbox.Service
-          return sandbox.status()
+          return yield* sandbox.status()
         }).pipe(
           Effect.provide(locations.get(requestRef(ctx.request))),
           locationErrors,

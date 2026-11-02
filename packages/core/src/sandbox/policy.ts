@@ -16,6 +16,10 @@ export interface Policy {
   readonly writableRoots: readonly string[]
   readonly protectedPaths: readonly string[]
   readonly unreadablePaths: readonly string[]
+  readonly referenceRoots?: readonly string[]
+  readonly referenceDataRoots?: readonly string[]
+  readonly referenceDeniedPaths?: readonly string[]
+  readonly referenceDeniedPatterns?: readonly string[]
   readonly scratch: string
 }
 

@@ -27,6 +27,11 @@ Read the attached docs reference and summarize api/authentication.md.
 Use references for documentation, shared libraries, examples, or source from
 another repository.
 
+With the [sandbox](/sandbox) enabled, registered references are trusted as
+read-only roots for agent operations, even when they are outside the workspace.
+Their contents may be read without a separate sandbox approval; registering a
+reference does not grant write access. Sandbox read exclusions still apply.
+
 ## Local
 
 Use `path` for a local directory:

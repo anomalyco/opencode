@@ -410,12 +410,7 @@ homebrewKernel(
       await Promise.all(Object.values(host).map((value) => fs.mkdir(value)))
       const confined = await MacSandbox.policy(host, {})
       const run = (command: string, args: string[]) => {
-        const launch = MacSandbox.launch(
-          confined,
-          command,
-          args,
-          SandboxPolicy.environment(process.env, host.scratch),
-        )
+        const launch = MacSandbox.launch(confined, command, args, SandboxPolicy.environment(process.env, host.scratch))
         return Bun.spawnSync([launch.command, ...launch.args], { cwd: host.directory, env: launch.env })
       }
       const python = run(homebrewPython, ["-I", "-B", "-c", 'import ssl, urllib.request; print("runtime ready")'])
@@ -426,6 +421,69 @@ homebrewKernel(
       expect(run("/bin/ls", ["/opt/homebrew/bin"]).exitCode).toBe(0)
       for (const directory of ["etc", "var", "share", "Library", "Caskroom"])
         expect(run("/bin/ls", [`/opt/homebrew/${directory}`]).exitCode).not.toBe(0)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+)
+
+kernel.each([false, true])(
+  "reference grants in OpenCode data preserve private files with fullDiskRead=%s",
+  async (fullDiskRead) => {
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-reference-policy-")))
+    try {
+      const host = {
+        directory: path.join(root, "workspace"),
+        scratch: path.join(root, "scratch"),
+        home: path.join(root, "home"),
+        config: path.join(root, "config"),
+        data: path.join(root, "data (test)"),
+        state: path.join(root, "state"),
+      }
+      await Promise.all(Object.values(host).map((value) => fs.mkdir(value)))
+      await fs.mkdir(path.join(host.data, "repos"))
+      await fs.mkdir(path.join(host.data, "log"))
+      await fs.writeFile(path.join(host.data, "repos", "readme"), "reference-public")
+      const authTarget = path.join(root, "auth-target")
+      await fs.writeFile(authTarget, "auth-secret")
+      await fs.symlink(authTarget, path.join(host.data, "auth.json"))
+      await fs.writeFile(path.join(host.data, "opencode.db"), "db-secret")
+      await fs.writeFile(path.join(host.data, "opencode.db-wal"), "wal-secret")
+      await fs.writeFile(path.join(host.data, "log", "log.txt"), "log-secret")
+      await fs.writeFile(path.join(host.config, "settings"), "config-secret")
+      const credentials = path.join(host.home, ".ssh")
+      await fs.mkdir(credentials)
+      await fs.writeFile(path.join(credentials, "key"), "ssh-secret")
+      const base = await MacSandbox.policy(host, { fullDiskRead })
+      const confined = await MacSandbox.references(base, host, [host.data, host.config, credentials])
+      // The pattern protects database files created after the profile was prepared.
+      await fs.writeFile(path.join(host.data, "opencode-new.db-shm"), "shm-secret")
+      await fs.writeFile(path.join(host.data, "OPENCODE-NEW.DB-JOURNAL"), "journal-secret")
+      const run = (command: string) => {
+        const launch = MacSandbox.launch(
+          confined,
+          "/bin/sh",
+          ["-c", command],
+          SandboxPolicy.environment(process.env, host.scratch),
+        )
+        return Bun.spawnSync([launch.command, ...launch.args], { cwd: host.directory, env: launch.env })
+      }
+      expect(run(`cat '${host.data}/repos/readme'`).stdout.toString()).toBe("reference-public")
+      expect(run(`ls '${host.data}'`).exitCode).toBe(0)
+      for (const target of [
+        path.join(host.data, "auth.json"),
+        authTarget,
+        path.join(host.data, "opencode.db"),
+        path.join(host.data, "opencode.db-wal"),
+        path.join(host.data, "opencode-new.db-shm"),
+        path.join(host.data, "OPENCODE-NEW.DB-JOURNAL"),
+        path.join(host.data, "log", "log.txt"),
+        path.join(host.config, "settings"),
+        path.join(credentials, "key"),
+      ]) {
+        expect(run(`cat '${target}'`).exitCode).not.toBe(0)
+      }
+      expect(run(`printf escape > '${host.data}/repos/new'`).exitCode).not.toBe(0)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }

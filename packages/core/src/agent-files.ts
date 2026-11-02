@@ -29,10 +29,9 @@ const layer = Layer.effect(
     if (!sandbox.enabled)
       return Service.of({ sandboxed: false, files: environment.files, checkWrites: () => Effect.void })
 
-    // Resolve lazily: unsupported hosts and helper failures fail the invocation, never fall back.
-    const confined = yield* Effect.cached(sandbox.files)
+    // Resolve per operation so reference changes take effect without a host I/O fallback.
     const binding = (target: string) =>
-      confined.pipe(Effect.mapError((cause) => new Environment.Failed({ path: target, cause })))
+      sandbox.files.pipe(Effect.mapError((cause) => new Environment.Failed({ path: target, cause })))
     const files: Environment.Files = {
       read: (target, range) => binding(target).pipe(Effect.flatMap((files) => files.read(target, range))),
       stat: (target) => binding(target).pipe(Effect.flatMap((files) => files.stat(target))),

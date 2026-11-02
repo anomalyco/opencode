@@ -73,16 +73,24 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
   const root = path.join(temporary.path, name)
   const directory = path.join(root, "workspace")
   const outside = path.join(root, "outside")
+  const reference = path.join(root, "reference")
+  const data = path.join(root, "data", "opencode")
   const config = path.join(root, "config")
   const cache = path.join(root, "cache", "opencode", "bin")
   await Promise.all(
-    [directory, outside, config, cache, path.join(root, "tmp")].map((folder) => fs.mkdir(folder, { recursive: true })),
+    [directory, outside, reference, data, config, cache, path.join(root, "tmp")].map((folder) =>
+      fs.mkdir(folder, { recursive: true }),
+    ),
   )
   await fs.copyFile(rg, path.join(cache, "rg"))
   await fs.chmod(path.join(cache, "rg"), 0o500)
   await fs.mkdir(path.join(root, ".ssh"))
   await fs.writeFile(path.join(root, ".ssh", "canary"), "PRIVATE_CREDENTIAL_CANARY")
   await fs.writeFile(path.join(outside, "public"), "OUTSIDE_READ_CANARY")
+  await fs.writeFile(path.join(reference, "readme"), "REFERENCE_READ_CANARY")
+  await fs.mkdir(path.join(data, "repos"))
+  await fs.writeFile(path.join(data, "repos", "readme"), "DATA_REFERENCE_CANARY")
+  await fs.writeFile(path.join(data, "opencode-probe.db"), "PRIVATE_DATABASE_CANARY")
   await fs.writeFile(path.join(root, "models.json"), "{}")
   await fs.writeFile(
     path.join(config, "opencode.json"),
@@ -90,6 +98,10 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
       update: "disable",
       experimental: { sandbox: { enabled, full_disk_read: fullDiskRead, readable_roots: [binary] } },
       model: "smoke/test-model",
+      references: {
+        external: { path: reference, description: "Reference smoke test" },
+        data: { path: data, description: "Data reference smoke test" },
+      },
       snapshots: true,
       permissions: [
         { action: "*", resource: "*", effect: "ask" },
@@ -140,7 +152,7 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
     PWD: directory,
     TMPDIR: path.join(root, "tmp"),
   })
-  return { root, directory, outside, config, env }
+  return { root, directory, outside, reference, data, config, env }
 }
 
 async function execute(f: Awaited<ReturnType<typeof fixture>>, args: string[]) {
@@ -196,6 +208,9 @@ for (const fullDiskRead of [false, true]) {
     { name: "grep", input: { pattern: "NATIVE_EDIT_CANARY" }, expect: "NATIVE_EDIT_CANARY" },
     { name: "write", input: { path: "format.fmt", content: "unformatted" } },
     { name: "shell", input: { command: network }, expect: "NETWORK_BLOCKED" },
+    { name: "shell", input: { command: `cat '${f.reference}/readme'` }, expect: "REFERENCE_READ_CANARY" },
+    { name: "shell", input: { command: `cat '${f.data}/repos/readme'` }, expect: "DATA_REFERENCE_CANARY" },
+    { name: "shell", input: { command: `cat '${f.data}/opencode-probe.db'` }, expect: "Operation not permitted" },
     {
       name: "shell",
       input: { command: `cat '${f.outside}/public'` },
@@ -335,7 +350,9 @@ for (const restarted of [false, true]) {
               sessionID,
               requestID: event.data.id,
               decision: decision === "session" ? "always" : "reject",
-              ...(decision === "session" ? { experimental: { acknowledgeSandbox: true, saveSandboxPrefix: true } } : {}),
+              ...(decision === "session"
+                ? { experimental: { acknowledgeSandbox: true, saveSandboxPrefix: true } }
+                : {}),
             })
           }
           if (

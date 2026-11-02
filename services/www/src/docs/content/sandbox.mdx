@@ -33,7 +33,7 @@ The embedded server accepts equivalent `sandbox` startup options. Unsupported ho
 
 ## Behavior
 
-Commands and their descendants can write to the workspace, sandbox scratch, and configured writable roots, except protected metadata and credentials. Reads are restricted to those roots, configured readable roots, and system/runtime paths. The default runtime grants include `/private/etc`, `/Library/Preferences`, and selected Homebrew installation directories under `/opt/homebrew`; they can contain configuration readable by your account. Broad reads expose more of the account's files, so opt in only when appropriate. Command network access is blocked.
+Commands and their descendants can write to the workspace, sandbox scratch, and configured writable roots, except protected metadata and credentials. Reads are restricted to those roots, configured readable roots, registered [references](/references), and system/runtime paths. References are trusted read-only grants, including repositories cloned into OpenCode's data directory; their contents may be read by the agent without a separate sandbox approval. [Read exclusions](#read-exclusions) still apply. The default runtime grants include `/private/etc`, `/Library/Preferences`, and selected Homebrew installation directories under `/opt/homebrew`; they can contain configuration readable by your account. Broad reads expose more of the account's files, so opt in only when appropriate. Command network access is blocked.
 
 Existing explicit `deny` rules continue to apply. Shell commands that would otherwise be allowed or require an ordinary approval can run without that approval inside the sandbox. When a command needs host access, the agent can request a separate approval showing the command, reason, and scope. You can approve an invocation once, or, for eligible commands, approve the offered literal command prefix for the current session, working directory, and shell until the server restarts. An approved escape runs with your account's filesystem and network access. Rejection or a missing approval does not run the escaped command. The sandbox does not automatically retry failed commands; a failure may have partial effects.
 
@@ -43,7 +43,8 @@ Automatic formatters and their discovery commands run inside the sandbox. Format
 
 Even with `full_disk_read` enabled, sandboxed operations cannot read these paths or their descendants:
 
-- OpenCode's global configuration, data, and state directories, including custom locations used by the server.
+- OpenCode's global configuration and state directories, including custom locations used by the server.
+- OpenCode's global data directory, except for registered references within it. When such a reference is present, `auth.json`, database files (`.db`, `.sqlite`, and `.sqlite3`, including SQLite journals), and the `log`, `shell`, `snapshot`, `storage`, `tool-output`, and `artifacts` directories directly under the data directory remain excluded.
 - `.aws` and `.ssh` directly under the user's home directory.
 - `.aws` and `.ssh` directly under each writable root, including the workspace, sandbox scratch, and configured writable roots.
 - Existing symlink targets of those excluded paths.

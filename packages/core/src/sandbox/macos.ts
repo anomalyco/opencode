@@ -144,7 +144,39 @@ export async function policy(
 
 // SBPL parameters keep paths out of executable policy text, including quotes and newlines.
 export function readableRoots(policy: SandboxPolicy.Policy) {
-  return [...new Set([...runtime, ...policy.readableRoots, ...policy.writableRoots])]
+  return [...new Set([...runtime, ...policy.readableRoots, ...policy.writableRoots, ...(policy.referenceRoots ?? [])])]
+}
+
+/** Reference grants are read-only and never expose OpenCode credentials or private state. */
+export async function references(
+  policy: SandboxPolicy.Policy,
+  host: { data: string },
+  values: readonly string[],
+): Promise<SandboxPolicy.Policy> {
+  const referenceRoots = [...new Set(values)].sort()
+  const data = await fs.realpath(host.data)
+  const referenceDataRoots = referenceRoots.filter((root) => contains(data, root))
+  const privateData = ["auth.json", "log", "shell", "snapshot", "storage", "tool-output", "artifacts"].map((name) =>
+    path.join(data, name),
+  )
+  const entries = await fs.readdir(data)
+  const database = /\.(?:db|sqlite|sqlite3)(?:-(?:wal|shm|journal))?$/i
+  const privatePaths = [
+    ...policy.unreadablePaths.filter((value) => referenceDataRoots.length === 0 || value !== data),
+    ...privateData,
+    ...entries.filter((name) => database.test(name)).map((name) => path.join(data, name)),
+  ]
+  const aliases = await Promise.all(privatePaths.map((value) => fs.realpath(value).catch(() => value)))
+  const escapedData = data.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return {
+    ...policy,
+    referenceRoots,
+    referenceDataRoots,
+    referenceDeniedPaths: [...new Set([...privatePaths, ...aliases])],
+    referenceDeniedPatterns: [
+      `^${escapedData}/[^/]+\\.([dD][bB]|[sS][qQ][lL][iI][tT][eE]3?)(-([wW][aA][lL]|[sS][hH][mM]|[jJ][oO][uU][rR][nN][aA][lL]))?$`,
+    ],
+  }
 }
 
 export function launch(
@@ -172,6 +204,9 @@ export function launch(
     ...policy.writableRoots.map((value, index) => `-DWRITE_${index}=${value}`),
     ...policy.protectedPaths.map((value, index) => `-DPROTECTED_${index}=${value}`),
     ...policy.unreadablePaths.map((value, index) => `-DUNREADABLE_${index}=${value}`),
+    ...(policy.referenceDataRoots ?? []).map((value, index) => `-DREF_DATA_${index}=${value}`),
+    ...(policy.referenceDeniedPaths ?? []).map((value, index) => `-DREF_DENY_${index}=${value}`),
+    ...(policy.referenceDeniedPatterns ?? []).map((value, index) => `-DREF_DENY_PATTERN_${index}=${value}`),
     ...ancestors.map((value, index) => `-DANCESTOR_${index}=${value}`),
   ]
   const profile = [
@@ -197,6 +232,15 @@ export function launch(
     ...policy.protectedPaths.map((_, index) => `(deny file-write* (subpath (param \"PROTECTED_${index}\")))`),
     ...policy.unreadablePaths.map(
       (_, index) => `(deny file-read* file-write* file-map-executable (subpath (param \"UNREADABLE_${index}\")))`,
+    ),
+    ...(policy.referenceDataRoots ?? []).map(
+      (_, index) => `(allow file-read* file-map-executable (subpath (param \"REF_DATA_${index}\")))`,
+    ),
+    ...(policy.referenceDeniedPaths ?? []).map(
+      (_, index) => `(deny file-read* file-write* file-map-executable (subpath (param \"REF_DENY_${index}\")))`,
+    ),
+    ...(policy.referenceDeniedPatterns ?? []).map(
+      (_, index) => `(deny file-read* file-write* file-map-executable (regex (param \"REF_DENY_PATTERN_${index}\")))`,
     ),
     ...ancestors.map((_, index) => `(deny file-write-unlink (literal (param \"ANCESTOR_${index}\")))`),
     '(allow file-read* file-write-data (literal "/dev/null") (literal "/dev/zero"))',

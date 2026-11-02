@@ -38,6 +38,8 @@ The subagent leaf checks placement before model/agent changes, child creation an
 
 Shell launch policy is fixed for each invocation after hooks and approval. A running background command is not rewrapped or granted a new root when a session subsequently moves. Location teardown still owns its process/helper resources and private scratch cleanup.
 
+Registered references are trusted read-only grants. Each confined launch resolves the current registry, including asynchronous Git checkouts; existing aliases are pinned for the Location and a changed target fails closed. OpenCode's data directory remains denied except for explicit reference roots within it, with credentials, databases and private state denied again after the reference grants. Existing processes retain the policy with which they started.
+
 ## Trusted host services and human operations
 
 | Service or entry point                                                                      | Classification and retained behavior                                                                                                                                                                                                                                                                                                                                                                                |

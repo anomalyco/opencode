@@ -8,6 +8,7 @@ import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { Location } from "./location.js"
+import { Reference } from "./reference.js"
 import { SandboxPolicy } from "./sandbox/policy.js"
 import { ShellSelect } from "./shell/select.js"
 import type { SandboxFiles } from "./sandbox/files.js"
@@ -32,13 +33,16 @@ export interface Interface {
   readonly scratch?: string
   readonly approval: "on-request" | "never"
   readonly fullDiskRead: boolean
-  readonly status: () => {
-    readonly active: boolean
-    readonly reads: "unrestricted" | "restricted" | "broad"
-    readonly escalation: "on-request" | "never" | "disabled"
-    readonly writableRoots: readonly string[]
-    readonly readableRoots: readonly string[]
-  }
+  readonly status: () => Effect.Effect<
+    {
+      readonly active: boolean
+      readonly reads: "unrestricted" | "restricted" | "broad"
+      readonly escalation: "on-request" | "never" | "disabled"
+      readonly writableRoots: readonly string[]
+      readonly readableRoots: readonly string[]
+    },
+    UnavailableError
+  >
   readonly checkLocation: (target: Location.Ref) => Effect.Effect<void, UnavailableError>
   readonly files: Effect.Effect<SandboxFiles.Interface, UnavailableError>
   readonly search: (command: string) => Effect.Effect<Launch, UnavailableError>
@@ -87,9 +91,7 @@ export const settingsConfigured = (input: Options = {}) =>
             )
             const directory = path.join(scratch, "workspace")
             yield* Effect.tryPromise(() => fs.mkdir(directory))
-            const policy = yield* Effect.tryPromise(() =>
-              MacSandbox.policy({ ...global, directory, scratch }, options),
-            )
+            const policy = yield* Effect.tryPromise(() => MacSandbox.policy({ ...global, directory, scratch }, options))
             const { SandboxCheck } = yield* Effect.promise(() => import("./sandbox/check.js"))
             yield* SandboxCheck.run(policy)
           }),
@@ -119,6 +121,7 @@ export const configured = (input?: Options) => {
         const location = yield* Location.Service
         const global = yield* Global.Service
         const subprocess = yield* AppProcess.Service
+        const references = yield* Reference.Service
         const options = yield* Settings
         const enabled = options.enabled === true
         const approval = options.approval ?? "on-request"
@@ -162,6 +165,38 @@ export const configured = (input?: Options) => {
           )
         }
 
+        // Reference registrations can change after Location startup, including asynchronous Git clones.
+        // Pin each existing alias for this Location so a workspace symlink cannot redirect its grant.
+        const pinnedReferences = new Map<string, string>()
+        const effectivePolicy = Effect.fn("Sandbox.effectivePolicy")(function* () {
+          if (!policy || !backend) return yield* new UnavailableError({ message: "Sandbox policy is unavailable." })
+          const entries = yield* references.list()
+          return yield* Effect.tryPromise({
+            try: async () => {
+              const roots = await Promise.all(
+                entries.map(async (entry) => {
+                  const resolved = await fs.realpath(entry.path).catch((error: NodeJS.ErrnoException) => {
+                    if (error.code === "ENOENT" || error.code === "ENOTDIR") return undefined
+                    throw error
+                  })
+                  if (!resolved || !(await fs.stat(resolved)).isDirectory()) return undefined
+                  const pinned = pinnedReferences.get(entry.path)
+                  if (pinned !== undefined && pinned !== resolved)
+                    throw new Error(`Reference target changed: ${entry.path}`)
+                  pinnedReferences.set(entry.path, resolved)
+                  return resolved
+                }),
+              )
+              return backend.MacSandbox.references(
+                policy,
+                global,
+                roots.filter((root): root is string => root !== undefined),
+              )
+            },
+            catch: (cause) => new UnavailableError({ message: `Unable to prepare reference access: ${cause}` }),
+          })
+        })
+
         const searches = yield* Cache.make({
           capacity: 1,
           lookup: (command: string) =>
@@ -177,12 +212,7 @@ export const configured = (input?: Options) => {
                 const binary = path.join(directory, "rg")
                 await fs.copyFile(await fs.realpath(command), binary)
                 await fs.chmod(binary, 0o500)
-                return backend.MacSandbox.launch(
-                  { ...policy, protectedPaths: [...policy.protectedPaths, directory] },
-                  binary,
-                  [],
-                  { PATH: "/usr/bin:/bin", HOME: scratch, TMPDIR: scratch },
-                )
+                return { binary, directory }
               },
               catch: (cause) => new UnavailableError({ message: `Unable to prepare confined search: ${cause}` }),
             }),
@@ -191,11 +221,12 @@ export const configured = (input?: Options) => {
         const command = Effect.fn("Sandbox.command")(function* (input: Launch) {
           if (!enabled || !backend || !policy || !scratch)
             return yield* new UnavailableError({ message: "Command sandboxing requires a local macOS execution host." })
+          const current = yield* effectivePolicy()
           return yield* Effect.tryPromise({
             try: async () => {
               await fs.access(backend.MacSandbox.executable, fs.constants.X_OK)
               return backend.MacSandbox.launch(
-                policy,
+                current,
                 input.command,
                 input.args,
                 SandboxPolicy.environment(input.env, scratch),
@@ -210,14 +241,27 @@ export const configured = (input?: Options) => {
           scratch,
           approval,
           fullDiskRead: options.fullDiskRead ?? false,
-          status: () => ({
-            active: enabled && policy !== undefined,
-            reads: enabled ? (options.fullDiskRead ? "broad" : "restricted") : "unrestricted",
-            escalation: enabled ? approval : "disabled",
-            writableRoots: policy?.writableRoots ?? [],
-            readableRoots: policy && backend ? backend.MacSandbox.readableRoots(policy) : [],
+          status: Effect.fn("Sandbox.status")(function* () {
+            const current = enabled ? yield* effectivePolicy() : undefined
+            return {
+              active: enabled && current !== undefined,
+              reads: enabled ? (options.fullDiskRead ? "broad" : "restricted") : "unrestricted",
+              escalation: enabled ? approval : "disabled",
+              writableRoots: current?.writableRoots ?? [],
+              readableRoots: current && backend ? backend.MacSandbox.readableRoots(current) : [],
+            }
           }),
-          search: (command) => Cache.get(searches, command),
+          search: Effect.fn("Sandbox.search")(function* (command) {
+            if (!backend || !scratch) return yield* new UnavailableError({ message: "Sandbox search is unavailable." })
+            const current = yield* effectivePolicy()
+            const { binary, directory } = yield* Cache.get(searches, command)
+            return backend.MacSandbox.launch(
+              { ...current, protectedPaths: [...current.protectedPaths, directory] },
+              binary,
+              [],
+              { PATH: "/usr/bin:/bin", HOME: scratch, TMPDIR: scratch },
+            )
+          }),
           command,
           checkLocation: Effect.fn("Sandbox.checkLocation")(function* (target: Location.Ref) {
             if (!enabled) return
@@ -242,13 +286,14 @@ export const configured = (input?: Options) => {
               })
             const { SandboxFiles } = yield* Effect.promise(() => import("./sandbox/files.js"))
             const { SandboxFileWorker } = yield* Effect.promise(() => import("./sandbox/file-worker.js"))
+            const current = yield* effectivePolicy()
             const launch = yield* Effect.tryPromise({
               try: async () => {
                 await fs.access(backend.MacSandbox.executable, fs.constants.X_OK)
                 return backend.MacSandbox.fileLaunch(
-                  policy,
+                  current,
                   await fs.realpath(process.execPath),
-                  SandboxFileWorker.configured(policy),
+                  SandboxFileWorker.configured(current),
                 )
               },
               catch: (cause) =>
@@ -263,6 +308,7 @@ export const configured = (input?: Options) => {
               return yield* new UnavailableError({ message: "Shell sandboxing requires a local macOS execution host." })
             if (escalated && approval === "never")
               return yield* new UnavailableError({ message: "Sandbox escalation is disabled by the server." })
+            const current = escalated ? policy : yield* effectivePolicy()
             return yield* Effect.tryPromise({
               try: async () => {
                 const command = invocation.shell
@@ -270,7 +316,7 @@ export const configured = (input?: Options) => {
                 const env = SandboxPolicy.environment(invocation.env, scratch)
                 if (escalated) return { command, args, env }
                 await fs.access(backend.MacSandbox.executable, fs.constants.X_OK)
-                return backend.MacSandbox.launch(policy, command, args, env)
+                return backend.MacSandbox.launch(current, command, args, env)
               },
               catch: (cause) => new UnavailableError({ message: `Unable to prepare shell sandbox: ${cause}` }),
             })
@@ -278,7 +324,13 @@ export const configured = (input?: Options) => {
         })
       }),
     ),
-    deps: [input === undefined ? settingsNode : settingsConfigured(input), Location.node, Global.node, AppProcess.node],
+    deps: [
+      input === undefined ? settingsNode : settingsConfigured(input),
+      Location.node,
+      Global.node,
+      AppProcess.node,
+      Reference.node,
+    ],
   })
 }
 
