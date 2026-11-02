@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer, Stream } from "effect"
+import { sql } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -69,6 +70,41 @@ describe("Project.list", () => {
           sandboxes: [],
         },
       ])
+    }),
+  )
+
+  it.effect("lists rows whose stored worktree is a backslash Windows path, normalized", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.make("valid"), worktree: abs("/valid"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 })
+        .run()
+      // Inserted raw: drizzle encoding would reject the backslash value on write
+      // just as it does on read, but such rows exist in real databases after a
+      // cross-OS migration (e.g. a Windows path left over on Linux).
+      yield* db.run(
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('migrated', ${"C:\\"}, '[]', 1, 1, 2)`,
+      )
+
+      const listed = yield* project.list()
+      expect(listed.map((item) => item.id)).toEqual([Project.ID.make("migrated"), Project.ID.make("valid")])
+      expect(listed[0]?.canonical).toEqual(abs("C:/"))
+    }),
+  )
+
+  it.effect("lists rows whose stored sandboxes hold a backslash Windows path, normalized", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      yield* db.run(
+        sql`INSERT INTO project (id, worktree, sandboxes, time_created, time_updated, time_active) VALUES ('sandboxed', ${"/sandboxed"}, ${JSON.stringify(["C:\\sandbox"])}, 1, 1, 1)`,
+      )
+
+      const listed = yield* project.list()
+      expect(listed.map((item) => item.id)).toEqual([Project.ID.make("sandboxed")])
+      expect(listed[0]?.sandboxes).toEqual([abs("C:/sandbox")])
     }),
   )
 })
