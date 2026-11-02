@@ -3,10 +3,9 @@ import { Cause, Effect, Option, Schema } from "effect"
 import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../codemode.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
-import type { Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
-import { Interpreter } from "./interpreter.js"
-import { formatLocation } from "./model.js"
+import { type Host, Interpreter } from "./interpreter.js"
+import { formatLocation, sourceLocation } from "./model.js"
 import type { Runner } from "./runner.js"
 
 export const executeProgram = <R>(
@@ -14,7 +13,7 @@ export const executeProgram = <R>(
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
-  globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
+  host?: (ctx: Interpreter<R>) => Host,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -38,7 +37,7 @@ export const executeProgram = <R>(
       const parsed = parseProgram(code)
       if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] } satisfies Result
       const services = yield* Effect.context<R>()
-      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
+      const ctx = new Interpreter<R>({ tools, services, builtins, logs, host })
       runner = ctx.runner
       const outcome = yield* runner.run(ctx.main(parsed.program))
       if (!outcome.ok) {
@@ -117,8 +116,22 @@ export const parseProgram = (code: string): { ok: true; program: Program } | { o
       sourceType: "script",
       allowReturnOutsideFunction: true,
       allowAwaitOutsideFunction: true,
+      // Imports bind host modules; scripts keep sloppy-mode semantics, which module source would make strict.
+      allowImportExportEverywhere: true,
       locations: true,
     })
+    const exported = program.body.find((statement) => statement.type.startsWith("Export"))
+    if (exported) {
+      const location = sourceLocation(exported)
+      return {
+        ok: false,
+        error: {
+          kind: "ParseError",
+          message: `SyntaxError: Exports aren't available. Return the result instead.${formatLocation(location)}`,
+          location,
+        },
+      }
+    }
     return { ok: true, program }
   } catch (error) {
     // Only acorn's own syntax errors become a located ParseError; anything else keeps the generic failure path.
@@ -138,10 +151,7 @@ const decodeAcornError = Schema.decodeUnknownOption(AcornError)
 const parseDiagnostic = (error: typeof AcornError.Type): Diagnostic => {
   const location = { line: error.loc.line, column: error.loc.column + 1 }
   const reason = error.message.replace(/ \(\d+:\d+\)$/, "")
-  const text =
-    reason === "'import' and 'export' may appear only with 'sourceType: module'"
-      ? "Imports and exports aren't available. Call tools through `tools` and use the built-in globals."
-      : `${reason.endsWith(".") ? reason : `${reason}.`} Code must be plain JavaScript written as a program body.`
+  const text = `${reason.endsWith(".") ? reason : `${reason}.`} Code must be plain JavaScript written as a program body.`
   return { kind: "ParseError", message: `SyntaxError: ${text}${formatLocation(location)}`, location }
 }
 

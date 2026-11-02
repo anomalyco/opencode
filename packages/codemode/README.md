@@ -14,7 +14,8 @@ The idea of code mode was originally introduced by Cloudflare. See
 ## How it differs from JavaScript
 
 - **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
-  globals the host adds through extensions. Timers, `process`, filesystem access, imports, and modules are unavailable.
+  globals and modules the host adds through extensions. Timers, `process`, filesystem access, and `export` are
+  unavailable.
 - **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
@@ -135,6 +136,24 @@ const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Ef
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
+
+An extension can also provide modules, any host value under a name the program loads the way Node code does:
+
+```ts
+const files = Extension.make({ name: "files", modules: { fs, "fs/promises": fs.promises } })
+```
+
+```js
+import fs, { readFile } from "node:fs"
+import * as promises from "fs/promises"
+const same = require("fs")
+const { default: alsoSame } = await import("fs")
+```
+
+A `node:` prefix names the same module. A default import is the module itself and a named import reads one of its
+properties. A module crosses like a result, but every function reachable from it is an entry point like a global, so
+calls fire the `extension` hooks with its path as the name (`fs.readFile`, `fs/promises.readFile`). Loading an unknown
+module throws an error listing the available ones, and a module name provided twice throws at `CodeMode.make`.
 
 ### OpenAPI tools
 

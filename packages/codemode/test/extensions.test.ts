@@ -474,6 +474,59 @@ describe("Effect globals", () => {
   })
 })
 
+describe("modules", () => {
+  const fs = { readFile: (path: string) => `text of ${path}`, promises: { readFile: async (path: string) => path } }
+  const files = Extension.make({ name: "files", modules: { "node:fs": fs, "fs/promises": fs.promises } })
+
+  test("every import form, require, and import() load the same module, and its functions fire the hooks", async () => {
+    const calls: Array<string> = []
+    const target = CodeMode.make({
+      extensions: [files],
+      hooks: { "extension.before": (call) => Effect.sync(() => void calls.push(`${call.extension}:${call.name}`)) },
+    })
+    expect(
+      await value(
+        `import fs, { readFile, readFile as read } from "fs"
+         import * as ns from "node:fs"
+         import "fs/promises"
+         const dynamic = await import("fs")
+         return [readFile("a"), read("b"), fs === require("node:fs"), ns.default === fs, dynamic === ns,
+           ns.readFile("c"), await require("fs/promises").readFile("d"), await fs.promises.readFile("e")]`,
+        target,
+      ),
+    ).toEqual(["text of a", "text of b", true, true, true, "text of c", "d", "e"])
+    expect(calls).toEqual([
+      "files:fs.readFile",
+      "files:fs.readFile",
+      "files:fs.readFile",
+      "files:fs/promises.readFile",
+      "files:fs.promises.readFile",
+    ])
+  })
+
+  test("an unknown module or export fails with what is available", async () => {
+    const target = CodeMode.make({ extensions: [files] })
+    expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
+      `Error: Module "yaml" isn't available. Available modules: fs, fs/promises (line 1, col 8)`,
+    )
+    expect(await value(`try { await import("yaml") } catch (e) { return e.message }`, target)).toBe(
+      `Module "yaml" isn't available. Available modules: fs, fs/promises`,
+    )
+    expect((await failure(`import { writeFile } from "fs"`, target)).message).toStartWith(
+      `SyntaxError: Module "fs" has no export named "writeFile".`,
+    )
+    expect((await failure(`require("fs")`)).message).toStartWith(
+      `Error: Module "fs" isn't available. No modules are available;`,
+    )
+  })
+
+  test("a module name may be provided once, with or without node:", () => {
+    expect(() =>
+      CodeMode.make({ extensions: [files, Extension.make({ name: "again", modules: { fs: {} } })] }),
+    ).toThrow('Extension "again" module "fs" is already defined.')
+  })
+})
+
 describe("host errors", () => {
   test("a synchronous throw becomes the matching program error", async () => {
     const target = CodeMode.make({

@@ -29,15 +29,19 @@ import {
 } from "./objects.js"
 import { describeValue, isOpaque } from "./references.js"
 
+/** A module by its normalized name, with the extension that provides it. */
+export type HostModule = { readonly extension: string; readonly value: unknown }
+
 /**
- * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and
- * built-in wrappers are copied, a host function becomes a program function whose calls cross the same way, and a
- * host Promise or Effect becomes a program promise.
+ * The global bindings and modules of one run's extensions. Everything crossing the boundary is converted: plain data
+ * and built-in wrappers are copied, a host function becomes a program function whose calls cross the same way, and a
+ * host Promise or Effect becomes a program promise. A module is converted the first time the program loads it.
  */
-export const extensionGlobals = <R>(
+export const extensionHost = <R>(
   ctx: Interpreter<R>,
   extensions: ReadonlyArray<Extension>,
-): ReadonlyArray<readonly [string, Value]> => {
+  modules: ReadonlyMap<string, HostModule>,
+) => {
   const builtins = ctx.builtins
 
   const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
@@ -74,12 +78,14 @@ export const extensionGlobals = <R>(
     return copied
   }
 
-  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): Value => {
+  // `extension` is set while converting a module, whose functions are entry points like globals and fire the hooks.
+  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), extension?: string): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
-    if (typeof value === "function") return wrap(value, label)
+    if (typeof value === "function")
+      return wrap(value, label, extension === undefined ? undefined : (args) => ({ extension, name: label, args }))
     if (value !== null && typeof value === "object") {
-      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen)
+      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen, extension)
       // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
       // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
       if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
@@ -151,10 +157,10 @@ export const extensionGlobals = <R>(
     throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
-  // A host function as a program function. Arguments cross in; for a global, the `extension.before` hook runs before
-  // the host function is called, so a call it denies never reaches the host. The host's result, or what it threw,
-  // crosses out so the program catches a copy, and `extension.after` sees how the call ended. Functions inside
-  // results are part of a value's API and skip the hooks.
+  // A host function as a program function. Arguments cross in; for a global or a module's function, the
+  // `extension.before` hook runs before the host function is called, so a call it denies never reaches the host. The
+  // host's result, or what it threw, crosses out so the program catches a copy, and `extension.after` sees how the
+  // call ended. Functions inside results are part of a value's API and skip the hooks.
   const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) => {
     // The host function's own `name` and `length` can be anything, even getters: each is read once, and only text
     // and a count cross.
@@ -201,11 +207,23 @@ export const extensionGlobals = <R>(
     return promise
   }
 
-  return extensions.flatMap((extension) =>
-    Object.entries(extension.globals).map(
-      ([name, value]) => [name, wrap(value, name, (args) => ({ extension: extension.name, name, args }))] as const,
+  const loaded = new Map<string, Value>()
+  return {
+    globals: extensions.flatMap((extension) =>
+      Object.entries(extension.globals).map(
+        ([name, value]) => [name, wrap(value, name, (args) => ({ extension: extension.name, name, args }))] as const,
+      ),
     ),
-  )
+    modules: new Map(
+      [...modules].map(([name, module]) => [
+        name,
+        () => {
+          if (!loaded.has(name)) loaded.set(name, fromHost(module.value, name, 0, new Set(), module.extension))
+          return loaded.get(name)
+        },
+      ]),
+    ),
+  }
 }
 
 /**
