@@ -2,7 +2,6 @@ import { createMemo, For, Match, Show, Switch, type Accessor, type JSX } from "s
 import { Option, Schema } from "effect"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { ToolElapsed } from "./tool-elapsed"
-import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Collapsible } from "@opencode/ui/collapsible"
 import type { IconProps } from "@opencode/ui/icon"
