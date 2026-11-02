@@ -732,19 +732,19 @@ function App() {
   createEffect(() => {
     if (highlighted || !plugins.ready() || client.connection.status() !== "connected") return
     highlighted = true
-    const items = app.highlights ?? []
+    const releases = app.highlights ?? []
     if (config.data.highlights === false) return
     if (route.data.type !== "home" || dialog.stack.length > 0 || promptRef.current?.current.text) return
     if (args.prompt || args.continue || args.sessionID || args.newSessionID) return
     if (process.env.OPENCODE_DRIVE || process.env.OPENCODE_STORY || process.env.OPENCODE_ROUTE) return
     void claim(storage, {
       version: app.version,
-      count: items.length,
+      releases: releases.map((release) => release.version),
       history: existsSync(path.join(paths.state, "prompt-history.jsonl")),
     })
       .then((show) => {
         if (show && dialog.stack.length === 0)
-          dialog.replace(() => <DialogHighlights version={app.version} items={items} />)
+          dialog.replace(() => <DialogHighlights releases={releases} />)
       })
       .catch(toast.error)
   })
@@ -1036,7 +1036,7 @@ function App() {
               name: "opencode.highlights",
               title: "Show release highlights",
               slash: { name: "highlights" },
-              run: () => dialog.replace(() => <DialogHighlights version={app.version} items={app.highlights ?? []} />),
+              run: () => dialog.replace(() => <DialogHighlights releases={app.highlights ?? []} />),
               category: "System",
             },
           ]

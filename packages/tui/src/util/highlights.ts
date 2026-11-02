@@ -2,8 +2,8 @@ import type { Storage } from "../context/storage"
 
 export type HighlightsInput = {
   readonly version: string
-  /** Number of highlights embedded in this build. */
-  readonly count: number
+  /** Versions whose highlights are embedded in this build. */
+  readonly releases: ReadonlyArray<string>
   /** Whether this user has used the TUI before, so a first run with no state is still an update. */
   readonly history: boolean
 }
@@ -11,8 +11,8 @@ export type HighlightsInput = {
 type State = { seen?: string }
 
 /**
- * Decides what to do with the current release's highlights: `show` opens the dialog and records the version,
- * `record` marks a version seen silently, and `none` leaves the state untouched. Only stable versions count.
+ * Decides what to do with the embedded release highlights after an update: `show` opens the dialog and records the
+ * version, `record` marks a version seen silently, and `none` leaves the state untouched. Only stable versions count.
  */
 export function decide(input: HighlightsInput & { readonly seen?: string }) {
   const current = stable(input.version)
@@ -20,7 +20,12 @@ export function decide(input: HighlightsInput & { readonly seen?: string }) {
   const seen = input.seen === undefined ? undefined : stable(input.seen)
   if (!seen && !input.history) return "record"
   if (seen && !newer(current, seen)) return "none"
-  return input.count > 0 ? "show" : "record"
+  // An update that skipped releases still shows their highlights, even when this release has none of its own.
+  const unseen = input.releases.some((release) => {
+    const version = stable(release)
+    return version && (!seen || newer(version, seen))
+  })
+  return unseen ? "show" : "record"
 }
 
 /**

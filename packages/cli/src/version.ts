@@ -8,12 +8,19 @@ declare const OPENCODE_RELEASE_HIGHLIGHTS: string
 const version = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
 const channel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
 const artifact = typeof OPENCODE_ARTIFACT === "string" ? OPENCODE_ARTIFACT : "cli"
-// Stable release builds embed the release notes' Highlights; every other build has none.
+// Stable release builds embed the newest releases' Highlights from CHANGELOG.md, newest first; every other build has none.
 const highlights =
   typeof OPENCODE_RELEASE_HIGHLIGHTS === "string"
     ? Option.getOrElse(
         Schema.decodeUnknownOption(
-          Schema.fromJsonString(Schema.Array(Schema.Struct({ title: Schema.String, body: Schema.String }))),
+          Schema.fromJsonString(
+            Schema.Array(
+              Schema.Struct({
+                version: Schema.String,
+                items: Schema.Array(Schema.Struct({ title: Schema.String, body: Schema.String })),
+              }),
+            ),
+          ),
         )(OPENCODE_RELEASE_HIGHLIGHTS),
         () => [],
       )

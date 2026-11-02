@@ -382,12 +382,12 @@ These changes affect code that imports `@opencode/ai` directly. They don't chang
 
 ### Highlights
 
-- Create, install and share [Desktop plugins](https://opencode.ai/v2/docs/build/plugins/gui) (experimental) ([#55246](https://github.com/anomalyco/opencode/pull/55246), [#59469](https://github.com/anomalyco/opencode/pull/59469), [#59489](https://github.com/anomalyco/opencode/pull/59489))
-- Refreshed the desktop app experience ([#56898](https://github.com/anomalyco/opencode/pull/56898), [#58865](https://github.com/anomalyco/opencode/pull/58865), [#55838](https://github.com/anomalyco/opencode/pull/55838), [#57962](https://github.com/anomalyco/opencode/pull/57962))
-- Add experimental image and decision generation APIs to plugins and sdk, allowing image generation or decision model (think typesafe, clef, etc) workflows. ([#59190](https://github.com/anomalyco/opencode/pull/59190), [#59380](https://github.com/anomalyco/opencode/pull/59380), [#58758](https://github.com/anomalyco/opencode/pull/58758))
-- Plugins can now attach and update keyed session instructions with ctx.session.instructions.entry.put/list/remove. Instead of editing the system prompt and busting the prompt cache, each change is added as a small update at the next step. The entries also survive compaction and reverts, and they don't start an extra model turn. ([#56550](https://github.com/anomalyco/opencode/pull/56550))
-- Restored the Todo tool in desktop via opt-in ([#59092](https://github.com/anomalyco/opencode/pull/59092))
-- Add configurable prompt cache TTLs per provider/model ([#59157](https://github.com/anomalyco/opencode/pull/59157))
+- **Desktop Plugins**: Create, install and share [Desktop plugins](https://opencode.ai/v2/docs/build/plugins/gui) (experimental). ([#55246](https://github.com/anomalyco/opencode/pull/55246), [#59469](https://github.com/anomalyco/opencode/pull/59469), [#59489](https://github.com/anomalyco/opencode/pull/59489))
+- **Refreshed Desktop App**: The desktop app experience has been refreshed. ([#56898](https://github.com/anomalyco/opencode/pull/56898), [#58865](https://github.com/anomalyco/opencode/pull/58865), [#55838](https://github.com/anomalyco/opencode/pull/55838), [#57962](https://github.com/anomalyco/opencode/pull/57962))
+- **Image and Decision Generation APIs**: Plugins and the SDK get experimental image and decision generation APIs for image generation or decision model workflows. ([#59190](https://github.com/anomalyco/opencode/pull/59190), [#59380](https://github.com/anomalyco/opencode/pull/59380), [#58758](https://github.com/anomalyco/opencode/pull/58758))
+- **Keyed Session Instructions**: Plugins can attach and update keyed session instructions with `ctx.session.instructions.entry.put/list/remove`. Each change is added at the next step instead of editing the system prompt and busting the prompt cache, and entries survive compaction and reverts. ([#56550](https://github.com/anomalyco/opencode/pull/56550))
+- **Opt-In Todo Tool on Desktop**: The Todo tool is back in desktop as an opt-in. ([#59092](https://github.com/anomalyco/opencode/pull/59092))
+- **Prompt Cache TTLs**: Configure prompt cache TTLs per provider and model. ([#59157](https://github.com/anomalyco/opencode/pull/59157))
 
 ### Breaking changes
 

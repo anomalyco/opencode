@@ -5,39 +5,112 @@ import { DialogHighlights } from "../../../component/dialog-highlights"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
-// The v2.0.27 release highlights, as a release build embeds them.
-const items = [
+// The v2.2.1 to v2.2.5 release highlights, as a release build embeds them from CHANGELOG.md.
+const releases = [
   {
-    title: "Built-In Worktree Tools",
-    body: "Ask OpenCode to use `worktree_create`, `worktree_list`, and `worktree_remove` in Code Mode. You can create isolated worktrees, move sessions into them, and remove them with normal edit approval.",
+    version: "2.2.5",
+    items: [
+      {
+        title: "Worktree and Shell Mode Shortcuts",
+        body: "Press `⌘⌥O` on macOS or `Ctrl+Alt+O` on Windows and Linux to choose a worktree, and `⌘⌥B` or `Ctrl+Alt+B` to choose its base branch. `⌘⇧X` or `Ctrl+Shift+X` now toggles shell mode in the composer.",
+      },
+      {
+        title: "Send Quotes From the Comment Popup",
+        body: "Hold `⌘` or `Ctrl` in the quote popup to turn its checkmark into send, or press `⌘Enter` or `Ctrl+Enter`, to send just that quote and comment while leaving the rest of the composer untouched.",
+      },
+      {
+        title: "Percentage Compaction Buffer",
+        body: "Set `\"compaction\": { \"buffer\": \"20%\" }` in `opencode.json` to keep a share of each model's context window free, so one setting fits models with small and large windows. Token counts still work.",
+      },
+    ],
   },
   {
-    title: "Safer Remote Pairing",
-    body: "The first `opencode pair --remote` now warns that it will expose your server and asks for confirmation. For non-interactive use, pass `opencode pair --remote --yes`.",
+    version: "2.2.4",
+    items: [
+      {
+        title: "Persistent Desktop Terminals",
+        body: "Desktop terminals now belong to the session, survive server restarts with their scrollback, and stay synchronized with the TUI and other windows. Renamed terminals also keep their names across restarts.",
+      },
+      {
+        title: "Publish Interactive Artifacts",
+        body: "Enable `\"experimental\": { \"artifacts\": true }` in `opencode.json` to let agents publish, update, and serve HTML or static artifacts through the built-in local provider or plugin-provided storage.",
+      },
+      {
+        title: "Guided Claude Agent Setup",
+        body: "Select Claude Agent from the provider picker to copy `claude auth login`, install Claude Code, and verify the connection before continuing to model selection.",
+      },
+      {
+        title: "Choose a Base Branch Quickly",
+        body: "While creating a worktree, open Choose base branch with `⌘⌥.` on macOS or `Ctrl+Alt+.` on Windows and Linux. The command is also available in the command palette and Settings › Shortcuts.",
+      },
+    ],
   },
   {
-    title: "Installable Web App",
-    body: "Use Chrome or Edge’s Install button to install the OpenCode web app, including when it runs behind an authenticating proxy.",
+    version: "2.2.3",
+    items: [
+      {
+        title: "Use Claude Code in OpenCode",
+        body: "Install Claude Code, run `claude auth login`, then select Claude Agent in `/connect` to use your Claude Code login and models.",
+      },
+      {
+        title: "Faster Long Sessions in Desktop",
+        body: "Streaming replies and long conversations now do much less rendering work.",
+      },
+      {
+        title: "Desktop Stability Fixes",
+        body: "Fixes side-panel tabs, repeated \"Session not found\" toasts, and Open file over HTTP.",
+      },
+    ],
   },
   {
-    title: "Clear Session Failures",
-    body: "Desktop and TUI timelines now show execution errors that happen before or between model steps instead of ending without an explanation.",
+    version: "2.2.2",
+    items: [
+      {
+        title: "Image Generation by Default",
+        body: "When a connected provider supports image models, agents can now use `experimental_image_generate` without additional configuration. Set its preferred model through `experimental.image_generate.model`.",
+      },
+      {
+        title: "Faster Worktree Selection",
+        body: "On the new-session screen, click the current Git branch to open that project’s “Run session in” worktree picker directly.",
+      },
+      {
+        title: "Unified Quotes and Annotations",
+        body: "Timeline quotes, terminal quotes, and browser annotations now share a compact optional-comment editor, while source highlights remain attached to local drafts.",
+      },
+    ],
   },
   {
-    title: "Automatic Project Cleanup",
-    body: "Projects whose directories no longer exist are automatically hidden from the project list. Opening the directory again restores the project.",
+    version: "2.2.1",
+    items: [
+      {
+        title: "Keep Working Toward a Goal",
+        body: "Run `/goal <objective>` in the TUI or Desktop to let the session continue until a reviewer confirms the objective is met. Use `/goal pause`, `/goal resume`, or `/goal clear` to control it.",
+      },
+      {
+        title: "Generate Images",
+        body: "Enable `experimental.image_generate` to let agents create or edit images with the new `image_generate` tool. You can optionally set its default model with `experimental.image_generate.model`.",
+      },
+      {
+        title: "Inspect Background Shells",
+        body: "Click a running shell in the Desktop activity pill to see its live output and stop it without leaving the menu.",
+      },
+      {
+        title: "New Default Model Picker",
+        body: "Search favorites, recent models, providers, and variants from the redesigned model picker, which is now the default in Desktop.",
+      },
+    ],
   },
 ]
 
 function HighlightsStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const open = (count: number) =>
-    props.context.ui.dialog.show(() => <DialogHighlights version="2.0.27" items={items.slice(0, count)} />)
+    props.context.ui.dialog.show(() => <DialogHighlights releases={releases.slice(0, count)} />)
 
   props.context.keymap.layer(() => ({
     commands: [
-      { bind: "o", title: "Open five highlights", group: "Storybook", run: () => open(5) },
-      { bind: "t", title: "Open two highlights", group: "Storybook", run: () => open(2) },
+      { bind: "o", title: "Open five releases", group: "Storybook", run: () => open(5) },
+      { bind: "t", title: "Open one release", group: "Storybook", run: () => open(1) },
       {
         bind: "escape",
         title: "Back to storybook",
@@ -55,8 +128,8 @@ function HighlightsStory(props: { context: Plugin.Context }) {
         context={props.context}
         title="storybook / release highlights"
         controls={[
-          { shortcut: "o", label: "five highlights" },
-          { shortcut: "t", label: "two highlights" },
+          { shortcut: "o", label: "five releases" },
+          { shortcut: "t", label: "one release" },
           { shortcut: "esc", label: "back" },
         ]}
       />
