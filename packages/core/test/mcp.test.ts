@@ -34,6 +34,7 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
+import { McpPool } from "@opencode/core/mcp/pool"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -49,6 +50,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  FiberSet,
   Layer,
   Option,
   PubSub,
@@ -56,6 +58,7 @@ import {
   Schedule,
   Schema,
   Scope,
+  Semaphore,
   Sink,
   Stream,
 } from "effect"
@@ -64,6 +67,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Image } from "@opencode/core/image"
 import { Global } from "@opencode/util/global"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
@@ -113,6 +117,8 @@ function resourceServer(
     tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
+    /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
+    roots?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -140,6 +146,8 @@ function resourceServer(
           progressToken: unknown
         }>,
         initializations: 0,
+        /** Listed after the configured tools; change it, then announce the change. */
+        extraTools: [] as ListToolsResult["tools"],
         urls: [] as string[],
         sessions: [] as string[],
       }
@@ -150,7 +158,7 @@ function resourceServer(
           { name: "mcp-resources", title: "MCP Resources", version: "1.0.0" },
           {
             capabilities: {
-              tools: {},
+              tools: { listChanged: input.listChanged },
               prompts: {},
               ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
             },
@@ -198,6 +206,8 @@ function resourceServer(
                   ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
                   : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }]),
               ...(input.tools ?? []),
+              ...(input.roots ? [{ name: "roots", inputSchema: { type: "object" as const, properties: {} } }] : []),
+              ...state.extraTools,
             ],
           })
         })
@@ -240,7 +250,13 @@ function resourceServer(
           })
         }
         if (!input.emptyElicitation && !input.urlElicitation) {
-          protocol.setRequestHandler("tools/call", (request) => {
+          protocol.setRequestHandler("tools/call", (request, ctx) => {
+            if (request.params.name === "roots") {
+              const responses = ctx.mcpReq.inputResponses
+              if (!responses)
+                return Promise.resolve(inputRequired({ inputRequests: { roots: inputRequired.listRoots() } }))
+              return Promise.resolve({ content: [], structuredContent: inputResponse(responses, "roots") })
+            }
             state.toolCalls.push({
               name: request.params.name,
               arguments: request.params.arguments,
@@ -307,6 +323,8 @@ function resourceServer(
         state,
         url: http.url.toString(),
         clientVersion: () => current.protocol.getClientVersion(),
+        sendToolListChanged: () =>
+          modern ? Promise.resolve(modern.notify.toolsChanged()) : current.protocol.sendToolListChanged(),
         sendResourceListChanged: () =>
           modern ? Promise.resolve(modern.notify.resourcesChanged()) : current.protocol.sendResourceListChanged(),
         completeElicitation: () => current.protocol.createElicitationCompletionNotifier("elicitation-test")(),
@@ -325,6 +343,8 @@ function resourceServer(
   )
 }
 
+const poolLayer = McpPool.layer.pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node)))
+
 function resourceMcpLayer(
   server: string | typeof ConfigMCP.Server.Type,
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
@@ -335,9 +355,11 @@ function resourceMcpLayer(
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
+    pool?: Layer.Layer<McpPool.Service>
+    directory?: string
   },
 ) {
-  const directory = AbsolutePath.make(import.meta.dir)
+  const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
   return Layer.effectDiscard(
     Effect.gen(function* () {
@@ -355,6 +377,7 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
+        overrides?.pool ?? poolLayer,
         overrides?.entries
           ? Layer.succeed(
               Config.Service,
@@ -427,7 +450,7 @@ function resourceMcpLayer(
 }
 
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
-  McpClient.connect(server, config, directory).pipe(Effect.provide(hostEnvironmentLayer))
+  McpClient.connect({ server, config, directory }).pipe(Effect.provide(hostEnvironmentLayer))
 
 // Reads no longer wait for startup, so tests that assert on a connected server settle it first.
 const settled = (service: Mcp.Interface, name = "resources") =>
@@ -810,7 +833,7 @@ test("spawns local MCP servers through the location environment", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* McpClient.connect("environment", config, import.meta.dir)
+        const connection = yield* McpClient.connect({ server: "environment", config, directory: import.meta.dir })
         yield* connection.tools()
       }),
     ).pipe(Effect.provide(recordingEnvironmentLayer(spawns))),
@@ -2241,6 +2264,7 @@ const shutdownIt = testEffect(
       Form.node,
       Environment.node,
       Location.node,
+      McpPool.node,
     ]),
     [
       Location.node.replace(
@@ -3134,3 +3158,401 @@ for (const source of ["config", "organization"] as const) {
       }),
   )
 }
+
+describe("MCP pool", () => {
+  const live = testEffect(Layer.empty).live
+  const pooled = (url: string, fields: Partial<ConfigMCP.Remote> = {}) =>
+    new ConfigMCP.Remote({ type: "remote", url, oauth: false, pool: true, ...fields })
+  const makePool = Layer.build(poolLayer).pipe(Effect.map((context) => Context.get(context, McpPool.Service)))
+  const directories = [import.meta.dir, path.join(import.meta.dir, "fixture")]
+
+  // One Location's MCP service on the given pool; `shutdown` closes the Location as eviction would.
+  const open = (
+    config: typeof ConfigMCP.Server.Type,
+    pool: McpPool.Interface,
+    directory: string,
+    overrides: {
+      onFormCreated?: (form: Form.Info) => Effect.Effect<void>
+      published?: string[]
+      environment?: Layer.Layer<Environment.Service>
+    } = {},
+  ) =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* Layer.buildWithScope(
+        resourceMcpLayer(config, overrides.onFormCreated, undefined, {
+          pool: Layer.succeed(McpPool.Service, pool),
+          directory,
+          published: overrides.published,
+          environment: overrides.environment,
+        }),
+        scope,
+      )
+      const mcp = Context.get(context, Mcp.Service)
+      yield* settled(mcp)
+      return { mcp, forms: Context.get(context, Form.Service), shutdown: Scope.close(scope, Exit.void) }
+    })
+  const status = (mcp: Mcp.Interface) => mcp.servers().pipe(Effect.map((servers) => servers[0]?.status))
+
+  live("shares one connection and one tool list between Locations", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false })
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      const b = yield* open(pooled(server.url), pool, directories[1])
+
+      const [toolsA, toolsB] = [yield* a.mcp.tools(), yield* b.mcp.tools()]
+      expect(toolsA.map((tool) => tool.name)).toEqual(["echo"])
+      expect(toolsB.map((tool) => tool.name)).toEqual(["echo"])
+      // Each Location tags its own copy of the one listed tool.
+      expect(toolsA[0]?.inputSchema).toBe(toolsB[0]?.inputSchema)
+      expect(server.state.toolLists).toBe(1)
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+      yield* b.mcp.callTool({ server: "resources", name: "echo" })
+      expect(server.state.toolCalls).toHaveLength(2)
+    }),
+  )
+
+  live("keeps connections apart when the configs differ", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false })
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      const b = yield* open(pooled(server.url, { headers: { "x-account": "b" } }), pool, directories[0])
+      expect((yield* a.mcp.tools())[0]?.inputSchema).not.toBe((yield* b.mcp.tools())[0]?.inputSchema)
+      expect(server.state.toolLists).toBe(2)
+    }),
+  )
+
+  test("keys connections on everything that changes them, and on no secret or name", () => {
+    const remote = new ConfigMCP.Remote({
+      type: "remote",
+      url: "https://mcp.example.com",
+      headers: { authorization: "secret" },
+    })
+    const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "secret" } })
+    const key = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) =>
+      McpPool.key({ config: remote, directory: "/a", ...input })
+
+    expect(key()).not.toContain("secret")
+    expect(McpPool.key({ config: local, directory: "/a" })).not.toContain("secret")
+    // A remote server does not depend on the Location's directory, so Locations anywhere share it.
+    expect(key({ directory: "/b" })).toBe(key())
+    expect(key({ credential: "cred_a" })).not.toBe(key({ credential: "cred_b" }))
+    expect(key({ config: new ConfigMCP.Remote({ ...remote, headers: { authorization: "other" } }) })).not.toBe(key())
+    expect(key({ config: new ConfigMCP.Remote({ ...remote, codemode: false }) })).not.toBe(key())
+    expect(key({ config: new ConfigMCP.Remote({ ...remote, disabled: false }) })).toBe(key())
+    expect(McpPool.key({ config: local, directory: "/a" })).not.toBe(McpPool.key({ config: local, directory: "/b" }))
+    expect(McpPool.key({ config: new ConfigMCP.Local({ ...local, cwd: "/srv" }), directory: "/a" })).toBe(
+      McpPool.key({ config: new ConfigMCP.Local({ ...local, cwd: "/srv" }), directory: "/b" }),
+    )
+    expect(
+      McpPool.key({ config: new ConfigMCP.Local({ ...local, environment: { TOKEN: "other" } }), directory: "/a" }),
+    ).not.toBe(McpPool.key({ config: local, directory: "/a" }))
+    expect(McpPool.key({ config: local, directory: "/a", clientInfo: { name: "other", version: "1" } })).not.toBe(
+      McpPool.key({ config: local, directory: "/a" }),
+    )
+  })
+
+  live("keeps a server that negotiates legacy private to each Location", () =>
+    Effect.gen(function* () {
+      const probes: Array<ChildProcess.Command> = []
+      const spawns: Array<ChildProcess.Command> = []
+      const pool = Context.get(
+        yield* Layer.build(
+          McpPool.layer.pipe(
+            Layer.provide(
+              Layer.effect(
+                ChildProcessSpawner.ChildProcessSpawner,
+                Effect.gen(function* () {
+                  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+                  return ChildProcessSpawner.make((command) => {
+                    probes.push(command)
+                    return spawner.spawn(command)
+                  })
+                }),
+              ).pipe(Layer.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+            ),
+          ),
+        ),
+        McpPool.Service,
+      )
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+        pool: true,
+      })
+      const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      const b = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      // One discovery attempt through the pool, then each Location spawns its own, as it would unpooled.
+      expect(probes).toHaveLength(1)
+      expect(spawns).toHaveLength(2)
+    }),
+  )
+
+  live("connects each Location on its own without pool", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false })
+      const pool = yield* makePool
+      const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" })
+      const a = yield* open(config, pool, directories[0])
+      const b = yield* open(config, pool, directories[0])
+      expect((yield* a.mcp.tools())[0]?.inputSchema).not.toBe((yield* b.mcp.tools())[0]?.inputSchema)
+      expect(server.state.toolLists).toBe(2)
+    }),
+  )
+
+  live("closes the shared connection when its last Location lets go", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false })
+      const pool = yield* makePool
+      const a = yield* open(pooled(server.url), pool, directories[0])
+      const b = yield* open(pooled(server.url), pool, directories[1])
+      yield* a.shutdown
+      yield* b.mcp.callTool({ server: "resources", name: "echo" })
+      const c = yield* open(pooled(server.url), pool, directories[0])
+      expect(server.state.toolLists).toBe(1)
+
+      yield* b.shutdown
+      yield* c.mcp.disconnect("resources")
+      yield* open(pooled(server.url), pool, directories[0])
+      expect(server.state.toolLists).toBe(2)
+    }),
+  )
+
+  live("routes an elicitation to the Location whose call caused it", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false, urlElicitation: true })
+      const pool = yield* makePool
+      const created = yield* Deferred.make<CreatedForm>()
+      const elsewhere: Form.Info[] = []
+      const a = yield* open(pooled(server.url), pool, directories[0], {
+        onFormCreated: (form) => Effect.sync(() => elsewhere.push(form)),
+      })
+      const b = yield* open(pooled(server.url), pool, directories[1], {
+        onFormCreated: (form) => recordForm(created, form),
+      })
+      const call = yield* b.mcp.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+      const { form, directory } = yield* Deferred.await(created)
+      expect(directory).toBe(directories[1])
+      yield* b.forms.reply({ id: form.id, answer: { elicitation: true } })
+      expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept" })
+      expect(elsewhere).toEqual([])
+      expect(yield* a.forms.list()).toEqual([])
+    }),
+  )
+
+  live("asks every holder about an elicitation no request claims, and takes the first answer", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false, urlElicitation: true })
+      const pool = yield* makePool
+      const environment = Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service)
+      const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" })
+      const holder = (directory: string) =>
+        Effect.gen(function* () {
+          const forms = Context.get(
+            yield* Layer.build(
+              Form.layer.pipe(
+                Layer.provide(
+                  Layer.mock(Bus.Service, {
+                    publish: (definition, data) =>
+                      Effect.succeed({ id: ID.create(), type: definition.type, data } as Payload<typeof definition>),
+                  }),
+                ),
+              ),
+            ),
+            Form.Service,
+          )
+          const scope = yield* Effect.scope
+          const run = yield* FiberSet.makeRuntime<never, void, never>()
+          const connection = pool.connection({
+            name: "resources",
+            config,
+            directory,
+            authProvider: Effect.undefined,
+            elicitation: {
+              create: () =>
+                forms
+                  .ask({ sessionID: "global", title: "Confirm", fields: [{ key: "ok", type: "boolean" }] })
+                  .pipe(
+                    Effect.map((state) => ({ action: state.status === "answered" ? "accept" : "cancel" }) as const),
+                  ),
+              complete: () => Effect.void,
+            },
+            environment,
+            scope,
+            lock: Semaphore.makeUnsafe(1).withPermit,
+            callbacks: run,
+            fork: run,
+            events: {
+              connecting: Effect.void,
+              connected: Effect.void,
+              failed: () => Effect.void,
+              settled: Effect.void,
+              closed: () => Effect.void,
+              changed: () => Effect.void,
+            },
+            key: Effect.succeed(McpPool.key({ config, directory })),
+          })
+          yield* connection.start
+          return { connection, forms }
+        })
+      const a = yield* holder(directories[0])
+      const b = yield* holder(directories[1])
+      const client = a.connection.client
+      if (!client) throw new Error("expected a shared connection")
+      expect(b.connection.client).toBe(client)
+
+      // Called on the shared client directly, so no Location claims the request.
+      const call = yield* client.callTool({ name: "url-elicitation" }).pipe(Effect.forkScoped)
+      const pending = (forms: Form.Interface) =>
+        forms.list().pipe(
+          Effect.flatMap((list) => (list[0] ? Effect.succeed(list[0]) : Effect.fail("none"))),
+          Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+        )
+      const asked = yield* pending(a.forms)
+      const other = yield* pending(b.forms)
+      yield* a.forms.reply({ id: asked.id, answer: { ok: true } })
+      expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept" })
+      expect((yield* b.forms.state(other.id)).status).toBe("cancelled")
+    }),
+  )
+
+  live("fans tool list changes out to every Location", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false, listChanged: true })
+      const pool = yield* makePool
+      const published = [[], []] as string[][]
+      const a = yield* open(pooled(server.url), pool, directories[0], { published: published[0] })
+      const b = yield* open(pooled(server.url), pool, directories[1], { published: published[1] })
+      published.forEach((events) => events.splice(0))
+      server.state.extraTools = [{ name: "added", inputSchema: { type: "object", properties: {} } }]
+      yield* Effect.promise(server.sendToolListChanged)
+      for (const mcp of [a.mcp, b.mcp])
+        yield* mcp.tools().pipe(
+          Effect.filterOrFail((tools) => tools.some((tool) => tool.name === "added")),
+          Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+        )
+      expect(server.state.toolLists).toBe(2)
+      for (const events of published)
+        yield* Effect.sync(() => events).pipe(
+          Effect.filterOrFail((events) => events.includes(McpEvent.ToolsChanged.type)),
+          Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+        )
+    }),
+  )
+
+  live("answers no roots on a shared connection", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false, roots: true })
+      const pool = yield* makePool
+      const own = yield* open(
+        new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+        pool,
+        directories[0],
+      )
+      expect((yield* own.mcp.callTool({ server: "resources", name: "roots" })).structured).toEqual({
+        kind: "roots",
+        roots: [{ uri: Bun.pathToFileURL(directories[0]).href }],
+      })
+      const shared = yield* open(pooled(server.url), pool, directories[0])
+      const error = yield* shared.mcp.callTool({ server: "resources", name: "roots" }).pipe(Effect.flip)
+      expect(error.message).toContain("roots/list")
+    }),
+  )
+
+  live("shares one local process, fails every holder when it dies, and closes it after the last", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const pids = path.join(tmp.path, "pids")
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+        environment: { MCP_PID_FILE: pids },
+        pool: true,
+      })
+      const started = () =>
+        Effect.promise(() => fs.readFile(pids, "utf8")).pipe(Effect.map((text) => text.trim().split("\n").map(Number)))
+      const alive = (pid: number) => {
+        try {
+          process.kill(pid, 0)
+          return true
+        } catch {
+          return false
+        }
+      }
+      const until = <A>(effect: Effect.Effect<A>, check: (value: A) => boolean) =>
+        effect.pipe(
+          Effect.filterOrFail(check, () => "pending"),
+          Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
+        )
+      const pool = yield* makePool
+      const a = yield* open(config, pool, directories[0])
+      const b = yield* open(config, pool, directories[0])
+      const [first] = yield* started()
+      expect(yield* started()).toHaveLength(1)
+      expect((yield* a.mcp.tools())[0]?.inputSchema).toBe((yield* b.mcp.tools())[0]?.inputSchema)
+
+      process.kill(first!, "SIGKILL")
+      for (const location of [a, b]) yield* until(status(location.mcp), (status) => status?.status === "failed")
+      yield* a.mcp.connect("resources")
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      expect((yield* status(b.mcp))?.status).toBe("failed")
+      yield* b.mcp.connect("resources")
+      expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+      const [, second] = yield* started()
+      expect(yield* started()).toHaveLength(2)
+
+      yield* a.shutdown
+      expect(alive(second!)).toBe(true)
+      yield* b.mcp.callTool({ server: "resources", name: "echo" })
+      yield* b.shutdown
+      yield* until(
+        Effect.sync(() => alive(second!)),
+        (alive) => !alive,
+      )
+    }),
+  )
+
+  live("keeps nothing of a Location that let go of a shared connection", () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern: true, resources: false, urlElicitation: true })
+      const pool = yield* makePool
+      // Reading a WeakRef keeps its target alive until the current job ends, so watch for finalization instead.
+      const collected = new Set<string>()
+      const registry = new FinalizationRegistry<string>((name) => collected.add(name))
+      // The first Location opens the connection and makes a call through it, then lets go while another holds on.
+      const shutdown = yield* Effect.gen(function* () {
+        const created = yield* Deferred.make<CreatedForm>()
+        const location = yield* open(pooled(server.url), pool, directories[0], {
+          onFormCreated: (form) => recordForm(created, form),
+        })
+        const call = yield* location.mcp
+          .callTool({ server: "resources", name: "url-elicitation" })
+          .pipe(Effect.forkScoped)
+        const { form } = yield* Deferred.await(created)
+        yield* location.forms.reply({ id: form.id, answer: { elicitation: true } })
+        yield* Fiber.join(call)
+        registry.register(location.mcp, "mcp")
+        registry.register(location.forms, "forms")
+        return location.shutdown
+      })
+      const second = yield* open(pooled(server.url), pool, directories[1])
+      yield* shutdown
+      // The collector also scans the native stack, where a stale pointer from the shutdown can survive in
+      // frames the event loop reuses. Unrelated work through the same paths overwrites those; then collect.
+      for (let attempt = 0; attempt < 50 && collected.size < 2; attempt++) {
+        yield* Effect.forEach(Array.from({ length: 20 }), () => Effect.promise(() => Bun.sleep(0)), {
+          concurrency: "unbounded",
+        })
+        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(() => resolve(Bun.gc(true)), 0)))
+      }
+      expect(Array.from(collected).toSorted()).toEqual(["forms", "mcp"])
+      expect(yield* status(second.mcp)).toEqual({ status: "connected" })
+      expect(server.state.toolLists).toBe(1)
+    }),
+  )
+})
