@@ -6,9 +6,10 @@ import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniT
 import { mergeInput as mergeNonInteractiveInput, parseRunModel } from "../src/run/run"
 import { parseSessionTargetModel } from "../src/session-target"
 
-async function cli(args: string[]) {
+async function cli(args: string[], env?: Record<string, string>) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
     cwd: path.join(import.meta.dir, ".."),
+    env: { ...process.env, ...env },
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -198,6 +199,84 @@ describe("mini command", () => {
     } finally {
       server.stop(true)
     }
+  })
+
+  test("accepts the deprecated V1 --attach and --variant flags", async () => {
+    const authorization = `Basic ${btoa("opencode:test-password")}`
+    let session: unknown
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.headers.get("authorization") !== authorization) return new Response(undefined, { status: 401 })
+        if (url.pathname === "/api/info")
+          return Response.json({
+            version: OPENCODE_VERSION,
+            pid: process.pid,
+            urls: [],
+            paths: { tmp: "/tmp/opencode" },
+          })
+        if (url.pathname === "/api/location")
+          return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
+        if (url.pathname === "/api/session") {
+          session = await request.json()
+          return new Response("boom", { status: 500 })
+        }
+        return new Response(undefined, { status: 404 })
+      },
+    })
+
+    try {
+      const result = await cli(
+        ["run", "--attach", server.url.toString(), "--variant", "low", "-m", "definitely/missing", "hi"],
+        { OPENCODE_PASSWORD: "test-password" },
+      )
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain("--attach is deprecated; use --server instead")
+      expect(result.stderr).toContain("--variant is deprecated; use --model provider/model#variant instead")
+      expect(result.stderr).toContain("UnexpectedStatus")
+      expect(session).toMatchObject({ model: { providerID: "definitely", id: "missing", variant: "low" } })
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("rejects a --variant that conflicts with the model variant before creating a session", async () => {
+    const requests: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        requests.push(new URL(request.url).pathname)
+        return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/opencode" } })
+      },
+    })
+
+    try {
+      const result = await cli([
+        "run",
+        "--server",
+        server.url.toString(),
+        "--variant",
+        "low",
+        "-m",
+        "definitely/missing#high",
+        "hi",
+      ])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain("--variant low conflicts with the variant in --model definitely/missing#high")
+      expect(requests).not.toContain("/api/session")
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("rejects --attach combined with --server", async () => {
+    const result = await cli(["run", "--attach", "http://127.0.0.1:9", "--server", "http://127.0.0.1:9", "hi"])
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain("--attach and --server cannot be combined")
   })
 
   test("reports pre-admission errors as JSON", async () => {

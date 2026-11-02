@@ -440,6 +440,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         title: Flag.String("title").pipe(Flag.withDescription("Session title"), Flag.optional),
         thinking: Flag.Boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
+        // Deprecated V1 spellings of --server and --model provider/model#variant, kept for existing scripts.
+        attach: Flag.String("attach").pipe(Flag.optional, Flag.withHidden),
+        variant: Flag.String("variant").pipe(Flag.optional, Flag.withHidden),
         ...PermissionParams,
       },
     }),

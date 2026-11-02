@@ -92,6 +92,8 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     fetch: noTimeoutFetch,
   })
   const explicit = parseRunModel(input.model)
+  if (options.variant && explicit?.variant && options.variant !== explicit.variant)
+    fail(`--variant ${options.variant} conflicts with the variant in --model ${input.model}`)
   const location = prepared.directory ? { directory: prepared.directory } : undefined
   const worktree =
     input.worktree === undefined
