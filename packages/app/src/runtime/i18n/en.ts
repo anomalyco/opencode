@@ -725,6 +725,7 @@ export const dict = {
   "common.copied": "Copied",
 
   "titlebar.tabs": "Tabs",
+  "titlebar.tabs.groupByServer": "Group tabs by server",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",

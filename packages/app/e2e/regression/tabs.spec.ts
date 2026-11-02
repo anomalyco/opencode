@@ -855,13 +855,37 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   expect(reads.filter((url) => !url.startsWith(REMOTE_SERVER))).toEqual([])
 })
 
+test("Side tabs group by server only after the list toggle is enabled", async ({ page }) => {
+  const local = session({ id: "ses_group_toggle_a", directory: "C:/server-a", title: "Local one" })
+  const remote = session({ id: "ses_group_toggle_b", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical" } },
+    tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const headers = page.locator('[data-slot="tab-server-group"]')
+  const toggle = page.locator('[data-action="toggle-tab-server-groups"]')
+  await expect(headers).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-pressed", "false")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-pressed", "true")
+  await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-pressed", "false")
+  await expect(headers).toHaveCount(0)
+})
+
 test("vertical tabs group by server and keep each server's tab order", async ({ page }) => {
   const sessionA = session({ id: "ses_group_a1", directory: "C:/server-a", title: "Group the sidebar by server" })
   const sessionA2 = session({ id: "ses_group_a2", directory: "C:/server-a", title: "Review the tab order" })
   const sessionB = session({ id: "ses_group_b1", directory: "/home/server-b", title: "Fix the docs build" })
   await twoServers(page, { a: [sessionA, sessionA2], b: [sessionB] })
   await seed(page, {
-    settings: { appearance: { tabLayout: "vertical" } },
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
     tabs: [sessionA.id, { session: sessionB.id, server: REMOTE_SERVER }, sessionA2.id],
   })
   await page.goto(sessionHref(sessionA.id))
@@ -891,7 +915,7 @@ test("vertical tabs stay flat when only one server has open tabs", async ({ page
   await mockWorkspace(page, {
     name: "SingleServerTabs",
     sessions: [a, b],
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    seed: { settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } } },
   })
   await page.goto(sessionHref(a.id))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
@@ -906,7 +930,7 @@ test("server groups limit their visible tabs and collapse from the header", asyn
   const remote = session({ id: "ses_group_more_remote", directory: "/home/server-b", title: "Remote one" })
   await twoServers(page, { a: local, b: [remote] })
   await seed(page, {
-    settings: { appearance: { tabLayout: "vertical" } },
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
     tabs: [local[0]!.id, { session: remote.id, server: REMOTE_SERVER }, ...local.slice(1).map((item) => item.id)],
   })
   await page.goto(sessionHref(local[0]!.id))
@@ -953,7 +977,7 @@ test("server groups can be reordered by dragging their headers", async ({ page }
   const remote = session({ id: "ses_group_order_b", directory: "/home/server-b", title: "Remote one" })
   await twoServers(page, { a: [local], b: [remote] })
   await seed(page, {
-    settings: { appearance: { tabLayout: "vertical" } },
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
     tabs: [local.id, { session: remote.id, server: REMOTE_SERVER }],
   })
   await page.goto(sessionHref(local.id))

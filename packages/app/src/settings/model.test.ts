@@ -107,6 +107,7 @@ describe("settings schema", () => {
         sans: "",
         terminal: "",
         tabLayout: "horizontal",
+        tabGroupByServer: false,
         tabServerOrder: [],
         reduceMotion: "system",
       },
@@ -163,6 +164,7 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
+      tabGroupByServer: false,
       tabServerOrder: [],
       reduceMotion: "system",
     })

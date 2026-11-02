@@ -532,6 +532,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
+            const groupTabsButton = () => (
+              <Show when={settings.appearance.tabLayout() === "vertical"}>
+                <Tooltip placement="bottom" value={language.t("titlebar.tabs.groupByServer")} class="shrink-0">
+                  <IconButton
+                    type="button"
+                    variant="ghost-muted"
+                    size="normal"
+                    icon={<Icon name={settings.appearance.tabGroupByServer() ? "file-tree" : "bullet-list"} />}
+                    state={settings.appearance.tabGroupByServer() ? "pressed" : undefined}
+                    onClick={() =>
+                      settings.appearance.setTabGroupByServer(!settings.appearance.tabGroupByServer())
+                    }
+                    aria-label={language.t("titlebar.tabs.groupByServer")}
+                    aria-pressed={settings.appearance.tabGroupByServer()}
+                    data-action="toggle-tab-server-groups"
+                  />
+                </Tooltip>
+              </Show>
+            )
+
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -866,11 +886,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <Show when={homeInSidebarHeader()} fallback={<div class="flex-1" />}>
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
                                 </Show>
-                                <SidebarToggle handoff="out" />
+                                {/* Optically aligns the toggle's glyph with the selected session's end edge. */}
+                                <div class="-me-0.5 flex shrink-0 items-center gap-1">
+                                  {groupTabsButton()}
+                                  <SidebarToggle handoff="out" />
+                                </div>
                               </div>
                             </Show>
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                              <Show when={!homeInSidebarHeader()}>
+                                <div class="flex w-full items-center gap-1">
+                                  <div class="min-w-0 flex-1">{homeButton(true)}</div>
+                                  {groupTabsButton()}
+                                </div>
+                              </Show>
                               {searchButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical

@@ -455,7 +455,7 @@ export function TitlebarTabStrip(props: {
     return new Set(open.map((tab) => tab.server)).size > 1
   })
 
-  const grouped = createMemo(() => vertical() && hasMultipleServers())
+  const grouped = createMemo(() => vertical() && settings.appearance.tabGroupByServer() && hasMultipleServers())
 
   // The user's dragged group order wins; servers they have not moved keep the
   // app's own order after it.
