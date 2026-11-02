@@ -867,6 +867,7 @@ test("Side tabs group by server only after the list toggle is enabled", async ({
 
   const headers = page.locator('[data-slot="tab-server-group"]')
   const toggle = page.locator('[data-action="toggle-tab-server-groups"]')
+  await expect(toggle).toHaveCount(1)
   await expect(headers).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-pressed", "false")
 

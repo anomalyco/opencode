@@ -897,7 +897,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <Show when={!homeInSidebarHeader()}>
                                 <div class="flex w-full items-center gap-1">
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
-                                  {groupTabsButton()}
+                                  <Show when={windows()}>{groupTabsButton()}</Show>
                                 </div>
                               </Show>
                               {searchButton(true)}
