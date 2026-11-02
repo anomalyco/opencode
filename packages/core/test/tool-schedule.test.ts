@@ -7,6 +7,8 @@ import { Permission } from "@opencode/core/permission"
 import { Schedule } from "@opencode/core/schedule"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
+import { tempLocationLayer } from "./fixture/location"
+import { Location } from "@opencode/core/location"
 import { ScheduleTools } from "@opencode/core/tool/plugin/schedule"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
@@ -24,7 +26,11 @@ const names = ["schedule_create", "schedule_list", "schedule_pause", "schedule_r
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
+  AppNodeBuilder.build(Tool.node, [
+    Image.node.replace(imagePassthrough),
+    Permission.node.replace(permissionLayer()),
+    Location.node.replace(tempLocationLayer),
+  ]),
 )
 
 /** An in-memory Schedule service. The real one is covered in schedule.test.ts; this exercises the tool layer. */

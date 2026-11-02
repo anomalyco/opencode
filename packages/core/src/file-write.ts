@@ -28,9 +28,9 @@ export interface Interface {
     file: string,
     context: FileAccess.Invocation,
   ) => Effect.Effect<FileAccess.Target, Environment.Failed | Permission.Error | SessionErrors.NotFoundError>
-  /** Request edit approval for a resolved target, showing the change when it is known. */
+  /** Request edit approval for resolved targets in one request, showing the change when it is known. */
   readonly authorize: (
-    target: FileAccess.Target,
+    target: FileAccess.Target | ReadonlyArray<FileAccess.Target>,
     context: FileAccess.Invocation,
     preview?: FileDiff.Info,
   ) => Effect.Effect<void, Permission.Error | SessionErrors.NotFoundError>
@@ -67,13 +67,13 @@ const layer = Layer.effect(
     })
 
     const authorize = Effect.fn("FileWrite.authorize")(function* (
-      target: FileAccess.Target,
+      target: FileAccess.Target | ReadonlyArray<FileAccess.Target>,
       context: FileAccess.Invocation,
       preview?: FileDiff.Info,
     ) {
       yield* permission.assert({
         action: "edit",
-        resources: [target.resource],
+        resources: [...new Set((Array.isArray(target) ? target : [target]).map((item) => item.resource))],
         save: ["*"],
         metadata: preview ? { files: [preview] } : undefined,
         ...Permission.invocation(context),

@@ -18,6 +18,8 @@ import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModeFs } from "./fs.js"
+import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -74,7 +76,7 @@ export type Inventory = {
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+  "`fetch` is available for HTTP requests, and Node's `fs` (with `fs.promises`) and `path` for files, also importable as `node:fs`, `fs/promises` and `node:path`. Other modules and packages, and timers, are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
@@ -85,6 +87,7 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  fileServices: Context.Context<CodeModeFs.Services>,
 ) => {
   return {
     name: "execute",
@@ -147,6 +150,7 @@ export const create = (
             ),
             Effect.provideService(CodeModeExecution.Service, context),
             Effect.provideService(Permission.Service, permission),
+            Effect.provideContext(fileServices),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -210,6 +214,8 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
         default:
+          if (call.extension === "fs")
+            return start(call, { tool: "fs", status: "running", input: CodeModeFs.display(call.name, call.args) })
           return Effect.void
       }
     },
@@ -262,15 +268,21 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+const runtimes = new WeakMap<
+  Inventory,
+  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeFs.Services>
+>()
 
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
   const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+  const created = CodeMode.make<
+    typeof tools,
+    [typeof CodeModeFetch.extension, typeof CodeModeFs.extension, typeof CodeModePath.extension]
+  >({
     tools,
-    extensions: [CodeModeFetch.extension],
+    extensions: [CodeModeFetch.extension, CodeModeFs.extension, CodeModePath.extension],
     hooks: runHooks,
   })
   runtimes.set(inventory, created)
@@ -278,7 +290,7 @@ function runtime(inventory: Inventory) {
 }
 
 /**
- * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ * Runs one program over `inventory` alone with no model step and no `fetch`, `fs` or `path`, binding `bindings` as outer globals.
  */
 export const check = (
   inventory: Inventory,
