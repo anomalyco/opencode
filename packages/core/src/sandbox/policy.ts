@@ -1,5 +1,7 @@
 export * as SandboxPolicy from "./policy.js"
 
+import path from "node:path"
+
 /** Host-owned settings; project configuration and tool input cannot change these. */
 export interface Options {
   readonly enabled?: boolean
@@ -50,5 +52,6 @@ export function environment(
     TMPDIR: scratch,
     TMP: scratch,
     TEMP: scratch,
+    TMPPREFIX: path.join(scratch, "zsh"),
   }
 }

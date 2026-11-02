@@ -74,6 +74,7 @@ describe("macOS sandbox launch", () => {
       NODE_OPTIONS: "--require=/tmp/injected",
       DYLD_INSERT_LIBRARIES: "/tmp/injected",
       TMPDIR: "/shared",
+      TMPPREFIX: "/shared/zsh",
     }
     const env = SandboxPolicy.environment(inherited, policy.scratch)
     expect(env).toEqual({
@@ -83,9 +84,11 @@ describe("macOS sandbox launch", () => {
       TMPDIR: policy.scratch,
       TMP: policy.scratch,
       TEMP: policy.scratch,
+      TMPPREFIX: path.join(policy.scratch, "zsh"),
     })
     expect(inherited.OPENCODE_PASSWORD).toBe("secret")
     expect(inherited.TMPDIR).toBe("/shared")
+    expect(inherited.TMPPREFIX).toBe("/shared/zsh")
   })
 
   // Windows symlink creation requires host privileges; this backend targets macOS.
@@ -287,6 +290,31 @@ kernel.each([false, true])(
       const allowed = run('printf hello > local; cat local; printf scratch > "$TMPDIR/ok"')
       expect(allowed.exitCode).toBe(0)
       expect(allowed.stdout.toString()).toBe("hello")
+      const heredocScript = "cat <<'EOF'\nheredoc works\nEOF"
+      const blockedHeredoc = MacSandbox.launch(confined, "/bin/zsh", ["-c", heredocScript], {
+        ...process.env,
+        TMPPREFIX: path.join(outside, "zsh"),
+      })
+      expect(
+        Bun.spawnSync([blockedHeredoc.command, ...blockedHeredoc.args], { cwd: workspace, env: blockedHeredoc.env })
+          .exitCode,
+      ).not.toBe(0)
+      const heredoc = MacSandbox.launch(
+        confined,
+        "/bin/zsh",
+        ["-c", heredocScript],
+        SandboxPolicy.environment({ ...process.env, TMPPREFIX: path.join(outside, "zsh") }, scratch),
+      )
+      const heredocResult = Bun.spawnSync([heredoc.command, ...heredoc.args], { cwd: workspace, env: heredoc.env })
+      expect({
+        exit: heredocResult.exitCode,
+        stderr: heredocResult.stderr.toString(),
+        stdout: heredocResult.stdout.toString(),
+      }).toEqual({
+        exit: 0,
+        stderr: "",
+        stdout: "heredoc works\n",
+      })
       const read = run(`cat '${outside}/secret'`)
       expect(read.exitCode === 0).toBe(fullDiskRead)
       expect(read.stdout.toString().includes("outside-secret")).toBe(fullDiskRead)
