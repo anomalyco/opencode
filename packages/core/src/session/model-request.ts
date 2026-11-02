@@ -307,7 +307,7 @@ export const layer = Layer.effect(
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 

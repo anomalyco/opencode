@@ -512,7 +512,7 @@ export const layer = Layer.effect(
       const fit =
         trigger.reason === "overflow"
           ? budget
-          : Math.max(budget, summaryRoom(context.model.limit, prepared.request.generation?.maxTokens))
+          : Math.max(budget, summaryRoom(context.model.limit, prepared.request.maxTokens))
       const result = yield* deliver(
         trigger,
         prepared,
@@ -1191,7 +1191,7 @@ const measuredPrompt = (context: SessionContext.Loaded) => {
  * `SUMMARY_OUTPUT_FLOOR` of the room left without the margin.
  */
 const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["limit"], size?: Estimate) => {
-  const current = request.generation?.maxTokens
+  const current = request.maxTokens
   if (current === undefined) return request
   const input = size ?? { measured: 0, estimated: estimateRequest(request) }
   const maxTokens = Math.min(
@@ -1202,7 +1202,7 @@ const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["l
     ),
   )
   if (maxTokens === current) return request
-  return { ...request, generation: { ...request.generation, maxTokens } }
+  return { ...request, maxTokens }
 }
 
 const estimateRequest = (request: Pick<LLMRequest, "system" | "tools" | "messages">) =>

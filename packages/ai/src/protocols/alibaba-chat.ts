@@ -72,7 +72,7 @@ export const protocol = Protocol.make({
         thinking_budget:
           opts.thinkingBudget === undefined
             ? undefined
-            : ProviderShared.fitThinkingBudget(opts.thinkingBudget, req.generation?.maxTokens),
+            : ProviderShared.fitThinkingBudget(opts.thinkingBudget, req.maxTokens),
         preserve_thinking: opts.preserveThinking,
         clear_thinking: opts.clearThinking,
         thinking: opts.thinking,
@@ -81,7 +81,7 @@ export const protocol = Protocol.make({
           opts.parallelToolCalls ??
           (req.toolChoice?.disableParallelToolUse === undefined ? undefined : !req.toolChoice.disableParallelToolUse),
         repetition_penalty: opts.repetitionPenalty,
-        top_k: req.generation?.topK,
+        top_k: req.topK,
         response_format: opts.responseFormat,
         enable_search: opts.enableSearch,
         search_options: opts.searchOptions,

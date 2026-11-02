@@ -38,7 +38,7 @@ for (const api of ["responses", "chat"] as const) {
             const request = ai.request({
               model: meta[api](modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-              generation: { maxTokens: 1024 },
+              maxTokens: 1024,
               providerOptions: {
                 reasoningEffort: effort,
                 ...(api === "responses" && effort === "high" ? { reasoningSummary: "auto" } : {}),
@@ -92,7 +92,7 @@ for (const api of ["responses", "chat"] as const) {
             tools: [weather],
             toolChoice: "auto",
             providerOptions: { reasoningEffort: "low" },
-            generation: { maxTokens: 1024 },
+            maxTokens: 1024,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body.tool_choice).toBe("auto")

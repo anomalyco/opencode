@@ -52,7 +52,7 @@ describe("sanitizeSurrogates", () => {
       system: "system",
       tools: [tool],
       messages: [...messages, Message.user("bad \uD800")],
-      generation: { maxTokens: 10 },
+      maxTokens: 10,
       providerOptions: { nested: { list: ["a", "b"] } },
     })
     const sanitized = sanitizeRequest(request)
@@ -63,7 +63,7 @@ describe("sanitizeSurrogates", () => {
     expect(sanitized.messages[2]).not.toBe(request.messages[2])
     expect(sanitized.messages[2]).toEqual(Message.user("bad \uFFFD"))
     expect(sanitized.tools[0]).toBe(request.tools[0])
-    expect(sanitized.generation).toBe(request.generation)
+    expect(sanitized.maxTokens).toBe(10)
 
     const input = request
     const output = sanitizeSurrogates(input)

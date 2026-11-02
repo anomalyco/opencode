@@ -133,7 +133,7 @@ it.live(
       expect((yield* second.sessions.get({ sessionID: session.id })).title).toBe("thread-recovery:2")
       expect(
         (yield* llm.requests()).map((request) => ({
-          temperature: request.generation?.temperature,
+          temperature: request.temperature,
           tools: request.tools?.filter((tool) => tool.name.startsWith("thread_")).map((tool) => tool.name),
         })),
       ).toEqual(Array.from({ length: 3 }, () => ({ temperature: 0.25, tools: ["thread_echo"] })))

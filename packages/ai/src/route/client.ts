@@ -33,6 +33,7 @@ import {
   mergeGenerationOptions,
   mergeProviderOptions,
   mergeTransport,
+  generationFields,
   type TransportOptions,
   withPartial,
 } from "../schema/index.js"
@@ -263,10 +264,9 @@ const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
   const normalized = messages === request.messages ? request : { ...request, messages }
   const routeDefaults = normalized.model.route.defaults
   const modelDefaults = normalized.model.defaults
-  const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized.generation)
   return {
     ...normalized,
-    generation: generation ?? new GenerationOptions({}),
+    ...generationFields(mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized)),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
@@ -584,8 +584,16 @@ const restoreClasses = (request: LLMRequest): LLMRequest => ({
   messages: request.messages.map(Message.make),
   tools: request.tools.map(ToolEntry.make),
   toolChoice: request.toolChoice === undefined ? undefined : ToolChoice.make(request.toolChoice),
-  generation: request.generation === undefined ? undefined : GenerationOptions.make(request.generation),
 })
+
+const validateRequest = Schema.decodeUnknownEffect(Schema.Struct(GenerationOptions.fields))
+
+// Requests are plain objects, so their generation fields are checked when they run, not when built.
+const checkRequest = (request: LLMRequest) =>
+  validateRequest(request).pipe(
+    Effect.mapError((error) => ProviderShared.invalidRequest(error.message, error)),
+    Effect.asVoid,
+  )
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
   const references = request.messages.flatMap((message) =>
@@ -602,6 +610,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
     return yield* ProviderShared.invalidRequest(
       "Local file references must be read with Media.file(path) before sending",
     )
+  yield* checkRequest(request)
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
@@ -694,13 +703,15 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
       options?: EndpointCompactOptions,
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
-      return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
-        if (options?.mechanism === "trigger" && canCompact(request, options))
-          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
-        if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
-          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
-        return unsupportedCompaction(request.model, options?.mechanism)
-      })
+      return checkRequest(request).pipe(
+        Effect.andThen((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
+          if (options?.mechanism === "trigger" && canCompact(request, options))
+            return request.model.route.compact.trigger(prepareRequest(request), executor, options)
+          if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
+            return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
+          return unsupportedCompaction(request.model, options?.mechanism)
+        }),
+      )
     }
     return Service.of({
       stream,

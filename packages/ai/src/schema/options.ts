@@ -148,7 +148,8 @@ export namespace GenerationOptions {
   export const make = (input: Input = {}) => (input instanceof GenerationOptions ? input : new GenerationOptions(input))
 }
 
-export type GenerationOptionsFields = {
+/** Portable sampling knobs, set at the top level of a text request. */
+export interface GenerationOptionsFields {
   readonly maxTokens?: number
   readonly temperature?: number
   readonly topP?: number
@@ -158,6 +159,30 @@ export type GenerationOptionsFields = {
   readonly seed?: number
   readonly stop?: ReadonlyArray<string>
 }
+
+/** The keys of `GenerationOptionsFields`, for splitting a flat record into portable knobs and provider options. */
+export const GENERATION_KEYS: ReadonlySet<keyof GenerationOptionsFields> = new Set([
+  "maxTokens",
+  "temperature",
+  "topP",
+  "topK",
+  "frequencyPenalty",
+  "presencePenalty",
+  "seed",
+  "stop",
+])
+
+/** Just the `GenerationOptionsFields` of `input`. */
+export const generationFields = (input: GenerationOptionsFields | undefined): GenerationOptionsFields => ({
+  maxTokens: input?.maxTokens,
+  temperature: input?.temperature,
+  topP: input?.topP,
+  topK: input?.topK,
+  frequencyPenalty: input?.frequencyPenalty,
+  presencePenalty: input?.presencePenalty,
+  seed: input?.seed,
+  stop: input?.stop,
+})
 
 export type GenerationOptionsInput = GenerationOptions | GenerationOptionsFields
 

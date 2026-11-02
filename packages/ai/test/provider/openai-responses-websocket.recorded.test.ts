@@ -121,7 +121,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         system: "Call get_weather once, then reply exactly: Paris is sunny.",
         prompt: "What is the weather in Paris?",
         tools: [weatherTool],
-        generation: { maxTokens: 50 },
+        maxTokens: 50,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
@@ -159,7 +159,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Alpha.",
-        generation: { maxTokens: 30 },
+        maxTokens: 30,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
@@ -190,7 +190,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
         model,
         system: "Follow the user's exact reply instruction.",
         prompt: "Reply exactly: Ready.",
-        generation: { maxTokens: 30 },
+        maxTokens: 30,
         cache: "none",
       })
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })

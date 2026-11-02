@@ -54,7 +54,8 @@ const request = ai.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
-  generation: { maxTokens: 80, temperature: 0.7 },
+  maxTokens: 80,
+  temperature: 0.7,
   promptCacheKey: "tutorial-joke",
 })
 
@@ -100,7 +101,8 @@ const streamWithTools = Effect.gen(function* () {
   const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-    generation: { maxTokens: 80, temperature: 0 },
+    maxTokens: 80,
+    temperature: 0,
     tools,
   })
   const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
@@ -139,7 +141,8 @@ const generateStructuredObject = Effect.gen(function* () {
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
     schema: WeatherReport,
-    generation: { maxTokens: 120, temperature: 0 },
+    maxTokens: 120,
+    temperature: 0,
   })
 
   console.log("\n== structured output ==")

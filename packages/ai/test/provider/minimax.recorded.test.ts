@@ -86,7 +86,7 @@ describe("MiniMax recorded", () => {
           const request = ai.request({
             model: item.model,
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-            generation: { maxTokens: 1536 },
+            maxTokens: 1536,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body).toMatchObject(item.body)
@@ -122,7 +122,7 @@ describe("MiniMax recorded", () => {
             prompt: "Use get_weather to look up the current weather in Paris.",
             tools: [weather],
             toolChoice: ToolChoice.named("get_weather"),
-            generation: { maxTokens: 512 },
+            maxTokens: 512,
           }),
         )
         expect(response.finishReason.normalized).toBe("tool-calls")
@@ -174,7 +174,7 @@ describe("MiniMax recorded", () => {
               "Look up the current weather in Paris using get_weather before answering. After receiving the result, report the weather in one short sentence.",
             tools: [weather],
             toolChoice: "auto",
-            generation: { maxTokens: 1536 },
+            maxTokens: 1536,
           })
           const first = yield* LLMClient.generate(request)
           expect(first.finishReason.normalized).toBe("tool-calls")

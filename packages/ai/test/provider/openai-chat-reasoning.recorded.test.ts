@@ -60,7 +60,8 @@ for (const item of cases) {
               model: item.model,
               system: "Think through the arithmetic, then reply with only the final integer.",
               prompt: "What is 173 multiplied by 219?",
-              generation: { maxTokens: 1536, temperature: 0 },
+              maxTokens: 1536,
+              temperature: 0,
             }),
           )
 

@@ -7,7 +7,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   CacheHint,
-  GenerationOptions,
   type LanguageModel,
   LLMEvent,
   Media,
@@ -148,7 +147,8 @@ const baseRequest = ai.request({
   // Wire-shape assertions in this file predate the `cache: "auto"` default;
   // pin the policy off so they only exercise the lowering path itself.
   cache: "none",
-  generation: { maxTokens: 64, temperature: 0 },
+  maxTokens: 64,
+  temperature: 0,
 })
 
 describe("Bedrock Converse route", () => {
@@ -213,7 +213,9 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest({
         ...baseRequest,
-        generation: GenerationOptions.make({ maxTokens: 64, temperature: 0, topK: 40 }),
+        maxTokens: 64,
+        temperature: 0,
+        topK: 40,
       })
 
       // Converse's inferenceConfig has no topK; Anthropic/Nova read it from
@@ -251,7 +253,8 @@ describe("Bedrock Converse route", () => {
             apiKey: "test-bearer",
             thinking: { type: "enabled", budgetTokens },
           }),
-          generation: GenerationOptions.make({ maxTokens, topK }),
+          maxTokens,
+          topK,
         }).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
 
       expect(yield* fields(64_000, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 31_999 } })
@@ -1891,7 +1894,8 @@ describe("Bedrock Converse route", () => {
             Message.user([{ type: "text", text: "User prefix.", cache }]),
             Message.assistant([{ type: "text", text: "Assistant prefix.", cache }]),
           ],
-          generation: { maxTokens: 16, temperature: 0 },
+          maxTokens: 16,
+          temperature: 0,
         }),
       )
 
@@ -2457,7 +2461,8 @@ describe("Bedrock Converse recorded", () => {
           system: "Reply with the single word 'Hello'.",
           prompt: "Say hello.",
           cache: "none",
-          generation: { maxTokens: 16, temperature: 0 },
+          maxTokens: 16,
+          temperature: 0,
         }),
       )
 
@@ -2480,7 +2485,8 @@ describe("Bedrock Converse recorded", () => {
           tools: [weatherTool],
           toolChoice: ToolChoice.make(weatherTool),
           cache: "none",
-          generation: { maxTokens: 80, temperature: 0 },
+          maxTokens: 80,
+          temperature: 0,
         }),
       )
 
@@ -2530,7 +2536,8 @@ describe("Bedrock Converse recorded", () => {
           ],
           tools: [weatherTool],
           cache: "none",
-          generation: { maxTokens: 40, temperature: 0 },
+          maxTokens: 40,
+          temperature: 0,
         }),
       )
 

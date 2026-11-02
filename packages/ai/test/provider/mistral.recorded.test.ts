@@ -41,7 +41,8 @@ describe("Mistral recorded", () => {
           ai.request({
             model: configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest"),
             prompt: "Reply with exactly one word: hello",
-            generation: { maxTokens: 40, temperature: 0 },
+            maxTokens: 40,
+            temperature: 0,
           }),
         )
 
@@ -62,7 +63,8 @@ describe("Mistral recorded", () => {
         const firstRequest = ai.request({
           model,
           prompt: "Calculate 17 multiplied by 23. Think briefly, then reply with only the integer.",
-          generation: { maxTokens: 512, temperature: 0 },
+          maxTokens: 512,
+          temperature: 0,
         })
         const first = yield* LLMClient.generate(firstRequest)
 
@@ -73,7 +75,8 @@ describe("Mistral recorded", () => {
         const followUp = {
           ...firstRequest,
           messages: [...firstRequest.messages, first.message, Message.user("Reply with exactly: Done.")],
-          generation: { maxTokens: 256, temperature: 0 },
+          maxTokens: 256,
+          temperature: 0,
         }
         const replay = yield* compileRequest(followUp)
         expect(replay.body.messages).toContainEqual(
@@ -105,7 +108,8 @@ describe("Mistral recorded", () => {
           prompt: "What is the weather?",
           tools: [weather],
           toolChoice: weather,
-          generation: { maxTokens: 160, temperature: 0 },
+          maxTokens: 160,
+          temperature: 0,
         })
         const first = yield* LLMClient.generate(firstRequest)
 
@@ -123,7 +127,8 @@ describe("Mistral recorded", () => {
             first.message,
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
           ],
-          generation: { maxTokens: 160, temperature: 0 },
+          maxTokens: 160,
+          temperature: 0,
         }
         const second = yield* LLMClient.generate(followUp)
 
@@ -148,7 +153,8 @@ describe("Mistral hosted GLM recorded", () => {
             prompt: "What is the weather?",
             tools: [weather],
             toolChoice: weather,
-            generation: { maxTokens: 256, temperature: 0 },
+            maxTokens: 256,
+            temperature: 0,
           }),
         )
 

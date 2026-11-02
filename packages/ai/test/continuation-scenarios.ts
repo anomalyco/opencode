@@ -108,6 +108,7 @@ export function continuationRequest(input: {
     providerOptions: features.has("encrypted-reasoning")
       ? { store: false, include: ["reasoning.encrypted_content"], reasoningSummary: "auto" }
       : undefined,
-    generation: { maxTokens: 80, temperature: 0 },
+    maxTokens: 80,
+    temperature: 0,
   })
 }

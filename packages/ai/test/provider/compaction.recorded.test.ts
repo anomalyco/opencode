@@ -28,7 +28,7 @@ for (const provider of [
     "compacts and continues with the provider checkpoint",
     () =>
       Effect.gen(function* () {
-        const request = ai.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
+        const request = ai.request({ model: provider.model, messages: history, maxTokens: 1024 })
         const compacted = yield* ai.compact(request)
         const result = yield* LLMClient.generate({
           ...request,
@@ -63,7 +63,7 @@ recordedTests({
               "The implementation and tests were reviewed. ".repeat(10000),
           ),
         ],
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
         providerOptions: {
           contextManagement: {
             edits: [
