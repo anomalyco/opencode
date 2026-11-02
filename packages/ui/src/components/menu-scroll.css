@@ -52,7 +52,8 @@
     }
   }
 
-  [data-component="menu-scroll"]:is(:hover, [data-scrolling], [data-dragging]) > [data-slot="menu-scroll-thumb"] {
+  [data-component="menu-scroll"]:is([data-scrolling], [data-dragging]) > [data-slot="menu-scroll-thumb"],
+  [data-slot="menu-scroll-thumb"]:hover {
     opacity: 1;
     pointer-events: auto;
   }

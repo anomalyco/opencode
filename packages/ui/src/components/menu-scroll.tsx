@@ -39,7 +39,7 @@ export function MenuScroll(
   const measure = () => {
     const track = Math.max(0, viewport.clientHeight - 8)
 
-    const size = Math.min(track, Math.max(32, (viewport.clientHeight / Math.max(1, viewport.scrollHeight)) * track))
+    const size = Math.min(track, Math.max(24, (viewport.clientHeight / Math.max(1, viewport.scrollHeight)) * track))
 
     const max = viewport.scrollHeight - viewport.clientHeight
 
