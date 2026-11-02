@@ -220,6 +220,42 @@ describe("fs", () => {
     ])
   })
 
+  test("fs follows Node for copy exclusivity, rename onto directories, nested listings, and file URLs", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "a.txt"), "a")
+    await Bun.write(path.join(tmp.path, "full/x.txt"), "x")
+    await Bun.write(path.join(tmp.path, "src/nested/b.txt"), "b")
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, fileServices(tmp.path)).execute(
+        {
+          code: `const code = (f) => { try { f() } catch (e) { return [e.code, typeof e.errno] } }
+            fs.mkdirSync("empty")
+            fs.mkdirSync("moved")
+            fs.renameSync("empty", "moved")
+            return [
+              code(() => fs.copyFileSync("a.txt", "full/x.txt", fs.constants.COPYFILE_EXCL)),
+              code(() => fs.renameSync("a.txt", "full")),
+              code(() => fs.renameSync("moved", "full")),
+              fs.readdirSync("src", { withFileTypes: true, recursive: true }).map((e) => [e.parentPath, e.name]),
+              fs.readFileSync(new URL("file://${tmp.path}/a.txt"), "utf8"),
+            ]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([
+      ["EEXIST", "number"],
+      ["EISDIR", "number"],
+      ["ENOTEMPTY", "number"],
+      [
+        ["src", "nested"],
+        ["src/nested", "b.txt"],
+      ],
+      "a",
+    ])
+  })
+
   test("a denied write never touches disk: the sync call throws and the promise rejects", async () => {
     await using tmp = await tmpdir()
     const denyEdits = {

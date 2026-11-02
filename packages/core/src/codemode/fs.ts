@@ -3,7 +3,9 @@ export * as CodeModeFs from "./fs.js"
 import { Extension } from "@opencode/codemode"
 import type { Context as ToolContext } from "@opencode/schema/tool"
 import { Effect } from "effect"
+import { constants as os } from "os"
 import path from "path"
+import { fileURLToPath } from "url"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileWrite } from "../file-write.js"
@@ -21,6 +23,7 @@ type Host = {
 }
 type Encoding = BufferEncoding | { readonly encoding?: BufferEncoding | null } | null
 type Data = string | Uint8Array
+type PathLike = string | URL
 type Op = (...args: never[]) => Effect.Effect<unknown, unknown, Services | CodeModeExecution.Service>
 
 // Each operation is written once and backs both `fs.promises.x` and `fs.xSync`. Reads ask the read permission like the
@@ -42,7 +45,11 @@ const ops = {
   readdir: op("scandir", function* (host, file, options?: { withFileTypes?: boolean; recursive?: boolean }) {
     const entries = yield* walk(host.files, yield* read(host, file), options?.recursive === true)
     if (options?.withFileTypes !== true) return entries.map((entry) => entry.path)
-    return entries.map((entry) => ({ name: path.basename(entry.path), ...kind(entry.type) }))
+    return entries.map((entry) => ({
+      name: path.basename(entry.path),
+      parentPath: path.join(file, path.dirname(entry.path)),
+      ...kind(entry.type),
+    }))
   }),
   stat: op("stat", (host, file) => stat(host, file, true)),
   lstat: op("lstat", (host, file) => stat(host, file, false)),
@@ -57,24 +64,34 @@ const ops = {
   }),
   rm: op("rm", remove),
   unlink: op("unlink", (host, file) => remove(host, file)),
-  rename: op("rename", function* (host, file, to: string) {
+  rename: op("rename", function* (host, file, to: PathLike) {
     const source = (yield* host.access.resolve({ path: file })).absolute
-    const target = (yield* host.access.resolve({ path: to })).absolute
-    if ((yield* typeOf(host, target)) === "directory")
-      return yield* new Environment.WrongKind({ path: target, actual: "directory" })
+    const target = (yield* host.access.resolve({ path: toPath(to) })).absolute
+    // As in Node: a directory may replace an empty directory; anything else onto a directory fails.
+    if ((yield* typeOf(host, target)) === "directory") {
+      if ((yield* typeOf(host, source)) !== "directory") return yield* Effect.fail("EISDIR" as const)
+      if ((yield* tree(host, target)).length > 0) return yield* Effect.fail("ENOTEMPTY" as const)
+    }
     // Paths inside a moved directory change too, under both their old and new names.
     const inside = yield* tree(host, source)
     yield* edit(host, [source, target, ...inside.flatMap((item) => [path.join(source, item), path.join(target, item)])])
+    if ((yield* typeOf(host, target)) === "directory") yield* host.files.remove(target)
     yield* host.files.move(source, target)
   }),
-  copyFile: op("copyfile", function* (host, file, to: string) {
-    yield* write(host, to, (yield* host.files.read(yield* read(host, file))).bytes)
+  copyFile: op("copyfile", function* (host, file, to: PathLike, mode?: number) {
+    const bytes = (yield* host.files.read(yield* read(host, file))).bytes
+    const destination = toPath(to)
+    if ((mode ?? 0) & constants.COPYFILE_EXCL) {
+      const absolute = (yield* host.access.resolve({ path: destination })).absolute
+      if ((yield* typeOf(host, absolute)) !== undefined) return yield* Effect.fail("EEXIST" as const)
+    }
+    yield* write(host, destination, bytes)
   }),
 }
 
 const variants = (wrap: (operation: Op) => Op, suffix: string) =>
   Object.fromEntries(Object.entries(ops).map(([name, operation]: [string, Op]) => [name + suffix, wrap(operation)]))
-const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 }
+const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1, COPYFILE_EXCL: 1 }
 
 export const extension = Extension.make({
   name: "fs",
@@ -101,8 +118,9 @@ function op<Args extends ReadonlyArray<unknown>, A>(
   syscall: string,
   body: (host: Host, file: string, ...args: Args) => Generator<Effect.Effect<unknown, unknown>, A, unknown>,
 ) {
-  return (file: string, ...args: Args) =>
-    Effect.gen(function* () {
+  return (input: PathLike, ...args: Args) => {
+    const file = toPath(input)
+    return Effect.gen(function* () {
       const host = {
         context: yield* CodeModeExecution.Service,
         access: yield* FileAccess.Service,
@@ -111,7 +129,11 @@ function op<Args extends ReadonlyArray<unknown>, A>(
       }
       return yield* body(host, file, ...args)
     }).pipe(Effect.mapError((error) => nodeError(error, syscall, file)))
+  }
 }
+
+const toPath = (input: PathLike) =>
+  typeof input === "string" && !input.startsWith("file:") ? input : fileURLToPath(input)
 
 function* read(host: Host, file: string) {
   return (yield* host.access.authorizeRead(file, host.context)).absolute
@@ -148,9 +170,16 @@ function* remove(host: Host, file: string, options?: { recursive?: boolean; forc
 
 function* stat(host: Host, file: string, follow: boolean) {
   const absolute = yield* read(host, file)
-  const info = yield* host.files.stat(absolute)
-  const type = follow ? yield* Environment.typeFollowing(host.files, absolute) : info.type
-  return { size: info.size, mtimeMs: info.mtimeMs, mtime: new Date(info.mtimeMs), ...kind(type) }
+  const own = yield* host.files.stat(absolute)
+  // `stat` describes what a symlink points at; reading zero bytes resolves it. A directory target keeps the link's size.
+  const info =
+    follow && own.type === "symlink"
+      ? yield* host.files.read(absolute, { offset: 0, length: 0 }).pipe(
+          Effect.map((result) => result.info),
+          Effect.catchTag("Environment.WrongKind", () => Effect.succeed({ ...own, type: "directory" as const })),
+        )
+      : own
+  return { size: info.size, mtimeMs: info.mtimeMs, mtime: new Date(info.mtimeMs), ...kind(info.type) }
 }
 
 const typeOf = (host: Host, absolute: string) =>
@@ -201,13 +230,19 @@ const messages = {
   EEXIST: "file already exists",
   EISDIR: "illegal operation on a directory",
   ENOTDIR: "not a directory",
+  ENOTEMPTY: "directory not empty",
 }
 
 // Errors carry Node's `code`, `syscall` and `path`, so `e.code === "ENOENT"` works.
 const nodeError = (error: unknown, syscall: string, file: string) => {
   const code = codeOf(error)
   if (code)
-    return Object.assign(new Error(`${code}: ${messages[code]}, ${syscall} '${file}'`), { code, syscall, path: file })
+    return Object.assign(new Error(`${code}: ${messages[code]}, ${syscall} '${file}'`), {
+      code,
+      errno: -os.errno[code],
+      syscall,
+      path: file,
+    })
   if (error instanceof Environment.Failed && error.cause instanceof Error) return error.cause
   // The feedback is the user talking to the model, so it must reach the program as the error's message.
   if (error instanceof Permission.CorrectedError)
@@ -216,7 +251,7 @@ const nodeError = (error: unknown, syscall: string, file: string) => {
 }
 
 const codeOf = (error: unknown): keyof typeof messages | undefined => {
-  if (error === "EEXIST") return error
+  if (typeof error === "string" && error in messages) return error as keyof typeof messages
   if (error instanceof Environment.NotFound) return "ENOENT"
   if (error instanceof Environment.WrongKind) return error.actual === "directory" ? "EISDIR" : "ENOTDIR"
 }
