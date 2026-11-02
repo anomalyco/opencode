@@ -1290,10 +1290,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
           namespace: item.namespace,
           providerMetadata: metadata,
         })
-    const result =
-      input === undefined
-        ? yield* ToolStream.finish(state.id, tools, item.id)
-        : yield* ToolStream.finishWithInput(state.id, tools, item.id, input)
+    const result = yield* ToolStream.finish(state.id, tools, item.id, input)
     const events: LLMEvent[] = []
     const finished = [...(closed?.events ?? []), ...(result.events ?? [])]
     // A done-only call never streamed a start event, so open its lifecycle here.
