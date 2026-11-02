@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
 import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
@@ -38,8 +39,9 @@ import { Plugin } from "@opencode/core/plugin"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
-import { AbsolutePath } from "@opencode/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { Snapshot } from "@opencode/core/snapshot"
 import { Workspace } from "@opencode/core/workspace"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
@@ -508,6 +510,133 @@ describe("LocationServiceMap", () => {
         ),
       ),
     ),
+  )
+
+  it.live("rebuilds a cached location when its directory becomes a git repo", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(dir.path)
+      const ref = Location.Ref.make({ directory })
+      const locations = yield* LocationServiceMap.Service
+      const borrow = Effect.gen(function* () {
+        return Context.get(yield* locations.contextEffect(ref), Location.Service)
+      }).pipe(Effect.scoped)
+
+      // A location built before the directory is a repo keeps the markerless identity.
+      const before = yield* borrow
+      expect(before.vcs).toBeUndefined()
+
+      yield* Effect.promise(() => $`git init -q`.cwd(dir.path).quiet())
+
+      // Borrowing between init and the first commit resolves a git graph that has no identity yet.
+      const pending = yield* borrow
+      expect(pending.vcs?.type).toBe("git")
+      expect(pending.project.id).toBe(Project.ID.global)
+
+      yield* Effect.promise(() =>
+        $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+          .cwd(dir.path)
+          .quiet(),
+      )
+      const head = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(dir.path).text())).trim()
+
+      // The commit pins the identity; the next borrow must report it instead of keeping `global`.
+      const after = yield* borrow
+      expect(after.vcs?.type).toBe("git")
+      expect(after.project.id).toBe(Project.ID.make(head))
+    }),
+  )
+
+  it.live("keeps a borrowed location on its identity until the borrow is released", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(dir.path)
+      const ref = Location.Ref.make({ directory })
+      const locations = yield* LocationServiceMap.Service
+      const hold = Effect.gen(function* () {
+        return Context.get(yield* locations.contextEffect(ref), Location.Service)
+      })
+      const borrow = hold.pipe(Effect.scoped)
+
+      const before = yield* borrow
+      expect(before.vcs).toBeUndefined()
+
+      // A running step keeps the graph it resolved: the repo appearing underneath it must wait for
+      // the borrow to be released instead of shutting the location down mid-turn.
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          expect((yield* hold).project.id).toBe(before.project.id)
+          yield* Effect.promise(() => $`git init -q`.cwd(dir.path).quiet())
+          expect((yield* hold).project.id).toBe(before.project.id)
+        }),
+      )
+
+      const after = yield* borrow
+      expect(after.vcs?.type).toBe("git")
+    }),
+  )
+
+  it.live("rebuilds a location when a parent directory becomes a git repo", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const directory = AbsolutePath.make(path.join(dir.path, "src"))
+      yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+      const ref = Location.Ref.make({ directory })
+      const locations = yield* LocationServiceMap.Service
+      const borrow = Effect.gen(function* () {
+        return Context.get(yield* locations.contextEffect(ref), Location.Service)
+      }).pipe(Effect.scoped)
+
+      // Opened in a subfolder while nothing above it is a repo.
+      expect((yield* borrow).vcs).toBeUndefined()
+
+      // The repo appears above the opened folder rather than in it.
+      yield* Effect.promise(() => $`git init -q`.cwd(dir.path).quiet())
+
+      const after = yield* borrow
+      expect(after.vcs?.type).toBe("git")
+      expect(after.project.id).toBe(Project.ID.global)
+    }),
+  )
+
+  it.live("restores snapshot capture after the directory becomes a git repo", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() => fs.writeFile(path.join(dir.path, "file.txt"), "one\n"))
+      const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+      const locations = yield* LocationServiceMap.Service
+      const borrow = Effect.gen(function* () {
+        const context = yield* locations.contextEffect(ref)
+        return {
+          location: Context.get(context, Location.Service),
+          snapshot: Context.get(context, Snapshot.Service),
+        }
+      }).pipe(Effect.scoped)
+
+      // A location without a VCS disables snapshot capture, so undo/redo would only roll back the
+      // conversation while the files keep the assistant's changes.
+      const before = yield* borrow
+      expect(before.location.vcs).toBeUndefined()
+      expect(yield* before.snapshot.capture()).toBeUndefined()
+
+      yield* Effect.promise(() => $`git init -q`.cwd(dir.path).quiet())
+      yield* Effect.promise(() => $`git add -A`.cwd(dir.path).quiet())
+      yield* Effect.promise(() =>
+        $`git -c user.email=test@example.com -c user.name=test commit -qm init`.cwd(dir.path).quiet(),
+      )
+
+      // The next borrow re-resolves the graph, so capture works again.
+      const after = yield* borrow
+      expect(after.location.vcs?.type).toBe("git")
+      const first = yield* after.snapshot.capture()
+      expect(first).toBeDefined()
+
+      yield* Effect.promise(() => fs.writeFile(path.join(dir.path, "file.txt"), "two\n"))
+      const second = yield* after.snapshot.capture()
+      expect(second).toBeDefined()
+      if (!first || !second) return
+      expect(yield* after.snapshot.files({ from: first, to: second })).toContain(RelativePath.make("file.txt"))
+    }),
   )
 
   it.live("isolates provider state by location", () =>
