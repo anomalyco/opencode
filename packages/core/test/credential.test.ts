@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
 import { eq, sql } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { CredentialTable } from "@opencode/core/credential/sql"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
+import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Event } from "@opencode/schema/event"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -15,6 +16,26 @@ import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Credential.node, Bus.node, Database.node])))
+
+const sourceRemovals: string[] = []
+const itWithSource = testEffect(
+  LayerNode.compile(Credential.node, {
+    replacements: [
+      WellKnown.node.replace(
+        Layer.mock(WellKnown.Service, {
+          // Deliberately empty: the cleanup must not depend on the loaded cache.
+          snapshot: () => [],
+          has: (integrationID: Integration.ID) =>
+            Effect.succeed(integrationID === Integration.ID.make("https://wellknown.test")),
+          remove: (origin: string) =>
+            Effect.sync(() => {
+              sourceRemovals.push(origin)
+            }),
+        }),
+      ),
+    ],
+  }),
+)
 
 describe("Credential", () => {
   it.effect("stores, updates, lists, and removes credentials", () =>
@@ -266,6 +287,27 @@ describe("Credential", () => {
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: legacy.id } },
         { type: Credential.Event.Updated.type, data: {} },
       ])
+    }),
+  )
+
+  itWithSource.effect("removes a well-known source when its last credential is gone", () =>
+    Effect.gen(function* () {
+      sourceRemovals.length = 0
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("https://wellknown.test")
+      const value = Credential.Key.make({ type: "key", key: "secret" })
+      const other = yield* credentials.create({ integrationID: Integration.ID.make("openai"), value })
+      yield* credentials.remove(other.id)
+      expect(sourceRemovals).toEqual([])
+
+      const first = yield* credentials.create({ integrationID, value })
+      const second = yield* credentials.create({ integrationID, value })
+
+      yield* credentials.remove(first.id)
+      expect(sourceRemovals).toEqual([])
+
+      yield* credentials.remove(second.id)
+      expect(sourceRemovals).toEqual(["https://wellknown.test"])
     }),
   )
 })

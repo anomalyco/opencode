@@ -45,6 +45,8 @@ export interface Entry {
 export interface Interface {
   readonly entries: () => Effect.Effect<readonly Entry[], Error>
   readonly snapshot: () => readonly Entry[]
+  /** Reports whether an integration is a registered source, reading the persisted list instead of the loaded cache. */
+  readonly has: (integrationID: Integration.ID) => Effect.Effect<boolean>
   readonly refresh: () => Effect.Effect<boolean, Error>
   readonly add: (origin: string) => Effect.Effect<Entry, Error>
   readonly remove: (origin: string) => Effect.Effect<void>
@@ -168,6 +170,11 @@ const layer = Layer.effect(
     return Service.of({
       entries: load,
       snapshot: () => Array.from(Ref.getUnsafe(cache).values()),
+      has: Effect.fn("WellKnown.has")(function* (integrationID) {
+        const value = yield* kv.get(sourcesKey)
+        const origins = Schema.is(Sources)(value) ? value : []
+        return origins.some((origin) => Integration.ID.make(origin) === integrationID)
+      }),
       refresh,
       add: Effect.fn("WellKnown.add")(
         function* (value) {

@@ -4,6 +4,7 @@ import { FetchHttpClient } from "effect/http"
 import { KV } from "@opencode/core/kv"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -78,11 +79,13 @@ serviceIt.live("persists sources in one KV value", () =>
         expect(entry.origin).toBe(server.url.origin)
         expect(yield* kv.get("wellknown:sources")).toEqual([server.url.origin])
         expect(yield* wellknown.entries()).toEqual([entry])
+        expect(yield* wellknown.has(Integration.ID.make(server.url.origin))).toBe(true)
         expect(yield* Fiber.join(changed)).toHaveLength(1)
 
         yield* wellknown.remove(server.url.origin)
         expect(yield* kv.get("wellknown:sources")).toEqual([])
         expect(yield* wellknown.entries()).toEqual([])
+        expect(yield* wellknown.has(Integration.ID.make(server.url.origin))).toBe(false)
       }),
     (server) => Effect.promise(() => server.stop(true)),
   ),

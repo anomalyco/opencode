@@ -11,6 +11,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { CredentialTable } from "./credential/sql.js"
 import { ErrorSummary } from "./util/error-summary.js"
+import { WellKnown } from "./wellknown.js"
 
 export const ID = Credential.ID
 export type ID = Credential.ID
@@ -74,6 +75,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const wellknown = yield* WellKnown.Service
     const flock = yield* EffectFlock.Service
     const scope = yield* Effect.scope
     const pending = new Map<ID, Fiber.Fiber<OAuth | undefined, unknown>>()
@@ -93,6 +95,15 @@ const layer = Layer.effect(
         const credential = stored(row)
         return credential ? [credential] : []
       })
+    const list = Effect.fn("Credential.list")((integrationID: Integration.ID) =>
+      db
+        .select()
+        .from(CredentialTable)
+        .where(eq(CredentialTable.integration_id, integrationID))
+        .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
+        .all()
+        .pipe(Effect.orDie, Effect.map(storedRows)),
+    )
 
     return Service.of({
       lock: Effect.fn("Credential.lock")((id, operation) =>
@@ -119,15 +130,7 @@ const layer = Layer.effect(
           .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
           .all()
           .pipe(Effect.orDie, Effect.map(storedRows)),
-      list: Effect.fn("Credential.list")((integrationID) =>
-        db
-          .select()
-          .from(CredentialTable)
-          .where(eq(CredentialTable.integration_id, integrationID))
-          .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
-          .all()
-          .pipe(Effect.orDie, Effect.map(storedRows)),
-      ),
+      list,
       get: Effect.fn("Credential.get")(function* (id) {
         const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
         return row ? stored(row) : undefined
@@ -347,9 +350,20 @@ const layer = Layer.effect(
             { integrationID: removed.integrationID, credentialID: removed.credentialID },
             { global: true },
           )
+        // A well-known source with no credential left cannot authenticate, and the config loader keeps its last
+        // cached remote config until the source is removed. Drop the source so every credential caller, not just
+        // the HTTP handler, drops the config with the last credential.
+        if (!removed.integrationID || (yield* list(removed.integrationID)).length) return
+        // The persisted source list, not the loaded cache, so this also holds before config has loaded the sources.
+        if (!(yield* wellknown.has(removed.integrationID))) return
+        yield* wellknown.remove(removed.integrationID)
       }),
     })
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node, EffectFlock.node] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [Database.node, Bus.node, EffectFlock.node, WellKnown.node],
+})
