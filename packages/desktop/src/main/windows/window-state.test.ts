@@ -32,6 +32,16 @@ describe("window state", () => {
     expect(resolveWindowState(negative, defaults, displays)).toEqual(negative)
   })
 
+  test("keeps edge-snapped bounds within the platform border tolerance", () => {
+    const saved = { x: -7, y: -7, width: 1000, height: 700, displayBounds: primary }
+    expect(resolveWindowState(saved, defaults, displays)).toEqual(saved)
+  })
+
+  test("falls back when the saved window is far outside a display", () => {
+    const saved = { x: -200, y: 100, width: 1000, height: 700, displayBounds: primary }
+    expect(resolveWindowState(saved, defaults, displays)).toEqual({ ...defaults, x: 0, y: 0, displayBounds: primary })
+  })
+
   test.each([
     {
       name: "it is above the primary and the normal bounds stayed on the primary",
