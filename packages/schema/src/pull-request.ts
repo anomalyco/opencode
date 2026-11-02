@@ -61,6 +61,12 @@ export interface Unavailable extends Schema.Schema.Type<typeof Unavailable> {}
 export const Result = Schema.Union([Snapshot, Unavailable]).annotate({ identifier: "PullRequest.Result" })
 export type Result = typeof Result.Type
 
+/**
+ * Experimental: may change without compatibility guarantees.
+ *
+ * `experimental.pull-request` identifies the RPC API, independently of the owning core plugin's `opencode.pull-request`
+ * registration ID. Keep the API experimental until its contract is ready to graduate.
+ */
 export const Definition = Rpc.define({
   id: "experimental.pull-request",
   methods: {
