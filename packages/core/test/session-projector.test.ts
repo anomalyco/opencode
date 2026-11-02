@@ -307,7 +307,12 @@ describe("SessionProjector", () => {
 
       const sessions = yield* Session.Service
       const store = yield* SessionStore.Service
-      const expected = { _tag: "Session.MessageDecodeError", sessionID, messageID }
+      const expected = {
+        _tag: "Session.MessageDecodeError",
+        sessionID,
+        messageID,
+        detail: expect.stringMatching(/Missing key\s+at \["text"\]/),
+      }
       expect(yield* store.messages({ sessionID }).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.messages({ sessionID }).pipe(Effect.flip)).toMatchObject(expected)
       expect(yield* sessions.context(sessionID).pipe(Effect.flip)).toMatchObject(expected)
