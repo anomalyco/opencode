@@ -25,16 +25,12 @@ describe("source syntax", () => {
     })
   })
 
-  test("explains that imports and exports aren't available", async () => {
-    expect(await error(`import x from "y"`)).toEqual({
+  test("explains that exports aren't available", async () => {
+    expect(await error(`const x = 1\nexport { x }`)).toEqual({
       kind: "ParseError",
-      message:
-        "SyntaxError: Imports and exports aren't available. Call tools through `tools` and use the built-in globals. (line 1, col 1)",
-      location: { line: 1, column: 1 },
+      message: "SyntaxError: Exports aren't available. Return the result instead. (line 2, col 1)",
+      location: { line: 2, column: 1 },
     })
-    expect((await error(`export const x = 1`)).message).toStartWith(
-      "SyntaxError: Imports and exports aren't available.",
-    )
   })
 
   test("rejects TypeScript-only syntax", async () => {

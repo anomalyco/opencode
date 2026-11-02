@@ -39,7 +39,10 @@ export type ToolCall = {
 /** A tool call the program is making, with its decoded input. */
 export type ToolInvocation = { readonly name: string; readonly input: unknown }
 
-/** A call the program is making to an extension global, with its arguments. */
+/**
+ * A call the program is making to an extension global or module function, with its arguments. A module function is
+ * named by its path from the module, such as `fs.readFile`.
+ */
 export type ExtensionInvocation = {
   readonly extension: string
   readonly name: string
