@@ -78,3 +78,18 @@ story("key-based reconnect completes without opening an authentication dialog", 
   await expect(component.getByText("Session connected")).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
 })
+
+story("first-time SSH setup reports install progress", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--installing")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("status")).toContainText("Setting up OpenCode on this server…")
+  await expect(dialog.getByRole("status")).toContainText(
+    "This can take a few minutes on the first connection. Keep this window open.",
+  )
+})
+
+story("starting an installed server does not show the install message", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--starting")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("status")).toHaveCount(0)
+})

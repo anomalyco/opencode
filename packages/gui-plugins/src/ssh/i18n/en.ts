@@ -32,6 +32,8 @@ export default {
   "error.unavailable": "SSH is unavailable",
   "action.authenticate": "Authenticate",
   "stage.connecting": "Connecting over SSH…",
+  "stage.installing": "Setting up OpenCode on this server…",
+  "stage.installHint": "This can take a few minutes on the first connection. Keep this window open.",
   "stage.authentication": "Authentication required",
   "form.name": "Server name (optional)",
   "form.namePlaceholder": "Localhost",
