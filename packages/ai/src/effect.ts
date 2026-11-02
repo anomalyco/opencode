@@ -11,7 +11,7 @@ export const ai = {
   generate: LLM.generate,
   stream: LLM.stream,
   loop: LLM.loop,
-  generateObject: LLM.generateObject,
+  collect: LLM.collect,
   compact: LLM.compact,
   canCompact: LLM.canCompact,
   image: Image,
@@ -30,7 +30,7 @@ export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
 export { ProviderPackage } from "./provider-package.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
-export type { Interface as LLMClientShape, LLMClientService } from "./route/client.js"
+export type { LLMClientService } from "./route/client.js"
 export {
   ProtocolID,
   RouteID,
@@ -74,7 +74,6 @@ export {
   ToolNamespace,
   ToolEntry,
   ToolChoice,
-  LLMRequest,
   FinishReason,
   Usage,
   MediaUsage,
@@ -93,12 +92,11 @@ export {
   ToolInputError,
   ToolCall,
   ToolResult,
-  ToolError,
   FinishReasonDetails,
   StepFinish,
   Finish,
   MediaEvent,
-  ProviderErrorEvent,
+  RawEvent,
   LLMEvent,
   LLMResponse,
   HttpContext,
@@ -106,7 +104,6 @@ export {
   InvalidRequestError,
   UnsupportedOperationError,
   ProviderConfigurationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
@@ -126,17 +123,18 @@ export type {
   GenerationOptionsInput,
   LanguageModelInput,
   LanguageModelProviderOptions,
+  LLMRequest,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
   ImageOptions,
-  ImageRequestFor,
+  ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
@@ -154,7 +152,6 @@ export {
   DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
-  DecisionRequest,
   DecisionResponse,
   DecisionTextPart,
   DecisionUsage,
@@ -172,7 +169,7 @@ export type {
   DecisionModelOptions,
   DecisionOptions,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionRequestInput,
   DecisionResponseFor,
   DecisionModelRoute,
@@ -190,20 +187,18 @@ export type {
 } from "./generation.js"
 export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
-export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
+export type { ToolSettlement } from "./tool-runtime.js"
 export type {
   ExecutableTool,
   Tool,
   ToolExecute,
   ToolExecuteContext,
+  ToolInput,
+  ToolInputType,
   ToolModelOutputInput,
   ToolOptions,
-  Tools,
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"
 export type { LLM } from "./llm.js"
-export type {
-  Definition as ProviderPackageDefinition,
-  Settings as ProviderPackageSettings,
-} from "./provider-package.js"
+export type { LLMLoopInput, LLMRequestInput } from "./llm.js"

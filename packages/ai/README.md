@@ -47,17 +47,26 @@ await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 ```
 
 Run `ai.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept input or a prebuilt
-`ai.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
+`ai.request(...)`. Input takes either `prompt`, a single user message, or `messages`, the whole conversation, never
+both; `system` goes with either. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs (an error result when
+it fails). Each step ends with its own `step-finish`; one `finish` ends the loop, carrying the final step's reason
+and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
-them. `tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
-`signal` aborts when the loop is interrupted.
-`tool` from `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
+them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
+`name`, and two tools with the same name fail the request. Tool arguments that are not valid JSON go back to the model
+as an error result so it can retry. A step that hits the output token limit ends the loop without running its tool
+calls, which may be cut off. A forced `toolChoice` applies to the first step only; later steps use `auto`. `tool` takes
+a plain `async` execute; a throw or rejection goes back to the model as an error result, and `signal` aborts when the
+loop is interrupted.
+`input` is an Effect Schema that decodes and types the arguments, or a raw JSON Schema object, such as an MCP tool's,
+whose arguments arrive as `unknown` (pair it with an optional JSON Schema `outputSchema`). `tool` from
+`@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
 
 ```ts
 import { readFile } from "node:fs/promises"
@@ -65,20 +74,32 @@ import { Schema } from "effect"
 import { ai, tool } from "@opencode/ai"
 
 const read_file = tool({
+  name: "read_file",
   description: "Read a UTF-8 file.",
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   execute: ({ path }, { signal }) => readFile(path, { encoding: "utf8", signal }),
 })
 
 const events = ai.loop({
   model,
   prompt: "Summarize package.json.",
-  tools: { read_file },
+  tools: [read_file],
   until: ({ steps }) => steps.length >= 8,
 })
 for await (const event of events) {
   if (event.type === "text-delta") process.stdout.write(event.text)
 }
+```
+
+The terminal `finish` carries the final assistant `message` and `usage`. To skip the events, `ai.collect` folds a
+stream from `stream` or `loop` into one result: `text` of the final step, `steps` (one `LLMResponse` per call),
+`messages` (each step's assistant message and its tool results, ready to append to the next request), the total
+`usage`, `finishReason`, and `object` with `schema`.
+
+```ts
+const result = await ai.collect(ai.loop({ model, prompt: "Summarize package.json.", tools: { read_file } }))
+// Effect: const result = yield* ai.collect(ai.loop({ ... }))
+console.log(result.text, result.usage?.totalTokens)
 ```
 
 ### Freeform tools
@@ -88,8 +109,9 @@ instead of JSON arguments: unconstrained `text`, or text matching a `regex` or `
 
 ```ts
 const run_code = tool({
+  name: "run_code",
   description: "Run JavaScript",
-  parameters: Schema.Struct({ code: Schema.String }),
+  input: Schema.Struct({ code: Schema.String }),
   freeform: { type: "lark", grammar: JS_GRAMMAR },
   execute: ({ code }) => runCode(code),
 })
@@ -104,35 +126,57 @@ history works with or without `freeform`.
 
 ### Structured output
 
-`generateObject` forces a tool call and decodes its input against `schema`; pass `jsonSchema` instead for an
-unvalidated `unknown` object:
+Pass `schema` to `generate`, `stream` or `loop`. The model must answer through a hidden tool call, decoded into
+`object` (typed from an Effect Schema, or an unvalidated `unknown` for a raw JSON Schema object):
 
 ```ts
-const { object } = await ai.generateObject({
-  model,
-  prompt: "Pick a city.",
-  schema: Schema.Struct({ city: Schema.String }),
-})
+const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.Struct({ city: Schema.String }) })
+res.object.city
+```
+
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the loop's `finish`. A
+decode failure is an `AIError` whose `partial` holds the response.
+
+### Errors
+
+Every failure is an `AIError`. `reason._tag` names the kind (`RateLimit`, `InvalidRequest`, `Transport`, ...), and
+getters read the common fields without digging into `reason` or the raw body:
+
+```ts
+try {
+  await ai.generate({ model, prompt: "Hi" })
+} catch (error) {
+  if (!(error instanceof AIError)) throw error
+  error.status // HTTP status, when the failure came from a response
+  error.code // provider error code such as "model_not_found", when known
+  error.isRetryable // whether sending the same request again may succeed
+  error.retryAfterMs // delay the provider asked for, when known
+}
 ```
 
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
 before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
-are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+are visible too. Raw events are off by default, and `generate` ignores them. `RawEvent` is the event's type. Act on a
+frame with a stream map:
 
 ```ts
-import { Stream } from "effect"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { Effect, Stream } from "effect"
+import { ai, AIError, ContentPolicyError } from "@opencode/ai/effect"
 
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
 
-const events = ai.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
-  Stream.map((event) =>
-    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
-  ),
-)
+const events = ai
+  .stream({ model, prompt: "Say hello.", includeRaw: true })
+  .pipe(
+    Stream.mapEffect((event) =>
+      event.type === "raw" && flagged(event.data)
+        ? Effect.fail(new AIError({ reason: new ContentPolicyError({ message: "Flagged by moderation" }) }))
+        : Effect.succeed(event),
+    ),
+  )
 ```
 
 ### Google Interactions
@@ -147,11 +191,13 @@ live under `providerMetadata.vertex`. The default is still full-history replay w
 
 ```ts
 const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
-const response = yield* ai.generate({
-  model,
-  prompt: "Say hello.",
-  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
-})
+const response =
+  yield *
+  ai.generate({
+    model,
+    prompt: "Say hello.",
+    providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+  })
 ```
 
 Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
@@ -666,18 +712,18 @@ Common fields are portable in shape, not in support. Some routes approximate `as
 size they offer; others fail with a typed `AIError` before any network call rather than dropping them, so check this
 table before swapping only the `model`:
 
-| Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
-| --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
-| OpenAI                | ✓¹  | nearest size         | nearest size          | ✓                                | `size`, `outputFormat`, `mask`                     |
-| Google (Gemini)       | 1   | ✓                    | ✓ (`0.5K` as `512`)   | ✓ (no public URLs)               | `seed`                                             |
-| xAI                   | ✓   | ✓                    | `1k`/`2k`             | ✓                                | none                                               |
-| Meta                  | ✓   | ✓ (hint)             | ignored               | ✓                                | `size`, `outputFormat`                             |
-| Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
-| Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
-| MiniMax               | ✓   | preset or w × h⁴     | preset or w × h⁴      | 1 (portrait subject)             | `aspect_ratio`, `width`, `height`, `seed`          |
-| Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
-| OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model⁵                       | `size`, `outputFormat` (no `mask`)                 |
-| Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
+| Provider              | `n` | `aspect`           | `resolution`        | `images`             | Moved to `providerOptions`                |
+| --------------------- | --- | ------------------ | ------------------- | -------------------- | ----------------------------------------- |
+| OpenAI                | ✓¹  | nearest size       | nearest size        | ✓                    | `size`, `outputFormat`, `mask`            |
+| Google (Gemini)       | 1   | ✓                  | ✓ (`0.5K` as `512`) | ✓ (no public URLs)   | `seed`                                    |
+| xAI                   | ✓   | ✓                  | `1k`/`2k`           | ✓                    | none                                      |
+| Meta                  | ✓   | ✓ (hint)           | ignored             | ✓                    | `size`, `outputFormat`                    |
+| Z.ai                  | ✗   | width × height     | width × height      | ✗                    | `size`                                    |
+| Alibaba               | ✓   | width × height     | width × height      | ✓                    | `size`, `seed`                            |
+| MiniMax               | ✓   | preset or w × h⁴   | preset or w × h⁴    | 1 (portrait subject) | `aspect_ratio`, `width`, `height`, `seed` |
+| Vercel AI Gateway     | ✓   | as OpenAI³         | as OpenAI³          | per model            | as OpenAI                                 |
+| OpenRouter            | ✓   | ✓ (`aspect_ratio`) | tier⁵               | per model⁵           | `size`, `outputFormat` (no `mask`)        |
+| Cloudflare Workers AI | 1   | width × height²    | width × height²     | ✗                    | `width`, `height`, `seed`                 |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
 computes a size the provider accepts and fails when the request falls outside its limits. ¹ `ai.image.stream` on OpenAI
@@ -848,11 +894,13 @@ and emits `image-partial` events before each final `image`; `ai.image.generate` 
 import { Stream } from "effect"
 import { ImageEvent } from "@opencode/ai/effect"
 
-const previews = ai.image.stream({
-  model: openai.image("gpt-image-2"),
-  prompt: "A lighthouse at dusk",
-  providerOptions: { partialImages: 2 },
-}).pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
+const previews = ai.image
+  .stream({
+    model: openai.image("gpt-image-2"),
+    prompt: "A lighthouse at dusk",
+    providerOptions: { partialImages: 2 },
+  })
+  .pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
 ```
 
 The provider may send fewer previews than requested when the final image is ready first.
@@ -882,9 +930,10 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
 
-- **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`ai.request({...})`** — build a provider-neutral `LLMRequest`, a plain object. Accepts ergonomic inputs (`system: string`, `prompt: string`) and normalizes them into `system`, `messages` and `tools` arrays. Edit it with a spread, or pass the edited object back to `ai.request`.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
+- **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
@@ -894,17 +943,17 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `generateObject`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
 
 These APIs may change without compatibility guarantees. The Effect API is exported from `@opencode/ai/experimental`,
-the Promise client exposes it under `ai.experimental`, and test layers come from `@opencode/ai/experimental/testing`.
+and the Promise client exposes it under `ai.experimental`.
 
 - **`Video`**, **`Speech`**, and **`Transcription`** — media generation and speech-to-text, with `VideoClient`,
   `SpeechClient`, and `TranscriptionClient` as their Effect services. Promise: `ai.experimental.video`, `.speech`, and
-  `.transcription`. Testing: `TestVideo`, `TestSpeech`, and `TestTranscription`.
+  `.transcription`.
 - **`Extraction`** — typed values read out of text.
 - **`Realtime`** — `Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or
   a short-lived WebSocket URL and token.
@@ -1233,13 +1282,16 @@ For explicit compaction, script a `CompactionResponse` through `push`, `always`,
 
 For `compact(request, { mechanism: "trigger" })`, script a `CompactionCheckpointResponse` instead. It carries `checkpoint`, `responseID`, and optional `usage`. Endpoint and trigger calls reject each other's fixtures; both share the same queue, gates, lazy recording, and fallback controls.
 
-`TestImage` and `TestDecision` (and `TestVideo`, `TestSpeech`, and `TestTranscription` from `@opencode/ai/experimental/testing`) follow the same pattern: `testLayer()` provides the modality's client and `Test`, with the same `push`, `always`, `serve`, `requests`, `wait`, and `gate` controls. Script an `ImageResponse` (or the modality's response) or an `AIError`. `stream` expands the response into its events, and `start` returns an already finished generation that `resume` accepts by token. Decision responses are returned as scripted, without checking the answers against the questions.
+Response helpers build common event arrays: `TestLLM.text(value, id)`, `textWithUsage(value, id, inputTokens)`,
+`toolCall(id, name, input)`, `stop(...events)`, `toolCalls(...events)`, and
+`complete({ reason, usage?, providerMetadata? }, ...events)`. `failAfter(error, ...events)` and `hangAfter(...events)`
+return streams that fail or never finish after the given events.
 
-The Promise client accepts the same layers as `AI.make({ clients: TestImage.testLayer() })`; `ai.run(TestImage.Test.use(...))` reaches the controls.
+`compileRequest`, also from `@opencode/ai/testing`, compiles an `LLMRequest` through its route without sending it, so
+tests can assert the provider payload.
 
-The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
-over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
-`testLayer`.
+Other modalities and the Promise client have no test double. Test them over a custom executor layer, such as
+`AI.make({ layer })`, that answers the HTTP requests.
 
 ## Provider compaction
 
@@ -1256,9 +1308,7 @@ Prefer this operation, where supported, when the application owns compaction pol
 ```ts
 const compacted = Effect.gen(function* () {
   const result = yield* ai.compact(request)
-  const next = LLMRequest.update(request, {
-    messages: result.replacement,
-  })
+  const next = { ...request, messages: result.replacement }
   return yield* ai.generate(next)
 })
 ```
@@ -1318,7 +1368,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { ai, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMClient, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = ai.request({
@@ -1330,9 +1380,7 @@ const request = ai.request({
 })
 const continued = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
-  return LLMRequest.update(request, {
-    messages: [...request.messages, response.message, Message.user("Continue")],
-  })
+  return { ...request, messages: [...request.messages, response.message, Message.user("Continue")] }
 })
 ```
 

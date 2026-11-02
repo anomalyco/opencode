@@ -19,14 +19,17 @@ import {
   LanguageModel,
   type CompactionCheckpointResponse,
   type CompactionResponse,
-  type LLMRequest,
+  type LLMEvent,
+  type LLMResponse,
 } from "./schema/index.js"
 import type {
-  GenerateObjectDynamicOptions,
-  GenerateObjectOptions,
-  GenerateObjectResponse,
-  LoopInput,
-  RequestInput,
+  LoopObjectEvent,
+  ObjectEvent,
+  ObjectResponse,
+  OutputSchema,
+  OutputType,
+  LLMLoopInput,
+  LLMRequestInput,
 } from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
@@ -36,7 +39,7 @@ import {
   type TranscriptionRequestInput,
 } from "./transcription.js"
 import { ToolFailure, build } from "./tool.js"
-import type { NoExecute, ToolExecuteContext, ToolOptions, ToolSchema } from "./tool.js"
+import type { NoExecute, ToolExecuteContext, ToolInput, ToolInputType, ToolOptions, ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -45,11 +48,9 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
  * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
  * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
-export interface Options<R = never> {
+export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
   readonly layer?: Layer.Layer<RequestExecutor.Service>
-  /** Replaces default clients, for example with `TestImage.testLayer()`; its other services are available to `run`. */
-  readonly clients?: Layer.Layer<R>
 }
 
 export interface RunOptions {
@@ -90,20 +91,14 @@ const abortEffect = (signal: AbortSignal | undefined) =>
         return Effect.sync(() => signal.removeEventListener("abort", onAbort))
       })
 
-export const make = <R = never>(options: Options<R> = {}) => {
-  const runtime = ManagedRuntime.make(
-    Layer.merge(
-      AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer),
-      // `R` is only inferred from `clients`, so it is `never` whenever `clients` is omitted.
-      (options.clients ?? Layer.empty) as Layer.Layer<R>,
-    ),
-  )
+export const make = (options: Options = {}) => {
+  const runtime = ManagedRuntime.make(AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer))
 
   /** Run any package Effect (for example `ai.compact(...)` from `@opencode/ai/effect`) inside this runtime. */
-  const run = <A, E>(effect: Effect.Effect<A, E, Services | R>, options?: RunOptions) =>
+  const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
-  const iterate = <A, E>(stream: Stream.Stream<A, E, Services | R>, options?: RunOptions): AsyncIterable<A> =>
+  const iterate = <A, E>(stream: Stream.Stream<A, E, Services>, options?: RunOptions): AsyncIterable<A> =>
     Stream.toAsyncIterable(
       Stream.unwrap(
         runtime.contextEffect.pipe(
@@ -115,26 +110,54 @@ export const make = <R = never>(options: Options<R> = {}) => {
       ),
     )
 
-  function generateObject<const Model extends LanguageModel, S extends ToolSchema<any>>(
-    input: GenerateObjectOptions<S, Model>,
-    options?: RunOptions,
-  ): Promise<GenerateObjectResponse<Schema.Schema.Type<S>>>
-  function generateObject<const Model extends LanguageModel>(
-    input: GenerateObjectDynamicOptions<Model>,
-    options?: RunOptions,
-  ): Promise<GenerateObjectResponse<unknown>>
-  function generateObject(
-    input: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions,
-    options?: RunOptions,
-  ) {
-    return run("schema" in input ? LLM.generateObject(input) : LLM.generateObject(input), options)
+  function generate<const Model extends LanguageModel, S extends OutputSchema>(
+    input: LLMRequestInput<Model> & { readonly schema: S },
+    options?: StreamOptions & RunOptions,
+  ): Promise<ObjectResponse<OutputType<S>>>
+  function generate<const Model extends LanguageModel>(
+    input: LLMRequestInput<Model>,
+    options?: StreamOptions & RunOptions,
+  ): Promise<LLMResponse>
+  function generate(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return run(LLM.generate(input, options), options)
   }
+
+  function stream<const Model extends LanguageModel, S extends OutputSchema>(
+    input: LLMRequestInput<Model> & { readonly schema: S },
+    options?: StreamOptions & RunOptions,
+  ): AsyncIterable<ObjectEvent<OutputType<S>>>
+  function stream<const Model extends LanguageModel>(
+    input: LLMRequestInput<Model>,
+    options?: StreamOptions & RunOptions,
+  ): AsyncIterable<LLMEvent>
+  function stream(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return iterate(LLM.stream(input, options), options)
+  }
+
+  function loop<const Model extends LanguageModel, S extends OutputSchema>(
+    input: LLMLoopInput<Model> & { readonly schema: S },
+    options?: StreamOptions & RunOptions,
+  ): AsyncIterable<LoopObjectEvent<OutputType<S>>>
+  function loop<const Model extends LanguageModel>(
+    input: LLMLoopInput<Model>,
+    options?: StreamOptions & RunOptions,
+  ): AsyncIterable<LLMEvent>
+  function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return iterate(LLM.loop(input, options), options)
+  }
+
+  /** Read `events` from `stream` or `loop` to the end and fold them into the final result. */
+  const collect = <Event extends LLMEvent>(events: AsyncIterable<Event>, options?: RunOptions) =>
+    run(LLM.collect(Stream.fromAsyncIterable(events, (error) => error)), options)
 
   function compact(
     request: CheckpointRequest,
     options: TriggerCompactOptions & RunOptions,
   ): Promise<CompactionCheckpointResponse>
-  function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
+  function compact(
+    request: CompactionRequest,
+    options?: EndpointCompactOptions & RunOptions,
+  ): Promise<CompactionResponse>
   // The overloads pair each request type with its mechanism; `LLM.compact` checks the route's capability at runtime.
   function compact(
     request: CheckpointRequest | CompactionRequest,
@@ -196,19 +219,11 @@ export const make = <R = never>(options: Options<R> = {}) => {
       )
     },
     request: LLM.request,
-    generate: <const Model extends LanguageModel>(
-      input: RequestInput<Model> | LLMRequest,
-      options?: StreamOptions & RunOptions,
-    ) => run(LLM.generate(input, options), options),
-    stream: <const Model extends LanguageModel>(
-      input: RequestInput<Model> | LLMRequest,
-      options?: StreamOptions & RunOptions,
-    ) => iterate(LLM.stream(input, options), options),
+    generate,
+    stream,
     /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
-    loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
-      iterate(LLM.loop(input, options), options),
-    /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated). */
-    generateObject,
+    loop,
+    collect,
     /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
     compact,
     canCompact: LLM.canCompact,
@@ -284,30 +299,30 @@ export const make = <R = never>(options: Options<R> = {}) => {
   }
 }
 
-export type Client<R = never> = ReturnType<typeof make<R>>
+export type Client = ReturnType<typeof make>
 
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
 
 /** `tool` from `@opencode/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
 export const tool = <
-  Parameters extends ToolSchema<any> = typeof Schema.Unknown,
+  Input extends ToolInput = typeof Schema.Unknown,
   Success extends ToolSchema<any> = typeof Schema.Unknown,
   Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> | NoExecute = NoExecute,
 >(
   config: ToolOptions<
-    Parameters,
+    Input,
     Success,
-    (params: Schema.Schema.Type<Parameters>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
+    (input: ToolInputType<Input>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
   >,
 ) => {
   const execute = config.execute
   return build(
     config,
     execute &&
-      ((params, context) =>
+      ((input, context) =>
         Effect.tryPromise({
-          try: async (signal) => execute(params, { ...context, signal }),
+          try: async (signal) => execute(input, { ...context, signal }),
           catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
         })),
   )
@@ -361,7 +376,6 @@ export {
   ToolNamespace,
   ToolEntry,
   ToolChoice,
-  LLMRequest,
   FinishReason,
   Usage,
   MediaUsage,
@@ -380,12 +394,11 @@ export {
   ToolInputError,
   ToolCall,
   ToolResult,
-  ToolError,
   FinishReasonDetails,
   StepFinish,
   Finish,
   MediaEvent,
-  ProviderErrorEvent,
+  RawEvent,
   LLMEvent,
   LLMResponse,
   HttpContext,
@@ -393,7 +406,6 @@ export {
   InvalidRequestError,
   UnsupportedOperationError,
   ProviderConfigurationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
@@ -413,17 +425,18 @@ export type {
   GenerationOptionsInput,
   LanguageModelInput,
   LanguageModelProviderOptions,
+  LLMRequest,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
   ImageOptions,
-  ImageRequestFor,
+  ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
@@ -440,7 +453,6 @@ export {
   DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
-  DecisionRequest,
   DecisionResponse,
   DecisionTextPart,
   DecisionUsage,
@@ -458,7 +470,7 @@ export type {
   DecisionModelOptions,
   DecisionOptions,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionRequestInput,
   DecisionResponseFor,
   DecisionModelRoute,
@@ -477,10 +489,12 @@ export type {
   Tool,
   ToolExecute,
   ToolExecuteContext,
+  ToolInput,
+  ToolInputType,
   ToolModelOutputInput,
   ToolOptions,
-  Tools,
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"
 export type { LLM } from "./llm.js"
+export type { LLMLoopInput, LLMRequestInput } from "./llm.js"

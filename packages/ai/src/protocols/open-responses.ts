@@ -641,10 +641,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -807,10 +804,7 @@ const lowerMessages = Effect.fnUntraced(function* (
   return input
 })
 
-export const lowerConversation = Effect.fnUntraced(function* (
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
+export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const instructions = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
@@ -1205,10 +1199,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: Event,
-) {
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
@@ -1236,10 +1227,7 @@ const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fnUntraced(function* (
-  state: ParserState,
-  item: NormalizedEvent["item"],
-) {
+const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: NormalizedEvent["item"]) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "compaction") {

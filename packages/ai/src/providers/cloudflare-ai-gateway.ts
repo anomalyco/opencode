@@ -130,9 +130,19 @@ export const configure = (input: Config) => {
           headers: headers(input),
         }
       : rest
-  const responses = responsesRoute.with(passthrough("openai"))
-  const messages = messagesRoute.with(passthrough("anthropic/v1"))
-  const chat = route.with(rest)
+  const responsesConfigured = responsesRoute.with(passthrough("openai"))
+  const messagesConfigured = messagesRoute.with(passthrough("anthropic/v1"))
+  const chatConfigured = route.with(rest)
+  const responses = (value: string | ModelID) =>
+    responsesConfigured.model<OpenAIProviderOptionsInput>({
+      id: native ? value.replace(/^openai\//, "") : value,
+    })
+  const messages = (value: string | ModelID) =>
+    messagesConfigured.model<OpenAIProviderOptionsInput>({
+      id: native ? value.replace(/^anthropic\//, "").replaceAll(".", "-") : value,
+    })
+  const chat = (value: string | ModelID) =>
+    chatConfigured.model<OpenAIProviderOptionsInput>({ id: value.replace(/^workers-ai\//, "") })
   // The Run API base is derived per call so a chat-only configuration without an account still constructs.
   const decision = (value: string | ModelID, providerOptions?: ProviderOptions) =>
     CloudflareRunDecisions.route
@@ -147,16 +157,13 @@ export const configure = (input: Config) => {
   return {
     id,
     model: (value: string | ModelID) => {
-      if (value.startsWith("openai/"))
-        return responses.model<OpenAIProviderOptionsInput>({ id: native ? value.slice("openai/".length) : value })
-      if (value.startsWith("anthropic/"))
-        return messages.model<OpenAIProviderOptionsInput>({
-          id: native ? value.slice("anthropic/".length).replaceAll(".", "-") : value,
-        })
-      if (value.startsWith("workers-ai/"))
-        return chat.model<OpenAIProviderOptionsInput>({ id: value.slice("workers-ai/".length) })
-      return chat.model<OpenAIProviderOptionsInput>({ id: value })
+      if (value.startsWith("openai/")) return responses(value)
+      if (value.startsWith("anthropic/")) return messages(value)
+      return chat(value)
     },
+    chat,
+    responses,
+    messages,
     decision,
     configure,
   }
@@ -166,6 +173,12 @@ export const provider = { id, configure }
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
+export const chat: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const responses: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).responses(modelID)
+export const messages: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).messages(modelID)
 export const decisionModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)

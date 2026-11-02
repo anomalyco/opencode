@@ -5,6 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
+import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
@@ -205,14 +206,16 @@ export const nativeLayer = Layer.succeed(
       if (input.type === "file" || input.type === "entries") {
         const directory = input.type === "file" ? path.dirname(input.target) : input.target
         const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
-        return Effect.try(() =>
-          watch(directory, { recursive: false }, (_event, file) => {
-            if (file && !names.has(file)) return
-            for (const name of file ? [file] : names) {
-              input.publish({ path: path.join(directory, name), type: "update" })
-            }
-          }),
-        ).pipe(
+        return Effect.try({
+          try: () =>
+            watch(directory, { recursive: false }, (_event, file) => {
+              if (file && !names.has(file)) return
+              for (const name of file ? [file] : names) {
+                input.publish({ path: path.join(directory, name), type: "update" })
+              }
+            }),
+          catch: (error) => error,
+        }).pipe(
           Effect.map((subscription): Subscription => {
             subscription.on("error", (error: unknown) =>
               Effect.runFork(Effect.logError("watcher callback failed", { path: directory, error })),
@@ -221,7 +224,9 @@ export const nativeLayer = Layer.succeed(
           }),
           // A missing directory (ENOENT) ends subscriber streams instead of crashing the watch.
           Effect.catch((error) =>
-            Effect.logError("failed to watch directory", { path: directory, error }).pipe(Effect.as(undefined)),
+            isRecord(error) && error.code === "ENOENT"
+              ? Effect.undefined
+              : Effect.logError("failed to watch directory", { path: directory, error }).pipe(Effect.as(undefined)),
           ),
         )
       }

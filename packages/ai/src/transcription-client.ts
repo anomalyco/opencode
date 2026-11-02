@@ -3,11 +3,11 @@ import { MediaClient } from "./media-client.js"
 import {
   TranscriptionFinishEvent,
   type TranscriptionEvent,
-  type TranscriptionRequestFor,
+  type TranscriptionRequest,
   type TranscriptionResponse,
 } from "./transcription.js"
 
-export type Interface = MediaClient.Interface<TranscriptionRequestFor, TranscriptionEvent, TranscriptionResponse>
+export type Interface = MediaClient.Interface<TranscriptionRequest, TranscriptionEvent, TranscriptionResponse>
 
 export class TranscriptionClientService extends Context.Service<TranscriptionClientService, Interface>()(
   "@opencode/TranscriptionClient",

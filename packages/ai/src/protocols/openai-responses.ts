@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import type { LLMRequest, ToolDefinition, ToolEntry } from "../schema/index.js"
 import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
@@ -183,7 +183,10 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
+const lowerTool = Effect.fnUntraced(function* (
+  tool: ToolDefinition,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
@@ -196,7 +199,10 @@ const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition, custom: Rea
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
+const lowerToolEntry = Effect.fnUntraced(function* (
+  tool: ToolEntry,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   if (tool.type === "tool") return yield* lowerTool(tool, custom)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.

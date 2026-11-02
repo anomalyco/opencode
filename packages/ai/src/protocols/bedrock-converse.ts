@@ -317,10 +317,7 @@ const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string):
   },
 })
 
-const lowerToolResultContent = Effect.fnUntraced(function* (
-  part: ToolResultPart,
-  documentNames: Set<string>,
-) {
+const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart, documentNames: Set<string>) {
   if (part.result.type === "text" || part.result.type === "error")
     return [{ text: ProviderShared.toolResultText(part) }]
   if (part.result.type === "json") return [{ json: part.result.value }]
@@ -354,10 +351,7 @@ const lowerToolResult = Effect.fnUntraced(function* (
 // Keep Claude and Nova tool-result images inline; put other models' images beside the result.
 const keepToolImagesInline = (id: string) => id.includes("anthropic.claude-") || id.includes("amazon.nova-")
 
-const lowerMessages = Effect.fnUntraced(function* (
-  request: LLMRequest,
-  breakpoints: BedrockCache.Breakpoints,
-) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: BedrockCache.Breakpoints) {
   const messages: BedrockMessage[] = []
   const documentNames = new Set<string>()
   // Mistral can reject replay IDs even when they satisfy Converse's broader ID syntax.

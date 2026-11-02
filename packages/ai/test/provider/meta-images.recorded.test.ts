@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Media, Message } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -94,13 +94,14 @@ recorded.effect.with(
         type: "content",
         value: [{ type: "file", mime: "image/webp", uri: expect.stringMatching(/^data:image\/webp;base64,/) }],
       })
-      const next = LLMRequest.update(request, {
+      const next = {
+        ...request,
         messages: [
           ...request.messages,
           first.message,
           Message.user("Change the square to blue. Keep the white background."),
         ],
-      })
+      }
       const replay = yield* compileRequest(next)
       expect(replay.body.input).toEqual(
         expect.arrayContaining([{ type: "image_generation_call", id: image?.id, status: "completed", result: null }]),

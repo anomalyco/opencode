@@ -172,7 +172,9 @@ export const SnowflakeCortexPlugin = define({
 
     const load = Effect.gen(function* () {
       const value = (yield* saved)?.value
+      const previous = account.value
       account.value = normalizeAccount(process.env.SNOWFLAKE_ACCOUNT ?? value?.metadata?.account ?? configured?.account)
+      return account.value !== previous
     })
     yield* load
     yield* ctx.provider.transform((providers) => {
@@ -201,7 +203,7 @@ export const SnowflakeCortexPlugin = define({
     })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load.pipe(Effect.andThen(ctx.provider.reload()))),
+      Stream.runForEach(() => load.pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void)))),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* ctx.session.hook(

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMRequest } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { LLMClient } from "../../src/route.js"
 import {
@@ -69,7 +69,7 @@ for (const item of [
             maxTokens: item.maxTokens,
             temperature: false,
           })
-          const events = yield* runWeatherToolLoop(LLMRequest.update(request, { cache: "auto" }))
+          const events = yield* runWeatherToolLoop({ ...request, cache: "auto" })
           expectWeatherToolLoop(events)
         }),
       60_000,

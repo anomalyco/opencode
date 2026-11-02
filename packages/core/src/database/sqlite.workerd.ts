@@ -1,10 +1,9 @@
-import { Context, Effect, Exit, Layer, Semaphore } from "effect"
+import { Context, Effect, Exit, Layer, Semaphore, Stream } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient, Statement } from "effect/sql"
 import type { Connection } from "effect/sql/SqlConnection"
 import { classifySqliteError, SqlError, UnknownError } from "effect/sql/SqlError"
 import type { NativeTransactionSqlClient } from "./drizzle/effect-sqlite/session.js"
-import { Sqlite } from "./sqlite.js"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
@@ -122,7 +121,7 @@ const makeWithTransaction =
 
 const make = (options: Config) =>
   Effect.gen(function* () {
-    const native = (yield* Sqlite.Native) as DurableObjectStorage
+    const native = options.storage
 
     const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
     const transformRows = options.transformResultNames
@@ -166,7 +165,16 @@ const make = (options: Config) =>
           }),
       })
 
-    const connection = Sqlite.makeConnection(run, runValues, {})
+    const connection: Connection = {
+      execute: (query, params, transformRows) =>
+        transformRows ? Effect.map(run(query, params), transformRows) : run(query, params),
+      executeRaw: (query, params) => run(query, params),
+      executeValues: (query, params) => runValues(query, params),
+      executeValuesUnprepared: (query, params) => runValues(query, params),
+      executeUnprepared: (query, params, transformRows) =>
+        transformRows ? Effect.map(run(query, params), transformRows) : run(query, params),
+      executeStream: () => Stream.die("executeStream not implemented"),
+    }
 
     const semaphore = yield* Semaphore.make(1)
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
@@ -202,19 +210,14 @@ const make = (options: Config) =>
 
 // Defends against the shared path-based Database.layer, which passes a
 // filename instead of storage when resolved under the workerd condition.
-const nativeLayer = (config: Config) =>
+export const sqliteLayer = (config: Config): Layer.Layer<SqlClient.SqlClient> =>
   config.storage
-    ? Layer.succeed(Sqlite.Native, config.storage)
+    ? Layer.effect(SqlClient.SqlClient, make(config)).pipe(Layer.provide(Reactivity.layer))
     : Layer.effect(
-        Sqlite.Native,
+        SqlClient.SqlClient,
         Effect.die(
-          "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
+          new Error(
+            "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
+          ),
         ),
       )
-
-const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
-
-export const sqliteLayer = (config: Config) => {
-  const native = nativeLayer(config)
-  return Layer.merge(native, clientLayer(config).pipe(Layer.provide(native))).pipe(Layer.provide(Reactivity.layer))
-}

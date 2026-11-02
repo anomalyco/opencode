@@ -134,6 +134,11 @@ const layer = Layer.effect(
       input: unknown,
       context: Tool.Context,
     ) {
+      yield* Effect.annotateCurrentSpan({
+        "gen_ai.tool.name": name,
+        "gen_ai.tool.call.id": context.id,
+        "session.id": context.sessionID,
+      })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),

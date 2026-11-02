@@ -127,9 +127,7 @@ describe("AI promise client", () => {
     const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
     const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
-    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
-      "Hello world",
-    )
+    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
     expect(image.image).toBeInstanceOf(Media.Asset)
@@ -217,7 +215,7 @@ describe("AI promise client", () => {
 
     expect((await ai.generate(request, options)).text).toBe("Hello world")
     await Array.fromAsync(ai.stream(request, options))
-    await Array.fromAsync(ai.loop({ ...request, tools: {} }, options))
+    await Array.fromAsync(ai.loop({ ...request, tools: [] }, options))
     expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
 
     const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
@@ -362,9 +360,7 @@ describe("AI promise client", () => {
     const inFlight = new AbortController()
     setTimeout(() => inFlight.abort(reason), 10)
     expect(
-      await ai
-        .generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal })
-        .catch((error: unknown) => error),
+      await ai.generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal }).catch((error: unknown) => error),
     ).toBe(reason)
 
     const preAborted = await Array.fromAsync(
@@ -447,8 +443,9 @@ describe("AI promise client", () => {
       ),
     })
     const read_file = AI.tool({
+      name: "read_file",
       description: "Read a file.",
-      parameters: Schema.Struct({ path: Schema.String }),
+      input: Schema.Struct({ path: Schema.String }),
       execute: async ({ path }) => {
         if (path === "missing.txt") throw new Error(`No such file: ${path}`)
         if (path === "empty.txt") return
@@ -457,7 +454,7 @@ describe("AI promise client", () => {
     })
 
     const events = await Array.fromAsync(
-      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
+      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: [read_file] }),
     )
 
     expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
@@ -471,6 +468,47 @@ describe("AI promise client", () => {
       expect.objectContaining({ tool_call_id: "call-3", content: "null" }),
     ])
     expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["Hello", " world"])
+    await ai.dispose()
+  })
+
+  test("collects a stream and a loop into their final results", async () => {
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                JSON.parse(input.text).messages.some((message: { role: string }) => message.role === "tool")
+                  ? chatBody
+                  : sseEvents(
+                      toolCallChunk("call-1", "read_file", JSON.stringify({ path: "a.txt" })),
+                      finishChunk("tool_calls"),
+                    ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
+    const read_file = AI.tool({
+      name: "read_file",
+      description: "Read a file.",
+      input: Schema.Struct({ path: Schema.String }),
+      execute: async () => "hello",
+    })
+    const model = openai.chat("gpt-4o-mini")
+
+    const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: [read_file] }))
+    expect(looped.text).toBe("Hello world")
+    expect(looped.steps).toHaveLength(2)
+    expect(looped.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant"])
+    expect(looped.finishReason.normalized).toBe("stop")
+
+    const streamed = await ai.collect(ai.stream({ model, prompt: "Read the file." }))
+    expect(streamed.steps).toHaveLength(1)
+    expect(streamed.messages).toEqual([streamed.steps[0].message])
+    expect(streamed.finishReason.normalized).toBe("tool-calls")
     await ai.dispose()
   })
 
@@ -493,7 +531,7 @@ describe("AI promise client", () => {
       ),
     })
 
-    const response = await ai.generateObject({
+    const response = await ai.generate({
       model: openai.chat("gpt-4o-mini"),
       prompt: "Pick a city.",
       schema: Schema.Struct({ city: Schema.String }),
@@ -532,9 +570,7 @@ describe("AI promise client", () => {
     const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
 
     const compacted = await ai.compact(request)
-    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual([
-      "compaction",
-    ])
+    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual(["compaction"])
     expect(compacted.usage?.totalTokens).toBe(110)
 
     const triggered = await ai.compact(request, { mechanism: "trigger" })

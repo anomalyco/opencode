@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -214,11 +214,10 @@ responses.effect.with(
       )
       expect(response.text.toLowerCase()).toContain("alibaba")
       expect(response.events.some(LLMEvent.is.toolResult)).toBe(true)
-      const replay = yield* compileRequest(
-        LLMRequest.update(request, {
-          messages: [...request.messages, response.message, Message.user("Summarize in one sentence.")],
-        }),
-      )
+      const replay = yield* compileRequest({
+        ...request,
+        messages: [...request.messages, response.message, Message.user("Summarize in one sentence.")],
+      })
       expect(replay.body.input).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ type: "web_search_call" }),

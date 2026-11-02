@@ -27,6 +27,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
@@ -47,6 +48,7 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    Skill.node,
     FSUtil.node,
     Location.node,
   ],
@@ -71,6 +73,7 @@ const testLayer = AppNodeBuilder.build(
     Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
+    Skill.node,
     Global.node,
     Image.node,
   ]),
