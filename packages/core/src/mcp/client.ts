@@ -452,7 +452,7 @@ export const connect = Effect.fnUntraced(function* (
             ).pipe(Effect.map((r) => r.resourceTemplates))
           : Effect.succeed([]),
       readResource: (input) => {
-        if (!client.getServerCapabilities()?.resources) return Effect.succeed(undefined)
+        if (!advertised("resources")) return Effect.succeed(undefined)
         return request("read MCP resource", (signal) =>
           client.readResource({ uri: input.uri }, { signal, timeout: execution }),
         )
@@ -473,7 +473,8 @@ export const connect = Effect.fnUntraced(function* (
               {
                 signal,
                 timeout: execution,
-                // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+                // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
+                // The SDK timeout does not reset on progress; execution is the hard wall.
                 onprogress: () => {},
                 // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
                 // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
@@ -490,8 +491,7 @@ export const connect = Effect.fnUntraced(function* (
         // so relist and retry once with the fresh definition.
         return call.pipe(
           Effect.catchIf(
-            (error) =>
-              client.getProtocolEra() === "modern" && error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+            (error) => connection.modern && error instanceof ProtocolError && error.code === HEADER_MISMATCH,
             () => connection.tools().pipe(Effect.andThen(call)),
           ),
           Effect.mapError(failure),
@@ -557,8 +557,8 @@ function toCallToolResult(result: SdkCallToolResult): CallToolResult {
       if (part.type === "resource_link") return [{ type: "text", text: part.uri }]
       if (part.type === "resource") {
         const resource = part.resource
-        if ("text" in resource && typeof resource.text === "string") return [{ type: "text", text: resource.text }]
-        if ("blob" in resource && typeof resource.blob === "string" && typeof resource.mimeType === "string")
+        if ("text" in resource) return [{ type: "text", text: resource.text }]
+        if ("blob" in resource && resource.mimeType !== undefined)
           return [{ type: "media", data: resource.blob, mimeType: resource.mimeType, uri: resource.uri }]
         return [{ type: "text", text: resource.uri }]
       }
