@@ -534,10 +534,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const groupTabsButton = () => (
               <Show
-                when={
-                  settings.appearance.tabLayout() === "vertical" &&
-                  global.servers.list().length > 0
-                }
+                when={settings.appearance.tabLayout() === "vertical" && global.servers.list().length > 1}
               >
                 <Tooltip placement="bottom" value={language.t("titlebar.tabs.groupByServer")} class="shrink-0">
                   <IconButton
@@ -868,7 +865,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <div
                                 data-slot="sidebar-header"
                                 data-home={homeInSidebarHeader() ? "" : undefined}
-                                class="flex w-full shrink-0 gap-2"
+                                class="flex w-full shrink-0 gap-2 [container-type:inline-size]"
                                 classList={{
                                   "items-start pt-2.5 pb-[3px]": homeInSidebarHeader(),
                                   "mb-0.5 h-12 items-center": !homeInSidebarHeader(),
@@ -902,7 +899,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             </Show>
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
                               <Show when={!homeInSidebarHeader()}>
-                                <div class="flex w-full items-center gap-1">
+                                <div
+                                  data-slot="sidebar-home-row"
+                                  class="flex w-full items-center gap-1 [container-type:inline-size]"
+                                >
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
                                   <Show when={windows()}>{groupTabsButton()}</Show>
                                 </div>

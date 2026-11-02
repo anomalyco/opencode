@@ -604,7 +604,6 @@ export const dict = {
   "session.tab.serverGroup.drag": "Drag to reorder {{server}}",
   "session.tab.serverGroup.expand": "Expand {{server}}",
   "session.tab.serverGroup.showLess": "Show less",
-  "session.tab.serverGroup.showMore": "Show more",
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.panel.bottom": "Bottom panel",

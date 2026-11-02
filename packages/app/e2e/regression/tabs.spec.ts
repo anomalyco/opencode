@@ -510,27 +510,33 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
-  await mockWorkspace(page, {
-    name: "Tabs",
-    sessions: [a, b],
-    seed: {
-      settings: {
-        appearance: { tabLayout: "vertical" },
-        keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
-      },
-      tabs: [
-        a.id,
-        ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
-        b.id,
-      ],
+  const remote = session({ id: "ses_narrow_remote", directory: "/srv/narrow", title: "Remote" })
+  await twoServers(page, {
+    a: [
+      session({ id: a.id, directory, title: a.title }),
+      session({ id: b.id, directory, title: b.title }),
+    ],
+    b: [remote],
+  })
+  await seed(page, {
+    settings: {
+      appearance: { tabLayout: "vertical" },
+      keybinds: { "home.toggle": "ctrl+alt+h", "tab.new": "ctrl+shift+n" },
     },
+    tabs: [
+      a.id,
+      ...Array.from({ length: 24 }, (_, index) => ({ draft: `draft_vertical_${index}`, directory })),
+      b.id,
+    ],
   })
   await page.goto(sessionHref(a.id))
 
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+  const groupToggle = page.locator('[data-action="toggle-tab-server-groups"]')
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
   await expect(sidebar).toHaveCSS("width", "240px")
+  await expect(groupToggle).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
@@ -575,6 +581,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
 
   await resize(-44, "196px")
   await resize(-40, "156px")
+  await expect(groupToggle).toBeHidden()
 
   for (const name of ["Home", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
@@ -903,7 +910,10 @@ test("vertical tabs group by server and keep each server's tab order", async ({ 
   ])
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer", "127.0.0.1:4097"])
 
-  await page.locator(`[data-action="tab-server-group-add"][data-server="${SERVER}"]`).click()
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
   await expect.poll(order).toEqual([
     `${SERVER}\n${sessionHref(sessionA.id)}`,
     `${SERVER}\n${sessionHref(sessionA2.id)}`,
@@ -912,7 +922,7 @@ test("vertical tabs group by server and keep each server's tab order", async ({ 
   ])
 })
 
-test("vertical tabs stay flat when only one server has open tabs", async ({ page }) => {
+test("vertical tabs stay flat with one registered server", async ({ page }) => {
   await mockWorkspace(page, {
     name: "SingleServerTabs",
     sessions: [a, b],
@@ -921,6 +931,21 @@ test("vertical tabs stay flat when only one server has open tabs", async ({ page
   await page.goto(sessionHref(a.id))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
+  await expect(page.locator('[data-action="toggle-tab-server-groups"]')).toHaveCount(0)
+})
+
+test("grouping works when only one registered server has tabs", async ({ page }) => {
+  const local = session({ id: "ses_group_one_a", directory: "C:/server-a", title: "Local one" })
+  const remote = session({ id: "ses_group_one_b", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local.id],
+  })
+  await page.goto(sessionHref(local.id))
+
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer"])
+  await expect(page.locator('[data-action="toggle-tab-server-groups"]')).toHaveAttribute("aria-pressed", "true")
 })
 
 test("server groups limit their visible tabs and collapse from the header", async ({ page }) => {
@@ -936,27 +961,92 @@ test("server groups limit their visible tabs and collapse from the header", asyn
   })
   await page.goto(sessionHref(local[0]!.id))
 
-  const visibleTabs = page.locator("[data-titlebar-tab-slot]:not([inert])")
+  const visibleTabs = page.locator("[data-titlebar-tab-slot]:visible")
   await expect(visibleTabs).toHaveCount(4)
 
-  const showMore = page.locator(`[data-action="tab-server-group-show-more"][data-server="${SERVER}"]`)
+  const showMore = page.locator('[data-action="tab-server-group-show-more"]')
   await expect(showMore).toHaveText("Show more")
   await showMore.click()
   await expect(visibleTabs).toHaveCount(5)
 
-  const showLess = page.locator(`[data-action="tab-server-group-show-less"][data-server="${SERVER}"]`)
+  const showLess = page.locator('[data-action="tab-server-group-show-less"]')
   await expect(showLess).toHaveText("Show less")
   await showLess.click()
   await expect(visibleTabs).toHaveCount(4)
 
-  const toggle = page.locator(`[data-action="tab-server-group-toggle"][data-server="${SERVER}"]`)
+  const toggle = page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-toggle"]')
+
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(visibleTabs).toHaveCount(1)
+  await expect(visibleTabs).toHaveCount(2)
 
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(visibleTabs).toHaveCount(4)
+
+  await page.goto(sessionHref(local[3]!.id))
+  await expect(visibleTabs).toHaveCount(5)
+  await expect(showMore).toBeVisible()
+
+  await toggle.click()
+  await expect(visibleTabs).toHaveCount(2)
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[data-titlebar-tab-slot][data-active="true"]')).toBeVisible()
+})
+
+test("server groups reorder visible tabs without disturbing concealed ones", async ({ page }) => {
+  const local = [1, 2, 3, 4].map((index) =>
+    session({ id: `ses_group_reorder_${index}`, directory: "C:/server-a", title: `Local ${index}` }),
+  )
+
+  const remote = session({ id: "ses_group_reorder_remote", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: local, b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [local[0]!.id, { session: remote.id, server: REMOTE_SERVER }, ...local.slice(1).map((item) => item.id)],
+  })
+  await page.goto(sessionHref(local[0]!.id))
+
+  const slot = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  const order = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((item) => item.getAttribute("data-tab-key")))
+
+  const source = slot(local[2]!.id)
+  const target = slot(local[0]!.id)
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+
+  if (!sourceBox || !targetBox) throw new Error("tab has no bounding box")
+
+  await page.mouse.move(sourceBox.x + 80, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox.x + 80, targetBox.y + targetBox.height / 2, { steps: 12 })
+  await page.mouse.up()
+
+  const grouped = [
+    `${SERVER}\n${sessionHref(local[2]!.id)}`,
+    `${SERVER}\n${sessionHref(local[0]!.id)}`,
+    `${SERVER}\n${sessionHref(local[1]!.id)}`,
+    `${SERVER}\n${sessionHref(local[3]!.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ]
+
+  await expect.poll(order).toEqual(grouped)
+  await expect(page.locator("[data-titlebar-tab-slot]:visible")).toHaveCount(4)
+
+  const remoteSlot = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remote.id, REMOTE_SERVER)}"])`)
+
+  await slot(local[0]!.id).dragTo(remoteSlot)
+  await expect.poll(order).toEqual(grouped)
 })
 
 test("server group motion follows the reduce motion preference", async ({ page }) => {
@@ -967,7 +1057,7 @@ test("server group motion follows the reduce motion preference", async ({ page }
   })
   await page.goto(sessionHref(a.id))
 
-  const tab = page.locator("[data-titlebar-tab-slot]").first()
+  const tab = page.locator('[data-titlebar-tab-slot][data-orientation="vertical"]').first()
   await expect(tab).toHaveCSS("transition-duration", /0\.2s/)
   await page.emulateMedia({ reducedMotion: "reduce" })
   await expect(tab).toHaveCSS("transition-duration", "0s")
@@ -986,10 +1076,11 @@ test("server groups can be reordered by dragging their headers", async ({ page }
   const headers = page.locator('[data-slot="tab-server-group"]')
   await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
 
-  const remoteHeader = page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`)
+  const remoteHeader = page.locator('[data-slot="tab-server-group"]', { hasText: "127.0.0.1:4097" })
+  const localHeader = page.locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
   await remoteHeader.hover()
 
-  const dragSource = page.locator(`[data-action="tab-server-group-drag"][data-server="${REMOTE_SERVER}"]`)
+  const dragSource = remoteHeader
   const sourceBox = await dragSource.boundingBox()
   const sessionBox = await page.locator('[data-slot="session-timeline-scroll"]').boundingBox()
 
@@ -1001,7 +1092,7 @@ test("server groups can be reordered by dragging their headers", async ({ page }
   await expect(dragSource).toHaveAttribute("data-dragging", "true")
   await expect(page.locator('[data-component="session-dropzone"]')).toBeHidden()
 
-  const target = page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`)
+  const target = localHeader
   const targetBox = await target.boundingBox()
 
   if (!targetBox) throw new Error("drop target has no bounding box")
@@ -1013,9 +1104,7 @@ test("server groups can be reordered by dragging their headers", async ({ page }
 
   await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
   await page.mouse.up()
-  await expect(
-    page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`),
-  ).not.toHaveAttribute("data-dragging", "true")
+  await expect(remoteHeader).not.toHaveAttribute("data-dragging", "true")
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -1026,13 +1115,9 @@ test("server groups can be reordered by dragging their headers", async ({ page }
     )
     .toEqual([REMOTE_SERVER, SERVER])
 
-  await page
-    .locator(`[data-action="tab-server-group-drag"][data-server="${SERVER}"]`)
-    .dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`))
+  await localHeader.dragTo(remoteHeader)
   await expect(headers).toHaveText(["This computer", "127.0.0.1:4097"])
-  await expect(
-    page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`),
-  ).not.toHaveAttribute("data-dragging", "true")
+  await expect(localHeader).not.toHaveAttribute("data-dragging", "true")
 })
 
 test("a remote tab stays busy while a child session runs", async ({ page }) => {

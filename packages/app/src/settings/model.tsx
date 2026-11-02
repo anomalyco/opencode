@@ -148,7 +148,7 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   // Group Side tabs by server. Off keeps the original flat strip.
   tabGroupByServer: Schema.Boolean,
-  // Server keys in the order the user dragged their Side tabs groups.
+  // Server keys in the order the user dragged their Side tab groups.
   tabServerOrder: Persistence.array(Schema.String),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),

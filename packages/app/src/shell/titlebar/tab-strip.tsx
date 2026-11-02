@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -37,6 +37,58 @@ export const previousSessionCommand = { id: "session.previous", keybind: "alt+ar
 
 export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
 
+function TabSlot(props: {
+  id: string
+  index: number
+  server: ServerConnection.Key
+  active: boolean
+  orientation: "horizontal" | "vertical"
+  concealed?: boolean
+  onIntent?: (hovered: boolean) => void
+  children: (dragging: boolean) => JSX.Element
+}) {
+  const sortable = useSortable({
+    get id() {
+      return props.id
+    },
+    get index() {
+      return props.index
+    },
+    get disabled() {
+      return props.concealed
+    },
+    get data() {
+      return { server: props.server }
+    },
+    accept: (source) => source.data?.server === props.server,
+  })
+
+  return (
+    <div
+      ref={sortable.ref}
+      data-titlebar-tab-slot
+      data-tab-key={props.id}
+      data-active={props.active}
+      data-orientation={props.orientation}
+      class="relative flex"
+      classList={{
+        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
+        "w-full shrink-0 transition-[max-height,opacity,margin] duration-200 ease-out":
+          props.orientation === "vertical",
+        "-my-0.5 opacity-0 pointer-events-none": props.orientation === "vertical" && props.concealed,
+      }}
+      style={{
+        "max-height": props.orientation === "vertical" ? (props.concealed ? "0px" : "48px") : undefined,
+      }}
+      inert={props.concealed}
+      onPointerEnter={() => props.onIntent?.(true)}
+      onPointerLeave={() => props.onIntent?.(false)}
+    >
+      {props.children(sortable.isDragSource())}
+    </div>
+  )
+}
+
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
@@ -57,60 +109,42 @@ function SessionTabSlot(props: {
   onClose: () => void
   onIntent: (hovered: boolean) => void
 }) {
-  const sortable = useSortable({
-    get id() {
-      return props.id
-    },
-    get index() {
-      return props.index
-    },
-  })
-
   let ref!: HTMLDivElement
 
   return (
-    <div
-      ref={sortable.ref}
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      data-active={props.active}
-      data-orientation={props.orientation}
-      class="relative flex"
-      classList={{
-        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
-        "w-full shrink-0 transition-[max-height,opacity,margin] duration-200 ease-out":
-          props.orientation === "vertical",
-        "-my-0.5 opacity-0 pointer-events-none": props.orientation === "vertical" && props.concealed,
-      }}
-      style={{
-        "max-height": props.orientation === "vertical" ? (props.concealed ? "0px" : "48px") : undefined,
-      }}
-      inert={props.concealed}
-      onPointerEnter={() => props.onIntent(true)}
-      onPointerLeave={() => props.onIntent(false)}
+    <TabSlot
+      id={props.id}
+      index={props.index}
+      server={props.tab.server}
+      active={props.active}
+      orientation={props.orientation}
+      concealed={props.concealed}
+      onIntent={props.onIntent}
     >
-      <TabNavItem
-        ref={(el) => {
-          ref = el
-        }}
-        href={tabHref(props.tab)}
-        server={props.tab.server}
-        session={props.session}
-        preparing={props.preparing}
-        unread={props.unread}
-        attention={props.attention}
-        loading={props.loading}
-        fallbackTitle={props.fallbackTitle}
-        fallbackDirectory={props.fallbackDirectory}
-        onRename={props.onRename}
-        onDelete={props.onDelete}
-        onNavigate={() => props.onNavigate(ref)}
-        onClose={props.onClose}
-        active={props.active}
-        dragging={sortable.isDragSource()}
-        orientation={props.orientation}
-      />
-    </div>
+      {(dragging) => (
+        <TabNavItem
+          ref={(el) => {
+            ref = el
+          }}
+          href={tabHref(props.tab)}
+          server={props.tab.server}
+          session={props.session}
+          preparing={props.preparing}
+          unread={props.unread}
+          attention={props.attention}
+          loading={props.loading}
+          fallbackTitle={props.fallbackTitle}
+          fallbackDirectory={props.fallbackDirectory}
+          onRename={props.onRename}
+          onDelete={props.onDelete}
+          onNavigate={() => props.onNavigate(ref)}
+          onClose={props.onClose}
+          active={props.active}
+          dragging={dragging}
+          orientation={props.orientation}
+        />
+      )}
+    </TabSlot>
   )
 }
 
@@ -355,49 +389,107 @@ function DraftTabSlot(props: {
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
-  const sortable = useSortable({
-    get id() {
-      return props.id
-    },
-    get index() {
-      return props.index
-    },
-  })
-
   let ref!: HTMLDivElement
 
   return (
-    <div
-      ref={sortable.ref}
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      data-active={props.active}
-      data-orientation={props.orientation}
-      class="relative flex"
-      classList={{
-        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
-        "w-full shrink-0 transition-[max-height,opacity,margin] duration-200 ease-out":
-          props.orientation === "vertical",
-        "-my-0.5 opacity-0 pointer-events-none": props.orientation === "vertical" && props.concealed,
-      }}
-      style={{
-        "max-height": props.orientation === "vertical" ? (props.concealed ? "0px" : "48px") : undefined,
-      }}
-      inert={props.concealed}
+    <TabSlot
+      id={props.id}
+      index={props.index}
+      server={props.tab.server}
+      active={props.active}
+      orientation={props.orientation}
+      concealed={props.concealed}
     >
-      <DraftTabItem
-        ref={(el) => {
-          ref = el
-        }}
-        href={tabHref(props.tab)}
-        title={props.title}
-        onNavigate={() => props.onNavigate(ref)}
-        onClose={props.onClose}
-        active={props.active}
-        dragging={sortable.isDragSource()}
-        orientation={props.orientation}
-      />
+      {(dragging) => (
+        <DraftTabItem
+          ref={(el) => {
+            ref = el
+          }}
+          href={tabHref(props.tab)}
+          title={props.title}
+          onNavigate={() => props.onNavigate(ref)}
+          onClose={props.onClose}
+          active={props.active}
+          dragging={dragging}
+          orientation={props.orientation}
+        />
+      )}
+    </TabSlot>
+  )
+}
+
+function ServerGroupHeader(props: {
+  title: string
+  collapsed: boolean
+  dragging: boolean
+  onAdd: () => void
+  onToggle: () => void
+  onDragStart: (event: DragEvent, element: HTMLElement) => void
+  onDragEnd: () => void
+  onDragOver: (event: DragEvent, element: HTMLElement) => void
+  onDrop: (event: DragEvent) => void
+}) {
+  const language = useLanguage()
+
+  const toggleLabel = () =>
+    language.t(props.collapsed ? "session.tab.serverGroup.expand" : "session.tab.serverGroup.collapse", {
+      server: props.title,
+    })
+
+  return (
+    <div
+      data-slot="tab-server-group"
+      role="group"
+      aria-label={props.title}
+      data-dragging={props.dragging ? "true" : undefined}
+      draggable={true}
+      title={language.t("session.tab.serverGroup.drag", { server: props.title })}
+      class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent active:cursor-grabbing"
+      onDragStart={(event) => props.onDragStart(event, event.currentTarget)}
+      onDragEnd={props.onDragEnd}
+      onDragOver={(event) => props.onDragOver(event, event.currentTarget)}
+      onDrop={props.onDrop}
+    >
+      <bdi class="min-w-0 truncate">{props.title}</bdi>
+      <div class="ms-auto flex shrink-0 items-center gap-0.5">
+        <button
+          type="button"
+          data-action="tab-server-group-add"
+          aria-label={language.t("session.tab.newOnServer", { server: props.title })}
+          title={language.t("session.tab.newOnServer", { server: props.title })}
+          class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+          onClick={props.onAdd}
+        >
+          <Icon name="plus" size="small" />
+        </button>
+        <button
+          type="button"
+          data-action="tab-server-group-toggle"
+          aria-label={toggleLabel()}
+          aria-expanded={!props.collapsed}
+          title={toggleLabel()}
+          class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+          onClick={props.onToggle}
+        >
+          <Icon name="outline-chevron-down" size="small" classList={{ "-rotate-90 rtl:rotate-90": props.collapsed }} />
+        </button>
+      </div>
     </div>
+  )
+}
+
+function ServerGroupFooter(props: { expanded: boolean; onClick: () => void }) {
+  const language = useLanguage()
+
+  return (
+    <button
+      type="button"
+      data-action={props.expanded ? "tab-server-group-show-less" : "tab-server-group-show-more"}
+      class="flex h-6 w-full shrink-0 items-center rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+      onClick={props.onClick}
+    >
+      {language.t(props.expanded ? "session.tab.serverGroup.showLess" : "session.tab.showMore")}
+    </button>
   )
 }
 
@@ -442,19 +534,12 @@ export function TitlebarTabStrip(props: {
 
   const groupTabLimit = 3
 
-  // A vertical strip with several servers reads as one flat list of identical
-  // rows, so it groups by server. A stable sort keeps each server's own tab
-  // order, so reordering inside a group still persists.
-  const hasMultipleServers = createMemo(() => {
-    const open = props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)])
+  // Grouping needs a second registered server; the sidebar toggle uses the same condition.
+  const groupable = createMemo(() => servers.list.length > 1)
 
-    return new Set(open.map((tab) => tab.server)).size > 1
-  })
+  const grouped = createMemo(() => vertical() && settings.appearance.tabGroupByServer() && groupable())
 
-  const grouped = createMemo(() => vertical() && settings.appearance.tabGroupByServer() && hasMultipleServers())
-
-  // The user's dragged group order wins; servers they have not moved keep the
-  // app's own order after it.
+  // The user's dragged order wins; servers they have not moved keep the app's order after it.
   const serverOrder = createMemo(() => {
     const available = servers.list.map((conn) => ServerConnection.key(conn))
     const known = new Set(available)
@@ -473,8 +558,7 @@ export function TitlebarTabStrip(props: {
     return orderTabsByServer(props.tabs, serverOrder())
   })
 
-  // Visible tabs per server, in display order. This is the input for both the
-  // three-row limit and the collapse toggle.
+  // Visible tabs per server, in display order.
   const groups = createMemo(() => {
     const result = new Map<ServerConnection.Key, Tab[]>()
 
@@ -510,11 +594,7 @@ export function TitlebarTabStrip(props: {
 
     const current = props.currentTab
 
-    if (
-      current &&
-      !collapsed[current.server] &&
-      groups().get(current.server)?.some((tab) => tabKey(tab) === tabKey(current))
-    )
+    if (current && groups().get(current.server)?.some((tab) => tabKey(tab) === tabKey(current)))
       keys.add(tabKey(current))
 
     return keys
@@ -532,8 +612,7 @@ export function TitlebarTabStrip(props: {
     return result
   })
 
-  // The first visible tab of each server carries its group header. Hidden tabs
-  // are skipped so a header never floats above a row that is not drawn.
+  // The first visible tab of each server carries its group header.
   const headers = createMemo(() => {
     if (!grouped()) return new Map<string, string>()
 
@@ -546,8 +625,7 @@ export function TitlebarTabStrip(props: {
     )
   })
 
-  // Collapsed and over-limit tabs stay mounted but leave keyboard and drag
-  // order, so shortcuts only visit rows the user can see.
+  // Hidden tabs stay mounted but leave keyboard and drag order, so shortcuts only visit visible rows.
   const visibleTabs = createMemo(() => ordering().filter((tab) => shownKeys().has(tabKey(tab))))
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
@@ -652,48 +730,36 @@ export function TitlebarTabStrip(props: {
 
     if (!directory) return
 
+    setCollapsed(server, false)
     ctx.projects.touch(directory)
     void tabs.newDraft({ server, directory })
   }
 
-  function toggleGroup(server: ServerConnection.Key) {
-    setCollapsed(server, !collapsed[server])
-  }
-
-  function showMore(server: ServerConnection.Key) {
-    setExpanded(server, true)
-  }
-
-  function showLess(server: ServerConnection.Key) {
-    setExpanded(server, false)
-  }
-
   function startGroupDrag(event: DragEvent, server: ServerConnection.Key, element: HTMLElement) {
     event.stopPropagation()
-    event.dataTransfer?.setData("text/plain", server)
-    event.dataTransfer?.setData(TAB_GROUP_DRAG_TYPE, server)
 
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move"
+    const transfer = event.dataTransfer
 
-      const ghost = element.cloneNode(true)
+    if (!transfer) return
 
-      if (ghost instanceof HTMLElement) {
-        ghost.removeAttribute("data-slot")
-        ghost.removeAttribute("data-action")
-        ghost.removeAttribute("data-server")
-        ghost.dataset.dragging = "true"
-        ghost.setAttribute("aria-hidden", "true")
-        ghost.style.position = "fixed"
-        ghost.style.inset = "-1000px auto auto -1000px"
-        ghost.style.width = `${element.getBoundingClientRect().width}px`
-        ghost.style.pointerEvents = "none"
-        document.body.appendChild(ghost)
-        event.dataTransfer.setDragImage(ghost, 12, 12)
-        setTimeout(() => ghost.remove(), 0)
-      }
-    }
+    transfer.setData("text/plain", server)
+    transfer.setData(TAB_GROUP_DRAG_TYPE, server)
+    transfer.effectAllowed = "move"
 
+    // SAFETY: cloning an HTMLElement returns an HTMLElement.
+    const ghost = element.cloneNode(true) as HTMLElement
+
+    ghost.removeAttribute("data-slot")
+    ghost.removeAttribute("data-action")
+    ghost.dataset.dragging = "true"
+    ghost.setAttribute("aria-hidden", "true")
+    ghost.style.position = "fixed"
+    ghost.style.inset = "-1000px auto auto -1000px"
+    ghost.style.width = `${element.getBoundingClientRect().width}px`
+    ghost.style.pointerEvents = "none"
+    document.body.appendChild(ghost)
+    transfer.setDragImage(ghost, 12, 12)
+    setTimeout(() => ghost.remove(), 0)
     setDrag({ server })
   }
 
@@ -726,7 +792,7 @@ export function TitlebarTabStrip(props: {
   function dropGroup(event: DragEvent) {
     event.preventDefault()
     event.stopPropagation()
-    setDrag("server", undefined)
+    endGroupDrag()
   }
 
   function endGroupDrag() {
@@ -808,22 +874,20 @@ export function TitlebarTabStrip(props: {
             props.onNavigate(tab, tabEl ?? undefined)
           }}
           onDragEnd={(event) => {
-            const current = visibleTabIds()
             const source = event.operation.source
 
             if (event.canceled || !isSortable(source)) return
 
             const { initialIndex, index } = source
 
-            if (initialIndex !== index) {
-              props.onReorder(
-                mergeVisibleTabOrder(
-                  props.tabs.map(tabKey),
-                  current,
-                  arrayMove(current, source.initialIndex, source.index),
-                ),
-              )
-            }
+            if (initialIndex === index) return
+
+            const order = ordering().map(tabKey)
+            const visible = visibleTabIds()
+            const shown = new Set(visible)
+            const next = arrayMove(order, initialIndex, index).filter((key) => shown.has(key))
+
+            props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), visible, next))
           }}
         >
           <div
@@ -837,14 +901,13 @@ export function TitlebarTabStrip(props: {
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
-                const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+                const orderIndex = () => ordering().findIndex((item) => tabKey(item) === id)
                 const header = () => headers().get(id)
                 const last = () => lastShown().get(tab.server) === id
                 const concealed = () => !shownKeys().has(id)
                 const groupSize = () => groups().get(tab.server)?.length ?? 0
                 const groupCollapsed = () => !!collapsed[tab.server]
                 const groupExpanded = () => !!expanded[tab.server]
-                const groupHidden = () => (groups().get(tab.server) ?? []).some((item) => !shownKeys().has(tabKey(item)))
                 const element = () => ref
                 tabRefs.set(id, element)
                 onCleanup(() => {
@@ -863,7 +926,7 @@ export function TitlebarTabStrip(props: {
                       tab={tab}
                       currentTab={props.currentTab}
                       id={id}
-                      index={visibleIndex()}
+                      index={orderIndex()}
                       active={props.currentTab === tab}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       concealed={concealed()}
@@ -880,7 +943,7 @@ export function TitlebarTabStrip(props: {
                     <DraftTabSlot
                       tab={tab}
                       id={id}
-                      index={visibleIndex()}
+                      index={orderIndex()}
                       active={props.currentTab === tab}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       concealed={concealed()}
@@ -896,83 +959,27 @@ export function TitlebarTabStrip(props: {
                 return (
                   <>
                     <Show when={header()}>
-                      {(title) => {
-                        const toggleLabel = () =>
-                          language.t(
-                            groupCollapsed()
-                              ? "session.tab.serverGroup.expand"
-                              : "session.tab.serverGroup.collapse",
-                            { server: title() },
-                          )
-
-                        return (
-                          <div
-                            data-slot="tab-server-group"
-                            data-server={tab.server}
-                            data-action="tab-server-group-drag"
-                            data-dragging={drag.server === tab.server ? "true" : "false"}
-                            draggable={true}
-                            title={language.t("session.tab.serverGroup.drag", { server: title() })}
-                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-inset data-[dragging=true]:ring-v2-icon-icon-accent active:cursor-grabbing"
-                            onDragStart={(event) => startGroupDrag(event, tab.server, event.currentTarget)}
-                            onDragEnd={endGroupDrag}
-                            onDragOver={(event) => dragOverGroup(event, tab.server, event.currentTarget)}
-                            onDrop={(event) => dropGroup(event)}
-                          >
-                            <bdi class="min-w-0 truncate">{title()}</bdi>
-                            <div class="ms-auto flex shrink-0 items-center gap-0.5">
-                              <button
-                                type="button"
-                                data-action="tab-server-group-add"
-                                data-server={tab.server}
-                                aria-label={language.t("session.tab.newOnServer", { server: title() })}
-                                title={language.t("session.tab.newOnServer", { server: title() })}
-                                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-                                onClick={() => newSessionInGroup(tab.server)}
-                              >
-                                <Icon name="plus" size="small" />
-                              </button>
-                              <button
-                                type="button"
-                                data-action="tab-server-group-toggle"
-                                data-server={tab.server}
-                                aria-label={toggleLabel()}
-                                aria-expanded={!groupCollapsed()}
-                                title={toggleLabel()}
-                                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-                                onClick={() => toggleGroup(tab.server)}
-                              >
-                                <Icon
-                                  name="outline-chevron-down"
-                                  size="small"
-                                  class={groupCollapsed() ? "-rotate-90" : ""}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      }}
+                      {(title) => (
+                        <ServerGroupHeader
+                          title={title()}
+                          collapsed={groupCollapsed()}
+                          dragging={drag.server === tab.server}
+                          onAdd={() => newSessionInGroup(tab.server)}
+                          onToggle={() => setCollapsed(tab.server, !collapsed[tab.server])}
+                          onDragStart={(event, element) => startGroupDrag(event, tab.server, element)}
+                          onDragEnd={endGroupDrag}
+                          onDragOver={(event, element) => dragOverGroup(event, tab.server, element)}
+                          onDrop={dropGroup}
+                        />
+                      )}
                     </Show>
                     {entry}
                     <Show when={grouped() && last()}>
-                      <Show
-                        when={!groupCollapsed() && (groupExpanded() ? groupSize() > groupTabLimit : groupHidden())}
-                      >
-                        <button
-                          type="button"
-                          data-action={
-                            groupExpanded() ? "tab-server-group-show-less" : "tab-server-group-show-more"
-                          }
-                          data-server={tab.server}
-                          class="flex h-6 w-full shrink-0 items-center rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-                          onClick={() => (groupExpanded() ? showLess(tab.server) : showMore(tab.server))}
-                        >
-                          {language.t(
-                            groupExpanded()
-                              ? "session.tab.serverGroup.showLess"
-                              : "session.tab.serverGroup.showMore",
-                          )}
-                        </button>
+                      <Show when={!groupCollapsed() && groupSize() > groupTabLimit}>
+                        <ServerGroupFooter
+                          expanded={groupExpanded()}
+                          onClick={() => setExpanded(tab.server, !groupExpanded())}
+                        />
                       </Show>
                     </Show>
                   </>

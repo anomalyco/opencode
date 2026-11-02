@@ -184,3 +184,10 @@
     animation-range: calc(100% - 1.1px) calc(100% - 1px);
   }
 }
+
+/* The Home row runs out of room before the sidebar's minimum width. */
+@container (max-width: 200px) {
+  [data-component="tooltip-v2-trigger"]:has(> [data-action="toggle-tab-server-groups"]) {
+    display: none;
+  }
+}
