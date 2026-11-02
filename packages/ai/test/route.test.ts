@@ -40,11 +40,6 @@ describe("Route.with", () => {
       "x-override": "patch",
       "x-patch": "patch",
     })
-    expect(route.defaults.http?.headers).toEqual({
-      "x-base": "base",
-      "x-override": "patch",
-      "x-patch": "patch",
-    })
   })
 
   test("assigns metadata ownership to a replacement provider and preserves explicit overrides", () => {

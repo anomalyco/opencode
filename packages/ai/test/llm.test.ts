@@ -126,16 +126,14 @@ describe("llm constructors", () => {
       prompt: "Say hello.",
       generation: { temperature: 0 },
       providerOptions: { store: true, metadata: { request: true } },
-      http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
+      headers: { "x-shared": "request" },
+      http: { body: { metadata: { request: true } }, query: { request: "1" } },
     })
 
     expect(request.generation).toEqual({ temperature: 0 })
     expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
-    expect(request.http).toEqual({
-      body: { metadata: { request: true } },
-      headers: { "x-shared": "request" },
-      query: { request: "1" },
-    })
+    expect(request.headers).toEqual({ "x-shared": "request" })
+    expect(request.http).toEqual({ body: { metadata: { request: true } }, query: { request: "1" } })
   })
 
   test("updates canonical models from the model datatype", () => {

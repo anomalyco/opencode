@@ -11,7 +11,6 @@ import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
   CacheTTL,
-  HttpOptions,
   type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
@@ -1535,7 +1534,7 @@ export const transport = <
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
       const requiredBetas = requiredBetaHeaders(input.body)
       if (requiredBetas.length === 0) return http.prepare(input)
-      const headers = Headers.fromInput(input.request.http?.headers)
+      const headers = Headers.fromInput(input.request.headers)
       const existingBetas = (headers["anthropic-beta"] ?? "")
         .split(",")
         .map((item) => item.trim())
@@ -1543,13 +1542,7 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: {
-          ...input.request,
-          http: new HttpOptions({
-            ...input.request.http,
-            headers: { ...headers, "anthropic-beta": [...betas].join(",") },
-          }),
-        },
+        request: { ...input.request, headers: { ...headers, "anthropic-beta": [...betas].join(",") } },
       })
     },
   }

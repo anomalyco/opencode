@@ -1,4 +1,4 @@
-import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { type HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
@@ -10,7 +10,7 @@ const baseURL = "https://opencode.ai/inference/systemone/v1"
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
   readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
+  readonly http?: HttpOptions
 }
 
 export type Settings = ProviderPackage.Settings & { readonly apiKey?: string | false }

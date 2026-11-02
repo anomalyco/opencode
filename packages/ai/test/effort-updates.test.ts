@@ -135,7 +135,7 @@ describe("Anthropic Messages effort updates", () => {
           model,
           messages: conversation,
           providerOptions: { effort: "low" },
-          http: { headers: { "anthropic-beta": "existing-beta" } },
+          headers: { "anthropic-beta": "existing-beta" },
         })
         const compiled = yield* compileRequest(request)
         const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)

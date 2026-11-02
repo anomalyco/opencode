@@ -3,7 +3,14 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+  type BaseRequest,
+} from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -81,28 +88,20 @@ const VideoRequestSchema = Schema.Struct({
   seed: Schema.optional(Schema.Number),
   negativePrompt: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized video request, the plain object `Video.request(...)` returns. */
 export type VideoRequest<Model extends VideoModel = VideoModel> = Omit<
   typeof VideoRequestSchema.Type,
   "model" | "providerOptions" | "resolution"
-> & {
-  readonly model: Model
-  readonly resolution?: VideoResolution
-  readonly providerOptions?: VideoModelOptions<Model>
-}
+> &
+  BaseRequest<Model, VideoModelOptions<Model>> & { readonly resolution?: VideoResolution }
 
 export type VideoModelOptions<Model> = Model extends VideoModel<infer Options> ? Options : never
 
 /** Input accepted by `Video.request` and the calls; a `VideoRequest` is also a valid input. */
-export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
-  VideoRequest<Model>,
-  "providerOptions" | "http"
-> & {
+export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<VideoRequest<Model>, "providerOptions"> & {
   readonly providerOptions?: NoInfer<VideoModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +163,6 @@ const collectResponse = (events: ReadonlyArray<VideoEvent>): Effect.Effect<Video
 /** Normalize video request input into a plain `VideoRequest`. */
 export const request = <const Model extends VideoModel>(input: VideoRequestInput<Model>): VideoRequest<Model> => ({
   ...input,
-  http: HttpOptions.make(input.http),
 })
 
 const validate = Schema.decodeUnknownSync(VideoRequestSchema)

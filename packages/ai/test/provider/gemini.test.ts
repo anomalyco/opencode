@@ -2208,7 +2208,7 @@ describe("Gemini response continuation", () => {
           },
         }),
       ])
-      const fiber = yield* LLMClient.generate({ ...continuedRequest, http: { timeout: 1_000 } }).pipe(
+      const fiber = yield* LLMClient.generate({ ...continuedRequest, timeout: 1_000 }).pipe(
         Effect.provide(server.layer),
         Effect.flip,
         Effect.forkChild({ startImmediately: true }),
