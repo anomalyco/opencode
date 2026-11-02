@@ -7,7 +7,7 @@ import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } f
 import { RestrictToHorizontalAxis, RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@/runtime/array-move"
-import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
+import { tabHref, tabKey, type DraftTab, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
@@ -711,16 +711,32 @@ export function TitlebarTabStrip(props: {
   }
 
   // Starts a draft on the group's server, in the directory its open tabs already use.
-  function newSessionInGroup(server: ServerConnection.Key) {
+  function newSessionInGroup(server: ServerConnection.Key, name: string) {
+    const fail = (reason: "connection" | "directory", description: string) => {
+      console.warn("[tab-strip] cannot start a session in a server group", { server, name, reason })
+      showToast({
+        variant: "error",
+        title: language.t("session.tab.serverGroup.openFailed.title"),
+        description,
+      })
+    }
+
     const conn = servers.list.find((item) => ServerConnection.key(item) === server)
 
-    if (!conn) return
+    if (!conn) {
+      fail(
+        "connection",
+        language.t("session.tab.serverGroup.openFailed.connection", { server: name }),
+      )
+
+      return
+    }
 
     const ctx = global.ensureServerCtx(conn)
     const group = props.tabs.filter((tab) => tab.server === server)
 
     const directory =
-      group.find((tab) => tab.type === "draft")?.directory ??
+      group.find((tab): tab is DraftTab => tab.type === "draft" && !!tab.directory)?.directory ??
       group
         .flatMap((tab) =>
           tab.type === "session"
@@ -731,11 +747,25 @@ export function TitlebarTabStrip(props: {
       ctx.projects.last()?.worktree ??
       ctx.projects.used()[0]?.worktree
 
-    if (!directory) return
+    if (!directory) {
+      fail(
+        "directory",
+        language.t("session.tab.serverGroup.openFailed.directory", { server: name }),
+      )
+
+      return
+    }
 
     setCollapsed(server, false)
     ctx.projects.touch(directory)
-    void tabs.newDraft({ server, directory })
+    void tabs.newDraft({ server, directory }).catch((cause) => {
+      console.error("[tab-strip] failed to start a draft in a server group", { server, name, cause })
+      showToast({
+        variant: "error",
+        title: language.t("session.tab.serverGroup.openFailed.title"),
+        description: errorMessage(cause, language.t("session.tab.serverGroup.openFailed.title")),
+      })
+    })
   }
 
   function startGroupDrag(event: DragEvent, server: ServerConnection.Key, element: HTMLElement) {
@@ -967,7 +997,7 @@ export function TitlebarTabStrip(props: {
                           title={title()}
                           collapsed={groupCollapsed()}
                           dragging={drag.server === tab.server}
-                          onAdd={() => newSessionInGroup(tab.server)}
+                          onAdd={() => newSessionInGroup(tab.server, title())}
                           onToggle={() => setCollapsed(tab.server, !collapsed[tab.server])}
                           onDragStart={(event, element) => startGroupDrag(event, tab.server, element)}
                           onDragEnd={endGroupDrag}

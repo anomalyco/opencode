@@ -26,6 +26,8 @@ const b = { id: "ses_tab_b", title: "Tab B session" }
 
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
+const WSL_SERVER = "http://127.0.0.1:4098"
+
 test.use({ serviceWorkers: "block" })
 
 test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
@@ -909,16 +911,65 @@ test("vertical tabs group by server and keep each server's tab order", async ({ 
     `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
   ])
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer", "127.0.0.1:4097"])
+})
+
+test("server group add starts a draft in the clicked group", async ({ page }) => {
+  const local = session({ id: "ses_group_add_a1", directory: "C:/server-a", title: "Local one" })
+  const local2 = session({ id: "ses_group_add_a2", directory: "C:/server-a", title: "Local two" })
+  const remote = session({ id: "ses_group_add_b1", directory: "/home/server-b", title: "Remote one" })
+  await twoServers(page, { a: [local, local2], b: [remote] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [
+      local.id,
+      { session: remote.id, server: REMOTE_SERVER },
+      local2.id,
+      // An empty draft must not shadow the directory its sessions already know.
+      { draft: "draft_group_add_empty", directory: "" },
+    ],
+  })
+  await page.goto(sessionHref(local.id))
+
+  const layout = () =>
+    page
+      .locator('[data-slot="tab-server-group"], [data-titlebar-tab-slot]')
+      .evaluateAll((nodes) =>
+        nodes.map((node) =>
+          node.getAttribute("data-slot") === "tab-server-group"
+            ? `group:${node.textContent?.trim()}`
+            : node.getAttribute("data-tab-key"),
+        ),
+      )
 
   await page
     .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
     .locator('[data-action="tab-server-group-add"]')
     .click()
-  await expect.poll(order).toEqual([
-    `${SERVER}\n${sessionHref(sessionA.id)}`,
-    `${SERVER}\n${sessionHref(sessionA2.id)}`,
+
+  await expect.poll(layout).toEqual([
+    "group:This computer",
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    "draft:draft_group_add_empty",
     expect.stringMatching(/^draft:/),
-    `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
+    "group:127.0.0.1:4097",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
+
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "127.0.0.1:4097" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+
+  await expect.poll(layout).toEqual([
+    "group:This computer",
+    `${SERVER}\n${sessionHref(local.id)}`,
+    `${SERVER}\n${sessionHref(local2.id)}`,
+    "draft:draft_group_add_empty",
+    expect.stringMatching(/^draft:/),
+    "group:127.0.0.1:4097",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+    expect.stringMatching(/^draft:/),
   ])
 })
 
@@ -946,6 +997,132 @@ test("grouping works when only one registered server has tabs", async ({ page })
 
   await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer"])
   await expect(page.locator('[data-action="toggle-tab-server-groups"]')).toHaveAttribute("aria-pressed", "true")
+})
+
+test("server group add reports when no working directory is known", async ({ page }) => {
+  const remote = session({ id: "ses_group_missing_dir_b", directory: "/home/server-b", title: "Remote one" })
+  await mockServers(page, {
+    [SERVER]: {
+      directory: "C:/server-a",
+      project: project({ id: "proj_server_a", directory: "C:/server-a" }),
+      provider: NO_PROVIDER,
+      sessions: [],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      directory: "/home/server-b",
+      project: project({ id: "proj_server_b", directory: "/home/server-b" }),
+      provider: NO_PROVIDER,
+      sessions: [remote],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+  await seed(page, {
+    servers: [REMOTE_SERVER],
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [{ draft: "draft_group_missing_dir", directory: "" }, { session: remote.id, server: REMOTE_SERVER }],
+  })
+  await page.goto(sessionHref(remote.id, REMOTE_SERVER))
+
+  const keys = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
+
+  await expect.poll(keys).toEqual([
+    "draft:draft_group_missing_dir",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
+
+  await page
+    .locator('[data-slot="tab-server-group"]', { hasText: "This computer" })
+    .locator('[data-action="tab-server-group-add"]')
+    .click()
+
+  await expect(page.getByText("Could not start a session", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("No working directory is known for This computer. Open a session there first.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expectPath(page, sessionHref(remote.id, REMOTE_SERVER))
+  await expect.poll(keys).toEqual([
+    "draft:draft_group_missing_dir",
+    `${REMOTE_SERVER}\n${sessionHref(remote.id, REMOTE_SERVER)}`,
+  ])
+})
+
+test("server group add reports when the group's server is gone", async ({ page }) => {
+  const wsl = session({ id: "ses_group_missing_server", directory: "/home/ubuntu/project", title: "WSL session" })
+  const health = Promise.withResolvers<void>()
+  await mockServers(page, {
+    [SERVER]: {
+      directory: "C:/server-a",
+      project: project({ id: "proj_group_server_a", directory: "C:/server-a" }),
+      provider: NO_PROVIDER,
+      sessions: [],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      directory: "/remote/project",
+      project: project({ id: "proj_group_server_b", directory: "/remote/project" }),
+      provider: NO_PROVIDER,
+      sessions: [],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [WSL_SERVER]: {
+      directory: "/home/ubuntu/project",
+      project: project({ id: "proj_group_server_wsl", directory: "/home/ubuntu/project" }),
+      provider: NO_PROVIDER,
+      sessions: [wsl],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+  await seed(page, {
+    servers: [REMOTE_SERVER],
+    settings: { appearance: { tabLayout: "vertical", tabGroupByServer: true } },
+    tabs: [{ session: wsl.id, server: "wsl:Ubuntu" }],
+  })
+  // The remote health probe never answers, so the stopped WSL server keeps its last healthy status.
+  await page.route(`${REMOTE_SERVER}/api/info`, async (route) => {
+    await health.promise
+    await route.fallback()
+  })
+
+  const href = sessionHref(wsl.id, "wsl:Ubuntu")
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", wsl: WSL_SERVER, path: href })}`,
+  )
+  await expectSessionTitle(page, wsl.title)
+
+  const keys = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
+
+  await expect.poll(keys).toEqual([`wsl:Ubuntu\n${href}`])
+
+  const header = page.locator('[data-slot="tab-server-group"]', { hasText: "Ubuntu" })
+  const add = header.locator('[data-action="tab-server-group-add"]')
+  await expect(add).toBeEnabled()
+
+  await page.getByRole("button", { name: "Stop WSL server" }).click()
+  await expect(add).toBeEnabled()
+  await add.click()
+
+  await expect(page.getByText("Could not start a session", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("wsl:Ubuntu is no longer connected. Reconnect it and try again.", { exact: true }),
+  ).toBeVisible()
+  await expect.poll(keys).toEqual([`wsl:Ubuntu\n${href}`])
+
+  health.resolve()
+  await page.unroute(`${REMOTE_SERVER}/api/info`)
 })
 
 test("server groups limit their visible tabs and collapse from the header", async ({ page }) => {
