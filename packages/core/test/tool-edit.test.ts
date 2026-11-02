@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
@@ -25,15 +26,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [
-    Tool.node,
-    FileAccess.node,
-    FileMutation.node,
-    Environment.node,
-    Formatter.node,
-    Location.node,
-    Permission.node,
-  ],
+  deps: [Tool.node, FileWrite.node, FileMutation.node, Environment.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")

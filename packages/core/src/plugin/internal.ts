@@ -39,6 +39,7 @@ import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
 import { Formatter } from "../formatter.js"
 import { Generate } from "../generate.js"
 import { Form } from "../form.js"
@@ -127,6 +128,7 @@ const services = [
   Environment.Service,
   FileAccess.Service,
   FileMutation.Service,
+  FileWrite.Service,
   Formatter.Service,
   Generate.Service,
   LocationWatcherPolicy.Service,
@@ -184,6 +186,7 @@ export const requirements = LayerNode.group([
   Environment.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
   Formatter.node,
   Generate.node,
   LocationWatcherPolicy.node,
