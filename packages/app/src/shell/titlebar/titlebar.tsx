@@ -543,7 +543,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     size="normal"
                     class="shrink-0"
                     classList={{ "opacity-50": !settings.appearance.tabGroupByServer() }}
-                    icon={<Icon name="server" />}
+                    icon={<Icon name="server" size="small" />}
                     state={settings.appearance.tabGroupByServer() ? "pressed" : undefined}
                     onClick={() =>
                       settings.appearance.setTabGroupByServer(!settings.appearance.tabGroupByServer())
@@ -921,6 +921,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 fallback={
                                   <TitlebarTabStrip
                                     orientation="vertical"
+                                    groupByServer
                                     tabs={tabsStore}
                                     currentTab={currentTab()}
                                     onNavigate={(tab, el) => {

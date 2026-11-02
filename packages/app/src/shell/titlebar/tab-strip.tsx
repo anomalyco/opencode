@@ -495,6 +495,7 @@ function ServerGroupFooter(props: { expanded: boolean; onClick: () => void }) {
 
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
+  groupByServer?: boolean
   tabs: Tab[]
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
@@ -537,7 +538,9 @@ export function TitlebarTabStrip(props: {
   // Grouping needs a second registered server; the sidebar toggle uses the same condition.
   const groupable = createMemo(() => servers.list.length > 1)
 
-  const grouped = createMemo(() => vertical() && settings.appearance.tabGroupByServer() && groupable())
+  const grouped = createMemo(
+    () => !!props.groupByServer && vertical() && settings.appearance.tabGroupByServer() && groupable(),
+  )
 
   // The user's dragged order wins; servers they have not moved keep the app's order after it.
   const serverOrder = createMemo(() => {
