@@ -7,28 +7,24 @@ import { ToolOutput } from "@opencode/core/tool-output"
 import type { Tool } from "@opencode/core/tool"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
-import { tmpdir } from "./fixture/tmpdir"
+import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(
   body: (output: ToolOutput.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
   limits?: { maxLines?: number; maxBytes?: number },
 ) =>
-  Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => {
-      const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
-        Global.node.replace(Global.layerWith({ data: tmp.path })),
-      ])
-      return Effect.gen(function* () {
-        const output = yield* ToolOutput.Service
-        const fs = yield* FSUtil.Service
-        if (limits) yield* output.transform((editor) => editor.configure(limits))
-        return yield* body(output, fs, tmp.path)
-      }).pipe(Effect.provide(layer))
-    },
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  )
+  withTempDir((tmp) => {
+    const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
+      Global.node.replace(Global.layerWith({ data: tmp.path })),
+    ])
+    return Effect.gen(function* () {
+      const output = yield* ToolOutput.Service
+      const fs = yield* FSUtil.Service
+      if (limits) yield* output.transform((editor) => editor.configure(limits))
+      return yield* body(output, fs, tmp.path)
+    }).pipe(Effect.provide(layer))
+  })
 
 describe("ToolOutput", () => {
   it.live("writes oversized text and returns a bounded preview", () =>
