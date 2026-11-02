@@ -509,7 +509,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
     .join("\n\n")
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
-    if (input.role !== "tool") return message(input)
+    if (input.role !== "tool") return message(input.role, input.content)
     const lowered = toolMessage(input)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
@@ -527,8 +527,11 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
-  switch (input.role) {
+function message(
+  role: Exclude<LLMRequest["messages"][number]["role"], "tool">,
+  content: LLMRequest["messages"][number]["content"],
+): LanguageModelV3Message[] {
+  switch (role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
       // chronological instruction update, but opaque AI SDK providers do not uniformly allow the system role after
@@ -539,17 +542,15 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
           content: [
             {
               type: "text",
-              text: ProviderShared.wrapSystemUpdate(input.content.filter((part) => part.type === "text")),
+              text: ProviderShared.wrapSystemUpdate(content.filter((part) => part.type === "text")),
             },
           ],
         },
       ]
     case "user":
-      return [{ role: "user", content: input.content.flatMap(userPart) }]
+      return [{ role: "user", content: content.flatMap(userPart) }]
     case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
-    case "tool":
-      return toolMessage(input).messages
+      return [{ role: "assistant", content: content.flatMap(assistantPart) }]
   }
 }
 
@@ -838,20 +839,14 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish":
-      return Effect.succeed([
-        LLMEvent.stepFinish({
-          index: state.step++,
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-        LLMEvent.finish({
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+    case "finish": {
+      const finish = {
+        reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+        usage: usage(event.usage),
+        providerMetadata: providerMetadata(event.providerMetadata),
+      }
+      return Effect.succeed([LLMEvent.stepFinish({ index: state.step++, ...finish }), LLMEvent.finish(finish)])
+    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -941,7 +936,7 @@ function llmError(error: unknown, operation: "request" | "read") {
 
 // AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
 // response in `value`, which carries the message and codes.
-const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
+const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch

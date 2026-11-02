@@ -212,6 +212,12 @@ const layer = Layer.effect(
 
     const rootDir = path.join(global.data, "artifacts")
     const itemDir = (id: ID) => path.join(rootDir, id)
+    const requireRecord = (id: ID) =>
+      loadProjectRecord(kv, id, location.project.id).pipe(
+        Effect.flatMap((existing) =>
+          existing ? Effect.succeed(existing) : Effect.fail(new NotFoundError({ artifactID: id })),
+        ),
+      )
 
     const localProvider: ProviderImplementation = {
       id: LocalProviderID,
@@ -220,14 +226,9 @@ const layer = Layer.effect(
       prompt:
         "Artifacts are served as HTML by this OpenCode server. Only people who can reach this server can open them.",
       create: (input) =>
-        replaceDirectoryFiles(itemDir(input.id), input.files).pipe(
-          Effect.as({ url: `/api/experimental/artifacts/${encodeURIComponent(input.id)}/view/` }),
-        ),
+        replaceDirectoryFiles(itemDir(input.id), input.files).pipe(Effect.as({ url: viewURL(input.id) })),
       read: (id) => readDirectoryFiles(itemDir(id)),
-      update: (id, input) =>
-        replaceDirectoryFiles(itemDir(id), input.files).pipe(
-          Effect.as({ url: `/api/experimental/artifacts/${encodeURIComponent(id)}/view/` }),
-        ),
+      update: (id, input) => replaceDirectoryFiles(itemDir(id), input.files).pipe(Effect.as({ url: viewURL(id) })),
       delete: (id) => Effect.promise(() => fs.rm(itemDir(id), { recursive: true, force: true })),
     }
 
@@ -349,7 +350,7 @@ const layer = Layer.effect(
           ...(input.sessionID === undefined ? {} : { sessionID: input.sessionID }),
           title,
           entry,
-          url: created.url ?? `/api/experimental/artifacts/${encodeURIComponent(id)}/view/`,
+          url: created.url ?? viewURL(id),
           time: { created: now, updated: now },
         })
         yield* kv.set(
@@ -364,14 +365,12 @@ const layer = Layer.effect(
       }),
       info: Effect.fn("Artifact.info")(function* (id) {
         yield* requireEnabled()
-        const existing = yield* loadProjectRecord(kv, id, location.project.id)
-        if (!existing) return yield* new NotFoundError({ artifactID: id })
+        const existing = yield* requireRecord(id)
         return existing.info
       }),
       get: Effect.fn("Artifact.get")(function* (id) {
         yield* requireEnabled()
-        const existing = yield* loadProjectRecord(kv, id, location.project.id)
-        if (!existing) return yield* new NotFoundError({ artifactID: id })
+        const existing = yield* requireRecord(id)
         const provider = yield* resolveProvider(existing.info.provider)
         const raw = yield* provider
           .read(id)
@@ -384,8 +383,7 @@ const layer = Layer.effect(
       update: Effect.fn("Artifact.update")(function* (id, input) {
         yield* requireEnabled()
         yield* checkSession(input.sessionID)
-        const existing = yield* loadProjectRecord(kv, id, location.project.id)
-        if (!existing) return yield* new NotFoundError({ artifactID: id })
+        const existing = yield* requireRecord(id)
         const title = input.title === undefined ? existing.info.title : input.title.trim()
         if (!title) return yield* new InvalidError({ reason: "Artifact title must not be empty", field: "title" })
         const files = yield* normalizeFiles(encodeStringFiles(input.files))
@@ -420,8 +418,7 @@ const layer = Layer.effect(
       }),
       remove: Effect.fn("Artifact.remove")(function* (id) {
         yield* requireEnabled()
-        const existing = yield* loadProjectRecord(kv, id, location.project.id)
-        if (!existing) return yield* new NotFoundError({ artifactID: id })
+        const existing = yield* requireRecord(id)
         const provider = state.get().providers.get(existing.info.provider)
         if (provider) {
           yield* provider
@@ -432,8 +429,7 @@ const layer = Layer.effect(
       }),
       readLocalFile: Effect.fn("Artifact.readLocalFile")(function* (id, subpath) {
         yield* requireEnabled()
-        const existing = yield* loadProjectRecord(kv, id, location.project.id)
-        if (!existing) return yield* new NotFoundError({ artifactID: id })
+        const existing = yield* requireRecord(id)
         if (existing.info.provider !== LocalProviderID) {
           return yield* new InvalidError({
             reason: `Artifact ${id} is hosted by provider "${existing.info.provider}", not the local server`,
@@ -482,9 +478,14 @@ function detectFileMime(filePath: string, bytes: Uint8Array) {
 }
 
 function normalizePath(raw: string): Effect.Effect<string, InvalidError> {
-  const trimmed = raw.replaceAll("\\", "/").replace(/^(?:\.\/)+/u, "").replace(/^\/+/u, "")
+  const trimmed = raw
+    .replaceAll("\\", "/")
+    .replace(/^(?:\.\/)+/u, "")
+    .replace(/^\/+/u, "")
   if (!trimmed || trimmed.includes("\0")) {
-    return Effect.fail(new InvalidError({ reason: `Invalid artifact file path: ${JSON.stringify(raw)}`, field: "files" }))
+    return Effect.fail(
+      new InvalidError({ reason: `Invalid artifact file path: ${JSON.stringify(raw)}`, field: "files" }),
+    )
   }
   const segments = trimmed.split("/")
   if (segments.some((part) => !part || part === "." || part === "..")) {
@@ -530,6 +531,10 @@ function resolveEntry(files: Readonly<Record<string, Uint8Array>>, requested?: s
       field: "entry",
     }),
   )
+}
+
+function viewURL(id: ID) {
+  return `/api/experimental/artifacts/${encodeURIComponent(id)}/view/`
 }
 
 function loadProjectRecord(kv: KV.Interface, id: ID, projectID: string) {
