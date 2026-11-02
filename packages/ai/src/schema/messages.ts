@@ -55,6 +55,17 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type MediaPartInput = Omit<MediaPart, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+
+const mediaPart = (input: MediaPartInput): MediaPart => {
+  const { mediaType, ...part } = input
+  return { ...part, media: Media.make(input.media, mediaType) }
+}
+
 const toolResultValueSchema = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("json"),
@@ -235,8 +246,10 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+export type ContentPartInput = Exclude<ContentPart, MediaPart> | MediaPartInput
+
 export namespace Message {
-  export type ContentInput = string | ContentPart | ReadonlyArray<ContentPart>
+  export type ContentInput = string | ContentPartInput | ReadonlyArray<ContentPartInput>
   export type SystemContentInput = string | TextPart | ReadonlyArray<TextPart>
   export type Input = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
     readonly content: ContentInput
@@ -244,14 +257,15 @@ export namespace Message {
 
   export const text = (value: string): ContentPart => ({ type: "text", text: value })
 
-  export const media = (asset: Media.Asset, options?: Omit<MediaPart, "type" | "media">): MediaPart => ({
-    type: "media",
-    media: asset,
-    ...options,
-  })
+  export const media = (media: Media.Input, options?: Omit<MediaPartInput, "type" | "media">): MediaPart =>
+    mediaPart({ type: "media", media, ...options })
 
-  export const content = (input: ContentInput) =>
-    typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]
+  export const content = (input: ContentInput): ContentPart[] => {
+    if (typeof input === "string") return [text(input)]
+    return (Array.isArray(input) ? input : [input]).map((part: ContentPartInput) =>
+      part.type === "media" ? mediaPart(part) : part,
+    )
+  }
 
   export const make = (input: Message | Input) => {
     if (input instanceof Message) return input

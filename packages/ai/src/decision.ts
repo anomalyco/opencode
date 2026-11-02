@@ -28,8 +28,15 @@ export const DecisionPart = Schema.Union([DecisionTextPart, DecisionJsonPart, De
 )
 export type DecisionPart = Schema.Schema.Type<typeof DecisionPart>
 
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type DecisionMediaPartInput = Omit<typeof DecisionMediaPart.Type, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+export type DecisionPartInput = Exclude<DecisionPart, { readonly type: "media" }> | DecisionMediaPartInput
+
 /** A plain object is one `json` part. */
-export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPart>
+export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPartInput>
 
 // ---------------------------------------------------------------------------
 // Questions
@@ -298,11 +305,20 @@ export const request = <const Model extends DecisionModel, const Questions exten
   input: DecisionRequestInput<Model, Questions>,
 ): DecisionRequest<Model, Questions> => ({
   ...input,
-  input: Array.isArray(input.input) ? input.input : [{ type: "json", value: input.input }],
+  input: isParts(input.input) ? input.input.map(decisionPart) : [{ type: "json", value: input.input }],
   http: HttpOptions.make(input.http),
 })
 
 const validate = Schema.decodeUnknownSync(DecisionRequestSchema)
+
+// `Array.isArray` doesn't narrow a readonly array union, so the object branch would keep the parts type.
+const isParts = (input: DecisionInput): input is ReadonlyArray<DecisionPartInput> => Array.isArray(input)
+
+const decisionPart = (part: DecisionPartInput): DecisionPart => {
+  if (part.type !== "media") return part
+  const { mediaType, ...rest } = part
+  return { ...rest, media: Media.make(part.media, mediaType) }
+}
 
 export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,

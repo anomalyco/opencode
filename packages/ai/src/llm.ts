@@ -29,7 +29,6 @@ import {
   ToolChoice,
   ToolEntry,
   Usage,
-  type ContentPart,
   type LanguageModelProviderOptions,
   type LLMRequest,
   type ToolEntryInput,
@@ -44,7 +43,7 @@ export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextR
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
-  | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
+  | { readonly prompt: Message.ContentInput; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
 interface TextRequestFields<Model extends LanguageModel> {
