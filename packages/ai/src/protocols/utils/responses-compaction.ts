@@ -4,7 +4,6 @@ import {
   InvalidProviderOutputError,
   CompactionPart,
   CompactionResponse,
-  HttpOptions,
   type LLMRequest,
   Message,
   type ContentPart,
@@ -110,7 +109,7 @@ export const make = (
     const parts = yield* HttpTransport.jsonRequestParts({
       request: {
         ...request,
-        http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
+        http: request.http === undefined ? undefined : { ...request.http, body: undefined },
       },
       body,
       endpoint: Endpoint.path(url.toString()),
@@ -124,7 +123,7 @@ export const make = (
         headers: parts.headers,
         encoding: request.http?.encoding,
       }),
-      options?.http,
+      RequestExecutor.withFetch(request.fetch, options?.http),
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(
       Stream.decodeText(),

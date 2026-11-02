@@ -188,28 +188,25 @@ describe("request option precedence", () => {
           .with({
             endpoint: { baseURL: "https://api.openai.test/v1/" },
             auth: Auth.bearer("fresh-key"),
+            headers: { "x-route": "route", "x-shared": "route" },
             http: {
               body: { metadata: { route: true, shared: "route" }, value: "route" },
-              headers: { "x-route": "route", "x-shared": "route" },
               query: { route: "1", shared: "route" },
             },
           })
           .model({
             id: "gpt-4o-mini",
             defaults: {
+              headers: { "x-model": "model", "x-shared": "model" },
               http: {
                 body: { metadata: { model: true, shared: "model" }, value: "model" },
-                headers: { "x-model": "model", "x-shared": "model" },
                 query: { model: "1", shared: "model" },
               },
             },
           }),
         prompt: "Say hello.",
-        http: {
-          body: { metadata: { request: true }, value: null },
-          headers: { "x-request": "request" },
-          query: { request: "1" },
-        },
+        headers: { "x-request": "request" },
+        http: { body: { metadata: { request: true }, value: null }, query: { request: "1" } },
       }),
     ).pipe(
       Effect.provide(

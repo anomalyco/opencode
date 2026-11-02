@@ -12,7 +12,6 @@ export {
   ProviderMetadata,
   HttpTimeout,
   RequestEncoding,
-  HttpOptions,
   GenerationOptions,
   LanguageModelDefaults,
   ReasoningEfforts,
@@ -87,17 +86,22 @@ export {
   AIError,
 } from "./schema/index.js"
 export type {
+  BaseRequest,
   ContentPartInput,
   GenerationOptionsFields,
   GenerationOptionsInput,
+  HttpOptions,
   LanguageModelInput,
   LanguageModelProviderOptions,
   LLMRequest,
   MediaPartInput,
+  RequestTimeout,
+  TimeoutConfig,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
+  TransportOptions,
   UsageInput,
 } from "./schema/index.js"
 export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
