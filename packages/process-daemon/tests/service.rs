@@ -246,6 +246,84 @@ fn title_changes_update_metadata_and_notify_subscribers() {
 }
 
 #[test]
+fn rename_updates_metadata_and_notifies_subscribers_once() {
+    let service = TerminalService::new(64 * 1024);
+    let terminal = service
+        .create(command("exec cat"))
+        .expect("terminal created");
+    let observer = service
+        .attach(
+            terminal.id,
+            0,
+            "observer".to_string(),
+            AttachmentRole::Observer,
+            false,
+        )
+        .expect("observer attached");
+
+    service
+        .rename(terminal.id, Some("renamed".to_string()))
+        .unwrap();
+    service
+        .rename(terminal.id, Some("renamed".to_string()))
+        .unwrap();
+    let snapshot = service.snapshot(terminal.id).unwrap();
+    assert_eq!(snapshot.info.title, "renamed");
+    assert_eq!(snapshot.info.user_title.as_deref(), Some("renamed"));
+    assert!(service.list().is_ok_and(|items| {
+        items.iter().any(|item| {
+            item.id == terminal.id
+                && item.title == "renamed"
+                && item.user_title.as_deref() == Some("renamed")
+        })
+    }));
+    service.terminate(terminal.id).expect("terminal removed");
+
+    let titles = observer
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            StreamEvent::TitleChanged { title } => Some(title),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(titles, ["renamed"]);
+    assert!(service.rename(terminal.id, None).is_err());
+}
+
+#[test]
+fn list_returns_terminals_in_creation_order() {
+    let service = TerminalService::new(64 * 1024);
+    let created = (0..6)
+        .map(|_| service.create(command("exec cat")).unwrap().id)
+        .collect::<Vec<_>>();
+    let listed = service
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|terminal| terminal.id)
+        .collect::<Vec<_>>();
+    assert_eq!(listed, created);
+    service.terminate(created[2]).unwrap();
+    let id = service.create(command("exec cat")).unwrap().id;
+    let listed = service
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|terminal| terminal.id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        listed,
+        [
+            created[0], created[1], created[3], created[4], created[5], id
+        ]
+    );
+    for id in listed {
+        service.terminate(id).unwrap();
+    }
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn foreground_process_tracks_deepest_tty_attached_job() {
     let service = TerminalService::new(64 * 1024);

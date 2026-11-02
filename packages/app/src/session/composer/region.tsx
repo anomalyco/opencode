@@ -20,7 +20,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useLocal } from "@/providers/models/selection"
 import { usePlatform } from "@/runtime/platform/platform"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
@@ -172,6 +172,24 @@ export function createActiveSessionRegion(input: {
     const path = event.composedPath()
     const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
     const active = activeElement()
+
+    // As in chat apps, page keys in the composer page the conversation, even when the draft itself overflows. An open
+    // suggestion popup has already claimed them, and modified page keys keep their native meaning.
+    if (
+      promptRef &&
+      active === promptRef &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+      input.timeline.actions.page(event.key === "PageUp" ? -1 : 1)
+
+      return
+    }
 
     if (
       path.some((item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null) ||

@@ -67,7 +67,12 @@ export function SessionTitleHeader(props: ParentProps) {
 }
 
 export function SessionHeaderLayout(
-  props: ParentProps<{ title: string | undefined; location: JSX.Element; actions?: JSX.Element }>,
+  props: ParentProps<{
+    title: string | undefined
+    location: JSX.Element
+    /** Receives the fit: `compact` while the title needs the room the actions' details take. */
+    actions?: (fit: { readonly compact: boolean }) => JSX.Element
+  }>,
 ) {
   const fit = createSessionHeaderFit()
 
@@ -81,8 +86,7 @@ export function SessionHeaderLayout(
           </span>
           {props.children}
         </div>
-        {/* Each read of a JSX prop renders it again, so the actions render once, from the condition's value. */}
-        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()}</div>}</Show>
+        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()(fit)}</div>}</Show>
       </div>
     </SessionHeaderCollapse.Provider>
   )
@@ -201,7 +205,8 @@ export function SessionLocation(props: {
 
   return (
     <>
-      <Menu placement="bottom-start" gutter={4} modal={false} onOpenChange={onOpenChange}>
+      {/* The shift lines the card's icons and labels up with the trigger's: 2px card + 8px row padding vs the trigger's 6px. */}
+      <Menu placement="bottom-start" gutter={4} shift={-4} modal={false} onOpenChange={onOpenChange}>
         <Tooltip
           placement="bottom"
           value={<bdi dir="auto">{label()}</bdi>}
@@ -316,7 +321,7 @@ export function SessionLocation(props: {
                       </bdi>
                     </Menu.SubTrigger>
                     <Menu.Portal>
-                      <Menu.SubContent class="w-max max-w-[calc(100vw-32px)]" aria-label={name()}>
+                      <Menu.SubContent class="w-max min-w-[172px] max-w-[calc(100vw-32px)]" aria-label={name()}>
                         <Menu.Item onSelect={() => void copyText(name())}>
                           <Icon name="outline-copy" class="text-v2-icon-icon-muted" />
                           {language.t("session.location.copyBranch")}
@@ -364,23 +369,27 @@ export function SessionLocation(props: {
               )}
             </Show>
             <Menu.Separator />
-            <SessionLocationDetail icon="server">
-              <ServerLabel server={server.conn} hint />
-            </SessionLocationDetail>
+            {/* The only server, on this computer, needs no name. */}
+            <Show when={servers.list.length > 1 || !servers.current(server.conn)}>
+              <SessionLocationDetail icon="server">
+                <ServerLabel server={server.conn} hint />
+              </SessionLocationDetail>
+            </Show>
             <Show when={props.directory}>
               {(directory) => (
                 <Menu.Sub gutter={4} overflowPadding={16} overlap>
                   <Menu.SubTrigger
                     data-slot="session-location-path"
                     class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted"
-                    style={{ height: "auto", "padding-block": "6px" }}
+                    // The split spans are flex items, which the accessible name would join with a space.
+                    aria-label={directory()}
                   >
-                    <span class="flex min-w-0 items-start gap-2 text-[12px] leading-4 text-v2-text-text-muted">
-                      <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
-                      <bdi dir="ltr" class="min-w-0 select-text break-all">
-                        {directory()}
-                      </bdi>
-                    </span>
+                    <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
+                    {/* Truncates in the middle: the parent folders shrink, the last folder stays whole. */}
+                    <bdi dir="ltr" class="flex min-w-0 select-text whitespace-nowrap">
+                      <span class="min-w-0 truncate">{directory().slice(0, lastSeparator(directory()))}</span>
+                      <span class="max-w-full shrink-0 truncate">{directory().slice(lastSeparator(directory()))}</span>
+                    </bdi>
                   </Menu.SubTrigger>
                   <Menu.Portal>
                     <Menu.SubContent class="w-max max-w-[calc(100vw-32px)]" aria-label={directory()}>
@@ -434,11 +443,15 @@ export function SessionLocation(props: {
 
 function SessionLocationDetail(props: ParentProps<{ icon: ComponentProps<typeof Icon>["name"] }>) {
   return (
-    <div class="flex h-7 min-w-0 items-center gap-2 px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
+    <div class="flex h-7 min-w-0 items-center gap-2 px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
       <Icon name={props.icon} class="shrink-0 text-v2-icon-icon-muted" />
       <span class="flex min-w-0 truncate">{props.children}</span>
     </div>
   )
+}
+
+function lastSeparator(path: string) {
+  return Math.max(0, path.lastIndexOf("/"), path.lastIndexOf("\\"))
 }
 
 export function SessionAncestorTrail(props: {

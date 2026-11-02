@@ -8,6 +8,7 @@ import {
   promiseOmitEndpoints,
 } from "@opencode/protocol/client"
 import { Agent } from "@opencode/schema/agent"
+import { Artifact } from "@opencode/schema/artifact"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { Credential } from "@opencode/schema/credential"
@@ -65,6 +66,7 @@ const effectContract = compile(ClientApi, {
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
+  ...namespaceTypes("Artifact", "@opencode/schema/artifact", Artifact),
   ...namespaceTypes("Command", "@opencode/schema/command", Command),
   ...namespaceTypes("Config", "@opencode/schema/config", Config),
   ...namespaceTypes("Credential", "@opencode/schema/credential", Credential),

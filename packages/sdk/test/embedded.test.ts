@@ -576,7 +576,7 @@ it.live(
           const wantsTool = !toolIssued && request.tools.some((tool) => tool.name === "shell")
           if (!wantsTool) return TestLLM.text("done", "answer")
           toolIssued = true
-          return TestLLM.tool("call-shell", "shell", { command: "echo hi" })
+          return TestLLM.toolCall("call-shell", "shell", { command: "echo hi" })
         })
         const models = Layer.mock(SessionRunnerModel.Service, {
           resolve: () =>

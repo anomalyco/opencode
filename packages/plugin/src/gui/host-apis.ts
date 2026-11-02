@@ -23,7 +23,7 @@ export interface ServerRef {
   readonly client: OpenCodeClient
   /** The server's synced data (sessions, projects, …). Reactive. */
   readonly data: Data
-  /** The built-in local server or a loopback http server. */
+  /** The app's own local server, or a loopback http connection to its port. */
   readonly local: boolean
   /** The app's own server, the desktop sidecar. */
   readonly builtin: boolean

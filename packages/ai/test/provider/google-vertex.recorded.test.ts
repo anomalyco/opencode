@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 
-import { LLM, Message, ToolDefinition, ToolCallPart } from "../../src/effect.js"
+import { ai, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { GoogleVertex } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
@@ -26,7 +26,7 @@ const recorded = recordedTests({
 describe("Google Vertex Gemini recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Reply with exactly one word: hello" }))
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Reply with exactly one word: hello" }))
 
       expect(response.text.toLowerCase()).toContain("hello")
     }),
@@ -35,7 +35,7 @@ describe("Google Vertex Gemini recorded", () => {
   recorded.effect("calls a tool", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model,
           prompt: "What is the weather in Paris? Use the lookup_weather tool.",
           tools: [lookupWeather],
@@ -51,7 +51,7 @@ describe("Google Vertex Gemini recorded", () => {
   recorded.effect("continues after a tool result", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.user("What is the weather in Paris?"),

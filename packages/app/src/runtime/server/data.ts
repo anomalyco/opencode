@@ -1,10 +1,12 @@
 import type { Data } from "@opencode/client/solid"
-import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
+import { isSessionNotFoundError, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
+
+const REMOVED_SESSION_LIMIT = 512
 
 // The events on which the server advances a session's `time.updated` to the event's time.
 const SESSION_ACTIVITY = [
@@ -27,8 +29,13 @@ const SESSION_ACTIVITY = [
 
 export function createDesktopData(input: { data: Data; remove: (sessionID: string) => Promise<void> }) {
   const mutation = createSessionMutations(input.remove)
-  const [activity, setActivity] = createStore<Record<string, number>>({})
-  onCleanup(input.data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
+  const [activity, setActivity] = createStore<Record<string, number | undefined>>({})
+  onCleanup(
+    input.data.on("session.deleted", (event) => {
+      setActivity(event.data.sessionID, undefined)
+      mutation.deleted(event.data.sessionID)
+    }),
+  )
 
   // Lists loaded earlier (the Home index, the live store, search results) learn each session's newer
   // `time.updated` from its events, so they rank sessions in the server's order without reloading.
@@ -53,7 +60,11 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       ...input.data.session,
       list: () => apply(input.data.session.list()),
       apply,
-      remove: mutation.remove,
+      remove: (sessionID: string) =>
+        mutation.remove(sessionID).then(() => {
+          setActivity(sessionID, undefined)
+          input.data.session.forget(sessionID)
+        }),
     },
   }
 }
@@ -65,6 +76,9 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
     setStore("session", (current) => current.filter((mutation) => mutation.id !== id))
   }
 
+  const append = (current: readonly SessionMutation[], next: SessionMutation) =>
+    [...current.filter((mutation) => mutation.sessionID !== next.sessionID), next].slice(-REMOVED_SESSION_LIMIT)
+
   return {
     apply(sessions: readonly SessionInfo[]) {
       const removed = new Set(
@@ -75,21 +89,20 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
     },
     remove(sessionID: string) {
       const mutation = { id: uuid(), type: "remove" as const, sessionID }
-      setStore("session", (current) => [...current, mutation])
+      setStore("session", (current) => append(current, mutation))
 
       return Promise.resolve()
         .then(() => remove(sessionID))
         .catch((error) => {
+          if (isSessionNotFoundError(error)) return
+
           clear(mutation.id)
           throw error
         })
     },
     // Keep the deleted session hidden: cached lists such as the Home index still hold it until they refetch.
     deleted(sessionID: string) {
-      setStore("session", (current) => [
-        ...current.filter((mutation) => mutation.sessionID !== sessionID),
-        { id: uuid(), type: "remove", sessionID },
-      ])
+      setStore("session", (current) => append(current, { id: uuid(), type: "remove", sessionID }))
     },
   }
 }

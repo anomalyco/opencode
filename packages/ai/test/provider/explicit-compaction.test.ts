@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, Message, ToolDefinition } from "../../src/effect.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -67,7 +67,7 @@ testEffect(
         http: { body: { instructions: "default instructions" } },
       },
     })
-    const request = LLM.request({
+    const request = ai.request({
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
@@ -83,14 +83,14 @@ testEffect(
         },
       },
     })
-    const options: Parameters<typeof LLMClient.compact>[1] = {
+    const options: Parameters<typeof ai.compact>[1] = {
       http: (request, next) => {
         middleware.push(new URL(request.url).pathname)
         return next(request)
       },
     }
     yield* LLMClient.generate(request, options)
-    yield* LLMClient.compact(request, options)
+    yield* ai.compact(request, options)
     expect(headers).toEqual(["fixture", "fixture"])
     expect(middleware).toEqual(["/fixture/responses", "/fixture/responses/compact"])
   }),
@@ -121,7 +121,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} validates tools but ignores unrelated unsupported generation settings`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model,
         system: "Keep the context",
         messages: [
@@ -137,7 +137,8 @@ for (const model of [
       })
       for (const [candidate, tag] of [
         [
-          LLMRequest.update(request, {
+          {
+            ...request,
             tools: [
               ToolDefinition.make({
                 name: "unsupported",
@@ -146,22 +147,22 @@ for (const model of [
                 native: { unsupported: {} },
               }),
             ],
-          }),
+          },
           "InvalidRequest",
         ],
         [
-          LLMRequest.update(request, { providerOptions: { contextManagement: "invalid-generation-option" } }),
+          { ...request, providerOptions: { contextManagement: "invalid-generation-option" } },
           model.provider === "xai" ? "UnsupportedOperation" : "InvalidRequest",
         ],
       ] as const) {
         const error = yield* LLMClient.generate(candidate).pipe(Effect.flip)
         expect(error.reason._tag).toBe(tag)
         if (candidate.tools.length > 0) {
-          const compactError = yield* LLMClient.compact(candidate).pipe(Effect.flip)
+          const compactError = yield* ai.compact(candidate).pipe(Effect.flip)
           expect(compactError.reason._tag).toBe("InvalidRequest")
           continue
         }
-        const response = yield* LLMClient.compact(candidate)
+        const response = yield* ai.compact(candidate)
         expect(response.replacement[0]?.content[0]?.type).toBe("compaction")
       }
     }),
@@ -198,7 +199,7 @@ const retainedItems = [
     content: [
       { type: "input_image", image_url: "https://example.com/image.png" },
       { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm", detail: "high" },
-      { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf", detail: "low" },
+      { type: "input_file", file_url: "https://example.com/report.pdf", detail: "low" },
     ],
   },
   checkpoint,
@@ -231,11 +232,11 @@ for (const model of [
     ),
   ).effect(`${model.route.id} retains messages, reasoning, and media through typed conversation parts`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model,
         prompt: "hello",
       })
-      const compacted = yield* LLMClient.compact(request)
+      const compacted = yield* ai.compact(request)
       expect(compacted.replacement.map((message) => message.role)).toEqual([
         "user",
         "assistant",
@@ -252,7 +253,7 @@ for (const model of [
       expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
@@ -280,8 +281,8 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
       }),
     ),
   ).effect(`compact preserves supported request controls${overlay ? " with HTTP overrides" : ""}`, () =>
-    LLMClient.compact(
-      LLM.request({
+    ai.compact(
+      ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
         promptCacheKey: "affinity",
@@ -345,9 +346,11 @@ for (const item of [
     `rejects unsupported compact output: ${JSON.stringify(item)}`,
     () =>
       Effect.gen(function* () {
-        const error = yield* LLMClient.compact(
-          LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
-        ).pipe(Effect.flip)
+        const error = yield* ai
+          .compact(
+            ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+          )
+          .pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
         expect(error.reason.body).toContain(JSON.stringify(item))
         expect(error.reason.http?.status).toBe(200)
@@ -381,24 +384,24 @@ for (const model of [
     ),
   ).effect(`${model.provider} preserves retained image detail through serialization and replay`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({ model, prompt: "hello" })
-      const compacted = yield* LLMClient.compact(request)
+      const request = ai.request({ model, prompt: "hello" })
+      const compacted = yield* ai.compact(request)
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
 
 testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic compaction options", () =>
   Effect.gen(function* () {
-    const request = LLMRequest.update(
-      LLM.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
-      { providerOptions: { contextManagement: [{ type: "compaction" }] } },
-    )
+    const request = {
+      ...ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
+      providerOptions: { contextManagement: [{ type: "compaction" }] },
+    }
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
     expect(error.reason._tag).toBe("UnsupportedOperation")
-    expect(error.message).toContain("LLMClient.compact")
+    expect(error.message).toContain("ai.compact")
     if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("in-band-compaction")
   }),
 )
@@ -445,8 +448,8 @@ for (const model of [
     ),
   ).effect(`${model.provider} explicitly compacts and replays the entire canonical window`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({ model, prompt: "original", system: "system", http: { body: { store: false } } })
-      const compacted = yield* LLMClient.compact(request)
+      const request = ai.request({ model, prompt: "original", system: "system", http: { body: { store: false } } })
+      const compacted = yield* ai.compact(request)
       expect(compacted.usage?.totalTokens).toBe(1010)
       expect(compacted.replacement.map((message) => message.role)).toEqual(["user", "assistant"])
       expect(compacted.replacement[0]?.content).toEqual([{ type: "text", text: "retained" }])
@@ -455,7 +458,7 @@ for (const model of [
       ])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages: [...messages, Message.user("continue")] }))
+      yield* LLMClient.generate({ ...request, messages: [...messages, Message.user("continue")] })
     }),
   )
 }
@@ -469,7 +472,7 @@ for (const model of [
     () =>
       Effect.gen(function* () {
         // @ts-expect-error Untyped callers must still receive the runtime capability error.
-        const error = yield* LLMClient.compact(LLM.request({ model, prompt: "hello" })).pipe(Effect.flip)
+        const error = yield* ai.compact(ai.request({ model, prompt: "hello" })).pipe(Effect.flip)
         expect(error.reason._tag).toBe("UnsupportedOperation")
         expect(error.message).toContain("does not support explicit compaction")
         if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("compact")
@@ -481,9 +484,9 @@ testEffect(
   fixedResponse(JSON.stringify({ object: "response.compaction", output: [retained], debug: "original payload" })),
 ).effect("invalid explicit compaction preserves the original response and HTTP context", () =>
   Effect.gen(function* () {
-    const error = yield* LLMClient.compact(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
-    ).pipe(Effect.flip)
+    const error = yield* ai
+      .compact(ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }))
+      .pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("original payload")
     expect(error.reason.http?.status).toBe(200)

@@ -7,7 +7,7 @@ import { ConfigPolicy } from "./policy.js"
 
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable the experimental portable shell permission scanner. Defaults to false.",
+    description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
   todo: Schema.Boolean.pipe(optional).annotate({
     description: "Enable the experimental todowrite tool. Defaults to false.",
@@ -36,6 +36,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
+  }),
+  artifacts: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
   }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",

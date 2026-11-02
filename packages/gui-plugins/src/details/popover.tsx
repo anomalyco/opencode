@@ -100,8 +100,7 @@ function DetailsPopover(
         />
       </Tooltip>
       <Popover.Portal>
-        {/* Kobalte positions the content relatively, so it places the Extensions flyout. Only the inner box scrolls,
-            so the flyout beside it is not clipped. */}
+        {/* Kobalte positions the content relatively, so it places the Extensions flyout. */}
         <Popover.Content
           class="session-summary-popover z-50 border-0 bg-transparent outline-none"
           aria-label={ctx.t("title")}
@@ -117,7 +116,7 @@ function DetailsPopover(
             if (content instanceof HTMLElement) setTimeout(() => content.focus({ preventScroll: true }))
           }}
         >
-          <div class="max-h-[calc(100dvh-96px)] overflow-y-auto p-1">{props.children}</div>
+          {props.children}
         </Popover.Content>
       </Popover.Portal>
     </Popover>

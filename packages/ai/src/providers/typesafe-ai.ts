@@ -2,6 +2,7 @@ import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../
 import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
+import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("typesafe-ai")
 const baseURL = "https://api.typesafe.ai/v1"
@@ -12,7 +13,7 @@ export type Config = ProviderAuthOption<"optional"> & {
   readonly http?: HttpOptions.Input
 }
 
-export type Settings = ProviderPackage.Settings & { readonly apiKey?: string }
+export type Settings = ProviderPackage.Settings & { readonly apiKey?: string | false }
 
 export const configure = (input: Config = {}) => {
   const route = SystemOne.route.with({
@@ -32,10 +33,9 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 
-export const decisionModel = (modelID: string, { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) =>
-  configure({ apiKey, baseURL, headers, http: body === undefined ? undefined : { body } }).decision(
-    modelID,
-    providerOptions,
-  )
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
 export * as TypeSafeAI from "./typesafe-ai.js"

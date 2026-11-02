@@ -103,8 +103,10 @@ export function SidebarInbox() {
     )
   }
 
-  const rows = (list: InboxEntry[]) => (
-    <For each={list.map((entry) => entry.key)}>
+  // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
+  // row on any session change and resetting the list's scroll.
+  const rows = (list: () => InboxEntry[]) => (
+    <For each={list().map((entry) => entry.key)}>
       {(key) => (
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
@@ -133,7 +135,7 @@ export function SidebarInbox() {
         <Show when={sections().needs.length > 0}>
           <div class="flex shrink-0 flex-col gap-px pb-3">
             <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} count={sections().needs.length} />
-            {rows(sections().needs)}
+            {rows(() => sections().needs)}
           </div>
         </Show>
         <Show
@@ -153,12 +155,12 @@ export function SidebarInbox() {
           <Show when={sections().needs.length > 0}>
             <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
           </Show>
-          {rows(sections().inbox)}
+          {rows(() => sections().inbox)}
         </Show>
         <Show when={sections().archived.length > 0}>
           <div class="flex shrink-0 flex-col gap-px pt-3">
             <SectionHeader label={language.t("sidebar.inbox.section.archived")} />
-            {rows(sections().archived)}
+            {rows(() => sections().archived)}
           </div>
         </Show>
       </div>
@@ -176,7 +178,7 @@ export function SidebarInbox() {
           />
           <div class="flex min-h-0 flex-col gap-px overflow-y-auto">
             {/* A collapsed shelf still shows the session that is open. */}
-            {rows(sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
+            {rows(() => sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
           </div>
         </div>
       </Show>

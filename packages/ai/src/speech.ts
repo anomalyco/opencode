@@ -12,26 +12,33 @@ import { SpeechClient, Service } from "./speech-client.js"
 
 export type SpeechOptions = MediaModel.Options
 
-export type SpeechRoute = MediaRoute.AnyRoute<SpeechRequestFor, SpeechEvent, SpeechResponse>
+export type SpeechRoute = MediaRoute.AnyRoute<SpeechRequest, SpeechEvent, SpeechResponse>
 
 export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends MediaModel<SpeechRoute, Options> {
   declare protected readonly _SpeechModel: void
 
   /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
   static fromRoute<Options extends SpeechOptions>(
-    route: MediaModel.InlineRouteInput<SpeechRequestFor<Options>, SpeechResponse>,
+    route: MediaModel.InlineRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechResponse>,
     input: MediaRoute.ModelInput,
   ): SpeechModel<Options>
   static fromRoute<Options extends SpeechOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<SpeechRequestFor<Options>, SpeechEvent, Frame, State>,
+    route: MediaModel.StreamRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechEvent, Frame, State>,
     input: MediaRoute.ModelInput,
   ): SpeechModel<Options>
   static fromRoute<Options extends SpeechOptions, Token>(
-    route: MediaModel.QueuedRouteInput<SpeechRequestFor<Options>, SpeechResponse, Token>,
+    route: MediaModel.QueuedRouteInput<SpeechRequest<SpeechModel<Options>>, SpeechResponse, Token>,
     input: MediaRoute.ModelInput,
   ): SpeechModel<Options>
   static fromRoute<Options extends SpeechOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<SpeechRequestFor<Options>, SpeechEvent, SpeechResponse, Frame, State, Token>,
+    route: MediaModel.AnyRouteInput<
+      SpeechRequest<SpeechModel<Options>>,
+      SpeechEvent,
+      SpeechResponse,
+      Frame,
+      State,
+      Token
+    >,
     input: MediaRoute.ModelInput,
   ) {
     return new SpeechModel<Options>({
@@ -68,7 +75,7 @@ export const SpeechTimestamp = Schema.Struct({
 }).annotate({ identifier: "Speech.Timestamp" })
 export type SpeechTimestamp = Schema.Schema.Type<typeof SpeechTimestamp>
 
-export class SpeechRequest extends Schema.Class<SpeechRequest>("Speech.Request")({
+const SpeechRequestSchema = Schema.Struct({
   model: SpeechModelSchema,
   text: Schema.String,
   voice: Schema.optional(SpeechVoice),
@@ -79,26 +86,25 @@ export class SpeechRequest extends Schema.Class<SpeechRequest>("Speech.Request")
   timestamps: Schema.optional(Schema.Boolean),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _SpeechRequest: void
-}
+})
 
-export type SpeechRequestFor<Options extends SpeechOptions = SpeechOptions> = Omit<
-  SpeechRequest,
-  "model" | "providerOptions"
+/** A normalized speech request, the plain object `Speech.request(...)` returns. */
+export type SpeechRequest<Model extends SpeechModel = SpeechModel> = Omit<
+  typeof SpeechRequestSchema.Type,
+  "model" | "providerOptions" | "format"
 > & {
-  readonly model: SpeechModel<Options>
-  readonly providerOptions?: Options
+  readonly model: Model
+  readonly format?: SpeechFormat
+  readonly providerOptions?: SpeechModelOptions<Model>
 }
 
 export type SpeechModelOptions<Model> = Model extends SpeechModel<infer Options> ? Options : never
 
+/** Input accepted by `Speech.request` and the calls; a `SpeechRequest` is also a valid input. */
 export type SpeechRequestInput<Model extends SpeechModel = SpeechModel> = Omit<
-  ConstructorParameters<typeof SpeechRequest>[0],
-  "model" | "providerOptions" | "http" | "format"
+  SpeechRequest<Model>,
+  "providerOptions" | "http"
 > & {
-  readonly model: Model
-  readonly format?: SpeechFormat
   readonly providerOptions?: NoInfer<SpeechModelOptions<Model>>
   readonly http?: HttpOptions.Input
 }
@@ -170,31 +176,32 @@ const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<Spee
 // Request-shaped call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends SpeechModel>(
-  input: SpeechRequestInput<Model>,
-): SpeechRequestFor<SpeechModelOptions<Model>>
-export function request(input: SpeechRequest): SpeechRequest
-export function request(input: SpeechRequest | SpeechRequestInput) {
-  if (input instanceof SpeechRequest) return input
-  return new SpeechRequest({
-    ...input,
-    http: HttpOptions.make(input.http),
-  })
-}
+/** Normalize speech request input into a plain `SpeechRequest`. */
+export const request = <const Model extends SpeechModel>(input: SpeechRequestInput<Model>): SpeechRequest<Model> => ({
+  ...input,
+  http: HttpOptions.make(input.http),
+})
 
-const requestEffect = (input: SpeechRequest | SpeechRequestInput) => tryRequest(() => request(input))
+const validate = Schema.decodeUnknownSync(SpeechRequestSchema)
+
+const requestEffect = (input: SpeechRequestInput) =>
+  tryRequest(() => {
+    const normalized = request(input)
+    validate(normalized)
+    return normalized
+  })
 
 export function generate<const Model extends SpeechModel>(
-  input: SpeechRequest | SpeechRequestInput<Model>,
+  input: SpeechRequestInput<Model>,
 ): Effect.Effect<SpeechResponse, AIError, Service>
-export function generate(input: SpeechRequest | SpeechRequestInput) {
+export function generate(input: SpeechRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => SpeechClient.generate(request)))
 }
 
 export function stream<const Model extends SpeechModel>(
-  input: SpeechRequest | SpeechRequestInput<Model>,
+  input: SpeechRequestInput<Model>,
 ): Stream.Stream<SpeechEvent, AIError, Service>
-export function stream(input: SpeechRequest | SpeechRequestInput) {
+export function stream(input: SpeechRequestInput) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => SpeechClient.stream(request))))
 }
 
