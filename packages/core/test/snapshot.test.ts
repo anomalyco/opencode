@@ -437,6 +437,107 @@ describe("Snapshot", () => {
       ),
     { timeout: 15_000 },
   )
+
+  testEffect(Layer.empty).live("compares trees captured before the project ID changed", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project, true)
+          })
+          const trees = yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const from = yield* snapshot.capture()
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "tracked.txt"), "two\n"))
+            const to = yield* snapshot.capture()
+            expect(from).toBeDefined()
+            expect(to).toBeDefined()
+            return from && to ? { from, to } : undefined
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+          if (!trees) return
+          const earlier = yield* snapshotDirectory(tmp.path)
+
+          // A remote-derived project ID replaces the root-commit one, so a new store is used from here on.
+          yield* Effect.promise(() =>
+            $`git remote add origin https://example.com/acme/project.git`.cwd(project).quiet(),
+          )
+          const diff = Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            return yield* snapshot.diff(trees)
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+
+          const found = yield* diff
+          expect((yield* Effect.promise(() => fs.readdir(path.join(tmp.path, "snapshot")))).length).toBe(2)
+          expect(found.map((file) => file.file)).toEqual(["tracked.txt"])
+
+          yield* Effect.promise(() => fs.rm(earlier, { recursive: true, force: true }))
+          expect(yield* diff).toEqual([])
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("diffs trees captured on both sides of a project ID change", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project, true)
+            // Uncommitted, so `from` is not also readable from the source repository the stores share.
+            await fs.writeFile(path.join(project, "tracked.txt"), "draft\n")
+          })
+          const capture = Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            return yield* snapshot.capture()
+          })
+          const from = yield* capture.pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+          expect(from).toBeDefined()
+          if (!from) return
+          const earlier = yield* snapshotDirectory(tmp.path)
+
+          yield* Effect.promise(async () => {
+            await $`git remote add origin https://example.com/acme/project.git`.cwd(project).quiet()
+            await fs.writeFile(path.join(project, "tracked.txt"), "two\n")
+            await fs.writeFile(path.join(project, "added.txt"), "added\n")
+          })
+          const layer = snapshotLayer(tmp.path, project)
+          const to = yield* capture.pipe(Effect.provide(layer))
+          expect(to).toBeDefined()
+          if (!to) return
+          const diff = Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            return yield* snapshot.diff({ from, to })
+          }).pipe(Effect.provide(layer))
+
+          // `from` exists only in the earlier store and `to` only in the current one.
+          expect((yield* diff).map((file) => [file.file, file.status])).toEqual([
+            ["added.txt", "added"],
+            ["tracked.txt", "modified"],
+          ])
+
+          // A store Git cannot read is an error, not a missing snapshot.
+          yield* Effect.promise(async () => {
+            const root = path.join(tmp.path, "snapshot")
+            const current = (await fs.readdir(root))
+              .map((projectID) => path.join(root, projectID, path.basename(earlier)))
+              .filter((store) => store !== earlier)
+            expect(current).toHaveLength(1)
+            await Promise.all(current.map((store) => fs.appendFile(path.join(store, "config"), "\n[broken\n")))
+          })
+          const failed = yield* diff.pipe(Effect.flip)
+          expect(failed._tag).toBe("Snapshot.Error")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
 
 function snapshotLayer(data: string, directory: string) {

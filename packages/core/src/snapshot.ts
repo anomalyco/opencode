@@ -146,10 +146,62 @@ const layer = Layer.effect(
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure(operation, cause)))
       return {
         source: repo.source,
+        worktree: repo.worktree,
         repository: repo.snapshotRepository,
         from: Git.TreeID.make(input.from),
         to: Git.TreeID.make(input.to),
       }
+    })
+
+    /**
+     * The store path includes the project ID, which changes when, for example, a repository gains a remote. Trees
+     * captured under an earlier ID stay in that ID's store, so when the current store lacks a compared tree, the diff
+     * reruns with every earlier store for the same worktree as an extra object source, and `from` and `to` may come
+     * from different stores. Resolves to undefined only when Git confirms a tree is in none of them; any other
+     * failure is returned unchanged.
+     */
+    const diffAcrossStores = Effect.fnUntraced(function* (
+      compared: Effect.Success<ReturnType<typeof comparison>>,
+      input: DiffInput,
+    ) {
+      const trees = [compared.from, compared.to]
+      const run = (alternates?: readonly AbsolutePath[]) =>
+        git.tree.diff({
+          repository: compared.repository,
+          from: compared.from,
+          to: compared.to,
+          context: input.context,
+          paths: input.paths,
+          alternates,
+        })
+      return yield* run().pipe(
+        Effect.catch((cause) =>
+          Effect.gen(function* () {
+            if ((yield* git.tree.missing({ repository: compared.repository, trees })).size === 0)
+              return yield* Effect.fail(cause)
+            const alternates = yield* earlierObjectDirectories(compared.worktree)
+            if (alternates.length === 0) return undefined
+            if ((yield* git.tree.missing({ repository: compared.repository, trees, alternates })).size > 0)
+              return undefined
+            return yield* run(alternates)
+          }),
+        ),
+      )
+    })
+
+    const earlierObjectDirectories = Effect.fnUntraced(function* (worktree: AbsolutePath) {
+      const root = path.join(global.data, "snapshot")
+      const stores = (yield* fs.readDirectory(root).pipe(
+        Effect.catchIf(
+          (error) => error.reason._tag === "NotFound",
+          () => Effect.succeed([]),
+        ),
+      ))
+        .filter((projectID) => projectID !== location.project.id)
+        .map((projectID) => path.join(root, projectID, Hash.fast(worktree)))
+      return (yield* Effect.filter(stores, (store) => fs.existsSafe(path.join(store, "HEAD")))).map((store) =>
+        AbsolutePath.make(path.join(store, "objects")),
+      )
     })
 
     // Snapshots track every scoped file; the source repository's ignore rules decide what callers see.
@@ -177,15 +229,12 @@ const layer = Layer.effect(
       if (input.paths?.length === 0) return []
       const compared = yield* comparison("diff", input)
       // Only an explicit selection becomes a pathspec; ignored paths are dropped from the result instead.
-      const diffs = yield* git.tree
-        .diff({
-          repository: compared.repository,
-          from: compared.from,
-          to: compared.to,
-          context: input.context,
-          paths: input.paths,
-        })
-        .pipe(Effect.mapError((cause) => failure("diff", cause)))
+      const diffs = yield* diffAcrossStores(compared, input).pipe(Effect.mapError((cause) => failure("diff", cause)))
+      // A diff is only displayed, so trees lost with their store degrade to no changes instead of failing.
+      if (!diffs) {
+        yield* Effect.logWarning("snapshot trees not found in any store", { from: input.from, to: input.to })
+        return []
+      }
       if (diffs.length === 0) return []
       const paths = diffs.map((file) => RelativePath.make(file.file))
       const skipped = yield* ignored("diff", compared.source, paths)
