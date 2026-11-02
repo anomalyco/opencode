@@ -54,7 +54,7 @@ export const layer = Layer.effect(
                 name: tool.name,
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",
-                input: (tool.inputSchema ?? { type: "object", properties: {} }) as JsonSchema.JsonSchema,
+                input: tool.inputSchema as JsonSchema.JsonSchema,
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {

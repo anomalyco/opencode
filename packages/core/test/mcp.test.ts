@@ -382,16 +382,17 @@ function resourceMcpLayer(
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
           subscribe: overrides?.subscribe ?? (() => Stream.never),
-          publish: (definition, data) => {
-            const event = {
-              id: ID.create(),
-              type: definition.type,
-              data,
-            } as Payload<typeof definition>
-            overrides?.published?.push(event.type)
-            if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
-            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
-          },
+          publish: (definition, data) =>
+            Effect.suspend(() => {
+              const event = {
+                id: ID.create(),
+                type: definition.type,
+                data,
+              } as Payload<typeof definition>
+              overrides?.published?.push(event.type)
+              if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
+              return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+            }),
         }),
         Layer.mock(Integration.Service, {
           revision: () => 0,
@@ -518,15 +519,11 @@ const mcp = Layer.mock(Mcp.Service, {
       invocations.push(input)
       if (input.name === "fail")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: true,
           content: [{ type: "text", text: "search index unavailable" }],
         } satisfies Mcp.ToolResult
       if (input.name === "media")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [
             { type: "text", text: "rendered chart" },
@@ -535,8 +532,6 @@ const mcp = Layer.mock(Mcp.Service, {
         } satisfies Mcp.ToolResult
       if (input.name === "attachments")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [
             {
@@ -555,28 +550,20 @@ const mcp = Layer.mock(Mcp.Service, {
         } satisfies Mcp.ToolResult
       if (input.name === "status")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: "hello" }],
         } satisfies Mcp.ToolResult
       if (input.name === "issues" || input.name === "typed")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
         } satisfies Mcp.ToolResult
       if (input.name === "count")
         return {
-          server: Mcp.ServerName.make(input.server),
-          tool: input.name,
           isError: false,
           content: [{ type: "text", text: "42" }],
         } satisfies Mcp.ToolResult
       return {
-        server: Mcp.ServerName.make(input.server),
-        tool: input.name,
         isError: false,
         structured: { ok: true },
         content: [],
@@ -2187,7 +2174,10 @@ test("reconciles only changed MCP server config", async () => {
           Effect.provide(
             resourceMcpLayer(resources(), undefined, undefined, {
               entries: () => Effect.sync(() => entries),
-              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+              subscribe: ((definition?: { readonly type: string }) =>
+                Stream.fromPubSub(updates).pipe(
+                  Stream.filter((event) => !definition || event.type === definition.type),
+                )) as Bus.Interface["subscribe"],
             }),
           ),
         )
@@ -2550,8 +2540,6 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed({
-                    server: Mcp.ServerName.make(input.server),
-                    tool: input.name,
                     isError: false,
                     content: [{ type: "text", text: "healthy" }],
                   } satisfies Mcp.ToolResult),
@@ -3136,7 +3124,10 @@ for (const source of ["config", "organization"] as const) {
           Effect.provide(
             resourceMcpLayer(server.url, undefined, undefined, {
               entries: config.entries,
-              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+              subscribe: ((definition?: { readonly type: string }) =>
+                Stream.fromPubSub(updates).pipe(
+                  Stream.filter((event) => !definition || event.type === definition.type),
+                )) as Bus.Interface["subscribe"],
             }),
           ),
         )

@@ -34,12 +34,12 @@ export interface ServerInstructions {
   readonly instructions: string
 }
 
-/** SDK tool definition tagged with the server that owns it. */
+/** Checked MCP tool definition tagged with the server that owns it. */
 export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
 export type ToolResultContent = McpClient.CallToolContent
-export type ToolResult = McpClient.CallToolResult & { readonly server: ServerName; readonly tool: string }
+export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
-export type PromptResult = McpClient.GetPromptResult & { readonly server: ServerName; readonly name: string }
+export type PromptResult = McpClient.GetPromptResult
 
 export const Resource = Mcp.Resource
 export type Resource = Mcp.Resource
@@ -212,7 +212,6 @@ export const layer = (options?: Options) =>
 
       // Register every remote server as an OAuth integration so credentials live in the global store
       // rather than in committed config. Servers that connect anonymously simply never use the method.
-      const owned = new Set<Integration.ID>()
       const register = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         if (entry.config.type !== "remote" || entry.config.oauth === false) return
         const remote = entry.config
@@ -226,7 +225,6 @@ export const layer = (options?: Options) =>
             .slice(0, 16)
         const integrationID = Integration.ID.make(suffix)
         entry.integrationID = integrationID
-        owned.add(integrationID)
         const methodID = Integration.MethodID.make(suffix)
         // Each registration gets its own child scope so disposal detaches it from the root scope
         // entirely; registering directly on root would accumulate a dead finalizer per replaced or
@@ -256,7 +254,7 @@ export const layer = (options?: Options) =>
       const requireServer = Effect.fnUntraced(function* (name: ServerName) {
         const entry = entries.get(name)
         if (!entry) return yield* new NotFoundError({ server: name })
-        return { name, entry }
+        return entry
       })
 
       const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
@@ -278,7 +276,7 @@ export const layer = (options?: Options) =>
               const formID = Form.ID.create()
               // Legacy only: 2026-07-28 has no elicitationId and no completion notification, so the form
               // settles when the user confirms and the SDK retries the tool call itself.
-              const elicitationID: string | undefined = input.params.elicitationId
+              const elicitationID = input.params.elicitationId
               const key = elicitationID === undefined ? undefined : input.server + "\u0000" + elicitationID
               if (key) urlElicitations.set(key, formID)
               return yield* forms
@@ -400,9 +398,9 @@ export const layer = (options?: Options) =>
                   yield* entry.connection.stop
                   yield* bus.publish(McpEvent.StatusChanged, { server: name })
                 }),
-              toolsChanged: Effect.suspend(() => bus.publish(McpEvent.ToolsChanged, { server: name })),
-              promptsChanged: Effect.suspend(() => bus.publish(PromptsChanged, { server: name })),
-              resourcesChanged: Effect.suspend(() => bus.publish(McpEvent.ResourcesChanged, { server: name })),
+              toolsChanged: bus.publish(McpEvent.ToolsChanged, { server: name }),
+              promptsChanged: bus.publish(PromptsChanged, { server: name }),
+              resourcesChanged: bus.publish(McpEvent.ResourcesChanged, { server: name }),
             },
           }),
         }
@@ -421,7 +419,7 @@ export const layer = (options?: Options) =>
               (tool): Tool => ({
                 ...tool,
                 server: name,
-                ...(entry.config.codemode === undefined ? {} : { codemode: entry.config.codemode }),
+                codemode: entry.config.codemode,
               }),
             ),
           }
@@ -450,15 +448,14 @@ export const layer = (options?: Options) =>
           ),
         })
 
-      const disposeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
+      const disposeServer = Effect.fnUntraced(function* (entry: ServerEntry) {
         yield* entry.connection.stop
-        if (entry.integrationID) owned.delete(entry.integrationID)
         if (entry.registration) yield* entry.registration.dispose
       })
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = entries.get(name)
-        if (previous) yield* disposeServer(name, previous)
+        if (previous) yield* disposeServer(previous)
         const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
         entries.set(name, entry)
         yield* Effect.gen(function* () {
@@ -475,10 +472,8 @@ export const layer = (options?: Options) =>
         )
       })
 
-      const removeServer = Effect.fnUntraced(function* (name: ServerName) {
-        const entry = entries.get(name)
-        if (!entry) return
-        yield* disposeServer(name, entry)
+      const removeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
+        yield* disposeServer(entry)
         // Credentials are keyed by name + URL and intentionally survive removal for a later re-add.
         entries.delete(name)
         yield* bus.publish(McpEvent.StatusChanged, { server: name })
@@ -492,8 +487,6 @@ export const layer = (options?: Options) =>
         if (!stack.includes(entry)) return
         const remaining = stack.filter((item) => item !== entry)
         const next = remaining.at(-1)
-        // Already detaching; closing the scope must not schedule a second detach.
-        entry.client.onClose(() => {})
         if (!next) {
           attached.delete(name)
           yield* Scope.close(entry.scope, Exit.void)
@@ -583,18 +576,18 @@ export const layer = (options?: Options) =>
         )
       })
 
-      let applied: Map<ServerName, Mcp.ServerConfig> | undefined
+      let booted = false
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcileLock = Semaphore.makeUnsafe(1)
       const reconcile = Effect.fnUntraced(function* () {
         const servers = state.get().servers
-        if (!applied && entries.size === 0) {
+        if (!booted) {
+          booted = true
           const started = yield* Clock.currentTimeMillis
           for (const [name, server] of servers) {
             entries.set(name, makeEntry(name, server, started))
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
-          applied = servers
 
           // Initial connections stay asynchronous so one slow server does not block Location startup.
           for (const [name, entry] of entries) {
@@ -615,18 +608,14 @@ export const layer = (options?: Options) =>
           return
         }
 
-        const names = new Set([...(applied?.keys() ?? []), ...servers.keys()])
-        for (const name of names) {
-          const previous = applied?.get(name)
+        for (const [name, entry] of entries) {
           const updated = servers.get(name)
-          if (isDeepStrictEqual(previous, updated)) continue
-          if (!updated) {
-            yield* removeServer(name).pipe(locks.withLock(name))
-            continue
-          }
-          yield* replaceServer(name, updated).pipe(locks.withLock(name))
+          if (isDeepStrictEqual(entry.config, updated)) continue
+          yield* (updated ? replaceServer(name, updated) : removeServer(name, entry)).pipe(locks.withLock(name))
         }
-        applied = servers
+        for (const [name, updated] of servers) {
+          if (!entries.has(name)) yield* replaceServer(name, updated).pipe(locks.withLock(name))
+        }
       })
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
@@ -646,10 +635,9 @@ export const layer = (options?: Options) =>
           }).pipe(locks.withLock(name))
         })
       fork(
-        bus.subscribe(Credential.Event.Switched).pipe(
-          Stream.filter((event) => owned.has(event.data.integrationID)),
-          Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
-        ),
+        bus
+          .subscribe(Credential.Event.Switched)
+          .pipe(Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID))))),
       )
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
@@ -702,17 +690,17 @@ export const layer = (options?: Options) =>
         connect: Effect.fn("MCP.connect")(function* (server) {
           const name = ServerName.make(server)
           yield* Effect.gen(function* () {
-            const target = yield* requireServer(name)
-            yield* target.entry.connection.stop
-            yield* target.entry.connection.start
+            const entry = yield* requireServer(name)
+            yield* entry.connection.stop
+            yield* entry.connection.start
           }).pipe(locks.withLock(name))
         }),
         disconnect: Effect.fn("MCP.disconnect")(function* (server) {
           const name = ServerName.make(server)
           yield* Effect.gen(function* () {
-            const target = yield* requireServer(name)
-            yield* target.entry.connection.stop
-            target.entry.status = { status: "disabled" }
+            const entry = yield* requireServer(name)
+            yield* entry.connection.stop
+            entry.status = { status: "disabled" }
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
           }).pipe(locks.withLock(name))
         }),
@@ -750,48 +738,28 @@ export const layer = (options?: Options) =>
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const server = ServerName.make(input.server)
+          const call = (connection: McpClient.Connection) =>
+            connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
+          const failed = (owner: string) =>
+            Effect.mapError(
+              (error: Error) =>
+                new ToolCallError({
+                  server,
+                  tool: input.name,
+                  message: `MCP tool "${input.name}" on ${owner} "${server}" failed: ${error.message}`,
+                }),
+            )
           // An attached client owns the tools it lists, even when a configured server shares its name, and
           // owns its name outright when no configured server has it.
           const client = attached.get(server)?.at(-1)
-          if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server))) {
-            const result = yield* client.client
-              .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
-              .pipe(
-                Effect.mapError(
-                  (error) =>
-                    new ToolCallError({
-                      server,
-                      tool: input.name,
-                      message: `MCP tool "${input.name}" on client "${server}" failed: ${error.message}`,
-                    }),
-                ),
-              )
-            return { ...result, server, tool: input.name }
-          }
-          const target = yield* requireServer(server)
-          yield* target.entry.startup.await
-          const connected = target.entry.connection.client
+          if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server)))
+            return yield* call(client.client).pipe(failed("client"))
+          const entry = yield* requireServer(server)
+          yield* entry.startup.await
+          const connected = entry.connection.client
           if (!connected)
-            return yield* new ToolCallError({
-              server: target.name,
-              tool: input.name,
-              message: unavailable(target.name, target.entry.status),
-            })
-          const result = yield* target.entry.connection
-            .recovering(connected, (connection) =>
-              connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
-            )
-            .pipe(
-              Effect.mapError(
-                (error) =>
-                  new ToolCallError({
-                    server: target.name,
-                    tool: input.name,
-                    message: `MCP tool "${input.name}" on server "${target.name}" failed: ${error.message}`,
-                  }),
-              ),
-            )
-          return { ...result, server: target.name, tool: input.name }
+            return yield* new ToolCallError({ server, tool: input.name, message: unavailable(server, entry.status) })
+          return yield* entry.connection.recovering(connected, call).pipe(failed("server"))
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
           return Array.from(entries)
@@ -810,15 +778,13 @@ export const layer = (options?: Options) =>
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
-          const target = yield* requireServer(ServerName.make(input.server))
-          yield* target.entry.startup.await
-          const client = target.entry.connection.client
+          const entry = yield* requireServer(ServerName.make(input.server))
+          yield* entry.startup.await
+          const client = entry.connection.client
           if (!client) return undefined
-          const result = yield* target.entry.connection
+          return yield* entry.connection
             .recovering(client, (connection) => connection.prompt({ name: input.name, args: input.args }))
             .pipe(Effect.orElseSucceed(() => undefined))
-          if (!result) return undefined
-          return { ...result, server: target.name, name: input.name }
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
           const empty = ResourceCatalog.make({ resources: [], templates: [] })
@@ -836,23 +802,25 @@ export const layer = (options?: Options) =>
           return mergeCatalogs(catalogs)
         }),
         resources: Effect.fn("MCP.resources")(function* (input) {
-          const target = yield* requireServer(ServerName.make(input.server))
-          yield* target.entry.startup.await
-          const client = target.entry.connection.client
+          const name = ServerName.make(input.server)
+          const entry = yield* requireServer(name)
+          yield* entry.startup.await
+          const client = entry.connection.client
           if (!client) return ResourceCatalog.make({ resources: [], templates: [] })
-          return mergeCatalogs([toCatalog(target.name, yield* target.entry.connection.catalog(client))])
+          return mergeCatalogs([toCatalog(name, yield* entry.connection.catalog(client))])
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
-          const target = yield* requireServer(ServerName.make(input.server))
-          yield* target.entry.startup.await
-          const client = target.entry.connection.client
+          const name = ServerName.make(input.server)
+          const entry = yield* requireServer(name)
+          yield* entry.startup.await
+          const client = entry.connection.client
           if (!client) return undefined
-          const result = yield* target.entry.connection.recovering(client, (connection) =>
+          const result = yield* entry.connection.recovering(client, (connection) =>
             connection.readResource({ uri: input.uri }),
           )
           if (!result) return undefined
           return ResourceContent.make({
-            server: target.name,
+            server: name,
             uri: input.uri,
             contents: result.contents.map((part) =>
               "text" in part
