@@ -9,36 +9,43 @@ import path from "path"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
-// The changelog covers OpenCode itself and its clients. Commits that only touch other paths, such as the console, stats,
-// cloud functions, docs, websites, infra, and release tooling, are left out.
-const changelogPaths = [
-  "packages/ai",
-  "packages/app",
-  "packages/cli",
-  "packages/client",
-  "packages/codemode",
-  "packages/core",
-  "packages/desktop",
-  "packages/gui-plugins",
-  "packages/latex",
-  "packages/merman",
-  "packages/patchmark",
-  "packages/plugin",
-  "packages/plugin-browser",
-  "packages/plugins",
-  "packages/process-daemon",
-  "packages/protocol",
-  "packages/schema",
-  "packages/sdk",
-  "packages/server",
-  "packages/session-ui",
-  "packages/theme",
-  "packages/tui",
-  "packages/ui",
-  "packages/util",
-  "sdks/vscode",
-  "install",
-  "patches",
+// The changelog covers OpenCode itself and its clients. Commits that only touch these paths, such as the console, stats,
+// cloud functions, docs, websites, infra, release tooling, and root files, are left out.
+const changelogExclusions = [
+  ":(exclude)packages/console",
+  ":(exclude)packages/effect-drizzle-sqlite",
+  ":(exclude)packages/function",
+  ":(exclude)packages/http-recorder",
+  ":(exclude)packages/httpapi-codegen",
+  ":(exclude)packages/identity",
+  ":(exclude)packages/posts",
+  ":(exclude)packages/script",
+  ":(exclude)packages/simulation",
+  ":(exclude)packages/stats",
+  ":(exclude)packages/stories",
+  ":(exclude)packages/web",
+  ":(exclude)services",
+  ":(exclude)infra",
+  ":(exclude)salesforce",
+  ":(exclude)nix",
+  ":(exclude)specs",
+  ":(exclude)perf",
+  ":(exclude)script",
+  ":(exclude).github",
+  ":(exclude).husky",
+  ":(exclude).opencode",
+  ":(exclude).vscode",
+  ":(exclude).zed",
+  // In glob pathspecs * does not match /, so these only cover root files. The install script is a root file and counts.
+  ":(exclude,glob).*",
+  ":(exclude,glob)*.json",
+  ":(exclude,glob)*.lock",
+  ":(exclude,glob)*.md",
+  ":(exclude,glob)*.nix",
+  ":(exclude,glob)*.png",
+  ":(exclude,glob)*.toml",
+  ":(exclude,glob)*.ts",
+  ":(exclude)LICENSE",
 ]
 const review = path.join(root, "RELEASE_REVIEW.md")
 const { values, positionals } = parseArgs({
@@ -193,21 +200,21 @@ async function generateReview(base: string, head: string, commits: string) {
 // V1 history was merged into dev when V2 was promoted, so it must be excluded from the release range. Merges are skipped
 // because dev only takes squash merges, and the promotion merge would otherwise show the whole V1 tree.
 function commitRange(base: string, head: string) {
-  return ["--no-merges", `${base}..${head}`, "--not", "origin/v1", "--", ...changelogPaths]
+  return ["--no-merges", `${base}..${head}`, "--not", "origin/v1", "--", ".", ...changelogExclusions]
 }
 
 function reviewPrompt(base: string, head: string, commits: string) {
-  const paths = changelogPaths.join(" ")
+  const pathspec = [".", ...changelogExclusions.map((exclusion) => `'${exclusion}'`)].join(" ")
   return `Create a concise pre-release review for a maintainer.
 
-The previous stable V2 release is ${base}. These commits from \`git log ${commitRange(base, head).join(" ")}\` are
-the only ones in scope:
+The previous stable V2 release is ${base}. These commits from
+\`git log --no-merges ${base}..${head} --not origin/v1 -- ${pathspec}\` are the only ones in scope:
 
 ${commits}
 
-Inspect every relevant commit and read its actual diff with \`git show <commit> -- ${paths}\`. Those paths are
-OpenCode itself and its clients. Ignore any part of a commit outside them, such as the console, stats, cloud functions,
-docs, websites, infra, and release tooling. Do not use a whole-tree \`git diff\` between the endpoints, which includes
+Inspect every relevant commit and read its actual diff with \`git show <commit> -- ${pathspec}\`. The excluded paths
+are not part of OpenCode or its clients. Ignore any part of a commit in them, such as the console, stats, cloud
+functions, docs, websites, infra, and release tooling. Do not use a whole-tree \`git diff\` between the endpoints, which includes
 V1 history merged into dev. Do not compare against V1 release tags or commits outside that range. Do not rely only on
 commit titles. Write a user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty
 sections and changes that are entirely internal. Group bug fixes separately from improvements. Preserve community
