@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Tracer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Tracer } from "effect"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
@@ -152,6 +152,38 @@ describe("WriteTool", () => {
     }),
   )
 
+  it.live("waits for a transaction lock held for the same file", () =>
+    withTempDir((tmp) => {
+      const fixture = makeWriteFixture()
+      const file = path.join(tmp.path, "locked.txt")
+      return Effect.promise(() => fs.writeFile(file, "old" + String.fromCharCode(10))).pipe(
+        Effect.andThen(
+          withTool(tmp.path, fixture, () =>
+            Effect.gen(function* () {
+              const files = yield* FileMutation.Service
+              const fileWrite = yield* FileWrite.Service
+              const target = yield* Effect.promise(() => fs.realpath(file))
+              const started = yield* Deferred.make<void>()
+              const release = yield* Deferred.make<void>()
+              const holder = yield* files
+                .withLock([target])(Deferred.succeed(started, void 0).pipe(Effect.andThen(Deferred.await(release))))
+                .pipe(Effect.forkChild)
+              yield* Deferred.await(started)
+              const write = yield* fileWrite
+                .write({ path: "locked.txt", content: "other" }, { sessionID, ...toolIdentity, id: "call-write" })
+                .pipe(Effect.forkChild)
+              yield* Effect.sleep("50 millis")
+              expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("old" + String.fromCharCode(10))
+              yield* Deferred.succeed(release, undefined)
+              yield* Fiber.join(holder)
+              yield* Fiber.join(write)
+              expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("other")
+            }),
+          ),
+        ),
+      )
+    }),
+  )
   it.live("formats the committed file", () =>
     withTempDir((tmp) => {
       const fixture = makeWriteFixture()
