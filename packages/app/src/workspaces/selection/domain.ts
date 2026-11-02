@@ -265,10 +265,16 @@ import { getFilename } from "@opencode/util/path"
 import fuzzysort from "fuzzysort"
 import { ServerSDK } from "@/runtime/server/client"
 
-export function cleanPickerInput(value: string) {
+function cleanPickerPath(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
 
-  return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
+  return first.replace(/[\u0000-\u001F\u007F]/g, "")
+}
+
+export function cleanPickerInput(value: string, trim = true) {
+  const path = cleanPickerPath(value)
+
+  return trim ? path.trim() : path
 }
 
 function normalizePickerPath(input: string) {
