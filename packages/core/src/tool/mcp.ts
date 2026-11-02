@@ -13,14 +13,16 @@ import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
+import { effectiveName, normalizedName } from "./runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 /**
  * Registry namespace and permission action names for MCP tools.
  */
-export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
-export const name = (server: string, tool: string) => `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+export const namespace = (server: string) => normalizedName({ name: server })
+export const name = (server: string, tool: string) =>
+  effectiveName({ name: tool, options: { namespace: namespace(server) } })
 
 export interface Interface {
   /**
@@ -63,13 +65,7 @@ export const layer = Layer.effect(
                       resources: ["*"],
                       save: ["*"],
                       metadata: { input: input ?? {} },
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source: {
-                        type: "tool",
-                        messageID: context.messageID,
-                        id: context.id,
-                      },
+                      ...Permission.invocation(context),
                     })
                     const result = yield* mcp
                       .callTool({

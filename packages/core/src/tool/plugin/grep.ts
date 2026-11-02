@@ -82,7 +82,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
               const target = yield* access.resolve({ path: input.path ?? "." })
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
@@ -97,9 +96,7 @@ export const Plugin = {
                   caseSensitive: input.caseSensitive,
                   limit: input.limit,
                 },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
               const root = target.absolute
               const type = yield* ToolSearch.pathType(environment.files, root, input.path ?? ".")

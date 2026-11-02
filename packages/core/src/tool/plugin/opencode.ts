@@ -201,9 +201,7 @@ export const Plugin = {
                 action: "edit",
                 resources: [target.resource],
                 save: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               yield* ctx.worktree
                 .remove({
