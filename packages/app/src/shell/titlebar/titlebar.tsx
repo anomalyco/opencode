@@ -533,13 +533,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             )
 
             const groupTabsButton = () => (
-              <Show when={settings.appearance.tabLayout() === "vertical"}>
+              <Show
+                when={
+                  settings.appearance.tabLayout() === "vertical" &&
+                  global.servers.list().length > 0
+                }
+              >
                 <Tooltip placement="bottom" value={language.t("titlebar.tabs.groupByServer")} class="shrink-0">
                   <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="normal"
-                    icon={<Icon name={settings.appearance.tabGroupByServer() ? "filetree" : "outline-list"} />}
+                    class="shrink-0"
+                    classList={{ "opacity-50": !settings.appearance.tabGroupByServer() }}
+                    icon={<Icon name="server" />}
                     state={settings.appearance.tabGroupByServer() ? "pressed" : undefined}
                     onClick={() =>
                       settings.appearance.setTabGroupByServer(!settings.appearance.tabGroupByServer())
