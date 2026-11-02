@@ -78,12 +78,15 @@ This section is the single source for loading indicators across `app`, `ui`, `se
 
 This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
 
-- Scroll with a plain element: `overflow-y-auto` (or `overflow-x-auto`, `overflow-auto`) plus `min-h-0` or a max height. `packages/ui/src/styles/scrollbar.css` gives every native scrollbar the shared thumb. Do not add `ScrollView` to fix how a scrollbar looks.
-- Mark each scroll container with `data-scrollable`. Nested-scroll handling (the timeline, Home, `createAutoScroll`) uses it to let the inner container scroll first.
+- Pages, panels and documents scroll with a plain element: `overflow-y-auto` (or `overflow-x-auto`, `overflow-auto`) plus `min-h-0` or a max height. `packages/ui/src/styles/scrollbar.css` gives every native scrollbar the shared thumb. Do not add `ScrollView` to fix how a scrollbar looks.
+- Menus, popovers, dropdowns and the result lists in pickers and dialogs scroll with `MenuScroll` (`@opencode/ui/menu-scroll`). A native scrollbar there takes 8px, more than the rows' 4-6px inset, so the end inset grows whenever the list overflows. `MenuScroll` hides the native scrollbar on pointer devices and draws the shared thumb over the rows; touch devices and high-contrast modes keep the native one.
+  - Put the list's padding on the viewport (`viewportClass`), not on the menu surface, so rows scroll to the edge under the thumb.
+  - Use `viewportRef` for scroll-into-view and keyboard reveal. Style a grid of rows through `[data-slot="menu-scroll-content"]`, the element that holds them.
+- Mark each scroll container with `data-scrollable`. Nested-scroll handling (the timeline, Home, `createAutoScroll`) uses it to let the inner container scroll first. `MenuScroll` marks its viewport itself.
 - Use one element when it both sizes and scrolls. Add an outer wrapper only for something that must stay put while the content scrolls, such as `::before` and `::after` edge fades: the wrapper is `relative flex flex-col min-h-0` and owns the fades, and the inner element is `min-h-0 flex-1 overflow-y-auto`.
-- A native scrollbar takes 8px from layout while the content overflows. Where text would visibly rewrap at that moment (the composer, settings search), add `scrollbar-gutter: stable` and subtract `var(--scrollbar-size, 0px)` from the end padding.
+- A native scrollbar takes 8px from layout while the content overflows. Where text would visibly rewrap at that moment (the composer, text fields), add `scrollbar-gutter: stable` and subtract `var(--scrollbar-size, 0px)` from the end padding. Do not do this in a menu or list; use `MenuScroll`.
 - A ref runs before the element's children render and before it is in the document. Restore a scroll position from `onMount` or a frame later, not in the ref.
-- `ScrollView` (`@opencode/ui/scroll-view`) is only for the session timeline and Home, which draw the thumb in an external track (`thumbContainer`) and, in the timeline, correct it for virtualized rows. Use it again only for one of those needs.
+- `ScrollView` (`@opencode/ui/scroll-view`) is only for the session timeline and Home, which draw the thumb in an external track (`thumbContainer`) and, in the timeline, correct it for virtualized rows. Use it again only for one of those needs, and not for menus.
 - Never set `scrollbar-width: thin`, `scrollbar-width: auto` or `scrollbar-color`. Chromium then ignores the shared style and draws the native Windows scrollbar. Hide a scrollbar only with `no-scrollbar` or `scrollbar-width: none`.
 
 ## Localization
