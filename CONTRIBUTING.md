@@ -73,6 +73,24 @@ Follow package-specific instructions in nearby `AGENTS.md` files. After changing
 
 Follow the repository [style guide](./AGENTS.md).
 
+### Windows
+
+Git checks out `packages/app/src/custom-elements.d.ts` as a symlink. Without
+Developer Mode, Windows writes the link target as a plain text file, and
+`bun run check` fails with `TS1128` in that file.
+
+Enable Developer Mode (Settings > System > For developers), then re-checkout
+the file:
+
+```powershell
+git config --local core.symlinks true
+Remove-Item packages/app/src/custom-elements.d.ts
+git checkout -- packages/app/src/custom-elements.d.ts
+```
+
+Package typechecks still work without this. For example,
+`cd packages/tui && bun typecheck`.
+
 ## Pull Requests
 
 ### Link Issues When Required
