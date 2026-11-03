@@ -65,7 +65,7 @@ const locations = makeGlobalNode({
                         ref.directory === blocked.directory
                           ? [
                               organizationPolicy([
-                                { action: "integration.use", resource: "skill:effect", effect: "deny" },
+                                { action: "skill.use", resource: "effect", effect: "deny" },
                               ]),
                             ]
                           : [],

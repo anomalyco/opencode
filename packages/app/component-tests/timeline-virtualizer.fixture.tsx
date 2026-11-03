@@ -19,7 +19,7 @@ export function mountTimelineVirtualizer(input: {
   document.body.appendChild(host)
 
   function Fixture() {
-    const [state, setState] = createStore({ pinned: true, ready: false })
+    const [state, setState] = createStore({ pinned: true, ready: false, grown: false })
 
     const rows = Array.from(
       { length: input.count },
@@ -31,6 +31,7 @@ export function mountTimelineVirtualizer(input: {
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
+    let scrollToEnd = () => {}
 
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
@@ -50,9 +51,10 @@ export function mountTimelineVirtualizer(input: {
         viewport = element
         resize.observe(element, { box: "border-box" })
       },
-      setContentRef: (element) => {
-        content = element
-        reveal.observe(element, { attributes: true, attributeFilter: ["style"] })
+      onContentResize: () => {
+        if (content) return
+        content = host.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
+        reveal.observe(content, { attributes: true, attributeFilter: ["style"] })
       },
       onPin: () => setState("pinned", true),
       onUnpin: () => setState("pinned", false),
@@ -65,6 +67,9 @@ export function mountTimelineVirtualizer(input: {
       onUserScroll: () => {},
       onHistoryScroll: () => {},
       canRenderImmediately: () => input.immediate ?? false,
+      setScrollToEnd: (fn) => {
+        scrollToEnd = fn
+      },
     })
 
     const resize = new ResizeObserver((entries) => {
@@ -117,6 +122,12 @@ export function mountTimelineVirtualizer(input: {
         >
           Reconnect ready rows
         </button>
+        <button type="button" onClick={() => scrollToEnd()}>
+          Scroll to end
+        </button>
+        <button type="button" onClick={() => setState("grown", true)}>
+          Grow last row
+        </button>
         <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
@@ -125,7 +136,9 @@ export function mountTimelineVirtualizer(input: {
               <div
                 data-component="markdown"
                 data-markdown-ready={state.ready ? "" : undefined}
-                style={{ height: `${input.rowHeight}px` }}
+                style={{
+                  height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
+                }}
               >
                 {row().userMessageID}
               </div>

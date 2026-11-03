@@ -41,7 +41,7 @@ type State = typeof StateSchema.Type
 
 const SessionsSchema = Schema.Record(
   Schema.String,
-  Schema.mutableKey(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
+  Persistence.entry(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
 )
 
 const Current = Persistence.struct({ session: SessionsSchema })

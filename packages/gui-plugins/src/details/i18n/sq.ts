@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Asnjë shtojcë nuk është konfiguruar",
   skills: "Aftësitë",
   "skills.empty": "Nuk ka aftësi të konfiguruara",
-  lsp: "LSP",
-  "lsp.empty": "Nuk ka serverë LSP të konfiguruar",
   failed: "Dështoi",
   retry: "Riprovo",
   connecting: "Po lidhet…",

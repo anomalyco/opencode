@@ -15,16 +15,22 @@ test("mention a session by title, send its stable token, and open its own tab", 
     sessions: [
       { id: "ses_mentions_source", title: "Review the plan" },
       { id: target, title: "Auth middleware" },
+      { id: "ses_0123456789authtokensabcdef", title: "Auth tokens" },
+      { id: "ses_0123456789authreviewabcdef", title: "Auth review" },
+      { id: "ses_0123456789authloggingabcde", title: "Auth logging" },
+      { id: "ses_0123456789authsessionsabcd", title: "Auth sessions" },
+      { id: "ses_0123456789authscopesabcdef", title: "Auth scopes" },
     ],
     seed: { tabs: ["ses_mentions_source"] },
     onPrompt: (input) => void prompts.push(input.body),
   })
 
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+
   await view.editor.fill("Compare with @Auth")
-  await page
-    .locator('[data-component="composer-suggestions"]')
-    .getByRole("button", { name: /Auth middleware/ })
-    .click()
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toHaveCount(5)
+  await view.editor.pressSequentially(" mid")
+  await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -49,6 +55,14 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
       { id: "ses_mention_search_source", title: "Review the plan" },
       { id: "ses_0123456789homesessionabcde", title: "HOME" },
       { id: target, title: "OPENCODE CONSOLE" },
+      { id: "ses_0123456789backhomeabcdefgh", title: "Back home", created: T0 + 2 },
+      {
+        id: "ses_0123456789otherprojecthome",
+        title: "HOME elsewhere",
+        projectID: "proj_other",
+        directory: "C:/OpenCode/Other",
+        created: T0 + 3,
+      },
     ],
     seed: { tabs: ["ses_mention_search_source"] },
     onPrompt: (input) => void prompts.push(input.body),
@@ -57,9 +71,23 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   const suggestions = page.locator('[data-component="composer-suggestions"]')
   const files = await holdRoute(page, (url) => url.pathname === "/api/fs/find")
 
+  // A bare @ offers only this project's sessions.
   await view.editor.pressSequentially("Compare with @")
   await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
   await expect(suggestions.getByRole("button", { name: /OPENCODE CONSOLE/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /HOME elsewhere/ })).toHaveCount(0)
+
+  // Typed matches rank this project first, then the exact title, a title start and a later word, ahead of recency.
+  await view.editor.pressSequentially("home")
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toContainText([
+    /HOME(?! elsewhere)/,
+    "Back home",
+    "HOME elsewhere",
+  ])
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
 
   await view.editor.pressSequentially("open")
   await files.arrived
@@ -79,7 +107,7 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
 
   // A space after a full title ends a typed mention, so the rest stays prose.
   await view.editor.pressSequentially("@home")
-  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /^HOME SessionMentionSearch$/ })).toBeVisible()
   await view.editor.pressSequentially(" now")
   await expect(suggestions).toBeHidden()
   await view.editor.press("Enter")
@@ -107,7 +135,12 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
           id: "opencode",
           name: "OpenCode",
           models: {
-            "big-pickle": { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, limit: { context: 200_000 } },
+            "big-pickle": {
+              id: "big-pickle",
+              name: "Big Pickle",
+              cost: { input: 0, output: 0 },
+              limit: { context: 200_000 },
+            },
           },
         },
         ...(state.authorized
@@ -117,7 +150,12 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
                 integrationID: "opencode-go",
                 name: "OpenCode Go",
                 models: {
-                  "glm-5-go": { id: "glm-5-go", name: "GLM-5 Go", cost: { input: 1, output: 1 }, limit: { context: 200_000 } },
+                  "glm-5-go": {
+                    id: "glm-5-go",
+                    name: "GLM-5 Go",
+                    cost: { input: 1, output: 1 },
+                    limit: { context: 200_000 },
+                  },
                 },
               },
             ]
@@ -131,7 +169,9 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
         id: "opencode",
         name: "OpenCode Console",
         methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
-        connections: state.authorized ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }] : [],
+        connections: state.authorized
+          ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }]
+          : [],
       },
       {
         id: "opencode-go",
@@ -259,6 +299,165 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
     page.locator('[data-component="composer-attachments"]').getByRole("img", { name: "diagram.png", exact: true }),
   ).toBeVisible()
   await expect(view.editor).toHaveText("")
+})
+
+for (const action of ["tray", "picker"] as const) {
+  test(`the Go usage limit restores the prompt and dismisses the tray when switching models through the ${action}`, async ({
+    page,
+    context,
+  }) => {
+    await page.clock.setFixedTime(T0)
+    await context.route("https://opencode.ai/**", (route) => route.fulfill({ body: "Go" }))
+    const sessionID = "ses_go_limit"
+    const model = { id: "glm-5-go", providerID: "opencode-go" }
+
+    const view = await openSession(page, {
+      name: "GoLimit",
+      sessions: [{ id: sessionID, agent: "build", model }],
+      onFileWrite: () => undefined,
+      provider: () => ({
+        all: [
+          {
+            id: "opencode",
+            name: "OpenCode",
+            models: {
+              "big-pickle": {
+                id: "big-pickle",
+                name: "Big Pickle",
+                cost: { input: 0, output: 0 },
+                limit: { context: 200_000 },
+              },
+            },
+          },
+          {
+            id: "opencode-go",
+            name: "OpenCode Go",
+            models: {
+              "glm-5-go": {
+                id: "glm-5-go",
+                name: "GLM-5 Go",
+                cost: { input: 1, output: 1 },
+                limit: { context: 200_000 },
+              },
+            },
+          },
+        ],
+        connected: ["opencode", "opencode-go"],
+        default: { build: "opencode-go/glm-5-go" },
+      }),
+      pageMessages: () => ({
+        items: [
+          { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+          { id: "msg_go_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
+        ],
+      }),
+    })
+
+    await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+    // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
+    const body = {
+      type: "error",
+      error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+      metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+    }
+
+    await view.push([
+      {
+        id: "evt_go_limit_1",
+        created: T0 + 2,
+        type: "session.step.failed",
+        location: { directory: view.directory },
+        durable: { aggregateID: sessionID, seq: 1, version: 1 },
+        data: {
+          sessionID,
+          assistantMessageID: "msg_go_assistant",
+          error: {
+            type: "provider.go-limit",
+            message: "OpenCode Go 5 hour usage limit reached.",
+            status: 429,
+            response: { body: JSON.stringify(body) },
+            retryAfterMs: 3_600_000,
+          },
+        },
+      },
+    ])
+
+    const tray = page.locator('[data-component="session-go-limit-tray"]')
+    await expect(tray).toContainText(/Go 5 hour usage limit reached\. It resets at .+?\./)
+    await expect(
+      page.getByRole("status").filter({ hasText: /^You've reached your OpenCode Go usage limit\. It resets at / }),
+    ).toBeVisible()
+    await expect(view.editor).toHaveText("Refactor the parser")
+    await expect(page.getByText("OpenCode Go 5 hour usage limit reached.")).toHaveCount(0)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+
+    // Extra Usage is turned on from the workspace's Go page in OpenCode Console.
+    const popup = page.waitForEvent("popup")
+    await tray.getByRole("button", { name: "Turn on Extra Usage", exact: true }).click()
+    await expect(await popup).toHaveURL("https://opencode.ai/console/wrk_go_limit/go")
+
+    if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
+
+    if (action === "picker") {
+      await page.locator('[data-action="composer-model"]').click()
+      const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+      await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
+      await picker.getByRole("option", { name: /Big Pickle/ }).click()
+    }
+
+    await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
+    await expect(tray).toHaveCount(0)
+    await expect(view.editor).toHaveText("Refactor the parser")
+  })
+}
+
+test("ChatGPT's usage limit opens the ChatGPT usage dialog", async ({ page }) => {
+  await page.clock.setFixedTime(T0)
+  const sessionID = "ses_chatgpt_limit"
+  const model = { id: "gpt-5.5", providerID: "openai" }
+
+  const view = await openSession(page, {
+    name: "ChatGPTLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    pageMessages: () => ({
+      items: [
+        { id: "msg_chatgpt_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        {
+          id: "msg_chatgpt_assistant",
+          type: "assistant",
+          agent: "build",
+          model,
+          content: [],
+          time: { created: T0 + 1 },
+        },
+      ],
+    }),
+  })
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+  await view.push([
+    {
+      id: "evt_chatgpt_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location: { directory: view.directory },
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        assistantMessageID: "msg_chatgpt_assistant",
+        error: {
+          type: "provider.chatgpt-limit",
+          message: "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+          status: 429,
+        },
+      },
+    },
+  ])
+
+  await expect(page.getByRole("dialog", { name: "ChatGPT usage limit reached" })).toBeVisible()
 })
 
 test("a catalog refresh cannot replace an existing session's model", async ({ page }) => {
@@ -830,6 +1029,50 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
+test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
+  const editor = await draft(page)
+  await page.keyboard.type("worktree off the latest dev")
+  const surface = page.locator('[data-component="new-session"]')
+  const dropzone = page.locator('[data-component="session-dropzone"]')
+
+  const text = await page.evaluateHandle(() => {
+    const value = new DataTransfer()
+    value.setData("text/plain", "worktree off the latest dev")
+
+    return value
+  })
+
+  await editor.dispatchEvent("dragenter", { dataTransfer: text })
+  await editor.dispatchEvent("dragover", { dataTransfer: text })
+  await expect(page.locator("[data-slot='session-dropzone-blur']")).toHaveAttribute("data-visible", "false")
+  await expect(dropzone).toHaveCount(0)
+
+  const files = await page.evaluateHandle(() => {
+    const value = new DataTransfer()
+    value.items.add(new File(["Dropzone fixture"], "dropzone.txt", { type: "text/plain" }))
+
+    return value
+  })
+
+  await surface.dispatchEvent("dragover", { dataTransfer: files })
+  await expect(dropzone).toHaveAttribute("data-visible", "true")
+  const shown = await dropzone.elementHandle()
+
+  // Moving onto the editor's own text fires dragleave on the editor before the next dragover.
+  await editor.evaluate((element, dataTransfer) => {
+    const inner = element.firstElementChild ?? element
+
+    const fire = (type: string, target: Element, relatedTarget: Element) =>
+      target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, relatedTarget }))
+
+    fire("dragenter", inner, element)
+    fire("dragleave", element, inner)
+    fire("dragover", inner, element)
+  }, files)
+  await expect.poll(() => shown?.evaluate((element) => element.isConnected)).toBe(true)
+  await expect(dropzone).toHaveAttribute("data-visible", "true")
+})
+
 test("keeps a narrow session composer contained when invoking a built-in", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 })
   const { editor } = await openSession(page, { name: "ComposerCommand", provider: NO_PROVIDER })
@@ -961,6 +1204,39 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"
+
+test("the shell shortcut toggles modes and keeps explicit bindings", async ({ page }) => {
+  const view = await openDraft(page, {
+    name: "ShellToggle",
+    seed: {
+      settings: {
+        keybinds: { "prompt.mode.shell": "mod+alt+s", "prompt.mode.normal": "mod+alt+e" },
+      },
+    },
+  })
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const exit = page.getByRole("button", { name: /^Exit/ })
+
+  await view.editor.fill("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toBeVisible()
+  await expect(view.editor).toHaveText("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toHaveText("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toBeVisible()
+  await view.editor.press("Escape")
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+s`)
+  await expect(exit).toBeVisible()
+  await view.editor.press(`${modifier}+Alt+e`)
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toHaveText("echo hello")
+})
 
 for (const row of [
   { state: "an idle", copy: "Ask anything, / for commands, @ for context…" },

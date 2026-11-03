@@ -37,6 +37,17 @@ describe("client paths", () => {
     expect(getFilenameTruncated("/repo/long-component-name.tsx", 16)).toBe("long-compon….tsx")
     expect(truncateMiddle("abcdefghijklmnop", 9)).toBe("abcd…mnop")
   })
+
+  test("truncates in the middle without overflowing small widths", () => {
+    expect(truncateMiddle("abcdefghij", 0)).toBe("")
+    expect(truncateMiddle("abcdefghij", 1)).toBe("…")
+    expect(truncateMiddle("abcdefghij", 2)).toBe("a…")
+    expect(truncateMiddle("abcdefghij", 3)).toBe("a…j")
+    expect(truncateMiddle("abcdefghij", 4)).toBe("ab…j")
+    expect(truncateMiddle("abcd", 4)).toBe("abcd")
+    expect(truncateMiddle("abcd", 10)).toBe("abcd")
+    expect(truncateMiddle("a", 1)).toBe("a")
+  })
 })
 
 describe("encodeFilePath", () => {

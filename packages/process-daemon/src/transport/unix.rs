@@ -391,6 +391,7 @@ mod tests {
                 &mut server,
                 &Response::Exited {
                     exit_code: Some(0),
+                    signal: None,
                     final_offset: 123,
                 },
             )
@@ -401,6 +402,7 @@ mod tests {
             read_frame(&mut client).unwrap(),
             Response::Exited {
                 exit_code: Some(0),
+                signal: None,
                 final_offset: 123,
             }
         ));

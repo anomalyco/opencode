@@ -1,5 +1,26 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("keeps quote attachment icons fixed while long text truncates", async ({ mount, page }) => {
+  const gallery = await mount("current-session-timeline-rows--quote-attachments")
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  for (const title of ["Remove this", "Can we make this smaller?"]) {
+    const icon = gallery
+      .locator('[data-component="attachment-card"]')
+      .filter({ hasText: title })
+      .locator('[data-slot="icon-svg"]')
+
+    await expect(icon).toHaveCSS("width", "12px")
+    await expect(icon).toHaveCSS("height", "12px")
+  }
+
+  const label = gallery.locator('[data-slot="attachment-card-label"]').filter({ hasText: "It has a 32px minimum" })
+
+  expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+  await expect(label).toHaveCSS("text-overflow", "ellipsis")
+})
+
 story.describe("message actions menu", () => {
   story.use({ timezoneId: "UTC" })
 
@@ -65,6 +86,8 @@ story("drops a pending footer at once on delivery with and without hover", async
   await page.mouse.move(0, 0)
   await expect(footer).toHaveCSS("height", "20px")
   await expect(footer).toHaveCSS("margin-top", "8px")
+  // A steer names only the model it changes, so change it to measure the gap after the labels.
+  await timeline.getByLabel("Changes model", { exact: true }).check()
 
   for (const hover of [true, false]) {
     await timeline.getByLabel("Delivery state").selectOption("steering")
@@ -154,11 +177,18 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   await expect(separator).toHaveText("\u00B7")
   await expect(timeline.locator('[data-slot="user-message-meta-label"]')).toHaveCSS("gap", "4px")
 
+  // A steer with the previous prompt's agent and model joins the running turn unchanged, so it names neither.
   await timeline.getByLabel("Delivery state").selectOption("steering")
+  await expect(timeline.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
+  await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveCount(0)
+  await timeline.getByLabel("Changes model", { exact: true }).check()
+  await expect(timeline.locator('[data-slot="user-message-meta-item"]')).toHaveText(["Claude Sonnet 4", "Balanced"])
   await timeline.getByLabel("Voice message", { exact: true }).check()
   const voice = timeline.getByRole("img", { name: "Voice", exact: true })
   await expect(voice).toBeVisible()
   await expect(indicator).toBeVisible()
+  // The faded bubble already marks a steer as waiting, so Pending is plain text with no icon.
+  await expect(indicator).toHaveText("Pending")
   await expect(indicator.locator("svg")).toHaveCount(0)
 
   await expect(voice.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-wave-audio")

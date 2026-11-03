@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition, type LLMResponse } from "../../src/effect.js"
+import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Moonshot } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -18,7 +18,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
       { tags: ["text", "reasoning", "usage"], metadata: { model: "kimi-k3" } },
       () =>
         Effect.gen(function* () {
-          const request = LLM.request({
+          const request = ai.request({
             model: Moonshot.configure({
               apiKey,
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
@@ -66,7 +66,7 @@ for (const item of [
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model: Moonshot.configure({ apiKey, providerOptions: { thinking: item.thinking } }).chat(item.model),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             generation: { maxTokens: 4096 },
@@ -106,7 +106,7 @@ for (const item of [
     { tags: ["tool", "tool-loop", "reasoning", "continuation", "usage"], metadata: { model: item.model } },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: Moonshot.configure({ apiKey, providerOptions: item.options })[item.api](item.model),
           prompt:
             "Use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
@@ -118,7 +118,8 @@ for (const item of [
         expect(first.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])
         expect(first.reasoning.length).toBeGreaterThan(0)
         expectUsage(first)
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
@@ -126,7 +127,7 @@ for (const item of [
               Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
             ),
           ],
-        })
+        }
         const compiled = yield* compileRequest(continuation)
         if (item.api === "chat")
           expect(compiled.body.messages).toEqual(
@@ -166,15 +167,14 @@ for (const item of [
         expect(second.toolCalls).toHaveLength(0)
         expect(second.finishReason.normalized).toBe("stop")
         expectUsage(second)
-        const third = yield* LLMClient.generate(
-          LLMRequest.update(continuation, {
-            messages: [
-              ...continuation.messages,
-              second.message,
-              Message.user("What temperature did the tool report? Reply with only the temperature."),
-            ],
-          }),
-        )
+        const third = yield* LLMClient.generate({
+          ...continuation,
+          messages: [
+            ...continuation.messages,
+            second.message,
+            Message.user("What temperature did the tool report? Reply with only the temperature."),
+          ],
+        })
         expect(third.text).toContain("18")
         expect(third.toolCalls).toHaveLength(0)
         expect(third.finishReason.normalized).toBe("stop")

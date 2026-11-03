@@ -54,31 +54,30 @@ import { agentLabel } from "./agent-label"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
-  const body = typeof document === "undefined" ? undefined : document.body
-
-  if (body) {
-    const textarea = document.createElement("textarea")
-    textarea.value = text
-    textarea.setAttribute("readonly", "")
-    textarea.style.position = "fixed"
-    textarea.style.opacity = "0"
-    textarea.style.pointerEvents = "none"
-    body.appendChild(textarea)
-    textarea.select()
-    const copied = document.execCommand("copy")
-    body.removeChild(textarea)
-
-    if (copied) return true
-  }
-
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-
-  if (!clipboard?.writeText) return false
-
-  return clipboard.writeText(text).then(
+  const written = await navigator.clipboard?.writeText(text).then(
     () => true,
     () => false,
   )
+
+  if (written) return true
+  // The textarea sits beside the focused element so a focus trap, such as an open menu's, keeps its selection.
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+  const host = active && active !== document.body ? (active.parentElement ?? document.body) : document.body
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.setAttribute("readonly", "")
+  textarea.setAttribute("aria-hidden", "true")
+  textarea.tabIndex = -1
+  textarea.style.position = "fixed"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+  host.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand("copy")
+  textarea.remove()
+  active?.focus({ preventScroll: true })
+
+  return copied
 }
 
 type MetaItem = { label: string; variant?: boolean }
@@ -90,6 +89,12 @@ function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssis
   if (!model.variant || model.variant === "default") return [{ label: name }]
 
   return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
+}
+
+function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
+  return (
+    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
+  )
 }
 
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
@@ -304,6 +309,8 @@ export function CurrentUserMessageDisplay(props: {
   text: string
   agent: string
   model: SessionMessageAssistant["model"]
+  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
+  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
@@ -353,13 +360,31 @@ export function CurrentUserMessageDisplay(props: {
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
 
-  const labels = createMemo<MetaItem[]>(() => {
+  const agentItems = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.agent, data.agents)
 
-    return [...(agent ? [{ label: agent }] : []), ...modelItems(data, props.model)]
+    return agent ? [{ label: agent }] : []
   })
 
-  const metaLabels = createMemo(() => (mobile() ? [] : labels()))
+  // A waiting steer joins the running turn, so its agent and model only say something when it changes them.
+  const changedLabels = createMemo<MetaItem[]>(() => {
+    const previous = props.previousSelection
+
+    if (!previous) return [...agentItems(), ...modelItems(data, props.model)]
+
+    return [
+      ...(previous.agent === props.agent ? [] : agentItems()),
+      ...(sameModel(previous.model, props.model) ? [] : modelItems(data, props.model)),
+    ]
+  })
+
+  const metaLabels = createMemo(() => {
+    if (mobile()) return []
+
+    if (waiting()) return changedLabels()
+
+    return [...agentItems(), ...modelItems(data, props.model)]
+  })
 
   // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.

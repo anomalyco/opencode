@@ -75,7 +75,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
   "compaction": {
     "auto": false,
     "keep": { "tokens": 24000 },
-    "buffer": 16000,
+    "buffer": "20%",
   },
 }
 ```
@@ -84,9 +84,23 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
-| `buffer` | 15% of the limit, at least 16k | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. A buffer at least as large as the model's limit is ignored. |
+| `buffer` | `"15%"`, at least 16k | Share of the model's context window kept free. Automatic compaction starts once the conversation reaches the rest. Larger values compact earlier. |
 
-`keep.tokens` and `buffer` accept non-negative integers.
+`keep.tokens` accepts a non-negative integer.
+
+### Buffer
+
+`buffer` is a percentage of each model's window, so one setting fits every model:
+
+| Model window | `"buffer": "20%"` compacts at |
+| ---: | ---: |
+| 128k | ~102k |
+| 1M | 800k |
+
+- It is the room kept free, not the point where compaction starts: `"20%"` compacts at 80% full.
+- Accepts `"1%"` to `"99%"`, including decimals such as `"12.5%"`.
+- A token count such as `20000` also works. The same count is a large share of a small window and a small share of a large one.
+- A token count at least as large as the model's window is ignored and the default applies.
 
 ## Model
 

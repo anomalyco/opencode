@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -29,6 +29,7 @@ import { Session } from "@opencode/core/session"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -36,7 +37,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* OpencodePlugin.effect(host)
 })
 
@@ -118,20 +119,6 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function eventually<A, E>(
-  effect: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, E | Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
 }
 
 const cost = (input: number, output = 0) => [
@@ -757,7 +744,8 @@ describe("OpencodePlugin", () => {
           state.failing = true
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(4)
+          // The failed fetch and its 3 retries.
+          expect(state.requests).toBe(7)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
@@ -765,7 +753,7 @@ describe("OpencodePlugin", () => {
           state.advertised = false
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(5)
+          expect(state.requests).toBe(8)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
         }),
@@ -1038,9 +1026,12 @@ describe("OpencodePlugin", () => {
       state.status = 503
       yield* TestClock.adjust("1 minute")
       yield* drain
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
 
       // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
-      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+      // The 404, then the 503 and its 3 retries.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true, true, true])
     }),
   )
 
@@ -1573,7 +1564,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )
@@ -1779,7 +1770,7 @@ describe("OpencodePlugin with a Console config", () => {
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigPolicyPlugin.Plugin.effect(host)
 
@@ -1948,7 +1939,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host)
           yield* ConfigProviderPlugin.Plugin.effect(host)
 
@@ -1998,7 +1989,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           // Registered in production order: the OpenCode and OpenAI provider plugins, then config in `post`.
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* OpenAIPlugin.effect(host)
@@ -2047,7 +2038,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigWebSearchPlugin.Plugin.effect(host)
           // A workspace without hosted search, or a member its policy denies, would get only failed searches.

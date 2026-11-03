@@ -8,7 +8,10 @@ import { createStore } from "solid-js/store"
 import { formatKeybindParts } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useTabs } from "@/shell/tabs/tabs"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { ActivityRing } from "@opencode/ui/activity-ring"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import type { ServerConnection } from "@/runtime/server/registry"
 import { getRelativeTime } from "@/shell/time"
 import { createCommandPaletteFileEntry, createCommandPaletteModel, type CommandPaletteEntry } from "./palette"
 import { createCommandPaletteSearch, matchesCommandPaletteEntry } from "./search"
@@ -157,55 +160,90 @@ function PaletteRow(props: {
             <Keybind keys={formatKeybindParts(props.item.keybind ?? "", props.language.t)} variant="neutral" />
           </Show>
         </Match>
-        <Match when={props.item.type === "session"}>
-          <div class="command-palette-row-main">
-            <div class="relative shrink-0">
-              <Show when={props.sessionOpen}>
-                <span
-                  aria-hidden="true"
-                  class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-                  style={{ "inset-inline-start": "-6px" }}
-                />
-              </Show>
-              <Show when={session()}>
-                {(session) => (
-                  <SessionTabAvatar
-                    project={props.item.project}
-                    directory={session().directory}
-                    sessionId={session().sessionID}
-                    server={session().server}
-                  />
-                )}
-              </Show>
-            </div>
-            <div class="command-palette-row-text">
-              <span
-                class="command-palette-title palette-menu-title"
-                dir="auto"
-                classList={{ "opacity-70": !!props.item.archived }}
-              >
-                <SearchHighlight text={props.item.title} />
-              </span>
-              <Show when={props.item.description}>
-                {(description) => (
-                  <span
-                    class="command-palette-description"
-                    dir="auto"
-                    classList={{ "opacity-70": !!props.item.archived }}
-                  >
-                    <SearchHighlight text={description()} />
-                  </span>
-                )}
-              </Show>
-            </div>
-          </div>
-          <Show when={props.item.updated}>
-            <span class="command-palette-meta">
-              {getRelativeTime(new Date(props.item.updated!).toISOString(), props.language.t)}
-            </span>
-          </Show>
+        <Match when={props.item.type === "session" && session()}>
+          {(session) => (
+            <PaletteSessionRow
+              item={props.item}
+              server={session().server}
+              directory={session().directory}
+              sessionID={session().sessionID}
+              language={props.language}
+              sessionOpen={props.sessionOpen}
+            />
+          )}
         </Match>
       </Switch>
     </button>
+  )
+}
+
+function PaletteSessionRow(props: {
+  item: CommandPaletteEntry
+  server: ServerConnection.Key
+  directory: string
+  sessionID: string
+  language: ReturnType<typeof useLanguage>
+  sessionOpen: boolean
+}) {
+  const status = useSessionTabAvatarState(
+    () => props.server,
+    () => props.sessionID,
+    () => true,
+  )
+
+  return (
+    <>
+      <div class="command-palette-row-main">
+        <div class="relative shrink-0">
+          <Show when={props.sessionOpen}>
+            <span
+              aria-hidden="true"
+              class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+              style={{ "inset-inline-start": "-6px" }}
+            />
+          </Show>
+          {/* A busy session shows its activity ring instead of the unread dot, as session tabs do. */}
+          <SessionTabAvatarView
+            project={props.item.project}
+            directory={props.directory}
+            unread={status.unread() && !status.loading()}
+          />
+        </div>
+        <div class="command-palette-row-text">
+          <span
+            class="command-palette-title palette-menu-title"
+            dir="auto"
+            classList={{ "opacity-70": !!props.item.archived }}
+          >
+            <SearchHighlight text={props.item.title} />
+          </span>
+          <Show when={props.item.description}>
+            {(description) => (
+              <span class="command-palette-description" dir="auto" classList={{ "opacity-70": !!props.item.archived }}>
+                <SearchHighlight text={description()} />
+              </span>
+            )}
+          </Show>
+        </div>
+      </div>
+      {/* The project avatar stays put; a working session shows its activity ring where its age would be. */}
+      <Show
+        when={status.loading()}
+        fallback={
+          <Show when={props.item.updated}>
+            {(updated) => (
+              <span class="command-palette-meta">
+                {getRelativeTime(new Date(updated()).toISOString(), props.language.t)}
+              </span>
+            )}
+          </Show>
+        }
+      >
+        <span class="command-palette-meta">
+          <span class="sr-only">{props.language.t("session.timeline.working")}</span>
+          <ActivityRing />
+        </span>
+      </Show>
+    </>
   )
 }

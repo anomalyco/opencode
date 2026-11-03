@@ -72,11 +72,12 @@ test("reads pre-2.0.15 checkpoint media without rewriting the stored payload", a
       media: { source: { type: "base64", data: "AQID", mediaType: "image/png" } },
       filename: "attachment.png",
       cache: { type: "ephemeral" },
-      metadata: { attachment: "original" },
       providerMetadata: { openai: { detail: "high" } },
     },
     { type: "media", media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
   ])
+  // The stored `metadata` key is no longer part of `MediaPart`, so decoding drops it.
+  expect(decoded[0]?.content[1]).not.toHaveProperty("metadata")
   expect(decoded[1]?.content).toMatchObject(legacyMedia[1]?.content ?? [])
   expect(JSON.stringify(legacyMedia)).toBe(before)
 })
@@ -206,15 +207,12 @@ test("a native window round-trips tools, opaque checkpoints and binary media thr
   const optionalMetadata = stored([
     Message.make({
       role: "user",
-      content: [
-        { type: "text", text: "attachment", metadata: { attachment: { name: undefined, source: { type: "inline" } } } },
-      ],
+      content: [{ type: "text", text: "attachment" }],
       providerMetadata: { openai: { itemId: undefined, type: "message", status: undefined, phase: undefined } },
     }),
   ])
   expect(decode({ native: optionalMetadata })[0]).toMatchObject({
     providerMetadata: { openai: { type: "message" } },
-    content: [{ metadata: { attachment: { source: { type: "inline" } } } }],
   })
   expect(() =>
     decode({
@@ -247,7 +245,7 @@ it.effect(
           current_values: { "test/context": Instructions.hash("newest instructions") },
         })
         const replayed = yield* s.load(target)
-        expect(replayed.initial).toBe("changed instructions")
+        expect(Instructions.join(replayed.initial)).toBe("changed instructions")
         expect(
           toLLMMessages(
             replayed.entries.map((entry) => entry.message),
@@ -264,7 +262,7 @@ it.effect(
           { ...model.ref, providerID: Provider.ID.make("other") },
         ]) {
           const expanded = yield* s.load(incompatible)
-          expect(expanded.initial).toBe("changed instructions")
+          expect(Instructions.join(expanded.initial)).toBe("changed instructions")
           expect(
             toLLMMessages(
               expanded.entries.map((entry) => entry.message),
@@ -277,7 +275,7 @@ it.effect(
           ])
         }
         const preview = yield* SessionHistory.preview(s.db, sessionID, s.instructions, target)
-        expect(preview.initial).toBe("changed instructions")
+        expect(Instructions.join(preview.initial)).toBe("changed instructions")
         expect(preview.messages).toEqual(replayed.entries.map((entry) => entry.message))
         const store = yield* SessionStore.Service
         expect((yield* store.messages({ sessionID })).map((message) => message.type)).toEqual([
@@ -328,7 +326,7 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
     s.state.value = "post-epoch update"
     yield* s.prepare
     const replayed = yield* s.load(target)
-    expect(replayed.initial).toBe("new native baseline")
+    expect(Instructions.join(replayed.initial)).toBe("new native baseline")
     expect(replayed.entries.map((entry) => entry.message.type)).toEqual(["compaction", "user", "system"])
     expect(replayed.entries[0]?.message).toMatchObject({ native, model: model.ref })
     expect(
@@ -338,7 +336,7 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
       ).filter((message) => message.role === "system"),
     ).toEqual([Message.system("post-epoch update")])
     const local = yield* s.load("local")
-    expect(local.initial).toBe("new native baseline")
+    expect(Instructions.join(local.initial)).toBe("new native baseline")
     expect(local.entries.map((entry) => entry.message.type)).toEqual(["compaction", "user", "user", "system"])
     expect(local.entries[0]?.message).toMatchObject({ summary: "local summary" })
   }),

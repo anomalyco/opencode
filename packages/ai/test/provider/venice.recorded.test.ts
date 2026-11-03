@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -38,7 +38,7 @@ for (const item of [
     },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: Venice.configure({ apiKey }).chat(item.model),
           system:
             "Use the provided tool for private data. After receiving the result, give only the requested number; do not call the tool again.",
@@ -52,7 +52,8 @@ for (const item of [
         expect(first.toolCalls).toMatchObject([{ name: "lookup_rate", input: { code: "ZEBRA" } }])
         expect(first.finishReason.normalized).toBe("tool-calls")
         expect(first.events.filter(LLMEvent.is.finish)).toHaveLength(1)
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           toolChoice: ToolChoice.make("none"),
           messages: [
             ...request.messages,
@@ -61,7 +62,7 @@ for (const item of [
               Message.tool({ id: call.id, name: call.name, result: { code: "ZEBRA", rate: 23 } }),
             ),
           ],
-        })
+        }
         const compiled = yield* compileRequest(continuation)
         const assistant = compiled.body.messages.find((message) => message.role === "assistant")
         expect(assistant).toBeDefined()
@@ -100,13 +101,14 @@ for (const item of [
         expect(second.finishReason.normalized).toBe("stop")
         expect(second.usage?.inputTokens).toBeGreaterThan(0)
         expect(second.usage?.outputTokens).toBeGreaterThan(0)
-        const followUp = LLMRequest.update(continuation, {
+        const followUp = {
+          ...continuation,
           messages: [
             ...continuation.messages,
             second.message,
             Message.user("Add 7 to your previous final answer. Reply with just the number."),
           ],
-        })
+        }
         const third = yield* LLMClient.generate(followUp)
         expect(third.text).toContain("407")
         expect(third.finishReason.normalized).toBe("stop")
@@ -133,7 +135,7 @@ recorded.effect.with(
   { tags: ["tool", "parallel", "signature"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: Venice.configure({ apiKey }).chat("gemini-3-8-flash"),
         prompt:
           "Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.",
@@ -143,7 +145,8 @@ recorded.effect.with(
       })
       const first = yield* LLMClient.generate(request)
       expect(first.toolCalls).toHaveLength(2)
-      const continuation = LLMRequest.update(request, {
+      const continuation = {
+        ...request,
         toolChoice: ToolChoice.make("none"),
         messages: [
           ...request.messages,
@@ -161,7 +164,7 @@ recorded.effect.with(
             }),
           ),
         ],
-      })
+      }
       const compiled = yield* compileRequest(continuation)
       expect(compiled.body.messages).toEqual(
         expect.arrayContaining([
@@ -184,13 +187,14 @@ recorded.effect.with(
         .map((part) => part.providerMetadata?.venice?.messageThoughtSignature)
         .find((value) => value !== undefined)
       expect(signature).toEqual(expect.any(String))
-      const followUp = LLMRequest.update(continuation, {
+      const followUp = {
+        ...continuation,
         messages: [
           ...continuation.messages,
           second.message,
           Message.user("Add 7 to your previous final answer. Reply with just the number."),
         ],
-      })
+      }
       expect((yield* compileRequest(followUp)).body.messages).toEqual(
         expect.arrayContaining([expect.objectContaining({ role: "assistant", thought_signature: signature })]),
       )
@@ -205,7 +209,7 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
           prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
           providerOptions: { reasoning: { enabled: false } },
@@ -221,7 +225,7 @@ recorded.effect.with(
 recorded.effect.with("surfaces Venice model errors", { tags: ["error"] }, () =>
   Effect.gen(function* () {
     const result = yield* LLMClient.generate(
-      LLM.request({ model: Venice.configure({ apiKey }).chat("no-such-model-xyz"), prompt: "Hello" }),
+      ai.request({ model: Venice.configure({ apiKey }).chat("no-such-model-xyz"), prompt: "Hello" }),
     ).pipe(Effect.result)
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {

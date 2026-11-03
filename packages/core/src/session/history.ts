@@ -20,8 +20,6 @@ const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
 const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
-const decodePartSync = Schema.decodeUnknownSync(SessionMessage.AssistantContent)
-export const encodePart = Schema.encodeSync(SessionMessage.AssistantContent)
 const PartQueryBatchSize = 500
 
 /**
@@ -87,9 +85,6 @@ const latestCompaction = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
 })
 
-export const hasInlineContent = (data: typeof SessionMessageTable.$inferSelect.data): boolean =>
-  "content" in data && Array.isArray(data.content) && data.content.length > 0
-
 /**
  * Puts each assistant row's `session_part` rows into its `data.content`, in ordinal order. Rows without parts keep
  * their inline content, so legacy rows read unchanged. Runs before blob hydration so media in parts restores too.
@@ -128,9 +123,6 @@ const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
   id: row.id,
   type: row.type,
 })
-
-export const decodePartRowSync = (row: typeof SessionPartTable.$inferSelect) =>
-  decodePartSync(SessionLegacy.part({ ...row.data, type: row.type }))
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
@@ -341,6 +333,32 @@ export const synthetics = Effect.fn("SessionHistory.synthetics")(function* (
     .all()
     .pipe(Effect.orDie)
   return yield* Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
+})
+
+/**
+ * The unfinished assistant messages `load(db, sessionID, "latest")` would return, read without the rest of the
+ * transcript. Only these can hold a tool call that is still streaming or running.
+ */
+export const incompleteAssistants = Effect.fn("SessionHistory.incompleteAssistants")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const compaction = yield* latestCompaction(db, sessionID, "latest")
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "assistant"),
+        sql`json_extract(${SessionMessageTable.data}, '$.time.completed') is null`,
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  return yield* decodeMessageRows(db, rows)
 })
 
 /** The id and text of the session's first user message. */

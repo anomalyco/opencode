@@ -111,15 +111,6 @@
   color: var(--v2-text-text-faint);
 }
 
-.new-session-location .new-session-location-workspace .command-palette-description {
-  font-size: 11px;
-  letter-spacing: 0.05px;
-}
-
-.new-session-location-workspace .command-palette-row-icon {
-  color: var(--v2-icon-icon-base);
-}
-
 .new-session-location-workspace .command-palette-row-text > .command-palette-title {
   max-width: 60%;
   flex-shrink: 0;
@@ -141,15 +132,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Its own hover, layered over the row's, shows that it drills in rather than choosing the row. The negative margin
+   keeps the glyph where the 16px slot put it. */
 .new-session-location-drill {
   display: flex;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  margin-inline: -2px;
   border-radius: 4px;
   color: var(--v2-icon-icon-faint);
+}
+
+.new-session-location-drill:hover {
+  background: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-icon-icon-base);
 }
 
 /* Keep the name legible while the path gives up space first. */

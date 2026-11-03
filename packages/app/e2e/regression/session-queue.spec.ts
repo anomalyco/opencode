@@ -231,6 +231,35 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock)
+  const interrupts: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`)) interrupts.push(request.url())
+  })
+  const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
+
+  await expect(stop).toBeVisible()
+  await view.input.click()
+  await view.input.press("Enter")
+  await view.input.press("ControlOrMeta+Enter")
+  await view.input.pressSequentially("   ")
+  await view.input.press("Enter")
+
+  const interrupted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+  )
+
+  await stop.click()
+  await interrupted
+
+  expect(interrupts).toHaveLength(1)
+  expect(mock.prompts).toEqual([])
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {
@@ -1179,10 +1208,8 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      // Pending stands in for the time of a steer that has not been sent.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
-        useInnerText: true,
-      })
+      // The steer keeps U1's agent and model, so Pending is all its meta line says.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 

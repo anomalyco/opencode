@@ -1,5 +1,6 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
 import {
   displayName,
@@ -149,7 +150,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
+  let observer: MutationObserver | undefined
+  let frame = 0
   const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
+  const updateFades = (element: HTMLDivElement) => {
+    element.toggleAttribute("data-fade-top", element.scrollTop > 0)
+    element.toggleAttribute("data-fade-bottom", element.scrollTop + element.clientHeight < element.scrollHeight - 1)
+  }
+  onCleanup(() => {
+    observer?.disconnect()
+    cancelAnimationFrame(frame)
+  })
 
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,
@@ -197,8 +208,19 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <div data-slot="home-projects-scroll" class="relative flex min-h-0 min-w-0 shrink flex-col">
-        <div data-slot="home-projects-viewport" data-scrollable class="min-h-0 flex-1 overflow-y-auto">
+      <div data-slot="home-projects-scroll" class="flex min-h-0 min-w-0 shrink flex-col">
+        <div
+          data-slot="home-projects-viewport"
+          data-scrollable
+          class="min-h-0 flex-1 overflow-y-auto"
+          ref={(element) => {
+            createResizeObserver(element, () => updateFades(element))
+            observer = new MutationObserver(() => updateFades(element))
+            observer.observe(element, { childList: true, subtree: true })
+            frame = requestAnimationFrame(() => updateFades(element))
+          }}
+          onScroll={(event) => updateFades(event.currentTarget)}
+        >
           <Show when={props.dropdown && props.servers.length === 1}>
             <HomeProjectNavButton
               type="button"

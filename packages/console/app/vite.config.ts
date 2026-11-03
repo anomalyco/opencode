@@ -15,6 +15,11 @@ export default defineConfig({
       },
     }),
   ],
+  environments: {
+    // Nitro copies public/ with fs.cp, which keeps the symlinks into packages/ui as links.
+    // Letting Vite copy it first writes real files.
+    client: { build: { copyPublicDir: true } },
+  },
   server: {
     allowedHosts: true,
     port: 3001,
