@@ -15,16 +15,22 @@ test("mention a session by title, send its stable token, and open its own tab", 
     sessions: [
       { id: "ses_mentions_source", title: "Review the plan" },
       { id: target, title: "Auth middleware" },
+      { id: "ses_0123456789authtokensabcdef", title: "Auth tokens" },
+      { id: "ses_0123456789authreviewabcdef", title: "Auth review" },
+      { id: "ses_0123456789authloggingabcde", title: "Auth logging" },
+      { id: "ses_0123456789authsessionsabcd", title: "Auth sessions" },
+      { id: "ses_0123456789authscopesabcdef", title: "Auth scopes" },
     ],
     seed: { tabs: ["ses_mentions_source"] },
     onPrompt: (input) => void prompts.push(input.body),
   })
 
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+
   await view.editor.fill("Compare with @Auth")
-  await page
-    .locator('[data-component="composer-suggestions"]')
-    .getByRole("button", { name: /Auth middleware/ })
-    .click()
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toHaveCount(5)
+  await view.editor.pressSequentially(" mid")
+  await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -49,6 +55,14 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
       { id: "ses_mention_search_source", title: "Review the plan" },
       { id: "ses_0123456789homesessionabcde", title: "HOME" },
       { id: target, title: "OPENCODE CONSOLE" },
+      { id: "ses_0123456789backhomeabcdefgh", title: "Back home", created: T0 + 2 },
+      {
+        id: "ses_0123456789otherprojecthome",
+        title: "HOME elsewhere",
+        projectID: "proj_other",
+        directory: "C:/OpenCode/Other",
+        created: T0 + 3,
+      },
     ],
     seed: { tabs: ["ses_mention_search_source"] },
     onPrompt: (input) => void prompts.push(input.body),
@@ -57,9 +71,23 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   const suggestions = page.locator('[data-component="composer-suggestions"]')
   const files = await holdRoute(page, (url) => url.pathname === "/api/fs/find")
 
+  // A bare @ offers only this project's sessions.
   await view.editor.pressSequentially("Compare with @")
   await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
   await expect(suggestions.getByRole("button", { name: /OPENCODE CONSOLE/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /HOME elsewhere/ })).toHaveCount(0)
+
+  // Typed matches rank this project first, then the exact title, a title start and a later word, ahead of recency.
+  await view.editor.pressSequentially("home")
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toContainText([
+    /HOME(?! elsewhere)/,
+    "Back home",
+    "HOME elsewhere",
+  ])
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
 
   await view.editor.pressSequentially("open")
   await files.arrived
@@ -79,7 +107,7 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
 
   // A space after a full title ends a typed mention, so the rest stays prose.
   await view.editor.pressSequentially("@home")
-  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /^HOME SessionMentionSearch$/ })).toBeVisible()
   await view.editor.pressSequentially(" now")
   await expect(suggestions).toBeHidden()
   await view.editor.press("Enter")
