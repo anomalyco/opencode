@@ -115,11 +115,11 @@ $ opencode run --format json "Reply with exactly: OK" | jq -r 'select(.type == "
 
 Check the exit status to tell whether the run succeeded; a failed tool call alone does not fail the run.
 
-| Code  | Meaning                                                           |
-| ----- | ----------------------------------------------------------------- |
-| `0`   | The run completed. Individual tool calls may still have failed.   |
-| `1`   | The run failed. With `--format json`, an `error` record says why. |
-| `130` | Interrupted with Ctrl+C.                                          |
+| Code  | Meaning                                                                   |
+| ----- | ------------------------------------------------------------------------- |
+| `0`   | The run completed. Individual tool calls may still have failed.           |
+| `1`   | The run failed. With `--format json`, an `error` record usually says why. |
+| `130` | Interrupted with Ctrl+C.                                                  |
 
 ```bash
 $ opencode run --format json --model deepseek/no-such-model "hi"; echo "exit=$?"
