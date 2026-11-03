@@ -1079,6 +1079,8 @@ export function createData(config: CreateDataInput) {
         return
       case "session.tool.called":
         message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
+          // A re-delivered `called` must not regress a tool that already settled: the overwrite drops its result content. A live re-call is always preceded by a fresh `tool.input.started` part, which editTool's findLast targeting matches instead of the settled sibling.
+          if (tool.state.status === "completed" || tool.state.status === "error") return
           tool.time.ran = event.created
           tool.executed = event.data.executed
           tool.native = event.data.native
