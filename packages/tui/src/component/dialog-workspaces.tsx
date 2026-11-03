@@ -259,7 +259,8 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           .catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
           title: "Delete worktree?",
-          message: "This worktree has file changes. Do you want to delete it anyway?",
+          message:
+            "This worktree needs force to delete. Force also discards uncommitted changes and unpushed commits in its submodules. Delete it anyway?",
           confirm: { title: "delete", key: "d" },
         })
         if (choice !== "yes") {

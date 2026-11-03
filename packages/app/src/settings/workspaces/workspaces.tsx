@@ -3,7 +3,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Key } from "@solid-primitives/keyed"
-import type { SessionInfo } from "@opencode/client/promise"
+import { isWorktreeError, type SessionInfo } from "@opencode/client/promise"
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -44,6 +44,8 @@ type Workspace = {
   directory: string
   project: Project
 }
+
+type RemoveResult = "removed" | "blocked" | "forceRequired" | "failed"
 
 export const SettingsWorkspaces: Component<{
   activeDirectory?: string
@@ -246,7 +248,11 @@ export const SettingsWorkspaces: Component<{
     })
   }
 
-  const remove = async (workspace: Workspace, force = false, context = captureDeleteContext()) => {
+  const remove = async (
+    workspace: Workspace,
+    force = false,
+    context = captureDeleteContext(),
+  ): Promise<RemoveResult> => {
     const key = String(pathKey(workspace.directory))
     setStore("deleting", (items) => [...items, key])
 
@@ -256,7 +262,7 @@ export const SettingsWorkspaces: Component<{
       if (!force && (preflight.result.active || preflight.result.linked || preflight.result.dirty)) {
         blocked(preflight.result)
 
-        return
+        return "blocked"
       }
 
       const removed = await context.sdk.api.worktree
@@ -265,18 +271,20 @@ export const SettingsWorkspaces: Component<{
           directory: workspace.directory,
           force,
         })
-        .then(() => true)
+        .then(() => "removed" as const)
         .catch((error) => {
+          if (!force && isWorktreeError(error) && error.data.forceRequired) return "forceRequired" as const
+
           showToast({
             variant: "error",
             title: language.t("workspace.delete.failed.title"),
             description: error instanceof Error ? error.message : language.t("common.requestFailed"),
           })
 
-          return false
+          return "failed" as const
         })
 
-      if (!removed) return
+      if (removed !== "removed") return removed
       setStore("removing", (items) => [...items, key])
       await new Promise((resolve) => setTimeout(resolve, 150))
       tabs.store.forEach((tab) => {
@@ -295,6 +303,8 @@ export const SettingsWorkspaces: Component<{
         queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.id),
       })
       await queryClient.invalidateQueries({ queryKey: [context.sdk.scope, "settings-workspace-inventory"] })
+
+      return "removed"
     } finally {
       setStore("deleting", (items) => items.filter((item) => item !== key))
       setStore("removing", (items) => items.filter((item) => item !== key))
@@ -307,18 +317,20 @@ export const SettingsWorkspaces: Component<{
     if (store.transaction === "confirm") setStore("transaction", undefined)
   }
 
-  const transact = async (task: () => Promise<void>) => {
-    if (store.transaction !== "confirm") return
+  const transact = async <T,>(task: () => Promise<T>): Promise<T | undefined> => {
+    if (store.transaction !== "confirm") return undefined
     setStore("transaction", "running")
 
     try {
-      await task()
+      return await task()
     } catch (error) {
       showToast({
         variant: "error",
         title: language.t("workspace.delete.failed.title"),
         description: error instanceof Error ? error.message : language.t("common.requestFailed"),
       })
+
+      return undefined
     } finally {
       setStore("transaction", undefined)
     }
@@ -337,7 +349,7 @@ export const SettingsWorkspaces: Component<{
           inspectionID={current}
           inspect={() => inspect(workspace, context)}
           inspectionMessages={inspectionMessages}
-          onDelete={() => transact(() => remove(workspace, true, context))}
+          onDelete={() => transact(() => remove(workspace, true, context)).then(() => undefined)}
         />
       ),
       releaseConfirmation,
@@ -345,7 +357,51 @@ export const SettingsWorkspaces: Component<{
   }
 
   const removeAll = async (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
-    await removeWorkspacesSequentially(inventory, (workspace) => remove(workspace, false, context))
+    const forceRequired: Workspace[] = []
+    await removeWorkspacesSequentially(inventory, async (workspace) => {
+      if ((await remove(workspace, false, context)) === "forceRequired") forceRequired.push(workspace)
+    })
+
+    return forceRequired
+  }
+
+  const forceDelete = async (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
+    if (store.transaction) return
+    setStore("transaction", "running")
+
+    try {
+      await removeWorkspacesSequentially(inventory, async (workspace) => {
+        await remove(workspace, true, context)
+      })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("workspace.delete.failed.title"),
+        description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+      })
+    } finally {
+      setStore("transaction", undefined)
+    }
+  }
+
+  const confirmForceDelete = (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
+    if (store.transaction) return
+    void dialog.push(() => (
+      <DialogDeleteWorkspaces
+        title={language.t("settings.workspaces.deleteForce.title")}
+        confirmation={language.plural("settings.workspaces.deleteForce.confirm", inventory.length)}
+        warning={language.t("settings.workspaces.deleteForce.warning")}
+        confirmLabel={language.t("settings.workspaces.deleteForce.button")}
+        onDelete={() => forceDelete(inventory, context)}
+      />
+    ))
+  }
+
+  const removeAllConfirmed = async (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
+    const forceRequired = await transact(() => removeAll(inventory, context))
+
+    if (!forceRequired?.length) return
+    confirmForceDelete(forceRequired, context)
   }
 
   const confirmDeleteAll = () => {
@@ -359,7 +415,7 @@ export const SettingsWorkspaces: Component<{
           title={language.t("settings.workspaces.deleteAll")}
           confirmation={language.plural("settings.workspaces.deleteAll.confirm", inventory.length)}
           warning={language.t("settings.workspaces.deleteAll.warning")}
-          onDelete={() => transact(() => removeAll(inventory, context))}
+          onDelete={() => removeAllConfirmed(inventory, context)}
         />
       ),
       releaseConfirmation,
@@ -377,7 +433,7 @@ export const SettingsWorkspaces: Component<{
           title={language.t("settings.workspaces.deleteWithoutSessions")}
           confirmation={language.plural("settings.workspaces.deleteWithoutSessions.confirm", inventory.length)}
           warning={language.t("settings.workspaces.deleteWithoutSessions.warning")}
-          onDelete={() => transact(() => removeAll(inventory, context))}
+          onDelete={() => removeAllConfirmed(inventory, context)}
         />
       ),
       releaseConfirmation,
@@ -574,6 +630,7 @@ function DialogDeleteWorkspaces(props: {
   title: string
   confirmation: string
   warning: string
+  confirmLabel?: string
   onDelete: () => Promise<void>
 }) {
   const dialog = useDialog()
@@ -603,7 +660,7 @@ function DialogDeleteWorkspaces(props: {
           {language.t("common.cancel")}
         </Button>
         <Button type="button" variant="danger" onClick={remove}>
-          {language.t("settings.workspaces.delete.button")}
+          {props.confirmLabel ?? language.t("settings.workspaces.delete.button")}
         </Button>
       </DialogFooter>
     </Dialog>

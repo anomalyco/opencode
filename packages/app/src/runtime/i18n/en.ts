@@ -1211,6 +1211,14 @@ export const dict = {
   "settings.workspaces.delete.warning": "This permanently deletes the worktree and its branch.",
   "settings.workspaces.deleteAll.warning":
     "Worktrees with unmerged changes, linked sessions, or active locations will be kept.",
+  "settings.workspaces.deleteForce.title": "Force delete worktrees?",
+  "settings.workspaces.deleteForce.confirm.one":
+    "Git refused to remove {{count}} worktree without force. It may contain initialized submodules or files that changed during deletion.",
+  "settings.workspaces.deleteForce.confirm.other":
+    "Git refused to remove {{count}} worktrees without force. They may contain initialized submodules or files that changed during deletion.",
+  "settings.workspaces.deleteForce.warning":
+    "Force deletion also removes uncommitted changes and unpushed commits inside those worktrees, including their submodules. This cannot be undone.",
+  "settings.workspaces.deleteForce.button": "Force delete",
   "settings.workspaces.delete.blocked.active": "The active worktree cannot be deleted.",
   "settings.workspaces.delete.blocked.linked":
     "Linked sessions will remain, but their working directory will no longer exist.",
