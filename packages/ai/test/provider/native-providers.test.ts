@@ -213,9 +213,9 @@ describe("native OpenAI-compatible providers", () => {
       })
 
       expect(selected.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-      expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
-      expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-      expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(selected.options?.headers).toEqual({ "x-application": "opencode" })
+      expect(selected.options?.http?.body).toEqual({ service_tier: "priority" })
+      expect(selected.options?.providerOptions).toEqual({ reasoningEffort: "high" })
     }
   })
 

@@ -5,7 +5,7 @@ import { AlibabaImages } from "../protocols/alibaba-images.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
 import { AlibabaResponses } from "../protocols/alibaba-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
@@ -15,6 +15,7 @@ import {
   ToolDefinition,
   type ModelID,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 
 export const id = ProviderID.make("alibaba")
@@ -39,7 +40,7 @@ type Location = AtLeastOne<{
 }> & { readonly workspaceID?: string }
 
 export type Config = Location &
-  Omit<RouteDefaultsInput, "providerOptions"> &
+  Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
   }
