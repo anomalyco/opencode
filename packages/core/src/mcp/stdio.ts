@@ -5,6 +5,7 @@ import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } 
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
 const CLOSE_GRACE = Duration.seconds(2)
@@ -33,6 +34,14 @@ export interface Options {
    */
   readonly environment: Record<string, string>
 }
+
+/**
+ * Resolves a local server's configured `cwd` against the workspace directory, expanding `~` to the
+ * opencode host's home. Environments do not expose their own home, so a workspace-backed location
+ * gets the host's home too.
+ */
+export const resolveCwd = (directory: string, cwd: string | undefined) =>
+  cwd ? FileAccess.resolvePath(directory, cwd) : directory
 
 /**
  * MCP stdio transport that spawns its server through the location's `Environment` instead of the
