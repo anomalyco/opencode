@@ -64,10 +64,18 @@ describe("splitFrontmatter", () => {
 
   test.each([
     ["LF frontmatter and body", "---\ndescription: Release\n---\n# Title", { properties: release, body: "# Title" }],
-    ["CRLF and UTF-8 BOM", "\uFEFF---\r\ndescription: Release\r\n---\r\n# Title\r\n", { properties: release, body: "# Title\r\n" }],
+    [
+      "CRLF and UTF-8 BOM",
+      "\uFEFF---\r\ndescription: Release\r\n---\r\n# Title\r\n",
+      { properties: release, body: "# Title\r\n" },
+    ],
     ["frontmatter at EOF", "---\nmode: primary\n---", { properties: primary, body: "" }],
     ["frontmatter with trailing blank lines only", "---\nmode: primary\n---\n\n", { properties: primary, body: "\n" }],
-    ["empty frontmatter before a later thematic break", "---\n---\n\nBody\n\n---\n\nFooter", { body: "\nBody\n\n---\n\nFooter" }],
+    [
+      "empty frontmatter before a later thematic break",
+      "---\n---\n\nBody\n\n---\n\nFooter",
+      { body: "\nBody\n\n---\n\nFooter" },
+    ],
     ["whitespace-only frontmatter", "---\n  \n---\n# Title", { body: "# Title" }],
   ])("splits %s", (_, input, expected) => {
     expect(splitFrontmatter(input)).toEqual(expected)
@@ -109,9 +117,36 @@ describe("splitFrontmatter", () => {
   test.each([
     ["a line that is not a key", "---\njust text\n---\n# Title", { body: "```yaml\njust text\n```\n\n# Title" }],
     ["a top-level list", "---\n- one\n- two\n---", { body: "```yaml\n- one\n- two\n```" }],
-    ["backticks in unreadable frontmatter", "---\n- ```ts\n---\n# Title", { body: "````yaml\n- ```ts\n````\n\n# Title" }],
+    [
+      "backticks in unreadable frontmatter",
+      "---\n- ```ts\n---\n# Title",
+      { body: "````yaml\n- ```ts\n````\n\n# Title" },
+    ],
   ])("keeps %s as a YAML block", (_, input, expected) => {
     expect(splitFrontmatter(input)).toEqual(expected)
+  })
+
+  test.each([
+    ["a trailing comment", "temperature: 0.2 # lower"],
+    ["a comment in a plain multi-line value", "note: first\n  second # more"],
+    ["a comment after a block scalar indicator", "prompt: | # keep\n  Line"],
+    ["an escaped double-quoted value", 'title: "a \\"b\\""'],
+    ["an escaped single-quoted value", "title: 'it''s'"],
+    ["a quoted value that wraps", 'description: "foo\n  bar"'],
+    ["a quoted value followed by a comment", 'title: "a" # note'],
+  ])("keeps %s as a YAML block", (_, yaml) => {
+    expect(splitFrontmatter(`---\n${yaml}\n---\nBody`)).toEqual({ body: `\`\`\`yaml\n${yaml}\n\`\`\`\n\nBody` })
+  })
+
+  test("reads hashes that are not comments", () => {
+    const yaml = ['title: "a # b"', "tag: C#", "summary: >", "  # not a comment", "prompt: |", "  # heading"].join("\n")
+
+    expect(splitFrontmatter(`---\n${yaml}\n---\nBody`).properties).toEqual([
+      { key: "title", value: "a # b", code: false },
+      { key: "tag", value: "C#", code: false },
+      { key: "summary", value: "# not a comment", code: false },
+      { key: "prompt", value: "# heading", code: false },
+    ])
   })
 
   test.each([

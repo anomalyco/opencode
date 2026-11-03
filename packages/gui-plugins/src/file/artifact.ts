@@ -183,6 +183,9 @@ function readProperties(yaml: string) {
   return properties
 }
 
+// A `#` at the start or after whitespace begins a YAML comment in a plain scalar.
+const comment = /(?:^|\s)#/
+
 function readProperty(head: string, rest: string[]): FrontmatterProperty | undefined {
   const match = /^([^\s:][^:]*?):(?:[ \t]+(.*))?$/.exec(head)
 
@@ -191,7 +194,16 @@ function readProperty(head: string, rest: string[]): FrontmatterProperty | undef
   const value = (match[2] ?? "").trim()
   const block = rest.slice(0, rest.findLastIndex((line) => line.trim()) + 1)
 
-  if (block.length === 0) return { key, value: value.replace(/^(["'])(.*)\1$/, "$2"), code: false }
+  // Only quoted values that close on this line without escapes are read; others fall back to the YAML block.
+  if (/^["']/.test(value)) {
+    const quoted = /^"([^"\\]*)"$|^'([^']*)'$/.exec(value)
+
+    if (!quoted || block.length > 0) return
+    return { key, value: quoted[1] ?? quoted[2], code: false }
+  }
+
+  if (comment.test(value)) return
+  if (block.length === 0) return { key, value, code: false }
   const indent = Math.min(...block.flatMap((line) => (line.trim() ? [line.length - line.trimStart().length] : [])))
   const lines = block.map((line) => line.slice(indent))
 
@@ -199,7 +211,10 @@ function readProperty(head: string, rest: string[]): FrontmatterProperty | undef
 
   // Folded (`>`) and plain multi-line scalars read as one line.
   if (value) {
-    const words = [/^>[+-]?\d?$/.test(value) ? "" : value, ...lines.map((line) => line.trim())]
+    const folded = /^>[+-]?\d?$/.test(value)
+
+    if (!folded && lines.some((line) => comment.test(line))) return
+    const words = [folded ? "" : value, ...lines.map((line) => line.trim())]
 
     return { key, value: words.filter(Boolean).join(" "), code: false }
   }
