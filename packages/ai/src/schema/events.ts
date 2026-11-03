@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { LLM } from "@opencode/schema/llm"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
+  AssistantMessage,
   Message,
   CompactionPart,
   ToolCallPart,
@@ -290,7 +291,7 @@ export const Finish = Schema.Struct({
   reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   /** The final assistant message, set by `ai.stream` and `ai.loop`. */
-  message: Schema.optional(Message),
+  message: Schema.optional(AssistantMessage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
@@ -453,7 +454,7 @@ interface ToolInputAssembly {
 
 interface ResponseState {
   readonly events: LLMEvent[]
-  readonly message: Message
+  readonly message: AssistantMessage
   readonly usage?: Usage
   readonly finishReason?: FinishReasonDetails
   readonly textParts: Readonly<Record<string, ContentAssembly>>
@@ -669,7 +670,7 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
 }
 
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
-  message: Message,
+  message: AssistantMessage,
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
   finishReason: FinishReasonDetails,

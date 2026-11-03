@@ -29,6 +29,7 @@ export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx:
         delete event.options.maxTokens
         // Preserve tool error status before the AI SDK bridge flattens error results to plain text.
         event.messages = event.messages.map((message) => {
+          if (message.role === "system") return message
           const content = message.content.map((part) => {
             if (part.type !== "tool-result" || part.result.type !== "error") return part
             const flags = {

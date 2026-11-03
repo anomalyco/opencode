@@ -164,6 +164,7 @@ const replaceMedia = (
   replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
 ) =>
   messages.map((message) => {
+    if (message.role === "system") return message
     const content = message.content.map((part) => {
       if (part.type === "media") {
         const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
@@ -182,7 +183,7 @@ const replaceMedia = (
     })
     return content.every((part, index) => part === message.content[index])
       ? message
-      : new Message({ ...message, content })
+      : Message.make({ ...message, content })
   })
 
 export const unsupportedParts = (

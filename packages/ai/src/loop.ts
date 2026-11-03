@@ -1,6 +1,7 @@
 import { Effect, Stream } from "effect"
 import {
   AIError,
+  AssistantMessage,
   InvalidProviderOutputError,
   LLMResponse,
   ResponseFold,
@@ -38,8 +39,8 @@ const invalidCall = (event: ToolInputError) =>
   ToolCallPart.make({ id: event.id, name: event.name, namespace: event.namespace, input: {} })
 
 /** Add the replayed calls for invalid input to the assistant message, so each tool result has its call. */
-const withInvalidCalls = (message: Message, calls: ReadonlyArray<ToolCallPart>) =>
-  calls.length === 0 ? message : new Message({ ...message, content: [...message.content, ...calls] })
+const withInvalidCalls = (message: AssistantMessage, calls: ReadonlyArray<ToolCallPart>) =>
+  calls.length === 0 ? message : new AssistantMessage({ ...message, content: [...message.content, ...calls] })
 
 /** The step's assistant message followed by one tool message per call, in call order. */
 export const stepMessages = (
@@ -168,7 +169,8 @@ export function collect<E, R>(
         }
         if (event.type === "tool-result" && betweenSteps) {
           const call = invalid.find((item) => item.id === event.id)
-          if (call) messages[assistant] = withInvalidCalls(messages[assistant], [call])
+          const previous = messages[assistant]
+          if (call && previous.role === "assistant") messages[assistant] = withInvalidCalls(previous, [call])
           messages.push(
             Message.tool({
               id: event.id,

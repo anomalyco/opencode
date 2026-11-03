@@ -8,10 +8,12 @@ import {
   GenerationOptions,
   Message,
   LanguageModel,
+  SystemMessage,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolResultPart,
+  UserMessage,
 } from "../src/schema/index.js"
 import { fixedResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -77,7 +79,7 @@ describe("llm constructors", () => {
 
     expect(Object.getPrototypeOf(request)).toBe(Object.prototype)
     expect(request.model).toBeInstanceOf(LanguageModel)
-    expect(request.messages[0]).toBeInstanceOf(Message)
+    expect(request.messages[0]).toBeInstanceOf(UserMessage)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
     expect(request.generation).toBeUndefined()
@@ -229,7 +231,7 @@ describe("llm constructors", () => {
       messages: [Message.user("Review this."), update],
     })
 
-    expect(update).toBeInstanceOf(Message)
+    expect(update).toBeInstanceOf(SystemMessage)
     expect(update).toEqual({
       role: "system",
       content: [{ type: "text", text: "Use parameterized SQL.", cache: { type: "ephemeral" } }],

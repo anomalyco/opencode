@@ -11,7 +11,14 @@
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
-import { type LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
+import {
+  type LLMRequest,
+  Message,
+  SystemMessage,
+  ToolDefinition,
+  type ContentPart,
+  type ToolEntry,
+} from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
@@ -141,8 +148,18 @@ const markMessageAt = (
   const existing = target.content[markAt]
   if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
-  const next = new Message({ ...target, content: nextContent })
+  const next =
+    target.role === "system"
+      ? new SystemMessage({
+          ...target,
+          content: target.content.map((part, i) =>
+            i === markAt && part.type === "text" ? { ...part, cache: hint } : part,
+          ),
+        })
+      : Message.make({
+          ...target,
+          content: target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part)),
+        })
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
   // closure dispatch and identity copies show up in profiling.
