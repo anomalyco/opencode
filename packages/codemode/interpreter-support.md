@@ -24,7 +24,8 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [x] `def` and `async def` with required parameters passed by position or name, closures, `await`, `asyncio.gather(*calls)`, and `try`/`except Exception`.
       Async functions, tools and declared async extensions return single-use coroutines. `await` runs one; `gather`
       schedules each distinct coroutine once and returns an awaitable result in input order. An unscheduled coroutine cannot
-      cross the host boundary. `asyncio` is prebound; `import asyncio` is also accepted.
+      cross the host boundary. No import is necessary. `import asyncio` and `from asyncio import gather` (with optional
+      `as` aliases) bind the built-in implementation. Other modules and members are rejected before execution.
 - [x] `print`, `len`, `str`, `bool`, `list`, `range`, list `.append`, and dictionary `.get`/`.keys`/`.values`/`.items`.
       `range` and dictionary views produce lists. Dot access on records prefers own fields (including host extension functions)
       over same-named dictionary methods. Dictionary subscripts never read inherited members. Tools and synchronous `search` accept one input dictionary,
@@ -33,17 +34,19 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       including negative values, or `None`/omission for defaults. A zero step is an error.
 - [x] Immutable tuple literals (`()`, `(x,)`, `x, y`), indexing, slicing, concatenation, iteration and equality. Tuples
       cross the host boundary as JSON arrays. Dictionary `.items()` returns a list of key/value tuples.
-- [x] Flat name unpacking in assignment, `for`, and list comprehensions; optional parentheses, exact arity. Accepts lists,
-      tuples, strings and dictionary keys. For example, `a, b = await asyncio.gather(...)` and `for k, v in row.items():`.
+- [x] Nested tuple/list targets in assignments, loops and comprehensions: `first, (a, *middle, b), *tail = rows`.
+      One starred target per level collects a fresh list. Without a star the count must match exactly.
+- [x] Single-expression `lambda` functions with lexical capture and the same required positional/named parameters as `def`,
+      e.g. `sorted(rows, key=lambda row: row["score"])`.
 - [x] Single-line `f'...'` / `f"..."` (also `F`): ordinary subset expressions, left-to-right `str` display, doubled
       `{{` and `}}` for literal braces, normal string escapes. Container display uses the subset's quoted string representation.
 - [x] Stable `sorted(iterable, key=None, reverse=False)` on lists, tuples, strings or dictionary keys. Returns a fresh
       list. Compare numbers (including booleans) or strings in Unicode code-point order. A synchronous callable key (e.g.
       `len` or a `def`) runs once per item in input order. `key` and `reverse` are keyword-only; `reverse` accepts integers/booleans.
 - [x] Explicit top-level `return`, final top-level expression, or `null` if neither supplies a result.
-- [ ] Slice assignment; nested/starred or list unpacking targets; `tuple()`; sequence ordering; sets and generators.
+- [ ] Slice assignment; subscript and attribute targets inside unpacking patterns; `tuple()`; sequence ordering; sets and generators.
 - [ ] Defaults, variadic/keyword-only parameter declarations, `**kwargs`, and `*args` after a keyword. Other built-ins,
-      methods and extensions are positional-only. No lambdas, f-string conversions (`!r`), format specs (`:.2f`), debug
+      methods and extensions are positional-only. No f-string conversions (`!r`), format specs (`:.2f`), debug
       fields (`{x=}`), multiline or nested f-strings.
 - [x] Python signatures in the catalog and discovery results; statically authorized Python schedule checks.
 - [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers and classes.

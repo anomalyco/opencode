@@ -63,8 +63,6 @@ const runtime = CodeMode.make({ language: "python", tools: { orders: { lookup: l
 const result = await Effect.runPromise(
   runtime.execute(
     `
-import asyncio
-
 async def lookup(id):
     return await tools.orders.lookup(id=id)
 
@@ -80,7 +78,8 @@ Both languages use the same tools, bindings, extension hooks, limits, result for
 accept keyword arguments, one input dictionary, or no arguments. `search(query="orders")` (or `search({...})`)
 returns catalog data synchronously; `print(...)` writes to the result's logs. In Python, calling an `async def`, a tool,
 or a declared async extension creates a coroutine. `await` runs it; `asyncio.gather(...)` schedules coroutines to run
-concurrently when the caller next suspends. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
+concurrently when the caller next suspends. `asyncio` is already in scope; importing it (or `gather` from it) is optional.
+Other imports are rejected, not ignored. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
 the entire program's syntax before it starts. See the [Python subset and differences](./interpreter-support.md#experimental-python-subset).
 
 OpenCode's `execute` tool, catalog, discovery results, and new scheduled code checks use Python. Keys marked `NotRequired`

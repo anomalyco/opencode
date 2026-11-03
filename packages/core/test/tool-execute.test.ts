@@ -30,6 +30,7 @@ test("execute describes invariant Code Mode behavior", () => {
   expect(description).toContain("Run a Python subset")
   expect(description).not.toMatch(/JavaScript|TypeScript|Promise/)
   expect(description).toContain("await asyncio.gather")
+  expect(description).toContain("No import is needed")
   expect(description).toContain("final top-level expression")
 })
 

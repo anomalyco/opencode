@@ -4,6 +4,7 @@ import { pythonKeywords } from "./names.js"
 export type Expr = { site: Token } & (
   | { kind: "literal"; value: string | number | boolean | null }
   | { kind: "name"; name: string }
+  | { kind: "lambda"; params: string[]; body: Body }
   | { kind: "list" | "tuple" | "fstring"; items: Expr[] }
   | { kind: "dict"; pairs: [Expr, Expr][] }
   | { kind: "comprehension"; item: Expr; binding: Binding; source: Expr; guard?: Expr }
@@ -16,13 +17,17 @@ export type Expr = { site: Token } & (
   | { kind: "compare"; left: Expr; rest: { op: string; right: Expr }[] }
 )
 export type Body = Stmt[]
-export type Binding = string | string[]
+export type Binding = string | { items: Binding[]; star: number }
+export function bindingNames(target: Binding): string[] {
+  return typeof target === "string" ? [target] : target.items.flatMap(bindingNames)
+}
 export type Stmt = { site: Token } & (
   | { kind: "expr"; expr: Expr }
   | { kind: "assign"; target: Extract<Expr, { kind: "name" | "index" }>; op: string; expr: Expr }
-  | { kind: "unpack"; names: string[]; expr: Expr }
+  | { kind: "unpack"; binding: Binding; expr: Expr }
   | { kind: "return"; expr?: Expr }
-  | { kind: "pass" | "break" | "continue" | "asyncio" }
+  | { kind: "pass" | "break" | "continue" }
+  | { kind: "import"; name: string; gather: boolean }
   | { kind: "if"; branches: { test: Expr; body: Body }[]; otherwise: Body }
   | { kind: "for"; binding: Binding; source: Expr; body: Body }
   | { kind: "while"; test: Expr; body: Body }
@@ -91,7 +96,7 @@ export function parsePython(source: string): Body {
       return { kind: "if", site, branches, otherwise: eat("else") ? suite() : [] }
     }
     if (eat("for")) {
-      const target = binding()
+      const target = binding("in")
       need("in")
       return { kind: "for", site, binding: target, source: tupleExpression(), body: suite(true) }
     }
@@ -101,8 +106,7 @@ export function parsePython(source: string): Body {
       need("def")
       const target = name()
       need("(")
-      const params = list(")", name)
-      if (new Set(params).size !== params.length) fail(site, "Duplicate parameter name.")
+      const params = parameters(")", site)
       const outer = { loops, async }
       loops = 0
       async = isAsync
@@ -130,36 +134,80 @@ export function parsePython(source: string): Body {
       return { kind: site.text === "break" ? "break" : "continue", site }
     }
     if (eat("pass")) return { kind: "pass", site }
-    if (eat("import")) {
-      if (!eat("asyncio")) fail(site, "Only the built-in asyncio module is available.", "UnsupportedSyntax")
-      return { kind: "asyncio", site }
+    if (eat("import") || eat("from")) {
+      if (!eat("asyncio"))
+        fail(
+          site,
+          "Only the built-in asyncio module is available; no import is needed for asyncio.gather.",
+          "UnsupportedSyntax",
+        )
+      const gather = site.text === "from"
+      if (gather) {
+        need("import")
+        if (!eat("gather")) fail(peek(), "Only gather is available from asyncio.", "UnsupportedSyntax")
+      }
+      return { kind: "import", site, name: eat("as") ? name() : gather ? "gather" : "asyncio", gather }
+    }
+    if (unpackAhead()) {
+      const target = binding("=")
+      need("=")
+      return { kind: "unpack", site, binding: target, expr: tupleExpression() }
     }
     const target = tupleExpression()
     if (!["=", "+=", "-=", "*="].includes(peek().text)) return { kind: "expr", site, expr: target }
     const op = take().text
-    if (target.kind === "tuple" && op === "=" && target.items.length) {
-      const names = target.items.map((item) =>
-        item.kind === "name" ? item.name : fail(item.site, "Unpacking targets must be a flat sequence of names."),
-      )
-      return { kind: "unpack", site, names, expr: tupleExpression() }
-    }
     if (target.kind !== "name" && target.kind !== "index")
       fail(site, "Expected a name or subscript as assignment target.")
     return { kind: "assign", site, target, op, expr: tupleExpression() }
   }
-  function binding(): Binding {
-    const grouped = eat("(")
-    const first = name()
-    const names = [first]
-    const unpack = eat(",")
-    if (unpack) {
-      while (peek().text !== (grouped ? ")" : "in")) {
-        names.push(name())
-        if (!eat(",")) break
+  // Patterns and expressions share tuple/list syntax, but *rest is only a binding here.
+  // Try the pattern grammar only for an assignment, never for an ordinary subscript like row[key] = value.
+  function unpackAhead() {
+    const first = peek().text
+    if (!["(", "[", "*"].includes(first) && tokens[at + 1]?.text !== ",") return false
+    for (let i = at; ; i++) {
+      const t = tokens[i]!
+      if (t.type === "name" && !pythonKeywords.has(t.text)) continue
+      if (t.type !== "operator") return false
+      if (t.text === "=") return true
+      if (!["(", ")", "[", "]", ",", "*"].includes(t.text)) return false
+      // After a completed target, an opening delimiter starts a call or subscript, not a pattern.
+      if (i > at && (t.text === "(" || t.text === "[")) {
+        const prev = tokens[i - 1]!
+        if (prev.type === "name" || prev.text === ")" || prev.text === "]") return false
       }
     }
-    if (grouped) need(")")
-    return unpack ? names : first
+  }
+  function binding(end: string, forceSequence = false): Binding {
+    checkDepth()
+    const items: Binding[] = []
+    let star = -1
+    let sequence = forceSequence
+    while (peek().text !== end) {
+      if (peek().text === "*") {
+        if (star !== -1) fail(peek(), "Only one starred target is allowed at each unpacking level.")
+        star = items.length
+        take()
+      }
+      if (eat("(")) {
+        items.push(binding(")"))
+        need(")")
+      } else if (eat("[")) {
+        items.push(binding("]", true))
+        need("]")
+      } else items.push(name())
+      if (!eat(",")) break
+      sequence = true
+    }
+    depth--
+    if (!items.length && end !== ")" && end !== "]") fail(peek(), "Expected an unpacking target.")
+    if (!sequence && star !== -1) fail(peek(), "A starred target must be in a list or tuple.")
+    return !sequence && items.length === 1 ? items[0]! : { items, star }
+  }
+  function parameters(end: string, site: Token) {
+    const params = list(end, name)
+    if (new Set(params).size !== params.length) fail(site, "Duplicate parameter name.")
+    return params
   }
   function tupleExpression(): Expr {
     const first = expression()
@@ -192,7 +240,7 @@ export function parsePython(source: string): Body {
       if (eat("]")) return { kind: "list", site, items: [] }
       const item = expression()
       if (eat("for")) {
-        const target = binding()
+        const target = binding("in")
         need("in")
         const source = expression()
         const guard = eat("if") ? expression() : undefined
@@ -245,6 +293,15 @@ export function parsePython(source: string): Body {
     checkDepth()
     const site = peek()
     let left: Expr
+    if (min === 1 && eat("lambda")) {
+      const params = parameters(":", site)
+      const outer = async
+      async = false
+      const expr = expression()
+      async = outer
+      depth--
+      return { kind: "lambda", site, params, body: [{ kind: "return", site: expr.site, expr }] }
+    }
     if (eat("not") || eat("-") || eat("+") || eat("await")) {
       if (min > 6 || (site.text === "not" && min > 3)) fail(site, `Unexpected '${site.text}'.`)
       if (site.text === "await" && !async) fail(site, "'await' outside an async function.")

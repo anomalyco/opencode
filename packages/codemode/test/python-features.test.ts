@@ -12,6 +12,30 @@ const runtime = CodeMode.make({ language: "python", tools: { echo } })
 const run = (code: string) => Effect.runPromise(runtime.execute(code))
 
 describe("Python sequence and call semantics", () => {
+  test("sorts by a lambda and unpacks nested results through an optional gather import", async () => {
+    expect(
+      await run(`
+from asyncio import gather as together
+rows = [[1, 4], [3, 8, 9]]
+first, *rest = sorted(rows, key=lambda row: row[0], reverse=True)
+(id, *values), [small, *_] = first, rest[0]
+return values, await together(tools.echo(id=id), tools.echo(id=small))`),
+    ).toEqual({
+      ok: true,
+      value: [
+        [8, 9],
+        [3, 1],
+      ],
+      toolCalls: [{ name: "echo" }, { name: "echo" }],
+    })
+  })
+  test("unknown imports abort before a tool runs and identify the available module", async () => {
+    expect(await run("await tools.echo(id=1)\nimport requests")).toMatchObject({
+      ok: false,
+      error: { kind: "UnsupportedSyntax", message: expect.stringContaining("asyncio") },
+      toolCalls: [],
+    })
+  })
   test("slice operands run left to right, once; omitted bounds differ from explicit -1", async () => {
     expect(
       await run(`
@@ -162,9 +186,14 @@ return s(words, reverse=True, key=by_size), words, s('😀\uE000a', key=None), s
     "f'{x'",
     "f'x}'",
     "f'{f\"nested\"}'",
-    "a, *tail = [1, 2]",
-    "a, (b, c) = [1, [2, 3]]",
-    "for (a, *b) in []:\n    pass",
+    "a, *tail, *extra = [1, 2]",
+    "a, (b, *c, *d) = [1, [2, 3]]",
+    "for *only in []:\n    pass",
+    "*only = []",
+    "sorted([], key=lambda x, x: x)",
+    "call = lambda: await tools.echo(id=1)",
+    "from asyncio import sleep",
+    "import requests",
     "x[:] = []",
     "tools.echo(id=1, id=2)",
     "tools.echo(id=1, 2)",
@@ -283,6 +312,11 @@ except Exception:
 })
 
 describe("Python schedule authorization", () => {
+  test("finds deferred tool calls in lambda bodies, even in unused functions", () => {
+    expect(
+      CodeMode.scanTools(`jobs = lambda: [tools.ns.lookup(id=i) for i, *rest in xs]\nreturn True`, "python"),
+    ).toEqual(Result.succeed(["ns.lookup"]))
+  })
   test("walks every new operand, including dead fields, slice bounds, key functions and keywords", () => {
     const code = `
 async def k(x):
@@ -299,6 +333,13 @@ for k, v in (await tools.mapping()).items():
   })
   test.each([
     "tools, x = xs",
+    "a, (*tools, b) = xs",
+    "for (a, [b, *tools]) in []:\n    pass",
+    "[x for (*tools, x) in []]",
+    "f = lambda tools: tools.ns.get()",
+    "f = lambda: tools.ns[name]()",
+    "import asyncio as tools",
+    "from asyncio import gather as tools",
     "for k, tools in xs:\n    pass",
     "[v for (tools,v) in xs]",
     "x, y = 1, tools",

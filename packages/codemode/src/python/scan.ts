@@ -1,7 +1,7 @@
 import { Result } from "effect"
 import { normalizeError } from "../interpreter/errors.js"
 import { fail, type Token } from "./lexer.js"
-import { type Binding, type Body, type Expr, parsePython } from "./parser.js"
+import { bindingNames, type Binding, type Body, type Expr, parsePython } from "./parser.js"
 
 /** Scheduled checks may only use the tools root as the start of a statically named call. */
 export function scanPythonTools(code: string) {
@@ -9,7 +9,7 @@ export function scanPythonTools(code: string) {
     try: () => {
       const paths = new Set<string>()
       const binding = (target: Binding | undefined, site: Token) => {
-        if (target === "tools" || (Array.isArray(target) && target.includes("tools")))
+        if (target !== undefined && bindingNames(target).includes("tools"))
           fail(site, "Schedule checks cannot rebind tools.", "UnsupportedSyntax")
       }
       function visit(expr: Expr): void {
@@ -20,6 +20,9 @@ export function scanPythonTools(code: string) {
             return
           case "literal":
             return
+          case "lambda":
+            expr.params.forEach((p) => binding(p, expr.site))
+            return block(expr.body)
           case "call": {
             const path = toolPath(expr.target)
             if (path !== undefined) paths.add(path)
@@ -79,7 +82,7 @@ export function scanPythonTools(code: string) {
               visit(stmt.expr)
               break
             case "unpack":
-              binding(stmt.names, stmt.site)
+              binding(stmt.binding, stmt.site)
               visit(stmt.expr)
               break
             case "return":
@@ -111,7 +114,9 @@ export function scanPythonTools(code: string) {
               block(stmt.body)
               block(stmt.handler)
               break
-            case "asyncio":
+            case "import":
+              binding(stmt.name, stmt.site)
+              break
             case "pass":
             case "continue":
             case "break":

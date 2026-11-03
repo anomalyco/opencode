@@ -4,11 +4,11 @@ import { locate, materialize } from "../interpreter/errors.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { type AstNode, rangeError, referenceError, typeError } from "../interpreter/model.js"
 import { fn } from "../interpreter/native.js"
-import { Coroutine, define, Native, Obj, PromiseObj, record, type Value } from "../interpreter/objects.js"
+import { Coroutine, define, getOwn, Native, Obj, PromiseObj, record, type Value } from "../interpreter/objects.js"
 import { combinator } from "../interpreter/promises.js"
 import { Call, type Eval, Interruption, Slice } from "../interpreter/runner.js"
 import { ToolReference } from "../tool-runtime.js"
-import { type Binding, type Body, type Expr, parsePython } from "./parser.js"
+import { bindingNames, type Binding, type Body, type Expr, parsePython } from "./parser.js"
 import { type pythonNames } from "./names.js"
 import { slice, sorted } from "./sequence.js"
 import {
@@ -119,17 +119,48 @@ export function compilePython(source: string) {
         scope.locals.set(binding, value)
         return
       }
-      // Do not change any target until the arity is known. Read at most one extra item.
+      // Validate one sequence at a time, then assign left to right. A later nested failure
+      // preserves earlier sibling assignments, as in Python.
       const iter = values(value, site)[Symbol.iterator]()
       const items: Value[] = []
-      for (const _ of binding) {
+      const { star, items: targets } = binding
+      for (let i = 0; i < (star < 0 ? targets.length : star); i++) {
         if (ctx.runner.tick()) yield Slice
         const item = iter.next()
-        if (item.done) throw typeError(`Not enough values to unpack (expected ${binding.length}).`, site)
+        if (item.done) throw typeError("Not enough values to unpack.", site)
         items.push(item.value)
       }
-      if (!iter.next().done) throw typeError(`Too many values to unpack (expected ${binding.length}).`, site)
-      binding.forEach((name, i) => scope.locals.set(name, items[i]))
+      if (star === -1) {
+        if (!iter.next().done) throw typeError(`Too many values to unpack (expected ${targets.length}).`, site)
+      } else {
+        const rest = list(ctx)
+        const trailing = targets.length - star - 1
+        for (let item = iter.next(); !item.done; item = iter.next()) {
+          if (ctx.runner.tick()) yield Slice
+          checkArrayLength(rest.items.length + 1)
+          rest.items.push(item.value)
+        }
+        if (rest.items.length < trailing) throw typeError("Not enough values to unpack.", site)
+        items.push(rest)
+        for (const item of rest.items.splice(rest.items.length - trailing, trailing)) items.push(item)
+      }
+      for (const [i, target] of targets.entries()) yield* bind(target, items[i], scope, site)
+    }
+    function makeFunction(scope: Scope, name: string, params: string[], body: Body, async: boolean) {
+      const locals = localNames(body)
+      const func = fn(builtins, name, params.length, function* (_, args, site) {
+        arity(name, args, params.length)
+        const inner = { locals: new Map<string, Value>(locals.map((k) => [k, unbound])), parent: scope }
+        params.forEach((p, i) => inner.locals.set(p, args[i]))
+        const run = function* (): Eval<Value> {
+          const result = yield* block(body, inner)
+          return result?.kind === "return" ? result.value : null
+        }
+        if (async) return new Coroutine(run(), site)
+        return (yield new Call(run())) as Value
+      })
+      parameters.set(func, new Map(params.map((name, i) => [name, i])))
+      return func
     }
     function* evaluate(expr: Expr, scope: Scope): Eval<Value> {
       if (ctx.runner.tick()) yield Slice
@@ -139,6 +170,8 @@ export function compilePython(source: string) {
             return expr.value
           case "name":
             return lookup(scope, expr)
+          case "lambda":
+            return makeFunction(scope, "<lambda>", expr.params, expr.body, false)
           case "attribute":
             return attribute(ctx, yield* evaluate(expr.target, scope), expr.name)
           case "index":
@@ -273,11 +306,11 @@ export function compilePython(source: string) {
             return { kind: stmt.kind }
           case "pass":
             break
-          case "asyncio":
-            scope.locals.set("asyncio", asyncio)
+          case "import":
+            scope.locals.set(stmt.name, stmt.gather ? getOwn(asyncio, "gather") : asyncio)
             break
           case "unpack":
-            yield* bind(stmt.names, yield* evaluate(stmt.expr, scope), scope, stmt.site)
+            yield* bind(stmt.binding, yield* evaluate(stmt.expr, scope), scope, stmt.site)
             break
           case "assign": {
             // Simple assignment evaluates the RHS first. Augmented assignment reads its target exactly once, first.
@@ -327,20 +360,7 @@ export function compilePython(source: string) {
             break
           }
           case "function": {
-            const locals = localNames(stmt.body)
-            const func = fn(builtins, stmt.name, stmt.params.length, function* (_, args, site) {
-              arity(stmt.name, args, stmt.params.length)
-              const inner = { locals: new Map<string, Value>(locals.map((k) => [k, unbound])), parent: scope }
-              stmt.params.forEach((p, i) => inner.locals.set(p, args[i]))
-              const run = function* (): Eval<Value> {
-                const result = yield* block(stmt.body, inner)
-                return result?.kind === "return" ? result.value : null
-              }
-              if (stmt.async) return new Coroutine(run(), site)
-              return (yield new Call(run())) as Value
-            })
-            parameters.set(func, new Map(stmt.params.map((name, i) => [name, i])))
-            scope.locals.set(stmt.name, func)
+            scope.locals.set(stmt.name, makeFunction(scope, stmt.name, stmt.params, stmt.body, stmt.async))
             break
           }
           case "try": {
@@ -374,13 +394,12 @@ function localNames(body: Body): string[] {
       case "assign":
         return stmt.target.kind === "name" ? [stmt.target.name] : []
       case "unpack":
-        return stmt.names
+        return bindingNames(stmt.binding)
       case "function":
+      case "import":
         return [stmt.name]
-      case "asyncio":
-        return ["asyncio"]
       case "for":
-        return [stmt.binding, ...localNames(stmt.body)].flat()
+        return [...bindingNames(stmt.binding), ...localNames(stmt.body)]
       case "while":
         return localNames(stmt.body)
       case "if":
