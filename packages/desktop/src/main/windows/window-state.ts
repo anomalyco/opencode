@@ -137,9 +137,14 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
     win.off("move", changed)
     win.off("close", update)
     win.off("closed", closed)
-    mkdirSync(path.dirname(file), { recursive: true })
-    writeFileSync(`${file}.tmp`, JSON.stringify(state))
-    renameSync(`${file}.tmp`, file)
+
+    try {
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(`${file}.tmp`, JSON.stringify(state))
+      renameSync(`${file}.tmp`, file)
+    } catch (error) {
+      console.warn("Failed to save window state", { file, error })
+    }
   }
 
   win.on("resize", changed)
