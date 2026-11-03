@@ -1,0 +1,213 @@
+/* A reply's links: one compact row each, hairlines between them inset to the text column. */
+[data-component="link-previews"] {
+  --link-preview-gutter: 8px;
+  --link-preview-icon: 16px;
+  --link-preview-gap: 10px;
+  --link-preview-merged: light-dark(var(--v2-purple-700), var(--v2-purple-400));
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  margin-inline: calc(-1 * var(--link-preview-gutter));
+  font-family: var(--v2-font-family-sans);
+
+  [data-slot="link-previews-list"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    position: relative;
+  }
+
+  li + li::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    inset-inline: calc(var(--link-preview-gutter) + var(--link-preview-icon) + var(--link-preview-gap))
+      var(--link-preview-gutter);
+    height: 1px;
+    background-color: var(--v2-border-border-muted);
+    pointer-events: none;
+  }
+
+  /* A hovered row's own hairlines give way to its highlight. */
+  li:hover::before,
+  li:has([data-slot="link-preview"]:focus-visible)::before,
+  li:hover + li::before,
+  li:has([data-slot="link-preview"]:focus-visible) + li::before {
+    opacity: 0;
+  }
+
+  [data-slot="link-preview"],
+  [data-slot="link-previews-more"] {
+    display: grid;
+    grid-template-columns: var(--link-preview-icon) minmax(0, 1fr) auto;
+    column-gap: var(--link-preview-gap);
+    align-items: center;
+    width: 100%;
+    height: 32px;
+    padding-inline: var(--link-preview-gutter);
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--v2-text-text-base);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 150ms ease-out;
+
+    &:hover,
+    &:focus-visible {
+      background-color: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="link-preview-icon"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--link-preview-icon);
+    height: var(--link-preview-icon);
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="link-preview-icon"][data-icon]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: currentColor;
+    mask: url("../components/markdown-globe.svg") center / 14px no-repeat;
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-repository"]::before {
+    mask-image: url("./github-repository.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-commit"]::before {
+    mask-image: url("./github-commit.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-pull-open"]::before {
+    mask-image: url("./github-pull-open.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-pull-merged"]::before {
+    mask-image: url("./github-pull-merged.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-pull-closed"]::before {
+    mask-image: url("./github-pull-closed.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-pull-draft"]::before {
+    mask-image: url("./github-pull-draft.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-issue-open"]::before {
+    mask-image: url("./github-issue-open.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-issue-completed"]::before {
+    mask-image: url("./github-issue-completed.svg");
+  }
+
+  [data-slot="link-preview-icon"][data-icon="github-issue-not-planned"]::before {
+    mask-image: url("./github-issue-not-planned.svg");
+  }
+
+  /* A site's own icon covers the globe once it has loaded. */
+  [data-slot="link-preview-favicon"] {
+    position: relative;
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+
+    &[data-loaded] {
+      opacity: 1;
+    }
+  }
+
+  [data-slot="link-preview-icon"]:has([data-slot="link-preview-favicon"][data-loaded])::before {
+    opacity: 0;
+  }
+
+  [data-slot="link-preview-title"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="link-preview-fact"] {
+    max-width: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="link-preview"][data-muted] [data-slot="link-preview-title"],
+  [data-slot="link-previews-more"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="link-previews-more"] [data-slot="link-preview-icon"] {
+    color: var(--v2-text-text-faint);
+    transition: transform 150ms ease-out;
+  }
+
+  [data-slot="link-previews-more"][aria-expanded="true"] [data-slot="link-preview-icon"] {
+    transform: rotate(180deg);
+  }
+
+  [data-tone="open"] {
+    [data-slot="link-preview-icon"],
+    [data-slot="link-preview-fact"] {
+      color: var(--v2-state-fg-success);
+    }
+  }
+
+  [data-tone="merged"],
+  [data-tone="completed"] {
+    [data-slot="link-preview-icon"],
+    [data-slot="link-preview-fact"] {
+      color: var(--link-preview-merged);
+    }
+  }
+
+  [data-tone="closed"] {
+    [data-slot="link-preview-icon"],
+    [data-slot="link-preview-fact"] {
+      color: var(--v2-state-fg-danger);
+    }
+  }
+}
+
+:root[data-motion="reduce"] [data-component="link-previews"] {
+  [data-slot="link-preview"],
+  [data-slot="link-previews-more"],
+  [data-slot="link-previews-more"] [data-slot="link-preview-icon"],
+  [data-slot="link-preview-favicon"] {
+    transition: none;
+  }
+}

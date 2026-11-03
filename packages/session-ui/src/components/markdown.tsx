@@ -49,6 +49,7 @@ import { createImagePreview } from "./image-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
+import { faviconURL } from "./link-favicon"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -344,10 +345,6 @@ function wrapTables(root: HTMLDivElement) {
   })
 }
 
-const publicFaviconHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
-
-const privateFaviconSuffix = /\.(?:alt|example|internal|invalid|local|localhost|onion|test|ts\.net)$/
-
 function markExternalLinkFavicons(root: HTMLDivElement) {
   root.querySelectorAll<HTMLAnchorElement>("a.external-link[href]").forEach((link) => {
     if (!link.textContent?.trim() || link.querySelector("img")) return
@@ -362,15 +359,12 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
     favicon.setAttribute("aria-hidden", "true")
     const host = url.hostname.toLowerCase()
 
+    const src = faviconURL(url)
+
     if (host === "github.com") favicon.dataset.github = ""
-    else if (
-      publicFaviconHost.test(host) &&
-      !privateFaviconSuffix.test(host) &&
-      host !== "home.arpa" &&
-      !host.endsWith(".home.arpa")
-    ) {
+    else if (src) {
       const image = document.createElement("img")
-      image.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.host)}&sz=32`
+      image.src = src
       image.alt = ""
       image.setAttribute("data-markdown-favicon", "")
       image.width = 14
