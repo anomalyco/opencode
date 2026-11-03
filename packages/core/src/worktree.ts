@@ -1,7 +1,7 @@
 export * as Worktree from "./worktree.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -282,12 +282,44 @@ const layer = Layer.effect(
         (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
         { concurrency: "unbounded" },
       )
+      const otherProjects = yield* db
+        .select({ worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(ne(ProjectTable.id, input.projectID))
+        .all()
+        .pipe(Effect.orDie)
+      const foreign = new Set<AbsolutePath>()
+      for (const item of otherProjects) {
+        if (item.worktree !== row.worktree) {
+          const resolved = yield* canonical(fs, item.worktree).pipe(
+            Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(item.worktree)),
+          )
+          foreign.add(resolved)
+        }
+      }
+      const otherWorktrees = yield* db
+        .select({ directory: WorktreeTable.directory })
+        .from(WorktreeTable)
+        .where(ne(WorktreeTable.project_id, input.projectID))
+        .all()
+        .pipe(Effect.orDie)
+      const local = new Set(stored.map((item) => item.directory))
+      for (const item of otherWorktrees) {
+        if (!local.has(item.directory) && item.directory !== row.worktree) {
+          const resolved = yield* canonical(fs, item.directory).pipe(
+            Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(item.directory)),
+          )
+          foreign.add(resolved)
+        }
+      }
       const strategies = Array.from(settings.strategies.values()).toReversed()
       const discovered = new Map<AbsolutePath, StoredInput>()
       // Unowned rows are checkout/discovery roots. Managed children are enumerated by their backend.
       const roots = new Set([
         row.worktree,
-        ...checked.filter((item) => item.exists && !item.strategy).map((item) => item.directory),
+        ...checked
+          .filter((item) => item.exists && !item.strategy && !foreign.has(item.directory))
+          .map((item) => item.directory),
       ])
       for (const directory of roots) {
         if (!(yield* fs.isDir(directory))) continue
@@ -304,15 +336,17 @@ const layer = Layer.effect(
             const directory = yield* canonical(fs, entry.directory).pipe(
               Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.undefined),
             )
-            if (!directory || discovered.has(directory)) continue
+            if (!directory || discovered.has(directory) || foreign.has(directory)) continue
             discovered.set(directory, {
               directory,
-              strategy: entry.type === "worktree" ? strategy.id : undefined,
+              strategy: directory === row.worktree ? undefined : entry.type === "worktree" ? strategy.id : undefined,
             })
           }
         }
       }
-      const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
+      const removed = checked
+        .filter((item) => !item.exists || (item.directory !== row.worktree && foreign.has(item.directory)))
+        .map((item) => item.directory)
       const changes = yield* db
         .transaction((tx) =>
           Effect.all({

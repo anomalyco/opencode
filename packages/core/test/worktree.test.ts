@@ -27,7 +27,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
-import { initRepo } from "./fixture/git"
+import { bareRepo, initRepo } from "./fixture/git"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -159,6 +159,110 @@ describe("Worktree", () => {
           { directory: abs(yield* Effect.promise(() => fs.realpath(linked))), strategy: "git" },
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
+    }),
+  )
+
+  projectIt.live("uses a checkout, not the bare repository, as the canonical directory", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const linked = path.join(root.path, "linked")
+      yield* Effect.promise(() => bareRepo(root.path, [linked]))
+      const project = yield* Project.Service
+
+      const resolved = yield* project.resolve(abs(linked))
+
+      const directory = abs(yield* Effect.promise(() => fs.realpath(linked)))
+      expect(resolved.canonical).toBe(directory)
+      expect(yield* stored(resolved.id)).toEqual([{ directory, strategy: null }])
+    }),
+  )
+
+  it.live("refresh does not claim another project's checkout or the bare repository", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(() => bareRepo(root.path, [path.join(root.path, "a"), path.join(root.path, "b")]))
+      const [a, b] = yield* Effect.forEach(["a", "b"], (name) =>
+        Effect.promise(() => fs.realpath(path.join(root.path, name))).pipe(Effect.map(abs)),
+      )
+      // Sibling checkouts of one repository that older versions resolved to separate projects.
+      const projects = [
+        { id: Project.ID.make("project-a"), directory: a },
+        { id: Project.ID.make("project-b"), directory: b },
+      ]
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values(
+          projects.map((item) => ({
+            id: item.id,
+            worktree: item.directory,
+            sandboxes: [],
+            time_created: 1,
+            time_updated: 1,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(WorktreeTable)
+        .values(projects.map((item) => ({ project_id: item.id, directory: item.directory })))
+        .run()
+        .pipe(Effect.orDie)
+      const context = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
+
+      yield* Context.get(context, Worktree.Service).refresh(
+        { projectID: projects[0].id },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[0].id)).toEqual([{ directory: a, strategy: null }])
+      expect(yield* stored(projects[1].id)).toEqual([{ directory: b, strategy: null }])
+    }),
+  )
+
+  it.live("refresh prunes foreign project roots that were previously registered", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(() => bareRepo(root.path, [path.join(root.path, "a"), path.join(root.path, "b")]))
+      const [a, b] = yield* Effect.forEach(["a", "b"], (name) =>
+        Effect.promise(() => fs.realpath(path.join(root.path, name))).pipe(Effect.map(abs)),
+      )
+      const projects = [
+        { id: Project.ID.make("project-a"), directory: a },
+        { id: Project.ID.make("project-b"), directory: b },
+      ]
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values(
+          projects.map((item) => ({
+            id: item.id,
+            worktree: item.directory,
+            sandboxes: [],
+            time_created: 1,
+            time_updated: 1,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      // Simulate historical cross-registration where project-a has project-b's root
+      yield* database.db
+        .insert(WorktreeTable)
+        .values([
+          { project_id: projects[0].id, directory: a },
+          { project_id: projects[0].id, directory: b, strategy: Worktree.StrategyID.make("git") },
+          { project_id: projects[1].id, directory: b },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      const context = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
+
+      yield* Context.get(context, Worktree.Service).refresh(
+        { projectID: projects[0].id },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[0].id)).toEqual([{ directory: a, strategy: null }])
     }),
   )
 

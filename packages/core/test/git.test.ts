@@ -99,6 +99,27 @@ describe("Git worktrees", () => {
     }),
   )
 
+  it.live("omits the bare repository entry when listing worktrees", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const source = path.join(root.path, "source")
+      const bare = path.join(root.path, "bare.git")
+      const linked = path.join(root.path, "linked")
+      yield* Effect.promise(async () => {
+        await initRepo(source)
+        await $`git clone -q --bare ${source} ${bare}`.quiet()
+        await $`git worktree add -q --detach ${linked}`.cwd(bare).quiet()
+      })
+      const git = yield* Git.Service
+      const repo = yield* git.repo.discover(AbsolutePath.make(linked))
+      if (!repo) throw new Error("Repository not found")
+
+      expect((yield* git.worktree.list(repo)).map((entry) => ({ directory: entry.directory, kind: entry.kind }))).toEqual(
+        [{ directory: AbsolutePath.make(yield* Effect.promise(() => fs.realpath(linked))), kind: "linked" }],
+      )
+    }),
+  )
+
   it.live("reads no remote and no root commits from an unborn repository", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped()

@@ -1440,16 +1440,25 @@ const layer = Layer.effect(
     })
 
     const worktreeList = Effect.fn("Git.worktree.list")(function* (repository: Repository) {
-      return (yield* worktreeRun("list", repository, ["worktree", "list", "--porcelain"]))
-        .split("\n")
-        .filter((line) => line.startsWith("worktree "))
-        .map(
-          (line, index) =>
-            new Worktree({
-              directory: AbsolutePath.make(resolvePath(repository.worktree, line.slice("worktree ".length).trim())),
-              kind: index === 0 ? "main" : "linked",
-            }),
+      const output = yield* worktreeRun("list", repository, ["worktree", "list", "--porcelain"])
+      const entries: Worktree[] = []
+      const blocks = output
+        .split(/(?:^|\n)(?=worktree )/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+      for (let index = 0; index < blocks.length; index++) {
+        const lines = blocks[index].split("\n").map((line) => line.trim())
+        const first = lines[0]
+        if (!first?.startsWith("worktree ")) continue
+        if (lines.includes("bare")) continue
+        entries.push(
+          new Worktree({
+            directory: AbsolutePath.make(resolvePath(repository.worktree, first.slice("worktree ".length).trim())),
+            kind: index === 0 ? "main" : "linked",
+          }),
         )
+      }
+      return entries
     })
 
     return Service.of({
