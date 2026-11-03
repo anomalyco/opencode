@@ -196,7 +196,7 @@ describe("SessionModelRequest.boundImages", () => {
     const result = boundImages(messages)
 
     expect(result[0]).toBeInstanceOf(Message)
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining('The image "first.png" was removed'))])
     expect(result[1]).toBe(text)
     expect(result[2]).not.toBe(messages[2])
     expect(result[2]?.content[0]).toMatchObject({ type: "text" })
@@ -216,6 +216,58 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, image("9.png")]))).toBe(4)
     expect(removed(boundImages([...history, image("9.png"), image("10.png"), image("11.png")]))).toBe(4)
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
+  })
+
+  test("keeps at most the newest 30 images, cutting back to 20 so the prompt cache survives", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const history = (count: number) => Array.from({ length: count }, (_, i) => image(`${i}.png`))
+    const removed = (messages: ReturnType<typeof boundImages>) =>
+      messages.filter((message) => message.content[0]?.type === "text").length
+
+    expect(removed(boundImages(history(30)))).toBe(0)
+    // The 31st image passes the trigger: the oldest 11 go, leaving 20.
+    expect(removed(boundImages(history(31)))).toBe(11)
+    // The cut holds until the kept count passes the trigger again.
+    expect(removed(boundImages(history(41)))).toBe(11)
+    expect(removed(boundImages(history(42)))).toBe(22)
+  })
+
+  test("names the removed file so the model can read it again", () => {
+    const read = (index: number) =>
+      Message.tool(
+        ToolResultPart.make({
+          id: `call_${index}`,
+          name: "read",
+          result: {
+            type: "content",
+            value: [
+              { type: "text", text: "Image read successfully" },
+              {
+                type: "file",
+                uri: "data:image/png;base64,aGVsbG8=",
+                mime: "image/png",
+                name: `/tmp/shot-${index}.png`,
+              },
+            ],
+          },
+        }),
+      )
+    const messages = Array.from({ length: 31 }, (_, i) => read(i))
+    const result = boundImages(messages)
+
+    expect(result[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "text", text: expect.stringContaining('read "/tmp/shot-0.png" again') },
+        ],
+      },
+    })
+    expect(result[10]).not.toBe(messages[10])
+    expect(result[11]).toBe(messages[11])
   })
 
   test("replaces images nested in tool results", () => {
