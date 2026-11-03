@@ -106,11 +106,10 @@ export const configure = (input: Config = {}) => {
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStrictMode: false,
-        supportsPromptCacheKey: true,
         sanitizer: "moonshot",
         reasoningField: "reasoning_content",
       },
+      capabilities: { tools: { strict: false }, promptCacheKey: true },
     })
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({

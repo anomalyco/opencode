@@ -1,6 +1,12 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { AIError, LLMEvent, type LanguageModelCompatibility, type LLMRequest } from "../schema/index.js"
+import {
+  AIError,
+  LLMEvent,
+  type LanguageModelCompatibility,
+  type LLMRequest,
+  type Capabilities,
+} from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -325,8 +331,9 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsPromptCacheKey: true,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { promptCacheKey: true } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "venice-chat",

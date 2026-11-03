@@ -103,7 +103,9 @@ export const configure = (input: Config) => {
   const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
   const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
   const chat = (id: string | ModelID) =>
-    chatRoute.with(common).model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility })
+    chatRoute
+      .with(common)
+      .model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility, capabilities: AlibabaChat.capabilities })
   const messages = (id: string | ModelID) =>
     messagesRoute
       .with({

@@ -83,7 +83,8 @@ describe("native OpenAI-compatible providers", () => {
 
     expect(together).toMatchObject({
       provider: "togetherai",
-      compatibility: { maxTokensField: "max_tokens", supportsStrictMode: false },
+      compatibility: { maxTokensField: "max_tokens" },
+      capabilities: { tools: { strict: false } },
       route: { id: "togetherai-chat", protocol: "openai-chat" },
     })
     expect(together.route.endpoint.baseURL).toBe("https://api.together.xyz/v1")

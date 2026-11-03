@@ -272,7 +272,7 @@ export const configure = (input: Config = {}) => {
       providerOptions,
     })
   const chat = (modelID: string | ModelID) =>
-    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
+    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } })
   return {
     id,
     model: chat,

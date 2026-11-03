@@ -2207,18 +2207,18 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("omits the prompt cache key when compatibility disables it", () =>
+  it.effect("omits the prompt cache key when capabilities disable it", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "request_cache",
         }),
       )
 
       expect(prepared.body).not.toHaveProperty("prompt_cache_key")
-      expect(model.compatibility?.supportsPromptCacheKey).toBeUndefined()
+      expect(model.capabilities?.promptCacheKey).toBeUndefined()
       expect(
         (yield* compileRequest(ai.request({ model, prompt: "Hello", promptCacheKey: "request_cache" }))).body,
       ).toHaveProperty("prompt_cache_key", "request_cache")
