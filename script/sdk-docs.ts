@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// The GUI extension SDK is learned from editor hovers and the guide, so both are checked. Fails, naming each file and
-// line, when in `packages/gui-extensions/src/sdk`:
+// The GUI plugin SDK is learned from editor hovers and the guide, so both are checked. Fails, naming each file and
+// line, when in `packages/plugin/src/gui`:
 // - an exported declaration, an interface member, a field of an object type (an option, a result, a union member), or
 //   a member of an exported object such as `Store.global` has no doc comment;
 // - a documented function or method leaves a parameter without `@param`, or names one it does not have.
-// It also fails when a code block of the guide (`packages/gui-extensions/README.md`) marked `<!-- source: path -->` (a
-// whole file of a shipping extension) or `<!-- source: path#name -->` (a top-level declaration or call named `name`,
+// It also fails when a code block of the guide (`packages/gui-plugins/README.md`) marked `<!-- source: path -->` (a
+// whole file of a built-in plugin) or `<!-- source: path#name -->` (a top-level declaration or call named `name`,
 // else the first nested match, with the comments directly above it) differs from that source, or when the
 // guide or the package's AGENTS.md names a `ctx.<member>` no context declares.
 // Usage: bun script/sdk-docs.ts
@@ -14,8 +14,8 @@ import { Glob } from "bun"
 import ts from "typescript"
 
 const root = path.resolve(import.meta.dir, "..")
-const pkg = path.join(root, "packages/gui-extensions")
-const sdk = path.join(pkg, "src/sdk")
+const pkg = path.join(root, "packages/gui-plugins")
+const sdk = path.join(root, "packages/plugin/src/gui")
 
 const problems: string[] = []
 const counts = { declarations: 0, members: 0, parameters: 0, blocks: 0 }

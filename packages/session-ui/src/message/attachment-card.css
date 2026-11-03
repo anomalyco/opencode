@@ -57,13 +57,14 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    min-height: 16px;
     overflow: hidden;
     white-space: nowrap;
     font-weight: 440;
     color: var(--v2-text-text-muted);
 
     [data-component="file-icon"],
-    [data-slot="attachment-card-icon"] {
+    [data-slot="icon-svg"] {
       width: 12px;
       height: 12px;
       flex: none;
@@ -74,6 +75,42 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+  }
+}
+
+[data-component="attachment-card"] {
+  [data-slot="comment-card-quote"],
+  [data-slot="comment-card-action"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  [data-slot="comment-card-action"] {
+    display: none;
+    color: var(--v2-text-text-base);
+  }
+}
+
+@media (hover: hover) {
+  [data-component="attachment-card"]:hover:has([data-slot="comment-card-action"]) [data-slot="comment-card-quote"] {
+    display: none;
+  }
+
+  [data-component="attachment-card"]:hover [data-slot="comment-card-action"] {
+    display: flex;
+  }
+}
+
+@media (hover: none) {
+  [data-component="attachment-card"]:has([data-slot="comment-card-action"]:not([data-commented]))
+    [data-slot="comment-card-quote"] {
+    display: none;
+  }
+
+  [data-component="attachment-card"] [data-slot="comment-card-action"]:not([data-commented]) {
+    display: flex;
   }
 }
 

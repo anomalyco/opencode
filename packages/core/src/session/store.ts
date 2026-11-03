@@ -59,6 +59,12 @@ export interface Interface {
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  /** {@link Interface.messages} for clients that fetch media themselves: files stored in `blob` stay `media:` refs. */
+  readonly messagesWithRefs: (input: MessagesInput) => Effect.Effect<SessionMessage.MediaInfo[], MessageDecodeError>
+  /** {@link Interface.message} for clients that fetch media themselves. */
+  readonly messageWithRefs: (
+    messageID: SessionMessage.ID,
+  ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
    * Top-level Sessions holding an execution claim. Recoverable background
    * children are resumed separately through their durable Job records.
@@ -91,6 +97,45 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+
+    /** One page of a session's message rows, oldest first within the page when paging backwards. */
+    const messageRows = Effect.fnUntraced(function* (input: MessagesInput) {
+      const direction = input.cursor?.direction ?? "next"
+      const requestedOrder = input.order ?? "desc"
+      const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+      const anchor = input.cursor
+        ? yield* db
+            .select({ seq: SessionMessageTable.seq })
+            .from(SessionMessageTable)
+            .where(
+              and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
+            )
+            .get()
+            .pipe(Effect.orDie)
+        : undefined
+      if (input.cursor && !anchor) return []
+      const boundary = anchor
+        ? order === "asc"
+          ? gt(SessionMessageTable.seq, anchor.seq)
+          : lt(SessionMessageTable.seq, anchor.seq)
+        : undefined
+      const query = db
+        .select()
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, input.sessionID),
+            boundary,
+            input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
+          ),
+        )
+        .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
+      const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+      return direction === "previous" ? rows.toReversed() : rows
+    })
+
+    const messageRow = (messageID: SessionMessage.ID) =>
+      db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, messageID)).get().pipe(Effect.orDie)
 
     return Service.of({
       get: Effect.fnUntraced(function* (sessionID) {
@@ -141,51 +186,22 @@ const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
-        const direction = input.cursor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const anchor = input.cursor
-          ? yield* db
-              .select({ seq: SessionMessageTable.seq })
-              .from(SessionMessageTable)
-              .where(
-                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
-              )
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
-        if (input.cursor && !anchor) return []
-        const boundary = anchor
-          ? order === "asc"
-            ? gt(SessionMessageTable.seq, anchor.seq)
-            : lt(SessionMessageTable.seq, anchor.seq)
-          : undefined
-        const query = db
-          .select()
-          .from(SessionMessageTable)
-          .where(
-            and(
-              eq(SessionMessageTable.session_id, input.sessionID),
-              boundary,
-              input.type === undefined ? undefined : eq(SessionMessageTable.type, input.type),
-            ),
-          )
-          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return yield* SessionHistory.decodeMessageRows(db, direction === "previous" ? rows.toReversed() : rows)
+        return yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))
+      }),
+      messagesWithRefs: Effect.fn("SessionStore.messagesWithRefs")(function* (input) {
+        return yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
-        const row = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
+        const row = yield* messageRow(messageID)
         if (!row) return undefined
         const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
+        return message && { sessionID: row.session_id, message }
+      }),
+      messageWithRefs: Effect.fn("SessionStore.messageWithRefs")(function* (messageID) {
+        const row = yield* messageRow(messageID)
+        if (!row) return undefined
+        const [message] = yield* SessionHistory.decodeMessageRowsWithRefs(db, [row]).pipe(Effect.orDie)
         return message && { sessionID: row.session_id, message }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {

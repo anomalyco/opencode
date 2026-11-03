@@ -75,6 +75,16 @@ Subscriptions are live-only, with no replay or automatic reconnection. A source
 failure ends current subscriptions; subscribe again after recovery. A late native
 subscriber receives the current `server.connected` marker, not past business events.
 
+Pass `types` to receive only some event types. The events are typed to match, and
+`server.connected` always comes through so a filtered subscriber still knows when to resync.
+Filtering happens on the shared connection, inside the client.
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
 ## Plugin RPC
 
 Import a plugin's shared contract and pass it to `client.rpc`:

@@ -5,8 +5,12 @@ export function createMarkdownBase() {
     renderer: {
       link({ href, title, tokens }) {
         const titleAttr = title ? ` title="${title}"` : ""
+        const text = this.parser.parseInline(tokens)
 
-        return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${this.parser.parseInline(tokens)}</a>`
+        // A fragment link points within the document, so it stays in the page.
+        if (href.startsWith("#")) return `<a href="${href}"${titleAttr}>${text}</a>`
+
+        return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
       },
     },
   })

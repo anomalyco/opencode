@@ -246,7 +246,7 @@ describe("Session.create", () => {
         })
         expect(aliasAdopted).toMatchObject({
           projectID: project.id,
-          location: aliased,
+          location: nested,
           subpath: RelativePath.make("packages/app"),
         })
         // Adoption is a project-domain fact; the session log records nothing new.
@@ -348,6 +348,19 @@ describe("Session.create", () => {
 
       expect(second.id).not.toBe(first.id)
       expect((yield* session.list()).data).toHaveLength(2)
+    }),
+  )
+
+  it.effect("stores a trailing-slash directory in the same session list", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+
+      const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
+
+      expect(created.location.directory).toBe(location.directory)
+      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([
+        created.id,
+      ])
     }),
   )
 
@@ -1425,6 +1438,7 @@ describe("SessionTransfer", () => {
             time: {
               ...template.time,
               updated: DateTime.makeUnsafe(100),
+              busy: DateTime.makeUnsafe(120),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(150),
             },
@@ -1466,6 +1480,7 @@ describe("SessionTransfer", () => {
       })
       expect(imported.time).toMatchObject({
         updated: DateTime.makeUnsafe(1_000),
+        busy: DateTime.makeUnsafe(120),
         idle: DateTime.makeUnsafe(200),
         viewed: DateTime.makeUnsafe(150),
       })
@@ -1475,7 +1490,11 @@ describe("SessionTransfer", () => {
       ])
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
       const exported = yield* transfer.export({ sessionID })
-      expect(exported.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
+      expect(exported.info.time).toMatchObject({
+        busy: DateTime.makeUnsafe(120),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(150),
+      })
       expect(exported.messages).toEqual(messages)
       const sanitized = yield* transfer.export({ sessionID, sanitize: true })
       expect(sanitized.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })
@@ -1514,7 +1533,7 @@ describe("SessionTransfer", () => {
     }),
   )
 
-  it.effect("clamps an imported viewed watermark to its idle transition", () =>
+  it.effect("clamps imported busy and viewed watermarks to their idle transition", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const transfer = yield* SessionTransfer.Service
@@ -1527,6 +1546,7 @@ describe("SessionTransfer", () => {
             outcome: "succeeded",
             time: {
               ...template.time,
+              busy: DateTime.makeUnsafe(300),
               idle: DateTime.makeUnsafe(200),
               viewed: DateTime.makeUnsafe(250),
             },
@@ -1536,7 +1556,11 @@ describe("SessionTransfer", () => {
         location,
       })
 
-      expect(imported.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(200) })
+      expect(imported.time).toMatchObject({
+        busy: DateTime.makeUnsafe(200),
+        idle: DateTime.makeUnsafe(200),
+        viewed: DateTime.makeUnsafe(200),
+      })
       expect(imported.outcome).toBe("succeeded")
     }),
   )

@@ -3,16 +3,16 @@ title: "Harnesses"
 description: "Use Console and Go models from other coding agents and AI apps."
 ---
 
-Console works with coding agents other than OpenCode. Point a harness at the Console gateway with an API key, and usage
-is billed to your workspace like any other request.
+Console works with coding agents other than OpenCode. Point a harness at the Console gateway with an API key to use any
+paid or Go model, and usage is billed to your workspace like any other request.
 
-| Harness                                       | Pay-as-you-go | Go        | Models                    | MCP |
-| --------------------------------------------- | ------------- | --------- | ------------------------- | --- |
-| [Claude Code](/console/harnesses/claude-code) | Yes           | Yes       | Anthropic Messages models | Yes |
-| [Codex](/console/harnesses/codex)             | Yes           | Yes       | OpenAI Responses models   | Yes |
-| [Hermes](/console/harnesses/hermes)           | Built in      | Built in  | Paid and Go models        | Yes |
-| [Pi](/console/harnesses/pi)                   | Built in      | Built in  | Paid and Go models        | Yes |
-| [Raycast](/console/harnesses/raycast)         | Extension     | Extension | Paid and Go models        | Yes |
+| Harness                                       | Pay-as-you-go | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | Yes           | Yes       | Yes |
+| [Codex](/console/harnesses/codex)             | Yes           | Yes       | Yes |
+| [Hermes](/console/harnesses/hermes)           | Built in      | Built in  | Yes |
+| [Pi](/console/harnesses/pi)                   | Built in      | Built in  | Yes |
+| [Raycast](/console/harnesses/raycast)         | Extension     | Extension | Yes |
 
 Free-tier chat models are only available from within OpenCode. Other harnesses receive HTTP `403` for those models,
 even with a Console API key. Use paid models or a Go subscription.
@@ -46,7 +46,8 @@ Pay-as-you-go and Go are served from different base URLs. Use the one that match
 | Pay-as-you-go | `https://opencode.ai/inference`    |
 | Go            | `https://opencode.ai/inference/go` |
 
-Append the path for the API your harness speaks.
+Append the path for the API your harness speaks. Every API serves every paid and Go text model: Console sends a request
+to the model's own endpoint when it speaks that API, and translates it otherwise.
 
 | API                     | Path                                            |
 | ----------------------- | ----------------------------------------------- |
@@ -58,22 +59,6 @@ Append the path for the API your harness speaks.
 ```text
 https://opencode.ai/inference/go/openai/v1/chat/completions
 ```
-
-## Choose an API
-
-A harness can only use the models that accept the API it speaks. Most models accept one API, and some accept several.
-The endpoint column in the [Console](/console/models#endpoints) and [Go](/console/go#endpoints) tables lists one API per
-model, so check the harness page for the full list.
-
-Hermes, Pi, and the Raycast extension pick the right API for each paid or Go model. Claude Code and
-Codex speak a single API and only reach part of the catalog.
-
-| Harness     | API                | Models                                                           |
-| ----------- | ------------------ | ---------------------------------------------------------------- |
-| Claude Code | Anthropic Messages | Claude and Qwen, plus Kimi K3, DeepSeek V4, and MiniMax M3 on Go |
-| Codex       | OpenAI Responses   | GPT, Grok, and Muse Spark, plus DeepSeek V4 on Go                |
-
-<Callout>Support for every model in every harness is coming soon.</Callout>
 
 ## Sessions
 

@@ -5,10 +5,16 @@ import solidJs from "@astrojs/solid-js"
 import cloudflare from "@astrojs/cloudflare"
 import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
-import { rehypeHeadingIds } from "@astrojs/markdown-remark"
+import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { copyFileSync } from "fs"
 import { execFileSync } from "child_process"
+import { setFlagsFromString } from "v8"
+
+// Node 24+ can deadlock in process.exit() when a background V8 compile job waits for a GC the exiting main thread
+// never runs, so `astro build` prints "Complete!" and never exits (https://github.com/nodejs/node/issues/64274).
+setFlagsFromString("--no-maglev")
+setFlagsFromString("--no-concurrent-sparkplug")
 
 // https://astro.build/config
 export default defineConfig({
@@ -16,7 +22,11 @@ export default defineConfig({
   base: "/docs",
   output: "server",
   adapter: cloudflare({
+    configPath: process.env.SST_WRANGLER_PATH,
     imageService: "passthrough",
+    // toolbeam-docs-theme passes its options to components through globalThis, which only works when pages
+    // prerender in the same Node process as the config.
+    prerenderEnvironment: "node",
   }),
   devToolbar: {
     enabled: false,
@@ -25,7 +35,9 @@ export default defineConfig({
     host: "0.0.0.0",
   },
   markdown: {
-    rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
+    processor: unified({
+      rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
+    }),
   },
   build: {},
   integrations: [
@@ -327,9 +339,9 @@ function configSchema() {
     name: "configSchema",
     hooks: {
       "astro:build:done": async () => {
-        execFileSync("bun", ["../schema/script/config-schema.ts", "./dist/config.json"], { stdio: "inherit" })
+        execFileSync("bun", ["../schema/script/config-schema.ts", "./dist/client/config.json"], { stdio: "inherit" })
         // The V1 TUI schema is frozen in the console app since packages/opencode lives on the v1 branch.
-        copyFileSync("../console/app/public/tui.json", "./dist/tui.json")
+        copyFileSync("../console/app/public/tui.json", "./dist/client/tui.json")
       },
     },
   }

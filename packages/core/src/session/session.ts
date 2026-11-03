@@ -165,19 +165,22 @@ export const make = Effect.fn("Session.make")(function* () {
             delivery: input.delivery ?? "steer",
           })
           if (existing) return existing
-          const item = yield* restore(
-            SessionPrompt.prepare({ session, messageID, input }).pipe(
-              Effect.provideService(Instance.Service, instances),
-              Effect.provideService(FSUtil.Service, fs),
-            ),
+          // Preparation, the staged revert commit and admission share one acquisition of the session's location
+          // services, so projections see its config whoever called prompt.
+          return yield* Effect.gen(function* () {
+            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
+            // Commit a staged revert only after preparation succeeds, before admitting new work.
+            if (session.revert) yield* SessionRevert.commit(bus, session)
+            return yield* admission.admit({
+              id: messageID,
+              sessionID: session.id,
+              item,
+            })
+          }).pipe(
+            instances.provide(session),
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(FSUtil.Service, fs),
           )
-          // Commit a staged revert only after preparation succeeds, before admitting new work.
-          if (session.revert) yield* SessionRevert.commit(bus, session)
-          return yield* admission.admit({
-            id: messageID,
-            sessionID: session.id,
-            item,
-          })
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )

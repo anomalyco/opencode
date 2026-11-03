@@ -34,6 +34,7 @@ import type {
   SessionInboxCompaction,
   ShellInfo,
   SkillInfo,
+  ToolContent,
   UsageLimitsInfo,
   VcsInfo,
   OpenCodeEvent,
@@ -46,7 +47,9 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
   isFormNotFoundError,
+  isMessageNotFoundError,
   isPermissionNotFoundError,
+  isSessionNotFoundError,
   type SessionPromptInput,
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -79,6 +82,11 @@ export type CreateDataInput = {
   }
   /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
   readonly onError?: (error: unknown) => void
+  /**
+   * Drops the payload of inline `data:` files in tool results before they enter the store. For clients that never
+   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive.
+   */
+  readonly omitToolFileData?: boolean
 }
 
 const messagePageLimit = 20
@@ -116,6 +124,7 @@ type LocationData = {
 type Store = {
   session: {
     info: Record<string, SessionInfo>
+    missing: Record<string, true | undefined>
     // Family index keyed by a family's root (or furthest-known-ancestor when the
     // true root is not yet loaded). The value is a flat deduplicated list of every
     // session ID in that family, including the key itself once its info arrives.
@@ -163,6 +172,26 @@ function optimisticFiles(files: SessionPromptInput["files"]) {
     return [item]
   })
   return items?.length ? items : undefined
+}
+
+// Keeps an empty `data:<mime>;base64,` URI so the item still says what it was. It is built from `mime` because any
+// slice of the original URI is a V8 sliced string that keeps the whole payload alive.
+function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, ...ToolContent[]] {
+  const omit = (item: ToolContent): ToolContent =>
+    item.type === "file" && item.uri.startsWith("data:") ? { ...item, uri: `data:${item.mime};base64,` } : item
+  return [omit(content[0]), ...content.slice(1).map(omit)]
+}
+
+function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
+  if (message.type !== "assistant") return message
+  return {
+    ...message,
+    content: message.content.map((part) =>
+      part.type === "tool" && "content" in part.state && part.state.content
+        ? { ...part, state: { ...part.state, content: omitFileData(part.state.content) } }
+        : part,
+    ),
+  }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -230,6 +259,7 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+const DELETED_SESSION_LIMIT = 512
 
 export function createData(config: CreateDataInput) {
   const api = config.api
@@ -240,6 +270,11 @@ export function createData(config: CreateDataInput) {
     if (disposed || (config.connection && config.connection.status() !== "connected")) return
     void load().catch((error) => {
       if (disposed || (config.connection && config.connection.status() !== "connected")) return
+      if (isSessionNotFoundError(error)) {
+        markDeleted(error.sessionID)
+        return
+      }
+      if (isMessageNotFoundError(error)) return
       if (config.onError) return config.onError(error)
       console.error("Failed to refresh client data", error)
     })
@@ -262,6 +297,7 @@ export function createData(config: CreateDataInput) {
   const [store, setStore] = createStore<Store>({
     session: {
       info: {},
+      missing: {},
       family: {},
       active: {},
       message: {},
@@ -283,6 +319,7 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -604,6 +641,36 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  let deletionEpoch = 0
+  const deletedAt = new Map<string, number>()
+
+  function clearDeleted(sessionID: string) {
+    deletedAt.delete(sessionID)
+    if (store.session.missing[sessionID]) setStore("session", "missing", sessionID, undefined)
+  }
+
+  function markDeleted(sessionID: string) {
+    if (sessionOutbox.has(sessionID)) return
+    batch(() => {
+      deletedAt.delete(sessionID)
+      deletedAt.set(sessionID, ++deletionEpoch)
+      if (deletedAt.size > DELETED_SESSION_LIMIT) {
+        const oldest = deletedAt.keys().next().value
+        if (oldest !== undefined) {
+          deletedAt.delete(oldest)
+          setStore("session", "missing", oldest, undefined)
+        }
+      }
+      setStore("session", "missing", sessionID, true)
+      removeSession(sessionID)
+    })
+  }
+
+  function evictMissing(error: unknown): never {
+    if (isSessionNotFoundError(error)) markDeleted(error.sessionID)
+    throw error
+  }
+
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
@@ -652,6 +719,11 @@ export function createData(config: CreateDataInput) {
               })
               activeUpdates = undefined
               setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+              // Sessions created before this connection (while disconnected, or before the client started)
+              // never delivered `session.created`; without their info a running child never joins its root's family.
+              snapshot.forEach((status, id) => {
+                if (status === "running" && !store.session.info[id]) refresh(() => result.session.sync(id))
+              })
             })
             .catch(() => {
               if (activeUpdates === updates) activeUpdates = undefined
@@ -673,6 +745,7 @@ export function createData(config: CreateDataInput) {
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
       case "session.created":
+        clearDeleted(event.data.sessionID)
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
@@ -684,7 +757,7 @@ export function createData(config: CreateDataInput) {
         sync.complete(`session.message:${event.data.sessionID}`)
         return
       case "session.deleted":
-        removeSession(event.data.sessionID)
+        markDeleted(event.data.sessionID)
         return
       case "session.usage.updated":
         if (store.session.info[event.data.sessionID])
@@ -747,6 +820,11 @@ export function createData(config: CreateDataInput) {
       case "session.permissions":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
+        return
+      case "session.metadata.updated":
+        // The event carries the whole record, so keys it drops must go too.
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
         return
       case "session.archived":
         if (store.session.info[event.data.sessionID])
@@ -1019,7 +1097,7 @@ export function createData(config: CreateDataInput) {
             status: "completed",
             input: tool.state.input,
             metadata: event.data.metadata,
-            content: [...event.data.content],
+            content: config.omitToolFileData ? omitFileData(event.data.content) : [...event.data.content],
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1034,7 +1112,8 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content: event.data.content,
+            content:
+              config.omitToolFileData && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1070,6 +1149,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")
+        // Revalidate so `time.busy` follows the projected execution start.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
@@ -1236,26 +1319,29 @@ export function createData(config: CreateDataInput) {
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
         refreshUsageLimits(location)
         if (event.type === "credential.updated") {
-          result.location.integration.invalidate(location)
-          refresh(() => result.location.integration.sync(location))
+          refreshLocation("integration", result.location.integration, location)
           return
         }
-        setStore("location", key, (data) => ({
-          integration: data?.integration?.map((integration) => {
-            if (integration.id !== event.data.integrationID) return integration
-            const active = integration.connections.find(
-              (connection) => connection.type === "credential" && connection.id === event.data.credentialID,
-            )
-            if (!active) return integration
-            return {
-              ...integration,
-              connections: [active, ...integration.connections.filter((connection) => connection !== active)],
-            }
-          }),
-        }))
+        if (store.location[key]?.integration)
+          setStore("location", key, (data) => ({
+            integration: data?.integration?.map((integration) => {
+              if (integration.id !== event.data.integrationID) return integration
+              const active = integration.connections.find(
+                (connection) => connection.type === "credential" && connection.id === event.data.credentialID,
+              )
+              if (!active) return integration
+              return {
+                ...integration,
+                connections: [active, ...integration.connections.filter((connection) => connection !== active)],
+              }
+            }),
+          }))
+        const active =
+          hasLocation("integration", location) || hasLocation("model", location) || hasLocation("provider", location)
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
+        if (active)
+          refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
       })
       return
     }
@@ -1264,30 +1350,24 @@ export function createData(config: CreateDataInput) {
     const location = event.location
     switch (event.type) {
       case "provider.updated":
-        result.location.provider.invalidate(location)
-        refresh(() => result.location.provider.sync(location))
+        refreshLocation("provider", result.location.provider, location)
         break
       case "model.updated":
-        result.location.model.invalidate(location)
-        refresh(() => result.location.model.sync(location))
+        refreshLocation("model", result.location.model, location)
         break
       case "agent.updated":
-        result.location.agent.invalidate(location)
-        refresh(() => result.location.agent.sync(location))
+        refreshLocation("agent", result.location.agent, location)
         break
       case "command.updated":
-        result.location.command.invalidate(location)
-        refresh(() => result.location.command.sync(location))
+        refreshLocation("command", result.location.command, location)
         break
       case "skill.updated":
-        result.location.skill.invalidate(location)
-        refresh(() => result.location.skill.sync(location))
+        refreshLocation("skill", result.location.skill, location)
         break
       case "vcs.branch.updated":
         // The event names only the current branch. Reload the rest: the default branch and provider can change with
         // it, and a read served before the location's VCS provider loaded has neither.
-        result.location.vcs.invalidate(location)
-        refresh(() => result.location.vcs.sync(location))
+        refreshLocation("vcs", result.location.vcs, location)
         break
       case "form.created":
         if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -1306,48 +1386,66 @@ export function createData(config: CreateDataInput) {
         break
       case "shell.exited":
       case "shell.deleted":
+        if (!store.location[locationKey(location)]?.shell?.[event.data.id]) break
         setStore("location", locationKey(location), (data) => ({
           shell: Object.fromEntries(Object.entries(data?.shell ?? {}).filter(([id]) => id !== event.data.id)),
         }))
         break
       case "reference.updated":
-        result.location.reference.invalidate(location)
-        refresh(() => result.location.reference.sync(location))
+        refreshLocation("reference", result.location.reference, location)
         break
-      case "integration.updated":
+      case "integration.updated": {
         refreshUsageLimits(location)
+        const active =
+          hasLocation("integration", location) || hasLocation("model", location) || hasLocation("provider", location)
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
         result.location.provider.invalidate(location)
-        refresh(() =>
-          Promise.all([
-            result.location.integration.sync(location),
-            result.location.model.sync(location),
-            result.location.provider.sync(location),
-          ]),
-        )
+        if (active)
+          refresh(() =>
+            Promise.all([
+              result.location.integration.sync(location),
+              result.location.model.sync(location),
+              result.location.provider.sync(location),
+            ]),
+          )
         break
+      }
       case "config.updated":
-        result.location.config.invalidate(location)
-        if (result.location.config.list(location) !== undefined || sync.has(`location.config:${locationKey(location)}`))
-          refresh(() => result.location.config.sync(location))
-        refresh(() => result.location.websearch.refresh(location))
+        refreshLocation("config", result.location.config, location)
+        if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
-        refresh(() => result.location.websearch.refresh(location))
+        if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       // Authenticating an MCP integration reconnects its server, which emits mcp.status.changed,
       // so the mcp list syncs here rather than off integration.updated. The server emits one event
       // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
-      case "mcp.status.changed":
+      case "mcp.status.changed": {
+        const active = hasLocation("mcpServer", location)
         result.location.mcp.server.invalidate(location)
-        settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
+        if (active) settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
+      }
       case "mcp.resources.changed":
-        result.location.mcp.resource.invalidate(location)
-        refresh(() => result.location.mcp.resource.sync(location))
+        refreshLocation("mcpResource", result.location.mcp.resource, location)
         break
     }
+  }
+
+  function hasLocation<Field extends keyof LocationData>(field: Field, ref?: LocationRef) {
+    const id = locationKey(ref ?? defaultLocation())
+    return store.location[id]?.[field] !== undefined || sync.has(`location.${field}:${id}`)
+  }
+
+  function refreshLocation<Field extends keyof LocationData>(
+    field: Field,
+    resource: { invalidate: (ref?: LocationRef) => void; sync: (ref?: LocationRef) => Promise<void> },
+    location: LocationRef,
+  ) {
+    const active = hasLocation(field, location)
+    resource.invalidate(location)
+    if (active) refresh(() => resource.sync(location))
   }
 
   // A cached per-location catalog. `sync` loads once per invalidation, keyed by the
@@ -1385,7 +1483,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const usageLimits = locationResource("usageLimits", (location) => api().usage.limits({ location }))
+  const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -1405,11 +1503,18 @@ export function createData(config: CreateDataInput) {
       get(sessionID: string) {
         return store.session.info[sessionID]
       },
+      missing(sessionID: string) {
+        return Boolean(store.session.missing[sessionID])
+      },
+      forget(sessionID: string) {
+        markDeleted(sessionID)
+      },
       creating(sessionID: string) {
         return creating.has(sessionID)
       },
       remember(info: SessionInfo) {
         batch(() => {
+          clearDeleted(info.id)
           setStore("session", "info", info.id, reconcile(info))
           sync.complete(`session:${info.id}`)
           registerSession(info.id)
@@ -1484,10 +1589,12 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
+            const started = deletionEpoch
             const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
             pendingUpdates.set(sessionID, updates)
             try {
-              const snapshot = await api().session.inbox.list({ sessionID })
+              const snapshot = await api().session.inbox.list({ sessionID }).catch(evictMissing)
+              if ((deletedAt.get(sessionID) ?? 0) > started) return
               // Events can overtake this HTTP response on a remote connection.
               // Reconcile them before an older snapshot can resurrect delivered input.
               const current = new Map(snapshot.map((item) => [item.id, item]))
@@ -1543,6 +1650,7 @@ export function createData(config: CreateDataInput) {
         const id = payload.id ?? SessionID.create()
         const location = payload.location ?? defaultLocation()
         const fresh = !store.session.info[id]
+        clearDeleted(id)
         if (fresh) {
           const now = Date.now()
           sessionOutbox.add(id)
@@ -1675,11 +1783,12 @@ export function createData(config: CreateDataInput) {
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+          const started = deletionEpoch
           const [info, children] = await Promise.all([
-            api().session.get({ sessionID }),
+            api().session.get({ sessionID }).catch(evictMissing),
             options?.children ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }) : [],
           ])
-          const sessions = [info, ...children]
+          const sessions = [info, ...children].filter((session) => (deletedAt.get(session.id) ?? 0) <= started)
           batch(() => {
             setStore(
               "session",
@@ -1689,6 +1798,7 @@ export function createData(config: CreateDataInput) {
               }),
             )
             for (const session of sessions) {
+              clearDeleted(session.id)
               sync.complete(`session:${session.id}`)
               registerSession(session.id)
             }
@@ -1709,12 +1819,16 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
-            const response = await api().message.list({
-              sessionID,
-              limit: config.initialMessageLimit?.() ?? messagePageLimit,
-              order: "desc",
-            })
-            const fetched = response.data.toReversed()
+            const started = deletionEpoch
+            const response = await api()
+              .message.list({
+                sessionID,
+                limit: config.initialMessageLimit?.() ?? messagePageLimit,
+                order: "desc",
+              })
+              .catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
+            const fetched = response.data.toReversed().map(stored)
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))
@@ -1782,7 +1896,7 @@ export function createData(config: CreateDataInput) {
                 { signal },
               )
               if (signal?.aborted) return
-              fetched.push(...response.data)
+              fetched.push(...response.data.map(stored))
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)
@@ -1820,7 +1934,10 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.permission:${sessionID}`, async () => {
-            setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
+            const started = deletionEpoch
+            const list = await api().permission.list({ sessionID }).catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
+            setStore("session", "permission", sessionID, list)
           })
         },
         invalidate(sessionID: string) {
@@ -1867,7 +1984,10 @@ export function createData(config: CreateDataInput) {
               ])
               return
             }
-            setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
+            const started = deletionEpoch
+            const list = await api().session.form.list({ sessionID }).catch(evictMissing)
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
+            setStore("session", "form", sessionID, list)
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {

@@ -783,17 +783,37 @@ body {
     0 2px 4px 0 #0000000a;
 }
 
-[data-page="stats"] [data-slot="status"] {
+[data-page="stats"] [data-slot="footer-bottom"] [data-slot="status"] {
+  --stats-status-dot: var(--stats-faint);
   display: flex;
   align-items: center;
   gap: 10px;
+  color: var(--stats-muted);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="footer-bottom"] [data-slot="status"]:hover {
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="status"][data-status="operational"] {
+  --stats-status-dot: #198b43;
+}
+
+[data-page="stats"] [data-slot="status"][data-status="degraded"] {
+  --stats-status-dot: #c48a00;
+}
+
+[data-page="stats"] [data-slot="status"][data-status="outage"] {
+  --stats-status-dot: #d93636;
 }
 
 [data-page="stats"] [data-slot="status"]::before {
   content: "";
+  flex: none;
   width: 6px;
   height: 6px;
-  background: #198b43;
+  background: var(--stats-status-dot);
 }
 
 [data-page="stats"] [data-component="content"] a {

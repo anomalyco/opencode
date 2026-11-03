@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
-import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError, isRetryable } from "../src/effect.js"
+import { ai, AIError, HttpContext, InvalidProviderOutputError, isRetryable, TransportError } from "../src/effect.js"
 import {
   LLMClient,
   RequestExecutor,
@@ -697,7 +697,7 @@ describe("RequestExecutor", () => {
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
       const model = route.with({ endpoint: { baseURL: "https://api.openai.test/v1" } }).model({ id: "gpt-4o-mini" })
-      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+      const error = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Ref.update(attempts, (value) => value + 1).pipe(
@@ -728,7 +728,7 @@ describe("RequestExecutor", () => {
 
 describe("WebSocket channel execution", () => {
   const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
-  const request = LLM.request({ model, prompt: "Say hello." })
+  const request = ai.request({ model, prompt: "Say hello." })
   const frames = [
     JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_1" } }),
     JSON.stringify({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),

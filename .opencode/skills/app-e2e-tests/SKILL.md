@@ -1,17 +1,17 @@
 ---
 name: app-e2e-tests
-description: Use when writing, changing, reviewing, or debugging Playwright e2e tests in packages/app/e2e (regression keepers and user stories). Covers the mocked opencode server harness and the Bun static server, per-test isolation, page-load and route cost, the suite-wide service-worker block, races with first mount, hover, measurement, clock, dialogs and shortcuts, projects, shards and worker scheduling, rehearsing Windows timing locally, and diagnosing a CI flake from its artifacts. Not for Storybook component tests or e2e/performance benchmarks.
+description: Use when writing, changing, reviewing, or debugging Playwright e2e tests in packages/app/e2e (regression keepers and user stories). Covers the mocked opencode server harness and the Bun static server, per-test isolation, page-load and route cost, the suite-wide service-worker block, races with first mount, hover, measurement, clock, dialogs and shortcuts, projects, shards and worker scheduling, rehearsing Windows timing locally, and diagnosing a CI flake from its artifacts. Not for component tests (stories mounted on packages/stories) or e2e/performance benchmarks.
 ---
 
 # App e2e tests
 
-Read `packages/app/e2e/AGENTS.md` and the Tests section of `packages/app/AGENTS.md` first. They define what to test, which locators to use, and how to assert. `packages/app/README.md` (E2E Testing) documents run modes and env vars. This skill covers what makes these tests slow or flaky in CI, which runs the suite as two shards per OS on 4-vCPU runners (`.github/workflows/test.yml:207-229`). Most races below were found on Windows.
+Read `packages/app/e2e/AGENTS.md` and the Tests section of `packages/app/AGENTS.md` first. They define what to test, which locators to use, and how to assert. `packages/app/README.md` (E2E Testing) documents run modes and env vars. This skill covers what makes these tests slow or flaky in CI, which runs the suite as two shards per OS on 4-vCPU runners (`.github/workflows/check-test.yml:217-240`). Most races below were found on Windows.
 
 All paths below are relative to `packages/app` unless they start with `packages/`, `services/` or `.github/`.
 
 ## What a test runs against
 
-- **No opencode backend.** Each shard leg runs `bun --cwd packages/app test:e2e:built --shard=<n>/2` (`test.yml:274-279`). It builds once and starts one Bun static server, `e2e/utils/serve.ts`, on `127.0.0.1:${PLAYWRIGHT_PORT ?? 3000}`. All 5 workers share it (`playwright.config.ts:23-27`).
+- **No opencode backend.** Each shard leg runs `bun --cwd packages/app test:e2e:built --shard=<n>/2` (`check-test.yml:287-292`). It builds once and starts one Bun static server, `e2e/utils/serve.ts`, on `127.0.0.1:${PLAYWRIGHT_PORT ?? 3000}`. All 5 workers share it (`playwright.config.ts:23-27`).
   - `serve.ts` keeps vite preview's SPA fallback rules. Do not move built e2e back to vite preview. On case-insensitive file systems it synchronously reads the whole `dist/_assets` directory (about 3,100 files) for every asset request, so every worker's page loads wait in line. The `e2e/performance` configs still use it to keep their baselines comparable.
 - **The API is an in-memory mock per page,** running in the test worker. `mockOpenCodeServer` (`e2e/utils/mock-server.ts:202`):
   - answers `page.route("**/api/**")` with an Effect HttpApi handler;
@@ -39,7 +39,7 @@ All paths below are relative to `packages/app` unless they start with `packages/
 
 - **Navigate once.** Every `goto` or `reload` is a cold load of the production bundle: about 150 requests per session open, about 125 of them static files. Each test has a new context, and any `page.route` disables the HTTP cache. Reach later states through the UI or through pushed events. Reload only when surviving a reload is the contract.
 - **Service workers are already blocked suite-wide** (`serviceWorkers: "block"`, `playwright.config.ts:66-67`). Do not add a per-file block; the 11 in `e2e/regression` are redundant.
-  - Production registers `/sw.js` on load (`src/entry.tsx:54-55`) and precaches about 1,600 files (`globPatterns: ["**/*"]`, `vite.pwa.ts:34`). `e2e/service-worker/` covers it under its own config. The main config ignores that directory (`playwright.config.ts:33-36`), and CI runs it after shard 2 (`test.yml:281-285`).
+  - Production registers `/sw.js` on load (`src/entry.tsx:54-55`) and precaches about 1,600 files (`globPatterns: ["**/*"]`, `vite.pwa.ts:34`). `e2e/service-worker/` covers it under its own config. The main config ignores that directory (`playwright.config.ts:33-36`), and CI runs it after shard 2 (`check-test.yml:294-298`).
   - Opt back in with `test.use({ serviceWorkers: "allow" })` only when the worker is the contract. It never controls the first load (`clientsClaim: false`, `vite.pwa.ts:26-28`). After a reload it can control the page, and page routes may then miss its requests.
   - Every built-mode page load logs Playwright's block warning. Console collectors must ignore it, as `captureConsoleWarnings` does (`e2e/utils/command-palette.ts:15-26`).
 - **Match new routes with a RegExp or a query-aware glob, not a function.**
@@ -77,7 +77,7 @@ Most of these rarely reproduce on an idle local machine.
 - **Use the harness's signals.** `holdRoute(...).arrived` resolves when the request reaches the route, and `transport.send` resolves after delivery. `setupTimeline(...).waitForPart` resolves once a part renders (`timeline.ts:328`).
 - **Decide which side is wrong.** Three of eight investigated e2e flakes were product bugs, each since fixed in the product:
   - a stale scroll offset restored when a scroll settles (`src/session/timeline/observe-element-offset.ts`);
-  - a video double-click that also entered native fullscreen (`packages/gui-extensions/src/file/artifact-view.tsx:617`);
+  - a video double-click that also entered native fullscreen (`packages/gui-plugins/src/file/artifact-view.tsx:612`);
   - shortcuts dropped while a dialog closed.
 
   If a user could hit the interleaving, fix the product and keep the assertion.
@@ -89,12 +89,12 @@ Most of these rarely reproduce on an idle local machine.
   - A rename that the regex misses quietly puts the file back in `chromium` as that serial group.
   - `--project chromium`, UI mode and the VS Code extension's default project skip the file.
 - **In `chromium`, files are the scheduling unit.** `fullyParallel` is off unless `PLAYWRIGHT_FULLY_PARALLEL=1` (`:42`), so a file's tests run in order on one worker. A long file sets a floor and leaves an idle tail. New regressions go into the area's keeper file (`e2e/AGENTS.md`), so keep each case cheap.
-- **Shards split whole files by test count, not duration** (`test.yml:219-222`). The touch project queues last, so its tests always fall in shard 2. To reproduce a leg's schedule, pass the same `--shard`.
+- **Shards split whole files by test count, not duration** (`check-test.yml:229-232`). The touch project queues last, so its tests always fall in shard 2. To reproduce a leg's schedule, pass the same `--shard`.
 - **Worker-scoped options fork a worker.** `launchOptions`, `channel`, `headless`, `video`, `trace`, `screenshot` and `defaultBrowserType` give a file its own worker hash.
   - Playwright groups a project's files by worker hash in order of first appearance, so such a file runs after every default file in its project.
   - Use test-scoped options instead: `viewport`, `deviceScaleFactor`, `hasTouch`, `isMobile`, `userAgent`, `colorScheme`, `serviceWorkers`, `locale`.
   - Use `launchOptions` only when a Chromium flag is the contract, with a comment (`patch-border.spec.ts:5-9`).
-- **Never spread `devices[...]` into `test.use`.** iPhone entries set `defaultBrowserType: "webkit"`, which forks a worker and needs a browser that CI never installs (`test.yml:269-272`). Copy the fields you need, as `mobile-timeline-scroll.spec.ts:23-28` does.
+- **Never spread `devices[...]` into `test.use`.** iPhone entries set `defaultBrowserType: "webkit"`, which forks a worker and needs a browser that CI never installs (`check-test.yml:282-285`). Copy the fields you need, as `mobile-timeline-scroll.spec.ts:23-28` does.
 - **Retries are not free.** CI retries twice (`playwright.config.ts:44`). Each failure restarts the worker's browser and costs 10-30 s of cleanup on Windows. The first retry then reruns with a trace and a video (`:62-65`).
 - **Timeouts are not a fix.** The limits are 60 s per test and 10 s per assertion (`playwright.config.ts:38-41`). `APP_READY_TIMEOUT` (30 s, `e2e/utils/waits.ts:4`) covers only first readiness.
   - When one wait is genuinely long, scope the timeout to that assertion and say what takes the time. `settings-wsl.spec.ts:268-276` does this with `{ timeout: 20_000 }` for a 10 s health check.
@@ -122,11 +122,11 @@ Run from `packages/app`:
 
 ## When CI flakes
 
-- **Find it.** e2e runs on pull requests that affect `@opencode/app` or `@opencode/storybook`, including their workspace dependencies, and on every manual dispatch (`.github/workflows/test.yml:42-54`). It never runs on dev (`:28`).
+- **Find it.** e2e runs on pull requests that affect `@opencode/app` or `@opencode/stories`, including their workspace dependencies, and on every manual dispatch (`.github/workflows/check-test.yml:50-62`). It never runs on dev (`:28`).
   - Each OS has the legs `app-1` and `app-2` (the shards), `session-ui-components` and `app-components`.
-  - The required `e2e (linux)` and `e2e (windows)` checks only aggregate those legs (`:316-335`).
+  - The required `e2e (linux)` and `e2e (windows)` checks only aggregate those legs (`:329-352`).
   - A pass on retry leaves a leg green. Check each Windows shard report's Flaky list, and make sure your new tests are not on it.
-- **Download:** `gh run download <run-id> -n playwright-windows-app-2-1 -D <dir>`. Artifacts are named `playwright-<os>-<leg>-<run attempt>` (`test.yml:301-314`). App e2e results are in `<dir>/app/e2e/`.
+- **Download:** `gh run download <run-id> -n playwright-windows-app-2-1 -D <dir>`. Artifacts are named `playwright-<os>-<leg>-<run attempt>` (`check-test.yml:314-327`). App e2e results are in `<dir>/app/e2e/`.
 - **In CI, the failing first attempt has no trace and no video** (`playwright.config.ts:62-65`).
   - `test-results/<test>-<project>/` holds `error-context.md` (the aria snapshot at the failure) and `test-failed-1.png`.
   - `<test>-<project>-retry1/` holds `trace.zip` and `video.webm` whether the retry passed or failed, plus failure files only if it failed. A second retry records neither.

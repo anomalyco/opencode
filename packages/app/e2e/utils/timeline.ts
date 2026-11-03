@@ -125,7 +125,6 @@ type TimelineServerInput = Partial<
     | "fileList"
     | "fileContent"
     | "findFiles"
-    | "pty"
     | "keepalive"
     | "onPermissionReply"
     | "shellCommands"
@@ -214,7 +213,7 @@ export async function setupTimeline(
     messages?: TimelineMessage[]
     sessionMessages?: SessionMessageInfo[]
     sessionStatus?: Record<string, SessionStatus>
-    settings?: Record<string, boolean | TimelineDetail>
+    settings?: Record<string, boolean | string | TimelineDetail>
     sessions?: Session[]
     cpuRate?: number
     viewport?: { width: number; height: number }
@@ -322,7 +321,7 @@ export async function setupTimeline(
 
   return {
     transport,
-    pty: mock.pty,
+    persistentPty: mock.persistentPty,
     send,
     async sendAll(sequence: { event: TimelineEvent; delay: number }[]) {
       for (const item of sequence) await send(item.event, item.delay)
@@ -352,6 +351,14 @@ export function event(
   data: Extract<OpenCodeEvent, { type: "session.status" }>["data"],
 ): OpenCodeEvent {
   return makeEvent(type, data)
+}
+
+export function inboxEnqueued(data: Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>["data"]) {
+  return makeEvent("session.inbox.enqueued", data)
+}
+
+export function inboxDelivered(data: Extract<OpenCodeEvent, { type: "session.inbox.delivered" }>["data"]) {
+  return makeEvent("session.inbox.delivered", data)
 }
 
 export function compactionStarted(data: Extract<OpenCodeEvent, { type: "session.compaction.started" }>["data"]) {

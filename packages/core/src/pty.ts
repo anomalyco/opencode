@@ -27,8 +27,8 @@ type Subscriber = {
 type Active = {
   info: Info
   process: Proc
+  // Retained output ending at cursor.
   buffer: string
-  bufferCursor: number
   cursor: number
   subscribers: Map<object, Subscriber>
   listeners: Disp[]
@@ -195,7 +195,6 @@ const layer = Layer.effect(
         info,
         process: proc,
         buffer: "",
-        bufferCursor: 0,
         cursor: 0,
         subscribers: new Map(),
         listeners: [],
@@ -217,9 +216,7 @@ const layer = Layer.effect(
           }
           session.buffer += chunk
           if (session.buffer.length <= BUFFER_LIMIT) return
-          const excess = session.buffer.length - BUFFER_LIMIT
-          session.buffer = session.buffer.slice(excess)
-          session.bufferCursor += excess
+          session.buffer = session.buffer.slice(session.buffer.length - BUFFER_LIMIT)
         }),
         proc.onExit(({ exitCode }) => {
           if (session.info.status === "exited") return
@@ -270,7 +267,6 @@ const layer = Layer.effect(
         pending: [],
       }
       session.subscribers.set(token, subscriber)
-      const start = session.bufferCursor
       const end = session.cursor
       const from =
         input.cursor === -1
@@ -278,14 +274,8 @@ const layer = Layer.effect(
           : input.cursor !== undefined && Number.isSafeInteger(input.cursor)
             ? Math.max(0, input.cursor)
             : 0
-      const replay = (() => {
-        if (!session.buffer || from >= end) return ""
-        const offset = Math.max(0, from - start)
-        if (offset >= session.buffer.length) return ""
-        return session.buffer.slice(offset)
-      })()
       return {
-        replay,
+        replay: session.buffer.slice(Math.max(0, from - (end - session.buffer.length))),
         cursor: end,
         write: (data: string) => {
           if (session.info.status === "running") session.process.write(data)

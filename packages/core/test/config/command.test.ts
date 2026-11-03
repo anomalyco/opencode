@@ -89,6 +89,21 @@ describe("ConfigCommandPlugin.Plugin", () => {
       input: '"alpha beta" gamma delta',
       expected: "First alpha beta. Rest gamma delta.",
     },
+    {
+      template: "Run awk '{print $0}' on $1.",
+      input: "app.log",
+      expected: "Run awk '{print $0}' on app.log.",
+    },
+    {
+      template: "Run awk '{print $0}'.",
+      input: "app.log",
+      expected: "Run awk '{print $0}'.\n\napp.log",
+    },
+    {
+      template: "First $1. Rest $2.",
+      input: '"$ARGUMENTS" tail',
+      expected: "First $ARGUMENTS. Rest tail.",
+    },
     { template: "$ARGUMENTS / $ARGUMENTS", input: "$& $$", expected: "$& $$ / $& $$" },
   ]) {
     it.live(`interpolates ${JSON.stringify(item.template)} with literal input ${JSON.stringify(item.input)}`, () =>
