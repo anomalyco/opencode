@@ -290,6 +290,8 @@ export function Session(props: {
     (id) => {
       if (id === sessionID) setRowsSynced(true)
     },
+    // A scroll-triggered history load joins this boundary load instead of publishing its own page.
+    () => pinAbove(),
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
   const anchors = createTimelineAnchors()
@@ -404,6 +406,15 @@ export function Session(props: {
     })
   }
 
+  // Pin an existing row before publication. Total height also counts streamed output below the
+  // reader, which must not move their viewport when it arrives alongside the older rows.
+  const pinAbove = () => {
+    if (!scroll || scroll.isDestroyed) return
+    if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
+    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
+    if (node) afterLayout(scroll.anchor(node))
+  }
+
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
   // mount on demand near the top, keeping inactive tabs cheap to tear down. While the reader stays
   // at the bottom the hidden span follows appends; leaving the bottom pins it to preserve the viewport.
@@ -426,16 +437,18 @@ export function Session(props: {
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
     loadMore: async (id) => {
-      await data.session.message.loadMore(id)
+      const beforePublish = () => {
+        if (route.sessionID === id) pinAbove()
+      }
+      await data.session.message.loadMore(id, { beforePublish })
       await completeGroupBoundary({
         rows,
         messages: () => data.session.message.list(id).length,
         more: () => data.session.message.more(id),
-        loadMore: () => data.session.message.loadMore(id),
+        loadMore: () => data.session.message.loadMore(id, { beforePublish }),
         active: () => route.sessionID === id,
       })
     },
-    height: () => scroll.scrollHeight,
     afterLayout,
     active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
     scrollBy: (amount) => {
@@ -449,11 +462,11 @@ export function Session(props: {
     if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
     if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
-    const before = scroll.scrollHeight
     scroll.stickyScroll = false
+    pinAbove()
     setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
-      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      scroll.scrollBy(scrollBy)
       scroll.stickyScroll = !navigationMessage()
       revealingOlderRows = false
     })

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import {
+  AIError,
   GenerationOptions,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
@@ -69,7 +71,11 @@ const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
     if (reject?.(request)) {
-      return Stream.make(LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }))
+      return Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({ message: "prompt too long", classification: "context-overflow" }),
+        }),
+      )
     }
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,
@@ -452,6 +458,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
         yield* compaction.transform((editor) => editor.configure({ buffer: 100_000 }))
         expect(yield* due(input(60_000, contextLimited))).toBe(false)
         expect(yield* due(input(84_000, contextLimited))).toBe(true)
+      }),
+    )
+
+    // A percentage buffer is a share of the model's window.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* compaction.transform((editor) => editor.configure({ buffer: "25%" }))
+        expect(yield* due(input(74_999, contextLimited))).toBe(false)
+        expect(yield* due(input(75_000, contextLimited))).toBe(true)
       }),
     )
 

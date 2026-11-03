@@ -125,7 +125,7 @@ const testEnvironment = Layer.effect(
     yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
-        const script = command._tag === "StandardCommand" ? (command.args.at(-1) ?? command.command) : "pipeline"
+        const script = command._tag === "StandardCommand" ? String(command.args.at(-1) ?? command.command) : "pipeline"
         shellState.runs.push(script)
         if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
         const outBytes = new TextEncoder().encode(shellState.stdout)

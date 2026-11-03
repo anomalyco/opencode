@@ -11,7 +11,7 @@
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
-import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
+import { type LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
@@ -198,7 +198,7 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
-  return LLMRequest.update(request, { tools, system, messages })
+  return { ...request, tools, system, messages }
 }
 
 /** Whether the cache policy places inline markers, which then carry the requested lifetime. */

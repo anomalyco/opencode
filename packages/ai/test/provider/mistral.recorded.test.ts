@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/mistral"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -70,10 +70,11 @@ describe("Mistral recorded", () => {
         expect(first.reasoning.length).toBeGreaterThan(0)
         expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
 
-        const followUp = LLMRequest.update(firstRequest, {
+        const followUp = {
+          ...firstRequest,
           messages: [...firstRequest.messages, first.message, Message.user("Reply with exactly: Done.")],
           generation: { maxTokens: 256, temperature: 0 },
-        })
+        }
         const replay = yield* compileRequest(followUp)
         expect(replay.body.messages).toContainEqual(
           expect.objectContaining({
@@ -114,7 +115,8 @@ describe("Mistral recorded", () => {
 
         const call = first.toolCalls[0]
         if (!call) throw new Error("Mistral did not return a tool call")
-        const followUp = LLMRequest.update(firstRequest, {
+        const followUp = {
+          ...firstRequest,
           toolChoice: ToolChoice.make("none"),
           messages: [
             ...firstRequest.messages,
@@ -122,7 +124,7 @@ describe("Mistral recorded", () => {
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
           ],
           generation: { maxTokens: 160, temperature: 0 },
-        })
+        }
         const second = yield* LLMClient.generate(followUp)
 
         expect(second.finishReason.normalized).toBe("stop")

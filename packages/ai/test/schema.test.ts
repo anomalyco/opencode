@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
   AIError,
   AIErrorReason,
@@ -12,15 +11,12 @@ import {
   InvalidProviderOutputError,
   InvalidRequestError,
   LLMEvent,
-  LLMRequest,
   LanguageModel,
   ModelID,
-  NoRouteError,
   ProviderID,
   ProviderInternalError,
   QuotaExceededError,
   RateLimitError,
-  RouteID,
   TimeoutError,
   ToolOutput,
   ToolResultValue,
@@ -39,38 +35,9 @@ const model = new LanguageModel({
   route: OpenAIChat.route,
 })
 
-const decodeLLMRequest = Schema.decodeUnknownSync(LLMRequest as unknown as Schema.Decoder<LLMRequest>)
 const decodeLLMEvent = Schema.decodeUnknownSync(LLMEvent as unknown as Schema.Decoder<LLMEvent>)
 
 describe("llm schema", () => {
-  test("decodes a minimal request", () => {
-    const input: unknown = {
-      id: "req_1",
-      model,
-      system: [{ type: "text", text: "You are terse." }],
-      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-      tools: [],
-      generation: {},
-    }
-
-    const decoded = decodeLLMRequest(input)
-
-    expect(decoded.id).toBe("req_1")
-    expect(decoded.messages[0]?.content[0]?.type).toBe("text")
-  })
-
-  test("accepts custom route ids", () => {
-    const decoded = decodeLLMRequest({
-      model: LanguageModel.update(model, { route: OpenAIResponses.route }),
-      system: [],
-      messages: [],
-      tools: [],
-      generation: {},
-    })
-
-    expect(decoded.model.route.id).toBe("openai-responses")
-  })
-
   test("rejects invalid event type", () => {
     expect(() => decodeLLMEvent({ type: "bogus" })).toThrow()
   })
@@ -336,12 +303,6 @@ test("AI error reasons are tagged Errors with required messages", () => {
       provider: model.provider,
       route: "fake-route",
     }),
-    new NoRouteError({
-      message: "No route",
-      route: RouteID.make("missing"),
-      provider: model.provider,
-      model: model.id,
-    }),
     new AuthenticationError({ message: "Missing credentials" }),
     new RateLimitError({ message: "Rate limited" }),
     new QuotaExceededError({ message: "Quota exceeded" }),
@@ -355,7 +316,6 @@ test("AI error reasons are tagged Errors with required messages", () => {
   expect(reasons.map((reason) => reason._tag)).toEqual([
     "InvalidRequest",
     "UnsupportedOperation",
-    "NoRoute",
     "Authentication",
     "RateLimit",
     "QuotaExceeded",

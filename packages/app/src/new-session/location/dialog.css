@@ -111,10 +111,6 @@
   color: var(--v2-text-text-faint);
 }
 
-.new-session-location-workspace .command-palette-row-icon {
-  color: var(--v2-icon-icon-base);
-}
-
 .new-session-location-workspace .command-palette-row-text > .command-palette-title {
   max-width: 60%;
   flex-shrink: 0;

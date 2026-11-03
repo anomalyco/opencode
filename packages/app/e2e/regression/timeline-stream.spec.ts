@@ -3,6 +3,7 @@ import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@op
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import { readSessionDraftText } from "../utils/drafts"
+import { holdRoute } from "../utils/app"
 import {
   assistantID,
   assistantMessage,
@@ -2005,6 +2006,7 @@ test("quotes plain timeline text into the composer, with or without a comment", 
   const user = '[data-slot="user-message-text"]'
   const answer = `[data-timeline-part-id="${renderedPartID("prt_quote_answer")}"] [data-slot="text-part-body"]`
   await expect(page.locator(answer).getByText("bundle", { exact: true })).toBeVisible()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
 
   const select = (from: string, to: string) =>
     page.evaluate(
@@ -2050,7 +2052,7 @@ test("quotes plain timeline text into the composer, with or without a comment", 
   await comment.fill("Why three?")
   await expect(popover.getByRole("button")).toHaveCount(1)
   await expect(popover.getByRole("button", { name: "Add comment", exact: true })).toBeVisible()
-  await popover.getByRole("button", { name: "Add comment", exact: true }).click()
+  await comment.press("Alt+Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(1)).toContainText("Why three?")
   await chips.nth(1).click()
@@ -2108,6 +2110,151 @@ test("quotes plain timeline text into the composer, with or without a comment", 
     }),
   ])
   await expect(chips).toHaveCount(0)
+})
+
+test("quote popup sends independently without consuming the draft or other quotes", async ({ page }) => {
+  const sent: string[] = []
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_direct_quote", "Keep this quoted passage.")])],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_direct_quote")}"] [data-slot="text-part-body"]`,
+  )
+
+  const editor = page.locator('[data-component="composer-editor"]')
+
+  const quote = page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await editor.fill("Keep my separate draft")
+  await selectQuoteText(answer)
+  await quote.click({ modifiers: ["Alt"] })
+  await expect(editor).toBeFocused()
+  await selectQuoteText(answer)
+  await quote.click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const comment = popup.locator("textarea")
+
+  const action = popup.getByRole("button")
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await expect(comment).toBeFocused()
+  await comment.fill("Explain this please")
+  await action.focus()
+  await page.keyboard.down(modifier)
+  await expect(action).toHaveAccessibleName("Send quote")
+  await page.keyboard.press("Enter")
+  await page.keyboard.up(modifier)
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent).toEqual(["steer"])
+  await expect(editor).toHaveText("Keep my separate draft")
+  const remaining = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  await expect(remaining).toHaveCount(1)
+  await expect(remaining).toContainText("Keep this quoted passage.")
+  await expect(remaining).not.toContainText("Explain this please")
+})
+
+test("a pending quote send hides mentions and keeps the comment read-only", async ({ page }) => {
+  const sent: string[] = []
+
+  await setupTimeline(page, {
+    settings: { followUpBehavior: "steer" },
+    sessionStatus: { [sessionID]: { type: "busy" } },
+    messages: [userMessage(), assistantMessage([textPart("prt_quote_mentions", "Keep this quoted passage.")])],
+    findFiles: () => ["src/api.ts"],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_mentions")}"] [data-slot="text-part-body"]`,
+  )
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const comment = popup.locator("textarea")
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await comment.fill("Explain @src/a")
+  await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(1)
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+  await popup.locator('[data-slot="line-comment-v2-submit"]').click({ modifiers: [modifier] })
+  await admission.arrived
+  await expect(popup.getByRole("button")).toBeDisabled()
+  await expect(comment).toHaveAttribute("readonly", "")
+  await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
+  await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(0)
+  await comment.press("Tab")
+  await expect(comment).toHaveValue("Explain @src/a")
+  expect(admission.requests).toHaveLength(1)
+  admission.release()
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent).toEqual(["queue"])
+})
+
+function selectQuoteText(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange()
+
+    range.selectNodeContents(element)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+  })
+}
+
+test("a failed direct quote send keeps the popup and comment for retry", async ({ page }) => {
+  let reject = true
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_direct_quote_failure", "Keep this quoted passage.")])],
+    onPrompt: () => {
+      if (reject) throw new Error("Quote send failed")
+    },
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_direct_quote_failure")}"] [data-slot="text-part-body"]`,
+  )
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const comment = popup.locator("textarea")
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await comment.fill("Keep my latest comment")
+  await comment.press(`${modifier}+Enter`)
+  await expect(popup.getByRole("alert")).toHaveText("Couldn’t send. Your comment is still here. Try again.")
+  await expect(comment).toHaveValue("Keep my latest comment")
+  await expect(comment).toBeEditable()
+  reject = false
+  await popup.getByRole("button").click({ modifiers: [modifier] })
+  await expect(popup).toHaveCount(0)
+  await expect(page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')).toHaveCount(
+    0,
+  )
 })
 
 test("highlights the exact duplicate passage whenever its quote comment is open", async ({ page }) => {
@@ -2230,6 +2377,7 @@ test("highlights the exact duplicate passage whenever its quote comment is open"
   await comment.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect.poll(highlights).toEqual([[]])
+  await expect(editor).toBeFocused()
 
   await select(second, 23)
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })

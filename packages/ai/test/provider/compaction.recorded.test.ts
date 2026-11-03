@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
 import { OpenAI, XAI, Anthropic } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
@@ -30,14 +30,13 @@ for (const provider of [
       Effect.gen(function* () {
         const request = ai.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
         const compacted = yield* ai.compact(request)
-        const result = yield* LLMClient.generate(
-          LLMRequest.update(request, {
-            messages: [
-              ...compacted.replacement,
-              Message.user("What is the project codename? Reply only with the codename."),
-            ],
-          }),
-        )
+        const result = yield* LLMClient.generate({
+          ...request,
+          messages: [
+            ...compacted.replacement,
+            Message.user("What is the project codename? Reply only with the codename."),
+          ],
+        })
         expect(result.text).toContain("COPPER-ORBIT-42")
       }),
     120000,
@@ -76,15 +75,14 @@ recordedTests({
       const first = yield* LLMClient.generate(request)
       expect(first.finishReason.raw).toBe("compaction")
       expect(first.message.content.some((part) => part.type === "compaction")).toBe(true)
-      const result = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          messages: [
-            ...request.messages,
-            first.message,
-            Message.user("What is the project codename? Reply only with the codename."),
-          ],
-        }),
-      )
+      const result = yield* LLMClient.generate({
+        ...request,
+        messages: [
+          ...request.messages,
+          first.message,
+          Message.user("What is the project codename? Reply only with the codename."),
+        ],
+      })
       expect(result.text).toContain("COPPER-ORBIT-42")
     }),
   120000,

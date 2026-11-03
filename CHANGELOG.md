@@ -2,6 +2,50 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.2.5 — 2026-10-30
+
+### Highlights
+
+- **Worktree and Shell Mode Shortcuts**: Press `⌘⌥O` on macOS or `Ctrl+Alt+O` on Windows and Linux to choose a worktree, and `⌘⌥B` or `Ctrl+Alt+B` to choose its base branch. `⌘⇧X` or `Ctrl+Shift+X` now toggles shell mode in the composer. ([#60713](https://github.com/anomalyco/opencode/pull/60713))
+- **Send Quotes From the Comment Popup**: Hold `⌘` or `Ctrl` in the quote popup to turn its checkmark into send, or press `⌘Enter` or `Ctrl+Enter`, to send just that quote and comment while leaving the rest of the composer untouched. ([#60640](https://github.com/anomalyco/opencode/pull/60640))
+- **Percentage Compaction Buffer**: Set `"compaction": { "buffer": "20%" }` in `opencode.json` to keep a share of each model's context window free, so one setting fits models with small and large windows. Token counts still work. ([#60647](https://github.com/anomalyco/opencode/pull/60647))
+
+### Core
+
+#### Improvements
+
+- `compaction.buffer` accepts a percentage of the model's context window, such as `"20%"`, in addition to a token count. ([#60647](https://github.com/anomalyco/opencode/pull/60647))
+- When `read` misses because a folder is missing, the error names that folder and the nearest one that exists. ([#60688](https://github.com/anomalyco/opencode/pull/60688))
+- When `edit` can't find `oldString`, the error shows the file's closest lines, or says the change is already there. ([#60689](https://github.com/anomalyco/opencode/pull/60689))
+- Calls to a tool named `bash` now run as `shell` instead of failing, with the same permissions. A plugin tool actually named `bash` still takes precedence. ([#60687](https://github.com/anomalyco/opencode/pull/60687))
+
+#### Bug fixes
+
+- MCP servers that send stdio messages larger than 10 MiB no longer get disconnected, and large messages are read much faster. ([#60694](https://github.com/anomalyco/opencode/pull/60694))
+- Idle locations no longer restart their MCP servers right after shutting down. ([#60668](https://github.com/anomalyco/opencode/pull/60668))
+- Compaction now caps its prompt at the model's context window when the input limit is larger. ([#60660](https://github.com/anomalyco/opencode/pull/60660))
+- LiteLLM context window errors now trigger compaction instead of stopping the session. ([#60692](https://github.com/anomalyco/opencode/pull/60692))
+- Reasoning is no longer turned into plain text when you switch models or resume an interrupted response, which caused request errors on some providers. ([#60498](https://github.com/anomalyco/opencode/pull/60498))
+
+### TUI
+
+#### Bug fixes
+
+- The connect menu no longer lists MCP servers, which are managed in their own place. ([#60675](https://github.com/anomalyco/opencode/pull/60675))
+
+### Desktop
+
+#### Improvements
+
+- Added keyboard shortcuts to choose a worktree and its base branch, shown in tooltips, and a shortcut to toggle shell mode. The worktree path can be selected to copy the full directory. ([#60713](https://github.com/anomalyco/opencode/pull/60713))
+- Hold `⌘` or `Ctrl` in the quote popup to send a quote and its comment directly. ([#60640](https://github.com/anomalyco/opencode/pull/60640))
+- Added flat input surfaces and a compact input size. ([#60598](https://github.com/anomalyco/opencode/pull/60598))
+
+#### Bug fixes
+
+- The connect menu no longer lists MCP servers. ([#60675](https://github.com/anomalyco/opencode/pull/60675))
+- Added the missing top inset to the search field in the recently closed menu. ([#60652](https://github.com/anomalyco/opencode/pull/60652))
+
 ## v2.2.4 — 2026-10-30
 
 ### Highlights

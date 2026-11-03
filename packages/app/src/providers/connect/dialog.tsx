@@ -37,7 +37,6 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
-import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -270,19 +269,12 @@ export const DialogConnectProvider: Component<{
 
 const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
 
-const CLAUDE_AGENT_DOCS_URL = "https://opencode.ai/v2/docs/providers#claude-agent"
-
-// The TUI's integration groups and order, plus Claude Agent, with connected integrations pulled up into their own group first.
-const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "claude-agent", "google"]
+// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
+const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
-  const data = useData()
-  const location = () => (props.directory ? { directory: props.directory } : undefined)
-  const mcpServers = () => data.location.mcp.server.list(location()) ?? []
-
-  createEffect(() => void data.location.mcp.server.sync(location()).catch(() => undefined))
 
   const [store, setStore] = createStore<{
     filter: string
@@ -291,30 +283,23 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
+  // MCP servers are connected and managed from the MCP dialog, not here.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
-    if (!query) return integrations.list()
-
-    return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
+    return integrations
+      .list()
+      .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
-  // MCP servers keep their own group whether or not they are signed in.
-  const providers = createMemo(() => all().filter((row) => row.metadata?.source !== "mcp"))
-
   const connected = createMemo(() =>
-    providers()
+    all()
       .filter((row) => row.connections.length > 0)
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const unconnected = createMemo(() => providers().filter((row) => row.connections.length === 0))
-
-  const mcp = createMemo(() =>
-    all()
-      .filter((row) => row.metadata?.source === "mcp")
-      .toSorted((a, b) => a.name.localeCompare(b.name)),
-  )
+  const unconnected = createMemo(() => all().filter((row) => row.connections.length === 0))
 
   const popular = createMemo(() =>
     unconnected()
@@ -330,7 +315,6 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
   const groups = () => [
     { title: language.t("dialog.provider.connected"), items: connected },
-    { title: language.t("dialog.provider.group.mcp"), items: mcp },
     { title: language.t("dialog.provider.group.popular"), items: popular },
     { title: language.t("dialog.provider.group.services"), items: services },
   ]
@@ -338,7 +322,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   // An integration that only reads environment variables has nothing to connect from here.
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
-  const rows = createMemo(() => [...connected(), ...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
+  const rows = createMemo(() => [...connected(), ...popular(), ...services()].filter((row) => !disabled(row)))
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -400,21 +384,13 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                   </div>
                   <For each={group.items()}>
                     {(provider) => {
-                      const mcp = provider.metadata?.source === "mcp"
                       const connection = () => provider.connections[0]
-
-                      const needsSignIn = () =>
-                        !!connection()?.status ||
-                        (mcp &&
-                          mcpServers().some(
-                            (server) => server.integrationID === provider.id && server.status.status === "needs_auth",
-                          ))
 
                       // The server lists the active account first.
                       const account = () => {
                         const current = connection()
 
-                        if (mcp || !current) return
+                        if (!current) return
 
                         return current.type === "credential" ? current.label : `$${current.name}`
                       }
@@ -454,7 +430,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                               </Badge>
                             )}
                           </Show>
-                          <Show when={needsSignIn()}>
+                          <Show when={!!connection()?.status}>
                             <span
                               data-slot="provider-status"
                               class="ms-auto shrink-0 pe-1 font-[440] text-[var(--v2-state-fg-warning)]"
@@ -559,9 +535,6 @@ function ProviderConnection(props: {
 
   const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
 
-  const mcp = () =>
-    integrations.list().find((integration) => integration.id === props.provider)?.metadata?.source === "mcp"
-
   const controller = createProviderConnectionController({
     provider: () => integrationID,
     directory,
@@ -603,8 +576,7 @@ function ProviderConnection(props: {
     })
 
     // Like the TUI, every connection continues to that provider's models, not just the first.
-    // MCP servers have no models, so they close instead.
-    const first = mcp() ? undefined : connectionGroups()[0]?.models[0]
+    const first = connectionGroups()[0]?.models[0]
 
     if (first) {
       setState({ models: true, selectedModel: modelKey(first) })
@@ -1650,10 +1622,7 @@ function ProviderConnection(props: {
         data-component="claude-agent-setup"
         class="flex flex-col items-start gap-5 px-3 pb-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
       >
-        <p>
-          {language.t("provider.connect.claudeAgent.description")}{" "}
-          <ExternalLink href={CLAUDE_AGENT_DOCS_URL}>{language.t("provider.connect.claudeAgent.learnMore")}</ExternalLink>
-        </p>
+        <p>{language.t("provider.connect.claudeAgent.description")}</p>
         <Show when={problem()}>
           {(message) => (
             <div class="flex items-start gap-2 text-v2-text-text-base">

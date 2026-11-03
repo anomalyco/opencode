@@ -12,7 +12,7 @@ export const info = Skill.Info.make({
   name: Skill.Name.make("Browser"),
   description:
     "Use the in-app browser: open and read pages, click and fill forms, take screenshots, check console and network logs, and profile performance and memory. Load it before your first browser tool call.",
-  path: AbsolutePath.make("/builtin/browser.md"),
+  path: AbsolutePath.make("skill://browser/SKILL.md"),
   content: [
     "# In-app browser",
     "",

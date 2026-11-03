@@ -74,7 +74,7 @@ jobs:
       # Match the release workflow's macOS playground exclusion.
       - name: Test macOS
         if: runner.os == 'macOS'
-        run: cargo test --locked --lib --test service --test runtime --test ownership --test rows --test ghostty-effects
+        run: cargo test --locked --lib --test service --test runtime --test ownership --test pipe --test rows --test ghostty-effects
 
   windows:
     name: Windows (${{ matrix.arch }})

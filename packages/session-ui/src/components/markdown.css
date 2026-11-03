@@ -153,8 +153,7 @@
     margin-inline-end: 4px;
   }
 
-  .markdown-link-favicon::before {
-    content: "";
+  .markdown-link-favicon-glyph {
     position: absolute;
     inset: 0;
     height: 14px;
@@ -163,7 +162,7 @@
     mask: url("./markdown-globe.svg") center / contain no-repeat;
   }
 
-  .markdown-link-favicon[data-github]::before {
+  .markdown-link-favicon[data-github] .markdown-link-favicon-glyph {
     mask-image: url("./markdown-github.svg");
   }
 
@@ -446,8 +445,8 @@
 
   th {
     padding: 8px 12px;
-    color: var(--v2-text-text-faint);
-    font-weight: 500;
+    color: var(--v2-text-text-muted);
+    font-weight: 530;
   }
 
   td {

@@ -28,7 +28,7 @@ import {
   type SessionPanelMenuItem,
 } from "@opencode/plugin/gui"
 import { useCommand } from "@/shell/commands/command"
-import { guardClosingFocus } from "@/shell/panel-motion"
+import { guardClosingFocus, setPanelResizing } from "@/shell/panel-motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { same } from "@/runtime/persistence/equality"
 import { useLayout } from "@/shell/state/layout"
@@ -153,6 +153,7 @@ export function SideRegion(props: {
 
                             if (column.height > 0) view().split.resize(1 - height / column.height)
                           }}
+                          onDraggingChange={setPanelResizing}
                         />
                       </div>
                     </Show>
@@ -401,7 +402,7 @@ export function PaneTabs(props: {
         </Menu>
         <div
           data-slot="session-side-panel-actions"
-          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
+          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-[var(--session-header-inset-end,12px)]"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
