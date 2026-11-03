@@ -354,10 +354,7 @@ describe("LocationServiceMap", () => {
     )
 
   it.live("retries a location after its missing directory is recreated", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -376,10 +373,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("keeps a workspace location admitted when its directory does not exist locally", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -442,10 +436,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("reuses cached services for constructed and decoded location refs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -466,10 +457,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("normalizes equivalent refs to one cached location graph", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -646,10 +634,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("rejects an unavailable selected model during location model resolution", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -699,10 +684,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("explains replacements for unavailable legacy provider models", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -746,10 +728,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("preserves the selected catalog identity when the package model id differs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })

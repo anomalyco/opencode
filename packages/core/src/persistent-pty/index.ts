@@ -21,9 +21,10 @@ import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
+  type DaemonAttachment,
   type DaemonTransport,
   type Role,
-  type StreamEvent,
+  type SubscribeInput,
   type WireResponse,
   type WireTerminal,
 } from "./daemon.js"
@@ -48,13 +49,7 @@ export type Attachment = {
   readonly info: Info
   readonly role: Role
   readonly generation: number
-  readonly replay: {
-    readonly requestedOffset: number
-    readonly availableOffset: number
-    readonly endOffset: number
-    readonly truncated: boolean
-    readonly data: Uint8Array
-  }
+  readonly replay: DaemonAttachment["replay"]
   readonly activate: () => void
   readonly detach: () => void
 }
@@ -126,14 +121,7 @@ export interface Interface {
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
   readonly attach: (
     id: Pty.ID,
-    input: {
-      readonly cursor: number
-      readonly attachmentID: string
-      readonly role: Role
-      readonly takeover?: boolean
-      readonly onEvent: (event: StreamEvent) => void
-      readonly onEnd: () => void
-    },
+    input: SubscribeInput,
   ) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
 }
 
@@ -211,76 +199,42 @@ const makeLayer = (options: Options = {}) =>
         return terminal
       })
 
-      const write = Effect.fn("PersistentPty.write")(function* (id: Pty.ID, data: string, attachmentID?: string) {
-        yield* get(id)
-        const response = yield* request(daemon, {
-          op: "write",
-          id: fromID(id),
-          attachment_id: attachmentID ?? null,
-          data_base64: Buffer.from(data).toString("base64"),
+      // Sends a terminal command that answers "ok"; `select` marks the terminal as its session's current one.
+      const command = (id: Pty.ID, op: string, body: object, select: boolean) =>
+        Effect.gen(function* () {
+          const terminal = yield* get(id)
+          const response = yield* request(daemon, { op, id: fromID(id), ...body })
+          if (response.type !== "ok") return yield* unexpected(response)
+          if (select) current.set(terminal.sessionID, id)
         })
-        if (response.type !== "ok") return yield* unexpected(response)
-        return undefined
-      })
 
-      const resize = Effect.fn("PersistentPty.resize")(function* (
-        id: Pty.ID,
-        cols: number,
-        rows: number,
-        attachmentID?: string,
-      ) {
-        const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "resize",
-          id: fromID(id),
-          attachment_id: attachmentID ?? null,
-          cols,
-          rows,
-        })
-        if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
-      })
+      const write = Effect.fn("PersistentPty.write")((id: Pty.ID, data: string, attachmentID?: string) =>
+        command(
+          id,
+          "write",
+          { attachment_id: attachmentID ?? null, data_base64: Buffer.from(data).toString("base64") },
+          false,
+        ),
+      )
 
-      const control = Effect.fn("PersistentPty.control")(function* (
-        id: Pty.ID,
-        attachmentID: string,
-        cols: number,
-        rows: number,
-      ) {
-        const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "control",
-          id: fromID(id),
-          attachment_id: attachmentID,
-          cols,
-          rows,
-        })
-        if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
-      })
+      const resize = Effect.fn("PersistentPty.resize")((id: Pty.ID, cols: number, rows: number, attachmentID?: string) =>
+        command(id, "resize", { attachment_id: attachmentID ?? null, cols, rows }, true),
+      )
 
-      const input = Effect.fn("PersistentPty.input")(function* (
-        id: Pty.ID,
-        attachmentID: string,
-        cols: number,
-        rows: number,
-        data: Uint8Array,
-      ) {
-        const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "input",
-          id: fromID(id),
-          attachment_id: attachmentID,
-          cols,
-          rows,
-          data_base64: Buffer.from(data).toString("base64"),
-        })
-        if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
-      })
+      const control = Effect.fn("PersistentPty.control")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number) =>
+          command(id, "control", { attachment_id: attachmentID, cols, rows }, true),
+      )
+
+      const input = Effect.fn("PersistentPty.input")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number, data: Uint8Array) =>
+          command(
+            id,
+            "input",
+            { attachment_id: attachmentID, cols, rows, data_base64: Buffer.from(data).toString("base64") },
+            true,
+          ),
+      )
 
       const rename = Effect.fn("PersistentPty.rename")(function* (id: Pty.ID, title: string | null) {
         const terminal = yield* get(id)

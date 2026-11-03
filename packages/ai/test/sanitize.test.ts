@@ -53,7 +53,7 @@ describe("sanitizeSurrogates", () => {
       tools: [tool],
       messages: [...messages, Message.user("bad \uD800")],
       generation: { maxTokens: 10 },
-      metadata: { nested: { list: ["a", "b"] } },
+      providerOptions: { nested: { list: ["a", "b"] } },
     })
     const sanitized = sanitizeRequest(request)
 
@@ -69,7 +69,7 @@ describe("sanitizeSurrogates", () => {
     const output = sanitizeSurrogates(input)
     expect(output.system).toBe(input.system)
     expect(output.tools).toBe(input.tools)
-    expect(output.metadata).toBe(input.metadata)
+    expect(output.providerOptions).toBe(input.providerOptions)
     expect(output.messages).not.toBe(input.messages)
 
     const clean = ai.request({ model, system: "system", tools: [tool], messages })

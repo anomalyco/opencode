@@ -452,7 +452,7 @@ interface ToolInputAssembly {
 }
 
 interface ResponseState {
-  readonly events: ReadonlyArray<LLMEvent>
+  readonly events: LLMEvent[]
   readonly message: Message
   readonly usage?: Usage
   readonly finishReason?: FinishReasonDetails
@@ -470,27 +470,24 @@ const emptyResponseState = (): ResponseState => ({
 })
 
 const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
-  const events = [...state.events, event]
+  state.events.push(event)
   if (LLMEvent.is.finish(event)) {
     return {
       ...state,
-      events,
       usage: event.usage ?? state.usage,
       finishReason: event.reason,
     }
   }
   return {
     ...state,
-    events,
     usage: "usage" in event && event.usage !== undefined ? event.usage : state.usage,
   }
 }
 
-const textContent = (text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
-  providerMetadata === undefined ? { type: "text", text } : { type: "text", text, providerMetadata }
+type ContentKind = "text" | "reasoning"
 
-const reasoningContent = (text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
-  providerMetadata === undefined ? { type: "reasoning", text } : { type: "reasoning", text, providerMetadata }
+const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
+  providerMetadata === undefined ? { type, text } : { type, text, providerMetadata }
 
 const contentWith = (state: ResponseState, content: ReadonlyArray<ContentPart>): ResponseState => ({
   ...state,
@@ -505,72 +502,64 @@ const replaceContent = (state: ResponseState, index: number, part: ContentPart) 
     state.message.content.map((item, itemIndex) => (itemIndex === index ? part : item)),
   )
 
-const ensureText = (state: ResponseState, id: string, providerMetadata?: ProviderMetadata): ResponseState => {
-  if (state.textParts[id]) return state
-  return {
-    ...appendContent(state, textContent("", providerMetadata)),
-    textParts: {
-      ...state.textParts,
-      [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
-    },
-  }
+const contentParts = (state: ResponseState, type: ContentKind) =>
+  type === "text" ? state.textParts : state.reasoningParts
+
+const withContentParts = (
+  state: ResponseState,
+  type: ContentKind,
+  parts: Readonly<Record<string, ContentAssembly>>,
+): ResponseState => (type === "text" ? { ...state, textParts: parts } : { ...state, reasoningParts: parts })
+
+const ensureContent = (
+  state: ResponseState,
+  type: ContentKind,
+  id: string,
+  providerMetadata?: ProviderMetadata,
+): ResponseState => {
+  const parts = contentParts(state, type)
+  if (parts[id]) return state
+  return withContentParts(appendContent(state, contentPart(type, "", providerMetadata)), type, {
+    ...parts,
+    [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
+  })
 }
 
-const reduceTextDelta = (state: ResponseState, event: TextDelta): ResponseState => {
-  const started = ensureText(state, event.id, event.providerMetadata)
-  const current = started.textParts[event.id]
+const reduceContentDelta = (
+  state: ResponseState,
+  type: ContentKind,
+  event: TextDelta | ReasoningDelta,
+): ResponseState => {
+  const started = ensureContent(state, type, event.id, event.providerMetadata)
+  const parts = contentParts(started, type)
+  const current = parts[event.id]
   if (!current) return started
   const text = current.text + event.text
   const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(started, current.contentIndex, textContent(text, providerMetadata)),
-    textParts: { ...started.textParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const reduceTextEnd = (state: ResponseState, event: TextEnd): ResponseState => {
-  const current = state.textParts[event.id]
-  if (!current) return state
-  const text = event.text ?? current.text
-  const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(state, current.contentIndex, textContent(text, providerMetadata)),
-    textParts: { ...state.textParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const ensureReasoning = (state: ResponseState, id: string, providerMetadata?: ProviderMetadata): ResponseState => {
-  if (state.reasoningParts[id]) return state
-  return {
-    ...appendContent(state, reasoningContent("", providerMetadata)),
-    reasoningParts: {
-      ...state.reasoningParts,
-      [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
+  return withContentParts(
+    replaceContent(started, current.contentIndex, contentPart(type, text, providerMetadata)),
+    type,
+    {
+      ...parts,
+      [event.id]: { ...current, text, providerMetadata },
     },
-  }
+  )
 }
 
-const reduceReasoningDelta = (state: ResponseState, event: ReasoningDelta): ResponseState => {
-  const started = ensureReasoning(state, event.id, event.providerMetadata)
-  const current = started.reasoningParts[event.id]
-  if (!current) return started
-  const text = current.text + event.text
-  const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(started, current.contentIndex, reasoningContent(text, providerMetadata)),
-    reasoningParts: { ...started.reasoningParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const reduceReasoningEnd = (state: ResponseState, event: ReasoningEnd): ResponseState => {
-  const current = state.reasoningParts[event.id]
+const reduceContentEnd = (state: ResponseState, type: ContentKind, event: TextEnd | ReasoningEnd): ResponseState => {
+  const parts = contentParts(state, type)
+  const current = parts[event.id]
   if (!current) return state
   const text = event.text ?? current.text
   const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(state, current.contentIndex, reasoningContent(text, providerMetadata)),
-    reasoningParts: { ...state.reasoningParts, [event.id]: { ...current, text, providerMetadata } },
-  }
+  return withContentParts(
+    replaceContent(state, current.contentIndex, contentPart(type, text, providerMetadata)),
+    type,
+    {
+      ...parts,
+      [event.id]: { ...current, text, providerMetadata },
+    },
+  )
 }
 
 const reduceToolInputStart = (state: ResponseState, event: ToolInputStart): ResponseState => ({
@@ -642,17 +631,17 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
     case "compaction":
       return appendContent(next, event)
     case "text-start":
-      return ensureText(next, event.id, event.providerMetadata)
+      return ensureContent(next, "text", event.id, event.providerMetadata)
     case "text-delta":
-      return reduceTextDelta(next, event)
+      return reduceContentDelta(next, "text", event)
     case "text-end":
-      return reduceTextEnd(next, event)
+      return reduceContentEnd(next, "text", event)
     case "reasoning-start":
-      return ensureReasoning(next, event.id, event.providerMetadata)
+      return ensureContent(next, "reasoning", event.id, event.providerMetadata)
     case "reasoning-delta":
-      return reduceReasoningDelta(next, event)
+      return reduceContentDelta(next, "reasoning", event)
     case "reasoning-end":
-      return reduceReasoningEnd(next, event)
+      return reduceContentEnd(next, "reasoning", event)
     case "tool-input-start":
       return reduceToolInputStart(next, event)
     case "tool-input-delta":
@@ -701,17 +690,20 @@ export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   }
 }
 
-export namespace LLMResponse {
+/**
+ * Internal fold that assembles one provider attempt. Not exported from the package.
+ * A state has a single owner: `reduce` appends to the events buffer in place, so earlier states must not be reused.
+ */
+export namespace ResponseFold {
   export type State = ResponseState
-  export type Output = LLMResponse | { readonly events: ReadonlyArray<LLMEvent>; readonly usage?: Usage }
 
-  /** Initial reducer state for assembling one provider attempt. */
+  /** Initial state with a fresh events buffer. */
   export const empty = emptyResponseState
 
-  /** Purely fold one provider-neutral event into the attempt assembly state. */
+  /** Fold one provider-neutral event into the state. */
   export const reduce = reduceResponseState
 
-  /** Return a completed response only after the terminal finish. */
+  /** Return a completed response only after the terminal finish. The response gets its own copy of the events. */
   export const complete = (state: State): LLMResponse | undefined =>
     state.finishReason === undefined
       ? undefined
@@ -722,14 +714,19 @@ export namespace LLMResponse {
           finishReason: state.finishReason,
         })
 
-  /** Convenience reducer for callers that already have a collected event list. */
-  export const fromEvents = (events: ReadonlyArray<LLMEvent>) => complete(events.reduce(reduce, empty()))
-
   /** Output that arrived before a failure, or `undefined` if only `step-start` did; an unfinished response reports `error`. */
   export const partial = (state: State) =>
     state.events.every(LLMEvent.is.stepStart)
       ? undefined
       : complete({ ...state, finishReason: state.finishReason ?? { normalized: "error" } })
+}
+
+export namespace LLMResponse {
+  export type Output = LLMResponse | { readonly events: ReadonlyArray<LLMEvent>; readonly usage?: Usage }
+
+  /** Assemble a response from a collected event list, or `undefined` if it has no terminal finish. */
+  export const fromEvents = (events: ReadonlyArray<LLMEvent>) =>
+    ResponseFold.complete(events.reduce(ResponseFold.reduce, ResponseFold.empty()))
 
   /** Concatenate assistant text from a response or collected event list. */
   export const text = (response: Output) => responseText(response.events)

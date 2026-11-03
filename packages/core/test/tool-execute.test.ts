@@ -54,7 +54,9 @@ describe("fetch permissions", () => {
     server = Bun.serve({
       port: 0,
       fetch: (request) => {
-        hits.push(`${request.method} ${new URL(request.url).pathname}`)
+        const url = new URL(request.url)
+        hits.push(`${request.method} ${url.pathname}`)
+        if (url.pathname === "/redirect") return Response.redirect(`${url.origin}/blocked`, 302)
         return new Response("ok")
       },
     })
@@ -85,6 +87,24 @@ describe("fetch permissions", () => {
         source: { type: "tool", messageID: context.messageID, id: context.id },
       },
     ])
+  })
+
+  test("a redirect to a URL denied for webfetch is never requested", async () => {
+    hits.length = 0
+    const denied = permissionService({
+      assert: () => Effect.void,
+      assertNotDenied: (input) =>
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+    })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), denied).execute(
+        { code: `try { await fetch("${server.url.origin}/redirect") } catch (e) { return e.message }` },
+        context,
+      ),
+    )
+
+    expect(result.output.output).toContain("Permission denied")
+    expect(hits).toEqual(["GET /redirect"])
   })
 
   test("a rejection with feedback reaches the program as the error message", async () => {

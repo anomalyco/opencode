@@ -41,7 +41,6 @@ export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Text" })
 export type TextPart = Schema.Schema.Type<typeof TextPart>
@@ -51,7 +50,6 @@ export const MediaPart = Schema.Struct({
   media: Media.AssetSchema,
   filename: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
@@ -135,7 +133,6 @@ export const ToolCallPart = withStatics(
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
   {
@@ -153,7 +150,6 @@ export const ToolResultPart = withStatics(
     result: ToolResultValue,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolResult" }),
   {
@@ -170,7 +166,6 @@ export const ToolResultPart = withStatics(
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
       cache: input.cache,
-      metadata: input.metadata,
       providerMetadata: input.providerMetadata,
     }),
   },
@@ -182,7 +177,6 @@ export const ReasoningPart = Schema.Struct({
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
@@ -236,7 +230,6 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   id: Schema.optional(Schema.String),
   role: MessageRole,
   content: Schema.Array(ContentPart),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -301,7 +294,6 @@ const toolDefinitionFields = {
   outputSchema: Schema.optional(JsonSchema),
   freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }
 
@@ -418,7 +410,6 @@ export interface LLMRequest<Model extends LanguageModel = LanguageModel> {
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
-  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
   readonly includeRaw?: boolean
 }

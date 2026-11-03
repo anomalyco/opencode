@@ -146,6 +146,9 @@ export function make(input: Input): Connection {
   const start: Effect.Effect<void> = Effect.suspend(() =>
     Effect.gen(function* () {
       yield* input.events.connecting
+      // Checked before the OAuth provider is built, which parses the URL too.
+      if (input.config.type === "remote" && !URL.canParse(input.config.url))
+        return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${input.config.url}` })
       const scope = yield* Scope.fork(input.scope)
       state.scope = scope
       const authProvider = yield* input.authProvider
