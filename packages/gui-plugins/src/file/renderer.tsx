@@ -45,7 +45,7 @@ import {
 } from "@opencode/plugin/gui/file"
 import type File from "./index"
 import { FileVisual } from "./label"
-import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import { fileTabId, fileTabPath, isFileTab, resolveOpenInAppPath, workspaceFileUrl } from "./path"
 import tabStyles from "./tabs.css?inline"
 import { onIdle, BuiltinPanel, BuiltinSlot, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
@@ -570,22 +570,25 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       session.server.client === client
 
     const pending = import("./resolve-link")
-      .then(async ({ checkFileLinkExists, parseFileLink }) => {
+      .then(async ({ checkFileLinkExists, parseFileLinkCandidates }) => {
         if (!current()) return false
 
         // A link in a previewed document opens relative to it, so only that path counts.
-        const path = parseFileLink(link.href).path
+        const parsed = parseFileLinkCandidates(link.href)
+        const base = link.base
 
-        const direct =
-          link.base === undefined || path.startsWith("//") || path.startsWith("~")
-            ? undefined
-            : resolve(files, path, link.base)
-
-        const exists = await (link.base === undefined
+        const exists = await (base === undefined
           ? checkFileLinkExists({ files, href: link.href, signal: ctx.signal })
-          : direct
-            ? files.exists(direct)
-            : false)
+          : (
+              await Promise.all(
+                parsed.map((candidate) => {
+                  if (candidate.path.startsWith("~") || candidate.path.startsWith("//")) return false
+                  const direct = resolve(files, candidate.path, base)
+
+                  return direct ? files.kind(direct).then((kind) => kind !== undefined) : false
+                }),
+              )
+            ).some(Boolean))
 
         if (!current()) return false
 
@@ -646,26 +649,28 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
       }
 
-      const openResolvedFile = (targetPath: string, selection?: LineRange) => {
+      const openResolvedFile = async (targetPath: string, selection?: LineRange, silent = false): Promise<boolean> => {
         const routed = stillCurrent()
 
-        if (!routed) return Promise.resolve()
+        if (!routed) return false
 
-        // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
+        // The browser pane shows HTML it can load. Confirm the file before handing it a path, so a mention's literal
+        // `@site/index.html` does not open a bogus tab before the real candidate is tried.
         const pane = ctx.use(Browser)()
 
         if (artifactKind(targetPath) === "html" && pane.status === "active" && pane.value.canOpen(routed, targetPath)) {
+          if ((await files.kind(targetPath)) !== "file") return false
           pane.value.open(routed, workspaceFileUrl(files.root, targetPath))
 
-          return Promise.resolve()
+          return true
         }
 
         // Confirm the file exists before a tab appears for it; a file deleted since its link rendered shows the load
         // error. Always reread: a cached copy can be stale.
-        return files.sync(targetPath, { force: true }).then(() => {
+        return files.sync(targetPath, { force: true, silent }).then(() => {
           const latest = stillCurrent()
 
-          if (!latest || !files.get(targetPath)?.loaded) return
+          if (!latest || !files.get(targetPath)?.loaded) return false
 
           batch(() => {
             applySelection(latest, files, targetPath, selection)
@@ -676,40 +681,110 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
           })
           // After the batch, as in `open`: the mobile tab strip registers the tab before it leaves the browser.
           updateFilter(latest.key, { browsing: false })
+
+          return true
         })
       }
 
+      // A mention can point at a folder. Opening it as a file returns "Path is not a file", so hand it to the OS
+      // instead. The web cannot do that, so it opens the file browser at the folder path.
+      const openDirectory = async (targetPath: string) => {
+        if (link.background) return false
+
+        if (!ctx.desktop) {
+          // The web cannot open a folder in the OS. Open the file browser at its path so the link still responds.
+          const session = sessions.current()
+
+          if (session) openPicker(session, targetPath.replace(/\/+$/, "") + "/")
+
+          return true
+        }
+
+        // Reveal, not launch: a message-supplied `.app` bundle is a directory, and launching it would run the app.
+        await ctx.desktop.reveal(files.absolute(targetPath) ? targetPath : resolveOpenInAppPath(files.root, targetPath))
+
+        return true
+      }
+
       void (async () => {
-        const { findFileLink, isAbsoluteLink, parseFileLink } = await import("./resolve-link")
+        const { findAnyFileLink, findFileLink, isAbsoluteLink, parseFileLinkCandidates } = await import(
+          "./resolve-link"
+        )
 
         if (!stillCurrent()) return
 
-        const parsed = parseFileLink(link.href)
-        const direct = resolve(files, parsed.path, link.base)
+        let attempted: string | undefined
 
-        if (!direct) return
+        const openFileCandidate = async (
+          candidate: { readonly path: string; readonly selection?: LineRange },
+          direct: string,
+          silent: boolean,
+        ) => {
+          // Absolute paths, links written relative to a document, and agent previews name one exact file.
+          if (isAbsoluteLink(candidate.path) || link.base !== undefined || link.background) {
+            attempted = direct
 
-        // Absolute paths, links written relative to a document, and agent previews name one exact file.
-        if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background) {
-          await openResolvedFile(direct, parsed.selection)
+            return openResolvedFile(direct, candidate.selection, silent)
+          }
 
-          return
+          const target = await findFileLink({ files, path: candidate.path, signal })
+          const latest = stillCurrent()
+
+          if (!latest) return false
+
+          if (target?.kind === "picker") {
+            openPicker(latest, target.query)
+
+            return true
+          }
+
+          // The file index misses folders, so a relative folder resolves through the mixed search instead.
+          const any = target ? undefined : await findAnyFileLink({ files, path: candidate.path, signal })
+          const path = target?.path ?? any ?? direct
+
+          attempted = path
+
+          if (!target && any && (await files.kind(any)) === "directory") return openDirectory(any)
+
+          // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
+          return openResolvedFile(path, candidate.selection, silent)
         }
 
-        const target = await findFileLink({ files, path: parsed.path, signal })
-        const latest = stillCurrent()
+        const candidates = parseFileLinkCandidates(link.href)
 
-        if (!latest) return
+        for (const [index, candidate] of candidates.entries()) {
+          const direct = resolve(files, candidate.path, link.base)
 
-        if (target?.kind === "picker") {
-          openPicker(latest, target.query)
+          attempted = undefined
 
-          return
+          if (!direct) continue
+
+          // Open as a file first; only a failed read pays for the folder check. Non-final tries stay silent so a
+          // mention can fall back to the next candidate, while the final try reports the load error as before.
+          if (await openFileCandidate(candidate, direct, true)) return
+
+          if ((await files.kind(direct)) === "directory") {
+            await openDirectory(direct)
+
+            return
+          }
+
+          if (index === candidates.length - 1) {
+            const failed = attempted ?? direct
+            const error = files.get(failed)?.error
+
+            // The silent attempt already stored the load error; replay it instead of reading the same path again.
+            if (error) {
+              const state = files.get(failed)
+              const open = layout.stored(session).some((id) => isFileTab(id) && fileTabPath(files, id) === failed)
+
+              // A tab that already shows the not-found state is the feedback; the model suppresses its toast there too.
+              if (!state?.notFound || !open)
+                ctx.toast.show({ variant: "error", title: ctx.t("toast.file.loadFailed.title"), description: error })
+            } else await openResolvedFile(failed, candidate.selection, false)
+          }
         }
-
-        // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-        await openResolvedFile(target?.path ?? direct, parsed.selection)
-      })()
+      })().catch(() => undefined)
     },
   })
 

@@ -23,7 +23,7 @@ const fileNames = new Set([
 export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^https?:\/\//i.test(text)) return "url"
 
-  if (!text || /\s/.test(text) || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+  if (!text || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
 
   // Code, globs and markup, not paths.
   if (/[{}<>"'`;=|&*,]/.test(text)) return
@@ -32,6 +32,10 @@ export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^[\\/]{2}/.test(text)) return
 
   const path = parsePathLineSuffix(text).path
+
+  // A space usually means prose or a shell command. Keep it only when the text starts like a path or ends in a
+  // file extension, so `bun test src/file` stays code while `my docs/notes.md` can link.
+  if (/\s/.test(path) && !/^([a-z]:[\\/]|~?[\\/]|\.{1,2}[\\/])/i.test(path) && !/\.[a-z][a-z0-9]*$/i.test(path)) return
 
   if (fileNames.has(path)) return "path"
 

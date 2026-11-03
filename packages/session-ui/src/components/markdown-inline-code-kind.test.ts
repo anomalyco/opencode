@@ -13,6 +13,8 @@ describe("inlineCodeKind", () => {
     "console.log",
     "Dockerfile",
     "Makefile:12",
+    "my docs/notes.md",
+    "C:\\Program Files\\app\\file.txt",
   ])("treats %s as a possible path", (text) => {
     expect(inlineCodeKind(text)).toBe("path")
   })
@@ -31,6 +33,9 @@ describe("inlineCodeKind", () => {
     "ftp://x/y",
     "\\\\host\\share\\x.ts",
     "//host/share/x.ts",
+    "bun test src/file",
+    "cd packages/app",
+    "npm 10.2.0",
   ])("leaves %s as code", (text) => {
     expect(inlineCodeKind(text)).toBeUndefined()
   })
