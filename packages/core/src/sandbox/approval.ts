@@ -40,7 +40,16 @@ export function parse(command: string, shell: string) {
     ["sh", "bash", "zsh", "dash", "ksh", "eval", "exec", "env", "source", ".", "command", "builtin"].includes(
       path.basename(tokens[0] ?? ""),
     ) ||
-    (prefix.length === 1 && /^(?:node|bun|deno|python[\d.]*|perl|ruby|php)$/.test(path.basename(prefix[0])))
+    /^(?:node|nodejs|deno|python[\d.]*|pypy[\d.]*|perl|ruby|php|julia|lua|osascript|Rscript|awk)$/.test(
+      path.basename(tokens[0] ?? ""),
+    ) ||
+    (path.basename(tokens[0] ?? "") === "bun" &&
+      (prefix.length === 1 ||
+        ["-e", "--eval", "eval"].includes(tokens[1] ?? "") ||
+        (tokens[1] === "run" &&
+          (prefix.length < 3 ||
+            (prefix[2] ?? "").includes("/") ||
+            /^(?:[.-]|.*\.(?:js|jsx|ts|tsx|mjs|cjs))/.test(prefix[2] ?? "")))))
   )
     return
   return { tokens, prefix }
