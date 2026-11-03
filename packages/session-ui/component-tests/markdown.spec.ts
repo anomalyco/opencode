@@ -501,6 +501,32 @@ story("keeps inline code backgrounds 18px tall", async ({ page }) => {
   ).toEqual([18, 18])
 })
 
+story("keeps inline code geometry when a completed stream turns it into a file link", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Edit `src/file.ts` to fix it", streaming: true })
+  }, fixture)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const harness = page.getByTestId("markdown-fixture")
+  const code = harness.locator(":not(pre) > code")
+  await expect(code).toHaveText("src/file.ts")
+  await expect(code).not.toHaveAttribute("data-inline-code-kind")
+
+  const geometry = () =>
+    code.evaluate((element) => {
+      const next = document.createRange()
+      next.selectNodeContents(element.nextSibling!)
+      const box = element.getBoundingClientRect()
+
+      return { left: box.left, right: box.right, next: next.getBoundingClientRect().left }
+    })
+
+  const before = await geometry()
+  await harness.getByLabel("Streaming").uncheck()
+  await expect(code).toHaveAttribute("data-inline-code-kind", "path")
+  expect(await geometry()).toEqual(before)
+})
+
 story("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { getCachedMarkdown, renderCachedMarkdown } = await import(fixture)
