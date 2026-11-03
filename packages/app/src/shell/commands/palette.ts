@@ -242,6 +242,7 @@ type SessionSearchState = {
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
+  archived?: boolean
   known?: () => SessionInfo[]
   /** Hides sessions deleted since they were loaded. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
@@ -276,7 +277,7 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (session.time.archived) return []
+      if (!!session.time.archived !== !!props.archived) return []
 
       const project = projectForSession(session, projects)
 

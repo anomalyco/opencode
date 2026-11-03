@@ -1113,6 +1113,10 @@ function mockHandlers(
 
               return session.parentID === ctx.query.parentID
             })
+            .filter(
+              (session) =>
+                !!currentSession(session, config.directory).time.archived === (ctx.query.archived === "true"),
+            )
             .filter((session) =>
               ctx.query.search === undefined
                 ? true
@@ -1286,10 +1290,20 @@ function mockHandlers(
         },
         sessionRename: (ctx) =>
           Effect.sync(() => {
-            const title = Option.getOrUndefined(decodeSessionRename(ctx.payload))?.title
+            const update = Option.getOrUndefined(decodeSessionUpdate(ctx.payload))
+
             const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
 
-            if (session && title !== undefined) session.title = title
+            if (!session || !update) return
+
+            if (update.title !== undefined) session.title = update.title
+
+            if (update.archived !== undefined) {
+              session.time = {
+                ...currentSession(session, config.directory).time,
+                archived: update.archived ? Date.now() : undefined,
+              }
+            }
           }).pipe(Effect.andThen(noContent)),
         sessionCommand: (ctx) => {
           const recordCommand = config.onCommand
@@ -1512,7 +1526,9 @@ const decodeSessionCreate = Schema.decodeUnknownOption(
   Schema.Struct({ id: lenient(Schema.String), title: lenient(Schema.String), parentID: lenient(Schema.String) }),
 )
 
-const decodeSessionRename = Schema.decodeUnknownOption(Schema.Struct({ title: Schema.String }))
+const decodeSessionUpdate = Schema.decodeUnknownOption(
+  Schema.Struct({ title: Schema.optionalKey(Schema.String), archived: Schema.optionalKey(Schema.Boolean) }),
+)
 
 const decodeRevertStage = Schema.decodeUnknownOption(Schema.Struct({ messageID: Schema.String }))
 

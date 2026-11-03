@@ -763,6 +763,7 @@ export const dict = {
   "sidebar.inbox.section.working": "Working",
   "sidebar.inbox.section.recent": "Recent",
   "sidebar.inbox.section.archived": "Archived",
+  "sidebar.inbox.archived.title": "Archived sessions",
   "sidebar.inbox.unarchive": "Unarchive",
   "sidebar.inbox.status.approval": "Approval",
   "sidebar.inbox.status.input": "Question",
