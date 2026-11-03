@@ -246,4 +246,3 @@ describe("SessionModelRequest.boundImages", () => {
     })
   })
 })
-
