@@ -6,7 +6,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { isRecord } from "@opencode/util/record"
-import { Cause, Context, Deferred, Duration, Effect, Layer, PubSub, RcMap, Stream } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Layer, Option, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
 import path from "path"
@@ -143,11 +143,16 @@ export const layer = (options?: Options) =>
       const keepWarm = (key: Target, released: Deferred.Deferred<void>, held: Deferred.Deferred<void>) =>
         Effect.scoped(
           Effect.gen(function* () {
-            yield* RcMap.getOption(watchers, key).pipe(Effect.onExit(() => Deferred.succeed(held, undefined)))
+            const pubsub = yield* RcMap.getOption(watchers, key).pipe(
+              Effect.onExit(() => Deferred.succeed(held, undefined)),
+            )
+            // A shut-down pubsub (unsupported backend) can never deliver updates, so
+            // retaining it would hand the next consumer a dead watch. Let it close.
+            if (Option.isNone(pubsub) || (yield* PubSub.isShutdown(pubsub.value))) return
             yield* Deferred.await(released)
             yield* Effect.sleep(IDLE_TIME_TO_LIVE)
           }),
-        ).pipe(Effect.ignoreCause, Effect.forkIn(scope), Effect.asVoid)
+        ).pipe(Effect.ignoreCause, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
 
       const subscribe = Effect.fnUntraced(function* (input: WatchInput, onReady: Effect.Effect<void> = Effect.void) {
         const target = path.resolve(input.path)

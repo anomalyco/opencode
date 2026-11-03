@@ -40,6 +40,10 @@ describe("FileWatch", () => {
       yield* fileWatch.watch(file("a.ts"))
       expect(yield* subscriptions).toBe(1)
       yield* fileWatch.unwatch(file("a.ts"))
+      // The watcher holds the native subscription through its idle grace window,
+      // so a rewatch inside that window reuses it instead of starting a new one.
+      yield* TestClock.adjust(Duration.seconds(3))
+      yield* Effect.yieldNow
       yield* fileWatch.watch(file("a.ts"))
       expect(yield* subscriptions).toBe(2)
     }),
@@ -76,6 +80,10 @@ describe("FileWatch", () => {
       yield* fileWatch.watch(file("newest.ts"))
       yield* fileWatch.watch(file("0.ts"))
       expect(yield* subscriptions).toBe(FileWatch.MAX_PER_LOCATION + 2)
+      // The evicted watch keeps its native subscription until the idle grace window
+      // elapses; rewatch it afterwards so it has to subscribe again.
+      yield* TestClock.adjust(Duration.seconds(3))
+      yield* Effect.yieldNow
       yield* fileWatch.watch(file("oldest.ts"))
       expect(yield* subscriptions).toBe(FileWatch.MAX_PER_LOCATION + 3)
     }),
