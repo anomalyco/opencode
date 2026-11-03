@@ -81,6 +81,14 @@ for (const variant of ["classic", "experimental"] as const) {
   })
 }
 
+story("MCP elicitation message and field descriptions link URLs", async ({ mount }) => {
+  const component = await mount("app-current-session-surface--mcp-elicitation-request")
+  const dock = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+
+  for (const url of ["https://example.com/releases/v2.4.0", "https://example.com/docs/release-notes"])
+    await expect(dock.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+})
+
 story(
   "uses the original question cards by default and submits selected and custom answers",
   async ({ mount, page }) => {

@@ -84,6 +84,15 @@ story("centers the error icon on the first line of short and wrapped errors", as
   geometry.forEach((card) => expect(card.offset).toBeCloseTo(0, 0))
 })
 
+story("links URLs in an error without splitting them at the scheme", async ({ mount }) => {
+  const timeline = await mount("current-session-error-card--linked-error")
+  const card = timeline.locator('[data-kind="session-error-card"]')
+  const url = "https://platform.example.com/settings/billing"
+
+  await expect(card.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+  await expect(card.locator("strong")).toHaveCount(0)
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "exploration" } })

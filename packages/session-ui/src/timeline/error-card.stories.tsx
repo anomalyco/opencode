@@ -98,3 +98,35 @@ export const ExecutionErrors = {
     />
   ),
 }
+
+const linkDocument = {
+  sessionID: CURRENT_SESSION_ID,
+  messages: [
+    ...thinkingDocument.messages,
+    {
+      id: "msg_story_error_link",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [],
+      error: {
+        type: "provider.quota",
+        message: "Insufficient balance. Top up at https://platform.example.com/settings/billing to continue.",
+      },
+      time: { created: STORY_TIME + 33_000, completed: STORY_TIME + 34_000 },
+    },
+  ],
+  status: { type: "idle" },
+  diffs: [],
+} satisfies SessionDocument
+
+export const LinkedError = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Linked error"
+      description="A provider error whose message includes a URL."
+      document={linkDocument}
+      width="480px"
+    />
+  ),
+}
