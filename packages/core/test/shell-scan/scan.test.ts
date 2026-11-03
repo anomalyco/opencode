@@ -254,6 +254,7 @@ describe("ShellScan lexical provenance", () => {
       commands: [
         {
           resource: source,
+          commandOffset: 24,
           words: ["git", "status", "a b", ""],
           rawWords: ['g"it"', "'status'", "a\\ b", '""'],
         },

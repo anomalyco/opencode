@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import os from "os"
 import path from "path"
 import { ShellParse } from "@opencode/core/shell/parse"
+import { Wildcard } from "@opencode/core/util/wildcard"
 
 describe("ShellParse", () => {
   test("splits bash commands and derives reusable prefixes", async () => {
@@ -17,6 +18,32 @@ describe("ShellParse", () => {
       directories: [],
     })
   })
+
+  test.each([
+    ["FOO=bar git status", "FOO=bar git status *"],
+    ["NODE_ENV=production npm run build", "NODE_ENV=production npm run build *"],
+    ["FOO=bar BAZ=1 git status", "FOO=bar BAZ=1 git status *"],
+    ["FOO=bar \\\nBAZ=1 git status", "FOO=bar \\\nBAZ=1 git status *"],
+    ["2>/dev/null curl -s https://example.com", "2>/dev/null curl *"],
+    ["> out git status", "> out git status *"],
+    ["FOO=bar >out git status 3>tail", "FOO=bar >out git status *"],
+  ] as const)("keeps leading assignments and redirects in the saved prefix: %s", async (command, save) => {
+    const scanned = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+    expect(scanned.commands).toEqual([{ resource: command, save }])
+    expect(Wildcard.match(command, save)).toBe(true)
+  })
+
+  test.each([
+    ["FOO=* git status", "git status *"],
+    ["URL=https://example.com/?a=1 curl -s x", "curl *"],
+    [">out* printf hello", "printf *"],
+  ] as const)(
+    "keeps the bare prefix when leading assignments or redirects hold a * or ?: %s",
+    async (command, save) => {
+      const scanned = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+      expect(scanned.commands).toEqual([{ resource: command, save }])
+    },
+  )
 
   test("rejects malformed syntax with an explicit scanner error", async () => {
     const malformed = await Effect.runPromiseExit(ShellParse.scan('echo "', "/bin/bash", "/workspace"))
