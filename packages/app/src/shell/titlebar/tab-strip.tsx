@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, on, onCleanup, onMount, Show } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -72,7 +72,7 @@ function SessionTabSlot(props: {
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
-        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
+        "w-56 min-w-20 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
       }}
       onPointerEnter={() => props.onIntent(true)}
@@ -361,7 +361,7 @@ function DraftTabSlot(props: {
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
-        "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
+        "w-56 min-w-20 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
       }}
     >
@@ -484,6 +484,22 @@ export function TitlebarTabStrip(props: {
       })),
   )
 
+  // Shortcuts and number keys select a tab without a click, so reveal the selected tab in an overflowing strip.
+  createEffect(
+    on(
+      () => (props.currentTab ? tabKey(props.currentTab) : undefined),
+      (key) => {
+        if (vertical() || !key) return
+
+        const slot = Array.from(scrollRef.querySelectorAll<HTMLElement>("[data-titlebar-tab-slot]")).find(
+          (element) => element.dataset.tabKey === key,
+        )
+
+        slot?.scrollIntoView({ behavior: "instant", block: "nearest", inline: "nearest" })
+      },
+    ),
+  )
+
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
@@ -514,6 +530,16 @@ export function TitlebarTabStrip(props: {
         }
         onScroll={() => {
           if (vertical()) measureFade()
+        }}
+        onWheel={(event) => {
+          const element = event.currentTarget
+
+          // The strip only scrolls horizontally, so a wheel or trackpad's vertical gesture drives it, as browser tabs do.
+          if (vertical() || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+
+          if (element.scrollWidth <= element.clientWidth) return
+          element.scrollLeft += event.deltaY
+          event.preventDefault()
         }}
       >
         <DragDropProvider

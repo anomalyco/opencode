@@ -469,42 +469,62 @@ for (const row of [
   })
 }
 
-test("icon-only inactive tabs retain their avatar and attention badge instead of showing a close overlay", async ({
-  page,
-}) => {
-  await mockWorkspace(page, {
-    name: "CompactTabs",
-    sessions: [
-      a,
-      b,
-      ...Array.from({ length: 30 }, (_, index) => ({ id: `ses_compact_${index}`, title: `Compact ${index}` })),
-    ],
-    sessionPermissions: {
-      [b.id]: [
-        {
-          id: "permission-compact-b",
-          sessionID: b.id,
-          action: "shell",
-          resources: ["git status"],
-          metadata: {},
-          save: [],
-        },
-      ],
-    },
-  })
-  await page.goto(sessionHref(a.id))
-  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
-  await expect(tabB.locator('[data-slot="tab-title"]')).toBeHidden()
-  await expect(tabB.locator('[data-component="project-avatar-v2"]')).toBeVisible()
-  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toBeVisible()
-  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCSS("width", "6px")
-  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCSS("height", "6px")
-  await expect(tabB.locator('[data-slot="tab-close"]')).toBeHidden()
-  await tabB.hover()
-  await expect(tabB.locator('[data-slot="tab-close"]')).toBeHidden()
-  await tabB.locator("[data-titlebar-tab-link]").click()
-  await expectPath(page, sessionHref(b.id))
-  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
+test("an overflowing horizontal tab strip keeps tabs usable and scrolls to the selected tab", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 720 })
+
+  const sessions = Array.from({ length: 14 }, (_, index) => ({
+    id: `ses_overflow_${index}`,
+    title: `Overflow session ${index}`,
+  }))
+
+  await mockWorkspace(page, { name: "OverflowTabs", sessions })
+  await page.goto(sessionHref(sessions[0]!.id))
+
+  const strip = page.locator('[data-slot="titlebar-tabs-scroll"]')
+  const slots = page.locator("[data-titlebar-tab-slot]")
+  await expect(slots).toHaveCount(sessions.length)
+  // Tabs keep a usable width and the strip overflows instead of shrinking into icon slivers.
+  await expect
+    .poll(() =>
+      slots.evaluateAll((elements) => Math.min(...elements.map((element) => element.getBoundingClientRect().width))),
+    )
+    .toBeGreaterThanOrEqual(80)
+  await expect(slots.nth(1).locator('[data-slot="tab-title"]')).toBeVisible()
+  await expect.poll(() => strip.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+
+  // A vertical wheel scrolls the strip horizontally, so tabs past the edge stay reachable with a mouse.
+  await strip.hover()
+  await page.mouse.wheel(0, 600)
+  await expect.poll(() => strip.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+
+  // Selecting an off-screen tab switches to it.
+  const last = sessions.at(-1)!
+  const lastLink = page.locator(`[data-titlebar-tab-link][href="${sessionHref(last.id)}"]`)
+  await strip.evaluate((element) => element.scrollTo(element.scrollWidth, 0))
+  const box = await lastLink.boundingBox()
+
+  if (!box) throw new Error("the last tab has no bounding box")
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expectPath(page, sessionHref(last.id))
+
+  // A number shortcut selects a tab and reveals it even when the strip starts scrolled to the beginning.
+  const ninth = sessions[8]!
+  const ninthLink = page.locator(`[data-titlebar-tab-link][href="${sessionHref(ninth.id)}"]`)
+
+  const ninthVisible = () =>
+    ninthLink.evaluate((element) => {
+      const strip = element.closest('[data-slot="titlebar-tabs-scroll"]')!
+      const link = element.getBoundingClientRect()
+      const bounds = strip.getBoundingClientRect()
+
+      return link.left >= bounds.left && link.right <= bounds.right
+    })
+
+  await strip.evaluate((element) => element.scrollTo(0, 0))
+  await expect.poll(ninthVisible).toBe(false)
+  await page.keyboard.press("ControlOrMeta+9")
+  await expectPath(page, sessionHref(ninth.id))
+  await expect.poll(ninthVisible).toBe(true)
 })
 
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
