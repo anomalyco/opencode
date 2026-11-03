@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { describe, expect, spyOn, test } from "bun:test"
+import { EventEmitter } from "node:events"
+import type { BrowserWindow } from "electron"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { readWindowState, resolveWindowState } from "./window-state"
+import { manageWindowState, readWindowState, resolveWindowState } from "./window-state"
 
 const defaults = { width: 1280, height: 800 }
 
@@ -108,4 +110,81 @@ describe("window state", () => {
     expect(readWindowState(file)).toBeUndefined()
     expect(readWindowState(path.join(dir, "missing.json"))).toBeUndefined()
   })
+})
+
+describe("saving window state on close", () => {
+  test.each(["success", "mkdir", "write", "rename", ...(process.platform === "linux" ? ["full"] : [])])(
+    "continues closing after %s",
+    (stage) => {
+      const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-close-"))
+      const file = path.join(dir, "state", "window.json")
+      const warn = spyOn(console, "warn").mockImplementation(() => {})
+      const bounds = { x: 10, y: 20, width: 800, height: 600 }
+
+      const win = Object.assign(new EventEmitter(), {
+        isDestroyed: () => false,
+        getBounds: () => bounds,
+        isMaximized: () => false,
+        isMinimized: () => false,
+        isFullScreen: () => false,
+      })
+
+      try {
+        if (stage === "mkdir") writeFileSync(path.dirname(file), "blocked")
+
+        if (stage === "write") {
+          mkdirSync(path.dirname(file))
+          writeFileSync(file, "previous state")
+          mkdirSync(`${file}.tmp`)
+        }
+
+        if (stage === "rename") mkdirSync(file, { recursive: true })
+
+        // /dev/full provides a real ENOSPC without filling the machine's disk.
+        if (stage === "full") {
+          mkdirSync(path.dirname(file))
+          symlinkSync("/dev/full", `${file}.tmp`)
+        }
+
+        // SAFETY: this fixture implements the window events and methods used for this non-maximized state.
+        manageWindowState(win as BrowserWindow, file, defaults, displays)
+        const closed = { called: false }
+        win.on("closed", () => {
+          closed.called = true
+        })
+        win.emit("close")
+        expect(() => win.emit("closed")).not.toThrow()
+        expect(closed.called).toBe(true)
+        expect(win.listenerCount("resize")).toBe(0)
+        expect(win.listenerCount("move")).toBe(0)
+        expect(win.listenerCount("close")).toBe(0)
+
+        if (stage === "success") {
+          expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+            ...bounds,
+            isMaximized: false,
+            isFullScreen: false,
+            displayBounds: primary,
+          })
+          expect(existsSync(`${file}.tmp`)).toBe(false)
+          expect(warn).not.toHaveBeenCalled()
+
+          return
+        }
+
+        expect(warn).toHaveBeenCalledWith("Failed to save window state", { file, error: expect.any(Error) })
+
+        if (stage === "write") expect(readFileSync(file, "utf8")).toBe("previous state")
+
+        if (stage === "full")
+          expect(warn).toHaveBeenCalledWith("Failed to save window state", {
+            file,
+            error: expect.objectContaining({ code: "ENOSPC" }),
+          })
+      } finally {
+        warn.mockRestore()
+        rmSync(dir, { recursive: true, force: true })
+      }
+    },
+  )
 })
