@@ -18,8 +18,8 @@ export interface WriteInput {
 }
 
 export interface Written extends FileMutation.TextWriteResult {
-  /** The file text after a formatter ran on it. */
-  readonly formatted?: string
+  /** Final file text after formatting and BOM synchronization. */
+  readonly formatted: string
 }
 
 export interface Interface {

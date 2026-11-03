@@ -345,10 +345,8 @@ export const Plugin = {
                 })
               }
               const result = yield* fileWrite.commit(target, replaced)
-              const formatted =
-                result.formatted ?? (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
-                files: [fileDiff(result.resource, source, formatted)],
+                files: [fileDiff(result.resource, source, result.formatted)],
                 replacements,
               } satisfies Output
             }).pipe(
