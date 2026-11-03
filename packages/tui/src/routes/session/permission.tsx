@@ -117,7 +117,12 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   )
 }
 
-export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
+export function PermissionPrompt(props: {
+  request: PermissionRequest
+  directory?: string
+  availableHeight?: number
+  availableWidth?: number
+}) {
   const data = useData()
   const toast = useToast()
   const config = useConfig().data
@@ -200,8 +205,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 ...(option === "always" ? (props.request.save ?? []).map((prefix) => `Session prefix: ${prefix}`) : []),
                 ...(option === "always" ? sandboxSessionScope : details.scope),
               ],
-              dimensions().width,
-              dimensions().height,
+              props.availableWidth ?? dimensions().width,
+              props.availableHeight ?? dimensions().height,
               11,
             )
           }
@@ -338,6 +343,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               instance={props.request.id}
               header={header}
               extraHeight={() => detailsRows()}
+              availableHeight={props.availableHeight}
+              availableWidth={props.availableWidth}
               scroll={
                 current.sandboxDetails ? (direction) => permissionScroll?.scrollBy(direction, "viewport") : undefined
               }
@@ -552,6 +559,8 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   choicesLabel?: string
   header?: JSX.Element | ((option: keyof T) => JSX.Element)
   extraHeight?: (option: keyof T) => number
+  availableHeight?: number
+  availableWidth?: number
   scroll?: (direction: -1 | 1) => void
   body: JSX.Element | ((option: keyof T) => JSX.Element)
   options: T
@@ -566,7 +575,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
     selected: keys[0],
     expanded: false,
   })
-  const narrow = createMemo(() => dimensions().width < 80)
+  const narrow = createMemo(() => (props.availableWidth ?? dimensions().width) < 80)
   const shortcuts = Keymap.useShortcuts()
   const id = () => props.id ?? "session.permission"
   const group = () => props.group ?? "Permission"
@@ -655,6 +664,8 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         expanded: store.expanded,
       }))}
       backgroundColor={theme.background.raised.base}
+      minHeight={0}
+      flexShrink={1}
       border={["left"]}
       borderColor={theme.background.action.primary.focused}
       customBorderChars={SplitBorder.customBorderChars}
@@ -662,14 +673,26 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
-            maxHeight: Math.min(dimensions().height, 15 + (props.extraHeight?.(store.selected) ?? 0)),
+            maxHeight: Math.min(
+              props.availableHeight ?? dimensions().height,
+              15 + (props.extraHeight?.(store.selected) ?? 0),
+            ),
             bottom: 0,
             left: 0,
             right: 0,
             position: "relative",
           })}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1} flexGrow={1}>
+      <box
+        gap={1}
+        paddingLeft={1}
+        paddingRight={3}
+        paddingTop={1}
+        paddingBottom={1}
+        flexGrow={1}
+        flexShrink={1}
+        minHeight={0}
+      >
         <Show
           when={props.header}
           fallback={

@@ -454,6 +454,56 @@ test("Enter in the diff panel cannot approve a pending permission in either pres
   expect(setup.requests.permission).toEqual([{ decision: "once" }])
 })
 
+test.each([
+  [100, 14],
+  [200, 14],
+  [100, 20],
+  [100, 30],
+  [160, 30],
+])("sandbox approval stays reviewable in the session at %s×%s", async (width, height) => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, {
+    sandboxPermission: true,
+    width,
+    height,
+    tabs: { mode: "on", layout: "horizontal" },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Permission required"))
+  await setup.waitForFrame((frame) => frame.includes("Allow once") && frame.includes("Reject"))
+  setup.mockInput.pressArrow("right")
+  await setup.waitForFrame((frame) => frame.includes("Allow prefix for session") && frame.includes("Reject"))
+  const actions = node(setup, "session.permission.actions")
+  const pane = node(setup, "session-pane")
+  expect(actions.y + actions.height).toBeLessThanOrEqual(pane.y + pane.height)
+  await setup.waitFor(() =>
+    descendants(setup.renderer.root).some(
+      (item) =>
+        item instanceof ScrollBoxRenderable && item.id === "session.permission.body" && item.viewport.height > 0,
+    ),
+  )
+  const body = descendants(setup.renderer.root).find(
+    (item): item is ScrollBoxRenderable =>
+      item instanceof ScrollBoxRenderable && item.id === "session.permission.body" && item.viewport.height > 0,
+  )
+  if (!body) throw new Error("Visible permission body is not scrollable")
+  if (body.scrollHeight > body.viewport.height) {
+    setup.mockInput.pressKey("\x1b[6~")
+    await setup.waitFor(() => body.scrollTop > 0)
+  }
+  body.scrollTo(body.scrollHeight)
+  await setup.waitForFrame((frame) => frame.includes("$ curl") && frame.includes("Allow prefix for session"))
+  expect(setup.requests.permission).toHaveLength(0)
+  if (width === 160 && height === 30) {
+    setup.mockInput.pressKey("F6")
+    await panelReady(setup)
+    await setup.waitForFrame((frame) => frame.includes("Allow prefix for session") && frame.includes("Reject"))
+    const resizedActions = node(setup, "session.permission.actions")
+    const resizedPane = node(setup, "session-pane")
+    expect(resizedActions.y + resizedActions.height).toBeLessThanOrEqual(resizedPane.y + resizedPane.height)
+    expect(resizedActions.x + resizedActions.width).toBeLessThanOrEqual(resizedPane.x + resizedPane.width)
+  }
+})
+
 test.each([true, false])("a form cannot capture diff keys (form already pending: %s)", async (pending) => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, { form: pending })
@@ -552,10 +602,12 @@ async function createSessionFixture(
   state: string,
   input: {
     width?: number
+    height?: number
     tabs?: Config.Info["tabs"]
     diffs?: Config.Info["diffs"]
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
+    sandboxPermission?: boolean
     form?: boolean
   } = {},
 ) {
@@ -574,8 +626,18 @@ async function createSessionFixture(
   const permission = {
     id: `per_panel_${crypto.randomUUID()}`,
     sessionID: session.id,
-    action: "shell",
-    resources: ["echo permission-fixture"],
+    action: input.sandboxPermission ? "sandbox.exec" : "shell",
+    resources: [input.sandboxPermission ? "curl -I https://example.com" : "echo permission-fixture"],
+    ...(input.sandboxPermission
+      ? {
+          save: ["curl"],
+          metadata: {
+            command: "curl -I https://example.com",
+            cwd: "/workspace",
+            justification: "Review the requested network operation and its effects. ".repeat(12),
+          },
+        }
+      : {}),
   } satisfies PermissionRequest
   const form = {
     id: `frm_panel_${crypto.randomUUID()}`,
@@ -602,7 +664,7 @@ async function createSessionFixture(
   }
   const setup = await createAppFixture({
     width: input.width ?? 160,
-    height: 36,
+    height: input.height ?? 36,
     state,
     args: { sessionID: session.id },
     config: {
@@ -643,7 +705,7 @@ async function createSessionFixture(
         })
       if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
       if (url.pathname === `/api/session/${session.id}/permission`)
-        return json({ data: input.permission ? [permission] : [] })
+        return json({ data: input.permission || input.sandboxPermission ? [permission] : [] })
       if (url.pathname === `/api/session/${session.id}/form`) return json({ data: input.form ? [form] : [] })
       if (url.pathname === `/api/session/${session.id}/prompt`) {
         requests.prompt.push(await request.json())

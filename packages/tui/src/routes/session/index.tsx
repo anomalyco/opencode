@@ -240,6 +240,8 @@ export function Session(props: {
 
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
+  const [sessionHeight, setSessionHeight] = createSignal(0)
+  const [sessionWidth, setSessionWidth] = createSignal(0)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
@@ -1502,6 +1504,10 @@ export function Session(props: {
         <box
           flexGrow={1}
           minHeight={0}
+          onSizeChange={function () {
+            setSessionHeight(this.height)
+            setSessionWidth(this.width)
+          }}
           paddingBottom={1}
           paddingLeft={dimensions().width < 44 ? 1 : 2}
           paddingRight={dimensions().width < 44 ? 1 : 2}
@@ -1604,7 +1610,12 @@ export function Session(props: {
                     {(_) => {
                       const request = promptedPermissions()[0]
                       return request ? (
-                        <PermissionPrompt request={request} directory={session()?.location.directory} />
+                        <PermissionPrompt
+                          request={request}
+                          directory={session()?.location.directory}
+                          availableHeight={Math.max(1, sessionHeight() - 2)}
+                          availableWidth={Math.max(1, sessionWidth() - (dimensions().width < 44 ? 2 : 4))}
+                        />
                       ) : null
                     }}
                   </Show>
