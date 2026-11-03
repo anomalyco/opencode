@@ -86,7 +86,7 @@ export function createHomeProjectsController(home: HomeController) {
         directory: project.worktree,
         project: {
           id: project.id,
-          canonical: project.canonical ?? project.worktree,
+          canonical: project.worktree,
           directory: project.worktree,
         },
       })

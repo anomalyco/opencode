@@ -323,8 +323,8 @@ function createServerController(
             requestedDirectory: directory,
             locationProject: {
               id: location.project.id,
-              worktree: location.project.worktree,
-              vcs: location.project.vcs,
+              directory: location.project.directory,
+              canonical: location.project.canonical,
             },
             sameIDProjects: sameID.map((project) => ({ id: project.id, worktree: project.worktree, vcs: project.vcs })),
             inventory: refreshed.map((project) => ({ id: project.id, worktree: project.worktree, vcs: project.vcs })),
