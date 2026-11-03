@@ -38,6 +38,10 @@ export default Plugin.define({
     const terminal = new Set<string>()
     const forms = new Set<string>()
     const permissions = new Set<string>()
+    // Servers that publish `session.status` say when a Session is really done: a finished turn can still be
+    // waiting on backgrounded work that will wake it. Older servers only report the turn.
+    let statusEvents = false
+    const finished = new Set<string>()
 
     const started = (sessionID: string) => {
       errored.delete(sessionID)
@@ -73,6 +77,12 @@ export default Plugin.define({
         // A running subagent's report wakes the session again, so it isn't done yet. Subagent sounds stay as they were.
         const session = context.data.session.get(event.data.sessionID)
         if (!session?.parentID && hasRunningChild(context, event.data.sessionID)) return
+        if (statusEvents) finished.add(event.data.sessionID)
+        else ended(event.data.sessionID)
+      }),
+      context.data.on("session.status", (event) => {
+        statusEvents = true
+        if (event.data.status.type !== "idle" || !finished.delete(event.data.sessionID)) return
         ended(event.data.sessionID)
       }),
       context.data.on("session.execution.interrupted", (event) => ended(event.data.sessionID)),

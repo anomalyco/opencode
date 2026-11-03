@@ -22,7 +22,8 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope, Stream } from "effect"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -140,6 +141,99 @@ describe("SessionExecution lifecycle", () => {
       yield* execution.awaitIdle(sessionID)
       expect((yield* claims(database))[sessionID]).toBe(false)
     }),
+  )
+
+  it.live("stays busy through a backgrounded tool until its notice wakes the Session", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_status_background")
+      yield* seedSessions(database, [sessionID])
+      const jobs = yield* Job.make
+      const latch = yield* Deferred.make<void>()
+      let drains = 0
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        () =>
+          Effect.gen(function* () {
+            if (drains++ > 0) return
+            // A foreground tool finishing mid-turn changes nothing.
+            yield* jobs.start({ id: "job_status_fg", sessionID, type: "tool", run: Effect.succeed("ok") })
+            yield* jobs.wait({ id: "job_status_fg" })
+            yield* jobs.start({
+              id: "job_status_bg",
+              type: "tool",
+              recovery: { kind: "tool", sessionID, tool: "deploy" },
+              run: Deferred.await(latch).pipe(Effect.as("deployed")),
+            })
+            yield* jobs.background("job_status_bg")
+          }),
+        undefined,
+        jobs,
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      // Admitting the notice takes a moment, as it does against the real inbox.
+      yield* jobs.registerNotifier((id) => Effect.sleep("20 millis").pipe(Effect.andThen(execution.wake(id))))
+      const statuses = yield* bus.subscribe(SessionStatusEvent.Status).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.map((event) => event.data.status.type),
+        Stream.takeUntil((type) => type === "idle"),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* execution.resume(sessionID)
+      yield* execution.awaitIdle(sessionID)
+      // The turn ended, but the backgrounded deploy will report back and wake it.
+      expect(yield* jobs.heldSessions).toEqual(new Set([sessionID]))
+
+      yield* Deferred.succeed(latch, undefined)
+      expect([...(yield* Fiber.join(statuses).pipe(Effect.timeout("2 seconds")))]).toEqual(["busy", "idle"])
+      expect(drains).toBe(2)
+    }).pipe(Effect.scoped),
+  )
+
+  it.live("Stop cancels the backgrounded work keeping the Session busy", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_status_stop")
+      yield* seedSessions(database, [sessionID])
+      const jobs = yield* Job.make
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        () =>
+          jobs
+            .start({
+              id: "job_status_stop",
+              type: "tool",
+              recovery: { kind: "tool", sessionID, tool: "deploy" },
+              run: Effect.never,
+            })
+            .pipe(Effect.andThen(jobs.background("job_status_stop")), Effect.asVoid),
+        undefined,
+        jobs,
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* jobs.registerNotifier((id) => execution.wake(id))
+      const statuses = yield* bus.subscribe(SessionStatusEvent.Status).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.map((event) => event.data.status.type),
+        Stream.takeUntil((type) => type === "idle"),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      yield* execution.resume(sessionID)
+      yield* execution.awaitIdle(sessionID)
+      expect(yield* execution.interrupt(sessionID)).toBeTrue()
+      expect((yield* jobs.get("job_status_stop"))?.status).toBe("cancelled")
+      expect([...(yield* Fiber.join(statuses).pipe(Effect.timeout("2 seconds")))]).toEqual(["busy", "idle"])
+    }).pipe(Effect.scoped),
   )
 
   it.effect("reports an idle interrupt as a no-op", () =>

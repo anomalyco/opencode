@@ -17,6 +17,65 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, Database.node, Global.node])))
 
 describe("Job", () => {
+  it.live("holds a Session only for backgrounded work that will wake it, until its notice lands", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.make
+      const sessionID = SessionSchema.ID.make("ses_held")
+      const notice = yield* Deferred.make<void>()
+      const delivered = yield* Deferred.make<void>()
+      const changes: SessionSchema.ID[] = []
+      yield* jobs.registerNotifier(() =>
+        Deferred.succeed(delivered, undefined).pipe(Effect.andThen(Deferred.await(notice))),
+      )
+      yield* jobs.registerHoldListener((id) => Effect.sync(() => changes.push(id)))
+      const tool = (id: string, run: Effect.Effect<string>) =>
+        jobs.start({ id, type: "tool", recovery: { kind: "tool", sessionID, tool: "deploy" }, run })
+
+      const latch = yield* Deferred.make<void>()
+      yield* tool("job_foreground", Effect.never)
+      yield* tool("job_detached", Effect.never)
+      yield* jobs.background("job_detached", { detach: true })
+      expect(yield* jobs.heldSessions).toEqual(new Set())
+
+      yield* tool("job_held", Deferred.await(latch).pipe(Effect.as("ok")))
+      yield* jobs.background("job_held")
+      expect(yield* jobs.heldSessions).toEqual(new Set([sessionID]))
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* Deferred.await(delivered)
+      // Finished, but its notice has not woken the Session yet.
+      expect(yield* jobs.heldSessions).toEqual(new Set([sessionID]))
+
+      yield* Deferred.succeed(notice, undefined)
+      yield* Effect.gen(function* () {
+        while ((yield* jobs.heldSessions).size > 0) yield* Effect.yieldNow
+      }).pipe(Effect.timeout("1 second"))
+      expect(changes.length).toBeGreaterThanOrEqual(2)
+      yield* jobs.cancel("job_foreground")
+      yield* jobs.cancel("job_detached")
+    }).pipe(Effect.scoped),
+  )
+
+  it.live("cancels held work without notices", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.make
+      const sessionID = SessionSchema.ID.make("ses_cancel_held")
+      const notices: string[] = []
+      yield* jobs.registerNotifier((_, notice) => Effect.sync(() => notices.push(notice.text)))
+      yield* jobs.start({
+        id: "job_cancel_held",
+        type: "tool",
+        recovery: { kind: "tool", sessionID, tool: "deploy" },
+        run: Effect.never,
+      })
+      yield* jobs.background("job_cancel_held")
+
+      expect((yield* jobs.cancelHeld(sessionID)).map((info) => info.status)).toEqual(["cancelled"])
+      expect(yield* jobs.heldSessions).toEqual(new Set())
+      expect(notices).toEqual([])
+    }).pipe(Effect.scoped),
+  )
+
   it.live("tracks process-local work through explicit observation", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service

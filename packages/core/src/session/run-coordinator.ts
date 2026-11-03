@@ -61,6 +61,8 @@ export const make = <Key, E, Reason = never>(options: {
    * drain and before the execution settles (waiters resolve after it completes).
    */
   readonly settled?: (key: Key, exit: Exit.Exit<void, E>, reason?: Reason) => Effect.Effect<void>
+  /** Runs once the key is idle again: its execution settled without a successor. */
+  readonly idle?: (key: Key) => Effect.Effect<void>
 }): Effect.Effect<Coordinator<Key, E, Reason>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const executions = new Map<Key, Execution<E, Reason>>()
@@ -98,7 +100,9 @@ export const make = <Key, E, Reason = never>(options: {
               execution.owner = undefined
             }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
           ),
-          Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
+          Effect.onExit((exit) =>
+            Effect.suspend(() => (settle(key, execution, exit) ? (options.idle?.(key) ?? Effect.void) : Effect.void)),
+          ),
           Effect.exit,
           Effect.asVoid,
         ),
@@ -109,9 +113,11 @@ export const make = <Key, E, Reason = never>(options: {
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
-      if (execution.pendingWake) start(key, false, execution.pendingWake)
+      const successor = execution.pendingWake
+      if (successor) start(key, false, successor)
       else executions.delete(key)
       Deferred.doneUnsafe(execution.done, exit)
+      return successor === undefined
     }
 
     const isActive = (key: Key) => Effect.sync(() => executions.has(key))

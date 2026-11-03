@@ -322,6 +322,9 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  // Servers that publish `session.status` own busyness (an ended turn can still wait on background work);
+  // older servers only report execution terminals.
+  let serverOwnsStatus = false
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -1147,6 +1150,10 @@ export function createData(config: CreateDataInput) {
           assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
         return
+      case "session.status":
+        serverOwnsStatus = true
+        setSessionActive(event.data.sessionID, event.data.status.type === "idle" ? "idle" : "running")
+        return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")
         // Revalidate so `time.busy` follows the projected execution start.
@@ -1169,7 +1176,7 @@ export function createData(config: CreateDataInput) {
       case "session.execution.succeeded":
       case "session.execution.failed":
       case "session.execution.interrupted":
-        setSessionActive(event.data.sessionID, "idle")
+        if (!serverOwnsStatus) setSessionActive(event.data.sessionID, "idle")
         message.update(event.data.sessionID, (draft) => {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined

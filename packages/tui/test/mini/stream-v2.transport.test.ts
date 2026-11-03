@@ -1661,6 +1661,32 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("goes idle when the server reports a Session hydrated as running is idle", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events], active: () => ({ ses_1: { type: "running" } }) })
+    const ui = footer()
+    const transport = await createSessionTransport({ sdk: client, sessionID: "ses_1", thinking: false, footer: ui.api })
+    const phase = () => {
+      const event = ui.events.findLast((event) => event.type === "stream.patch" && event.patch.phase)
+      return event?.type === "stream.patch" ? event.patch.phase : undefined
+    }
+    try {
+      while (!phase()) await Bun.sleep(0)
+      expect(phase()).toBe("running")
+      // Only backgrounded work held it; that work has now reported back.
+      events.push({
+        id: "evt_status_idle",
+        created: 2,
+        type: "session.status",
+        data: { sessionID: "ses_1", status: { type: "idle" } },
+      })
+      while (phase() !== "idle") await Bun.sleep(0)
+    } finally {
+      await transport.close()
+    }
+  })
+
   test("reconnects and hydrates without completing before session.wait", async () => {
     const first = feed()
     const second = feed()

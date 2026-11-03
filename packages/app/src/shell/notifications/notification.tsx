@@ -338,7 +338,22 @@ export function createServerNotificationState(input: {
     })
   }
 
+  // Servers that publish `session.status` say when a Session is really done: a finished turn can still be
+  // waiting on backgrounded work that will wake it. Older servers only report the turn.
+  let statusEvents = false
+  const finished = new Map<string, string>()
+
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "session.status") {
+      statusEvents = true
+      const eventID = finished.get(event.data.sessionID)
+      if (event.data.status.type !== "idle" || !eventID) return
+      finished.delete(event.data.sessionID)
+      handleSessionIdle(event.data.sessionID, eventID)
+
+      return
+    }
+
     if (event.type === "permission.asked") {
       void handleRequest("permission", event.data.sessionID, event.data.id)
 
@@ -356,12 +371,15 @@ export function createServerNotificationState(input: {
     }
 
     if (event.type === "session.execution.failed") {
+      finished.delete(event.data.sessionID)
       handleSessionError(event.data.sessionID, event.id)
 
       return
     }
 
-    if (event.type === "session.execution.succeeded") handleSessionIdle(event.data.sessionID, event.id)
+    if (event.type !== "session.execution.succeeded") return
+    if (statusEvents) finished.set(event.data.sessionID, event.id)
+    else handleSessionIdle(event.data.sessionID, event.id)
   })
 
   onCleanup(() => {
