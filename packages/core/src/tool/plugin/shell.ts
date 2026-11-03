@@ -5,7 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Scope } from "effect"
+import { Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
@@ -187,22 +187,30 @@ export const Plugin = {
             Effect.gen(function* () {
               const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
-              const info = yield* shell.create(
-                {
-                  command: input.command,
-                  cwd: input.workdir,
-                  timeout,
-                  shell: yield* compatibleShell,
-                  metadata: { sessionID: context.sessionID },
-                },
-                (invocation) =>
-                  Effect.gen(function* () {
-                    invocation.env.AGENT = "1"
-                    invocation.env.OPENCODE = "1"
-                    invocation.env.AI_AGENT ||= "opencode"
-                    invocation.env.OPENCODE_SESSION_ID = context.sessionID
-                    finalTimeout = yield* prepare(invocation, context)
-                  }),
+              // Keep ownership through progress and Job registration; preparation and spawning remain cancellable.
+              const info = yield* Effect.acquireRelease(
+                shell.create(
+                  {
+                    command: input.command,
+                    cwd: input.workdir,
+                    timeout,
+                    shell: yield* compatibleShell,
+                    metadata: { sessionID: context.sessionID },
+                  },
+                  (invocation) =>
+                    Effect.gen(function* () {
+                      invocation.env.AGENT = "1"
+                      invocation.env.OPENCODE = "1"
+                      invocation.env.AI_AGENT ||= "opencode"
+                      invocation.env.OPENCODE_SESSION_ID = context.sessionID
+                      finalTimeout = yield* prepare(invocation, context)
+                    }),
+                ),
+                (info, exit) =>
+                  Exit.isSuccess(exit)
+                    ? Effect.void
+                    : jobs.cancel(info.id).pipe(Effect.andThen(shell.remove(info.id).pipe(Effect.ignore))),
+                { interruptible: true },
               )
               yield* context.progress({ shellID: info.id })
 
@@ -244,9 +252,7 @@ export const Plugin = {
                 return backgroundResult(info.id, info.file)
               }
 
-              const result = yield* jobs
-                .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
+              const result = yield* jobs.block({ id: job.id, sessionID: context.sessionID })
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
@@ -258,6 +264,7 @@ export const Plugin = {
 
               return yield* Deferred.await(settled)
             }).pipe(
+              Effect.scoped,
               Effect.map(toolResult),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
