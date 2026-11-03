@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createMemo } from "solid-js"
 import { useRenderer } from "@opentui/solid"
 import { useData } from "../../context/data"
@@ -12,6 +13,7 @@ import { useNewDesigns } from "../../config"
 import { appendToSessionPrompt } from "../../component/prompt/draft-stash"
 
 export function DialogMessage(props: { messageID: string; sessionID: string }) {
+  const language = useLanguage()
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
@@ -23,19 +25,19 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
 
   return (
     <DialogSelect
-      title="Message Actions"
+      title={language.t("tui.details.messageActions")}
       renderFilter={!newDesigns()}
       options={[
         {
-          title: "Jump to",
+          title: language.t("tui.details.jumpTo"),
           value: "message.jump",
-          description: "view message in session",
+          description: language.t("tui.details.viewMessageInSession"),
           onSelect: (dialog) => dialog.clear(),
         },
         {
-          title: "Revert",
+          title: language.t("tui.details.revert"),
           value: "session.revert",
-          description: "undo messages and file changes",
+          description: language.t("tui.details.undoMessagesAndFileChanges"),
           onSelect: (dialog) => {
             const value = message()
             const { sessionID, messageID } = props
@@ -49,9 +51,9 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
           },
         },
         {
-          title: "Copy",
+          title: language.t("tui.details.copy"),
           value: "message.copy",
-          description: "message text to clipboard",
+          description: language.t("tui.details.messageTextToClipboard"),
           onSelect: async (dialog) => {
             const value = message()
             if (!value) return
@@ -75,9 +77,9 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
           },
         },
         {
-          title: "Fork",
+          title: language.t("tui.details.fork"),
           value: "session.fork",
-          description: "create a new session",
+          description: language.t("tui.details.createANewSession"),
           onSelect: (dialog) => {
             const value = message()
             if (!value || value.type !== "user") return

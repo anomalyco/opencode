@@ -1,3 +1,5 @@
+import { createLanguage } from "../i18n/translate"
+import { Config } from "../config"
 // RunFooter -- the mutable control surface for direct interactive mode.
 //
 // In the split-footer architecture, scrollback is immutable (append-only)
@@ -231,6 +233,7 @@ export class RunFooter implements FooterApi {
           .catch(() => {})
           .finally(() => this.destroyTheme(theme))
       },
+      language: createLanguage(() => this.options.tuiConfig.language ?? "en"),
       shellOutput: () => this.miniSettings().shell_output === "show",
       mono: this.miniSettings().mono,
       imagePreview: this.options.tuiConfig.session?.image_preview,
@@ -325,58 +328,63 @@ export class RunFooter implements FooterApi {
     const footer = this
     void render(
       () =>
-        createComponent(Keymap.Provider, {
-          config: options.tuiConfig,
+        createComponent(Config.ConfigProvider, {
+          config: { ...Config.resolve({}, { terminalSuspend: false }), ...options.tuiConfig },
           get children() {
-            return createComponent(RunFooterView, {
-              directory: options.directory,
-              state: footer.state,
-              startup: footer.startup,
-              view: footer.view,
-              subagent: footer.subagent,
-              queuedPrompts: footer.queuedPrompts,
-              findFiles: options.findFiles,
-              agents: footer.agents,
-              references: footer.references,
-              commands: footer.commands,
-              providers: footer.providers,
-              currentAgent: footer.currentAgent,
-              currentAgentID: footer.currentAgentID,
-              currentModel: footer.currentModel,
-              variants: footer.variants,
-              currentVariant: footer.currentVariant,
-              theme: footer.theme,
-              tuiConfig: options.tuiConfig,
-              get mono() {
-                return footer.miniSettings().mono
+            return createComponent(Keymap.Provider, {
+              config: options.tuiConfig,
+              get children() {
+                return createComponent(RunFooterView, {
+                  directory: options.directory,
+                  state: footer.state,
+                  startup: footer.startup,
+                  view: footer.view,
+                  subagent: footer.subagent,
+                  queuedPrompts: footer.queuedPrompts,
+                  findFiles: options.findFiles,
+                  agents: footer.agents,
+                  references: footer.references,
+                  commands: footer.commands,
+                  providers: footer.providers,
+                  currentAgent: footer.currentAgent,
+                  currentAgentID: footer.currentAgentID,
+                  currentModel: footer.currentModel,
+                  variants: footer.variants,
+                  currentVariant: footer.currentVariant,
+                  theme: footer.theme,
+                  tuiConfig: options.tuiConfig,
+                  get mono() {
+                    return footer.miniSettings().mono
+                  },
+                  miniSettings: footer.miniSettings,
+                  history: footer.history,
+                  onSubmit: footer.handlePrompt,
+                  onPermissionReply: footer.handlePermissionReply,
+                  onFormReply: footer.handleFormReply,
+                  onFormCancel: footer.handleFormCancel,
+                  onCycle: footer.handleCycle,
+                  onInterrupt: footer.handleInterrupt,
+                  onBackground: options.onBackground,
+                  onQueuedPromptAction: options.onQueuedPromptAction,
+                  onEditorOpen: (input) => {
+                    footer.finishStartup()
+                    return options.onEditorOpen(input)
+                  },
+                  onInputClear: footer.handleInputClear,
+                  onExitRequest: footer.handleExit,
+                  onRequestExit: footer.setRequestExitHandler,
+                  onExit: () => footer.close(),
+                  onAgentSelect: footer.handleAgentSelect,
+                  onModelSelect: footer.handleModelSelect,
+                  onVariantSelect: footer.handleVariantSelect,
+                  onRows: footer.syncRows,
+                  onLayout: footer.syncLayout,
+                  onStatus: footer.setStatus,
+                  onMiniSettingChange: footer.handleMiniSettingChange,
+                  onSubagentSelect: options.onSubagentSelect,
+                  onSubagentInterrupt: options.onSubagentInterrupt,
+                })
               },
-              miniSettings: footer.miniSettings,
-              history: footer.history,
-              onSubmit: footer.handlePrompt,
-              onPermissionReply: footer.handlePermissionReply,
-              onFormReply: footer.handleFormReply,
-              onFormCancel: footer.handleFormCancel,
-              onCycle: footer.handleCycle,
-              onInterrupt: footer.handleInterrupt,
-              onBackground: options.onBackground,
-              onQueuedPromptAction: options.onQueuedPromptAction,
-              onEditorOpen: (input) => {
-                footer.finishStartup()
-                return options.onEditorOpen(input)
-              },
-              onInputClear: footer.handleInputClear,
-              onExitRequest: footer.handleExit,
-              onRequestExit: footer.setRequestExitHandler,
-              onExit: () => footer.close(),
-              onAgentSelect: footer.handleAgentSelect,
-              onModelSelect: footer.handleModelSelect,
-              onVariantSelect: footer.handleVariantSelect,
-              onRows: footer.syncRows,
-              onLayout: footer.syncLayout,
-              onStatus: footer.setStatus,
-              onMiniSettingChange: footer.handleMiniSettingChange,
-              onSubagentSelect: options.onSubagentSelect,
-              onSubagentInterrupt: options.onSubagentInterrupt,
             })
           },
         }),

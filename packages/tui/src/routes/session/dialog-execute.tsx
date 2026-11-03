@@ -20,12 +20,14 @@ import {
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
+import { useLanguage } from "../../context/language"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 // The part is the live store object, so the dialog follows the tool while child
 // calls stream and the output arrives.
 export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
@@ -88,24 +90,52 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "up", title: "Scroll up", group: "Execute", run: () => scroll?.scrollBy(-1) },
-      { bind: "down", title: "Scroll down", group: "Execute", run: () => scroll?.scrollBy(1) },
-      { bind: "pageup", title: "Previous page", group: "Execute", run: () => scroll?.scrollBy(-maxHeight()) },
-      { bind: "pagedown", title: "Next page", group: "Execute", run: () => scroll?.scrollBy(maxHeight()) },
-      { bind: "home", title: "Scroll to code", group: "Execute", run: () => scroll?.scrollTo(0) },
-      { bind: "end", title: "Scroll to output", group: "Execute", run: () => scroll?.scrollTo(Infinity) },
-      { bind: "c", title: "Copy code", group: "Execute", run: () => copy("code") },
-      { bind: "o", title: "Copy output", group: "Execute", run: () => copy("output") },
+      { bind: "up", title: language.t("tui.interface.scrollUp"), group: "Execute", run: () => scroll?.scrollBy(-1) },
+      { bind: "down", title: language.t("tui.interface.scrollDown"), group: "Execute", run: () => scroll?.scrollBy(1) },
+      {
+        bind: "pageup",
+        title: language.t("tui.interface.previousPage"),
+        group: "Execute",
+        run: () => scroll?.scrollBy(-maxHeight()),
+      },
+      {
+        bind: "pagedown",
+        title: language.t("tui.interface.nextPage"),
+        group: "Execute",
+        run: () => scroll?.scrollBy(maxHeight()),
+      },
+      {
+        bind: "home",
+        title: language.t("tui.interface.scrollToCode"),
+        group: "Execute",
+        run: () => scroll?.scrollTo(0),
+      },
+      {
+        bind: "end",
+        title: language.t("tui.interface.scrollToOutput"),
+        group: "Execute",
+        run: () => scroll?.scrollTo(Infinity),
+      },
+      { bind: "c", title: language.t("tui.interface.copyCode"), group: "Execute", run: () => copy("code") },
+      { bind: "o", title: language.t("tui.interface.copyOutput"), group: "Execute", run: () => copy("output") },
     ],
   }))
 
   const copyActions = () => [
     copied() === "code"
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("code") }
-      : { title: "copy code", key: "c", onTrigger: () => copy("code") },
+      ? {
+          title: language.t("tui.dialogs.copied"),
+          color: theme.text.feedback.success.base,
+          onTrigger: () => copy("code"),
+        }
+      : { title: language.t("tui.interface.copyCode2"), key: "c", onTrigger: () => copy("code") },
     copied() === "output"
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("output") }
-      : { title: "copy output", key: "o", onTrigger: () => copy("output") },
+      ? {
+          title: language.t("tui.dialogs.copied"),
+          color: theme.text.feedback.success.base,
+          onTrigger: () => copy("output"),
+        }
+      : { title: language.t("tui.interface.copyOutput2"), key: "o", onTrigger: () => copy("output") },
   ]
 
   return (
@@ -115,7 +145,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
           gap={2}
           titleView={
             <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
-              execute
+              {language.t("tui.interface.execute")}
             </text>
           }
         >
@@ -127,9 +157,9 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         <DialogFooter
           actions={{
             secondary: [
-              { title: "scroll", key: "↑/↓" },
+              { title: language.t("tui.session.scroll"), key: "↑/↓" },
               ...copyActions(),
-              { title: "back", key: "esc", onTrigger: () => dialog.clear() },
+              { title: language.t("tui.stats.back"), key: "esc", onTrigger: () => dialog.clear() },
             ],
           }}
         />
@@ -148,15 +178,18 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
           <box gap={1} paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
             <box>
               <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
-                Code
+                {language.t("tui.interface.code")}
               </text>
-              <Show when={code()} fallback={<text fg={contentTheme.text.muted}>Waiting for code…</text>}>
+              <Show
+                when={code()}
+                fallback={<text fg={contentTheme.text.muted}>{language.t("tui.interface.waitingForCode")}</text>}
+              >
                 {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} />}
               </Show>
             </box>
             <box>
               <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
-                Output
+                {language.t("tui.interface.output")}
               </text>
               <Show
                 when={highlighted()}

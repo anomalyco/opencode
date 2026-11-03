@@ -1,3 +1,4 @@
+import { createLanguage } from "../i18n/translate"
 import { createScrollbackWriter, useRenderer } from "@opentui/solid"
 import {
   MarkdownRenderable,
@@ -87,6 +88,7 @@ export function RunEntryContent(props: {
   opts?: ScrollbackOptions
 }) {
   const renderer = useRenderer()
+  const language = props.opts?.language ?? createLanguage(() => "en")
   const borrowers: Renderable[] = []
   let fallback: SyntaxStyle | undefined
   const theme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
@@ -227,7 +229,7 @@ export function RunEntryContent(props: {
                 </box>
               ) : (
                 <text width="100%" wrapMode="word" fg={theme().block.diffRemoved}>
-                  -{item.deletions ?? 0} line{item.deletions === 1 ? "" : "s"}
+                  -{language.plural("tui.miniTool.lines", item.deletions ?? 0)}
                 </text>
               )}
             </box>
@@ -256,7 +258,7 @@ export function RunEntryContent(props: {
       <Match when={todo_snapshot()}>
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme().block.muted}>
-            # Todos
+            # {language.t("tui.miniTool.todos")}
           </text>
           <box width="100%" flexDirection="column" gap={0}>
             {todo_snapshot()!.items.map((item) => (
@@ -282,7 +284,7 @@ export function RunEntryContent(props: {
       <Match when={question_snapshot()}>
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme().block.muted}>
-            # Questions
+            # {language.t("tui.miniTool.questionsHeading")}
           </text>
           <box width="100%" flexDirection="column" gap={1}>
             {question_snapshot()!.items.map((item) => (

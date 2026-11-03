@@ -1,10 +1,11 @@
+import { Locale } from "../util/locale"
+import { useLanguage } from "../context/language"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useNewDesigns } from "../config"
 import { DialogHeader, DialogLayout, useDialog } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
-import { Locale } from "../util/locale"
 
 export type DialogConfirmProps = {
   title: string
@@ -18,6 +19,7 @@ export type DialogConfirmProps = {
 }
 
 export function DialogConfirm(props: DialogConfirmProps) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const newDesigns = useNewDesigns()
@@ -35,28 +37,28 @@ export function DialogConfirm(props: DialogConfirmProps) {
     mode: "modal",
     commands: newDesigns()
       ? [
-          { bind: "return", title: "Confirm", group: "Dialog", run: () => choose("confirm") },
-          { bind: "escape", title: "Cancel", group: "Dialog", run: () => choose("cancel") },
+          { bind: "return", title: language.t("ui.common.confirm"), group: "Dialog", run: () => choose("confirm") },
+          { bind: "escape", title: language.t("common.cancel"), group: "Dialog", run: () => choose("cancel") },
         ]
       : [
           {
             bind: "return",
-            title: "Confirm dialog selection",
-            group: "Dialog",
+            title: language.t("tui.confirmDialogSelection"),
+            group: language.t("tui.dialog"),
             run: () => choose(store.active),
           },
           {
             bind: "left",
-            title: "Previous dialog option",
-            group: "Dialog",
+            title: language.t("tui.previousDialogOption"),
+            group: language.t("tui.dialog"),
             run: () => {
               setStore("active", store.active === "confirm" ? "cancel" : "confirm")
             },
           },
           {
             bind: "right",
-            title: "Next dialog option",
-            group: "Dialog",
+            title: language.t("tui.nextDialogOption"),
+            group: language.t("tui.dialog"),
             run: () => {
               setStore("active", store.active === "confirm" ? "cancel" : "confirm")
             },
@@ -90,7 +92,11 @@ export function DialogConfirm(props: DialogConfirmProps) {
                 onMouseUp={() => choose(key)}
               >
                 <text fg={key === store.active ? theme.text.action.primary.focused : theme.text.muted}>
-                  {Locale.titlecase(props.label?.[key] ?? key)}
+                  {props.label?.[key]
+                    ? Locale.titlecase(props.label[key])
+                    : key === "confirm"
+                      ? language.t("ui.common.confirm")
+                      : language.t("common.cancel")}
                 </text>
               </box>
             )}

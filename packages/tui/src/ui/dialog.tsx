@@ -20,6 +20,7 @@ import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig, useNewDesigns } from "../config"
 import { copy, copyOnSelectRelease } from "../util/selection"
+import { useLanguage } from "../context/language"
 
 export type DialogSize = "medium" | "large" | "xlarge"
 
@@ -111,11 +112,7 @@ export function DialogHeader(
         </text>
       )}
       {props.children}
-      <text
-        fg={theme.text.muted}
-        flexShrink={0}
-        onMouseUp={() => (props.onClose ?? dialog.clear)()}
-      >
+      <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => (props.onClose ?? dialog.clear)()}>
         {props.closeLabel ?? "esc"}
       </text>
     </box>
@@ -304,6 +301,7 @@ function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary
 }
 
 function init() {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     stack: [] as {
       element: () => JSX.Element
@@ -348,8 +346,8 @@ function init() {
     commands: [
       {
         bind: "escape",
-        title: "Close dialog",
-        group: "Dialog",
+        title: language.t("tui.dialogs.closeDialog"),
+        group: language.t("tui.dialog"),
         run: () => {
           if (renderer.getSelection()) {
             renderer.clearSelection()
@@ -363,8 +361,8 @@ function init() {
       },
       {
         bind: "ctrl+c",
-        title: "Close dialog",
-        group: "Dialog",
+        title: language.t("tui.dialogs.closeDialog"),
+        group: language.t("tui.dialog"),
         run: () => {
           if (renderer.getSelection()) {
             renderer.clearSelection()

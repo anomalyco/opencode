@@ -1,20 +1,22 @@
+import { useLanguage } from "../context/language"
 import { Slug } from "@opencode/core/util/slug"
 import { useNewDesigns } from "../config"
 import { type DialogContext } from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"
 
 export function DialogWorktreeName(props: { onConfirm: (name: string) => void }) {
+  const language = useLanguage()
   const newDesigns = useNewDesigns()
   return (
     <DialogPrompt
-      title="Name worktree"
-      placeholder="Worktree name"
+      title={language.t("tui.dialogs.nameWorktree")}
+      placeholder={language.t("tui.dialogs.worktreeName")}
       onConfirm={(value) => props.onConfirm(slugify(value) || Slug.create())}
       actions={[
         {
           title: newDesigns() ? "generate name" : "generate one",
           command: "dialog.worktree.generate",
-          commandTitle: "Generate worktree name",
+          commandTitle: language.t("tui.dialogs.generateWorktree"),
           onTrigger: (prompt) => prompt.setValue(Slug.create()),
         },
       ]}

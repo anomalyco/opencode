@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout } from "../ui/dialog"
 import { useData } from "../context/data"
@@ -5,6 +6,7 @@ import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export function DialogStatus() {
   const data = useData()
+  const language = useLanguage()
   const theme = useTheme().surface("dialog")
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])
@@ -15,12 +17,13 @@ export function DialogStatus() {
     return theme.text.muted
   }
   return (
-    <DialogLayout header={<DialogHeader title="Status" />}>
-      <Show when={mcp().length > 0} fallback={<text fg={theme.text.base}>No MCP servers</text>}>
+    <DialogLayout header={<DialogHeader title={language.t("tui.devtools.status")} />}>
+      <Show
+        when={mcp().length > 0}
+        fallback={<text fg={theme.text.base}>{language.t("tui.details.noMCPServers")}</text>}
+      >
         <box>
-          <text fg={theme.text.base}>
-            {mcp().length} MCP server{mcp().length === 1 ? "" : "s"}
-          </text>
+          <text fg={theme.text.base}>{language.plural("tui.dialogs.mcpCount", mcp().length)}</text>
           <For each={mcp()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
@@ -30,12 +33,14 @@ export function DialogStatus() {
                 <text fg={theme.text.base} wrapMode="word">
                   <b>{item.name}</b>{" "}
                   <span style={{ fg: theme.text.muted }}>
-                    <Switch fallback={item.status.status}>
-                      <Match when={item.status.status === "connected"}>Connected</Match>
+                    <Switch fallback={language.t("tui.devtools.connecting")}>
+                      <Match when={item.status.status === "connected"}>{language.t("tui.details.connected")}</Match>
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
-                      <Match when={item.status.status === "disabled"}>Disabled in configuration</Match>
+                      <Match when={item.status.status === "disabled"}>
+                        {language.t("tui.details.disabledInConfiguration")}
+                      </Match>
                       <Match when={item.status.status === "needs_auth" && item.status}>
-                        {(val) => `Needs authentication: ${val().error}`}
+                        {(val) => `${language.t("tui.details.needsAuthentication")}: ${val().error}`}
                       </Match>
                     </Switch>
                   </span>

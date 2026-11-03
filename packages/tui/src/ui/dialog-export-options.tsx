@@ -6,6 +6,8 @@ import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
 
+import { useLanguage } from "../context/language"
+
 export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
@@ -35,6 +37,7 @@ type Row = "format" | "thinking" | "tools" | "sanitize"
 
 /** Export options as a list of values, under the "new-designs" experiment: ↑/↓ moves, ←/→ or space changes. */
 function DialogExportOptionsList(props: DialogExportOptionsProps) {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
     thinking: props.defaultThinking,
@@ -57,10 +60,10 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     setStore(row, !store[row])
   }
 
-  const include = (value: boolean) => (value ? "include" : "exclude")
+  const include = (value: boolean) => (value ? language.t("tui.include") : language.t("tui.exclude"))
   const options = createMemo(() => [
     {
-      title: "Format",
+      title: language.t("tui.interface.format"),
       value: "format" as Row,
       onSelect: () => change("format"),
       footerOverhang: 2,
@@ -69,37 +72,42 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     ...(store.format === "markdown"
       ? [
           {
-            title: "Thinking",
+            title: language.t("settings.timeline.category.thinking"),
             value: "thinking" as Row,
             onSelect: () => change("thinking"),
-            category: "Options",
+            category: language.t("tui.export.options"),
             footerOverhang: 2,
             footer: <DialogSelectChoice value={include(store.thinking)} active={selected() === "thinking"} />,
           },
           {
-            title: "Tools",
+            title: language.t("tui.devtools.tools"),
             value: "tools" as Row,
             onSelect: () => change("tools"),
-            category: "Options",
+            category: language.t("tui.export.options"),
             footerOverhang: 2,
             footer: <DialogSelectChoice value={include(store.tools)} active={selected() === "tools"} />,
           },
         ]
       : [
           {
-            title: "Sanitize",
+            title: language.t("tui.interface.sanitize"),
             value: "sanitize" as Row,
             onSelect: () => change("sanitize"),
-            category: "Options",
+            category: language.t("tui.export.options"),
             footerOverhang: 2,
-            footer: <DialogSelectChoice value={store.sanitize ? "on" : "off"} active={selected() === "sanitize"} />,
+            footer: (
+              <DialogSelectChoice
+                value={language.t(store.sanitize ? "tui.on" : "tui.off")}
+                active={selected() === "sanitize"}
+              />
+            ),
           },
         ]),
   ])
 
   return (
     <DialogSelect
-      title="Export session"
+      title={language.t("tui.dialogs.exportSession")}
       renderFilter={false}
       footerGap={2}
       options={options()}
@@ -107,25 +115,36 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
       actions={[
         {
           command: "dialog.export.copy",
-          title: "copy",
+          title: language.t("tui.session.copy"),
           bind: "c",
           selection: "none",
           group: "primary",
           onTrigger: () => confirm("copy"),
         },
       ]}
-      footerHints={[{ title: "save to file", label: "enter", group: "primary" }]}
+      footerHints={[{ title: language.t("tui.interface.saveToFile"), label: "enter", group: "primary" }]}
       bindings={[
-        { bind: "left", title: "Previous value", group: "Dialog", run: () => change(selected()) },
-        { bind: "right", title: "Next value", group: "Dialog", run: () => change(selected()) },
-        { bind: "space", title: "Change export option", group: "Dialog", run: () => change(selected()) },
-        { bind: "return", title: "Save to file", group: "Dialog", run: () => confirm("export") },
+        { bind: "left", title: language.t("tui.previousValue"), group: "Dialog", run: () => change(selected()) },
+        { bind: "right", title: language.t("tui.nextValue"), group: "Dialog", run: () => change(selected()) },
+        {
+          bind: "space",
+          title: language.t("tui.interface.changeExportOption"),
+          group: "Dialog",
+          run: () => change(selected()),
+        },
+        {
+          bind: "return",
+          title: language.t("tui.interface.saveToFile2"),
+          group: "Dialog",
+          run: () => confirm("export"),
+        },
       ]}
     />
   )
 }
 
 function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
+  const language = useLanguage()
   const theme = useTheme().surface("dialog")
   // Same field styling as the question form: only the focused row is highlighted, and the
   // mark alone shows what's checked.
@@ -170,12 +189,22 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "tab", title: "Next export option", group: "Dialog", run: () => move(1) },
-      { bind: "shift+tab", title: "Previous export option", group: "Dialog", run: () => move(-1) },
+      {
+        bind: "tab",
+        title: language.t("tui.dialogs.nextExportOption"),
+        group: language.t("tui.dialog"),
+        run: () => move(1),
+      },
+      {
+        bind: "shift+tab",
+        title: language.t("tui.interface.previousExportOption"),
+        group: "Dialog",
+        run: () => move(-1),
+      },
       {
         bind: "return",
-        title: "Select export option",
-        group: "Dialog",
+        title: language.t("tui.dialogs.selectExportOption"),
+        group: language.t("tui.dialog"),
         run: activate,
       },
     ],
@@ -188,7 +217,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
 
   return (
     <DialogLayout
-      header={<DialogHeader title="Export session" />}
+      header={<DialogHeader title={language.t("tui.dialogs.exportSession")} />}
       legacyFooter={
         <box flexDirection="row" justifyContent="flex-end" gap={1}>
           <box
@@ -200,7 +229,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             onMouseUp={() => confirm("copy")}
           >
             <text fg={store.active === "copy" ? theme.text.action.primary.focused : theme.text.action.primary.base}>
-              Copy
+              {language.t("tui.details.copy")}
             </text>
           </box>
           <box
@@ -212,7 +241,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             onMouseUp={() => confirm("export")}
           >
             <text fg={store.active === "export" ? theme.text.action.primary.focused : theme.text.action.primary.base}>
-              Export
+              {language.t("tui.dialogs.export")}
             </text>
           </box>
         </box>
@@ -220,7 +249,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
     >
       <box gap={1}>
         <box flexDirection="row" gap={1}>
-          <text fg={theme.text.base}>Export as:</text>
+          <text fg={theme.text.base}>{language.t("tui.dialogs.exportAs")}</text>
           <box flexDirection="row" gap={1}>
             <For each={["markdown", "json"] as const}>
               {(format) => (
@@ -250,7 +279,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             }}
           >
             <text fg={markColor(store.active === "thinking", store.thinking)}>{store.thinking ? "[x]" : "[ ]"}</text>
-            <text fg={labelColor(store.active === "thinking")}>Include thinking</text>
+            <text fg={labelColor(store.active === "thinking")}>{language.t("tui.dialogs.includeThinking")}</text>
           </box>
           <box
             flexDirection="row"
@@ -261,7 +290,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             }}
           >
             <text fg={markColor(store.active === "tools", store.tools)}>{store.tools ? "[x]" : "[ ]"}</text>
-            <text fg={labelColor(store.active === "tools")}>Include tools</text>
+            <text fg={labelColor(store.active === "tools")}>{language.t("tui.dialogs.includeTools")}</text>
           </box>
         </Show>
         <Show when={store.format === "json"}>
@@ -274,7 +303,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
             }}
           >
             <text fg={markColor(store.active === "sanitize", store.sanitize)}>{store.sanitize ? "[x]" : "[ ]"}</text>
-            <text fg={labelColor(store.active === "sanitize")}>Sanitize sensitive data</text>
+            <text fg={labelColor(store.active === "sanitize")}>{language.t("tui.dialogs.sanitize")}</text>
           </box>
         </Show>
       </box>

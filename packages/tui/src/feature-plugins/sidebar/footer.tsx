@@ -5,8 +5,10 @@ import { FilePath } from "../../ui/file-path"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { usePromptMove } from "../../component/prompt/move"
 import { hasConnectedProvider } from "../../util/connected-provider"
+import { useLanguage } from "../../context/language"
 
 export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: string }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const [onboarding, updateOnboarding] = props.context.storage.store("getting-started", {
     initial: { dismissed: false },
@@ -40,7 +42,7 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
         <box flexGrow={1} gap={1}>
           <box flexDirection="row" justifyContent="space-between">
             <text fg={props.context.theme.text.base}>
-              <b>Getting started</b>
+              <b>{language.t("tui.interface.gettingStarted")}</b>
             </text>
             <text
               id="sidebar.footer.getting-started.dismiss"
@@ -54,9 +56,11 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
               ✕
             </text>
           </box>
-          <text fg={props.context.theme.text.muted}>OpenCode includes free models so you can start immediately.</text>
           <text fg={props.context.theme.text.muted}>
-            Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+            {language.t("tui.interface.opencodeIncludesFreeModelsSoYouCanStart")}
+          </text>
+          <text fg={props.context.theme.text.muted}>
+            {language.t("tui.interface.connectFrom75ProvidersToUseOtherModels")}
           </text>
           <box
             id="sidebar.footer.getting-started.connect"
@@ -65,7 +69,7 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
             justifyContent="space-between"
             onMouseUp={() => props.context.keymap.dispatch("provider.connect")}
           >
-            <text fg={props.context.theme.text.base}>Connect provider</text>
+            <text fg={props.context.theme.text.base}>{language.t("tui.interface.connectProvider2")}</text>
             <text fg={props.context.theme.text.muted}>/connect</text>
           </box>
         </box>

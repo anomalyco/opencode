@@ -7,8 +7,10 @@ import type { TuiHighlight } from "../context/runtime"
 import { useTheme } from "../context/theme"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
+import { useLanguage } from "../context/language"
 
 export function DialogHighlights(props: { version: string; items: ReadonlyArray<TuiHighlight> }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const overlay = useTheme()
@@ -22,30 +24,62 @@ export function DialogHighlights(props: { version: string; items: ReadonlyArray<
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "return", title: "Close highlights", group: "Dialog", run: () => dialog.clear() },
-      ...["up", "k"].map((bind) => ({ bind, title: "Scroll up", group: "Dialog", run: () => scroll?.scrollBy(-1) })),
-      ...["down", "j"].map((bind) => ({ bind, title: "Scroll down", group: "Dialog", run: () => scroll?.scrollBy(1) })),
-      { bind: "pageup", title: "Previous page", group: "Dialog", run: () => scroll?.scrollBy(-maxHeight()) },
-      { bind: "pagedown", title: "Next page", group: "Dialog", run: () => scroll?.scrollBy(maxHeight()) },
-      { bind: "home", title: "Scroll to top", group: "Dialog", run: () => scroll?.scrollTo(0) },
-      { bind: "end", title: "Scroll to bottom", group: "Dialog", run: () => scroll?.scrollTo(Infinity) },
+      {
+        bind: "return",
+        title: language.t("tui.interface.closeHighlights"),
+        group: "Dialog",
+        run: () => dialog.clear(),
+      },
+      ...["up", "k"].map((bind) => ({
+        bind,
+        title: language.t("tui.interface.scrollUp"),
+        group: "Dialog",
+        run: () => scroll?.scrollBy(-1),
+      })),
+      ...["down", "j"].map((bind) => ({
+        bind,
+        title: language.t("tui.interface.scrollDown"),
+        group: "Dialog",
+        run: () => scroll?.scrollBy(1),
+      })),
+      {
+        bind: "pageup",
+        title: language.t("tui.interface.previousPage"),
+        group: "Dialog",
+        run: () => scroll?.scrollBy(-maxHeight()),
+      },
+      {
+        bind: "pagedown",
+        title: language.t("tui.interface.nextPage"),
+        group: "Dialog",
+        run: () => scroll?.scrollBy(maxHeight()),
+      },
+      { bind: "home", title: language.t("tui.interface.scrollToTop"), group: "Dialog", run: () => scroll?.scrollTo(0) },
+      {
+        bind: "end",
+        title: language.t("tui.interface.scrollToBottom"),
+        group: "Dialog",
+        run: () => scroll?.scrollTo(Infinity),
+      },
     ],
   }))
 
   return (
     <DialogLayout
       header={<DialogHeader title={`What's new in ${props.version}`} />}
-      footer={{ actions: { primary: [{ title: "ok", key: "enter", onTrigger: () => dialog.clear() }] } }}
+      footer={{
+        actions: { primary: [{ title: language.t("tui.dialogs.ok"), key: "enter", onTrigger: () => dialog.clear() }] },
+      }}
       legacyFooter={
         <box flexDirection="row" justifyContent="space-between" alignItems="center">
-          <DialogFooter actions={{ secondary: [{ title: "scroll", key: "↑/↓" }] }} />
+          <DialogFooter actions={{ secondary: [{ title: language.t("tui.session.scroll"), key: "↑/↓" }] }} />
           <box
             paddingLeft={3}
             paddingRight={3}
             backgroundColor={theme.background.action.primary.focused}
             onMouseUp={() => dialog.clear()}
           >
-            <text fg={theme.text.action.primary.focused}>ok</text>
+            <text fg={theme.text.action.primary.focused}>{language.t("tui.dialogs.ok")}</text>
           </box>
         </box>
       }

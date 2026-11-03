@@ -14,6 +14,8 @@ import { FilePath } from "../ui/file-path"
 import { useToast } from "../ui/toast"
 import { errorDetails } from "../util/error-details"
 
+import { useLanguage } from "../context/language"
+
 export function DialogErrorDetails(props: {
   title: string
   source?: string
@@ -23,6 +25,7 @@ export function DialogErrorDetails(props: {
   onBack: () => void
 }) {
   const clipboard = useClipboard()
+  const language = useLanguage()
   const dialog = useDialog()
   const location = useLocation()
   const route = useRoute()
@@ -55,17 +58,22 @@ export function DialogErrorDetails(props: {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "escape", title: "Back", group: "Dialog", run: props.onBack },
-      { bind: "c", title: "Copy details", group: "Dialog", run: copy },
-      { bind: "i", title: "Investigate error", group: "Dialog", run: investigate },
+      { bind: "escape", title: language.t("ui.common.back"), group: language.t("tui.dialog"), run: props.onBack },
+      { bind: "c", title: language.t("tui.dialogs.copyDetails"), group: language.t("tui.dialog"), run: copy },
+      {
+        bind: "i",
+        title: language.t("tui.dialogs.investigateError"),
+        group: language.t("tui.dialog"),
+        run: investigate,
+      },
     ],
   }))
 
   const actions = () => [
-    { title: "investigate", key: "i", onTrigger: investigate },
+    { title: language.t("tui.dialogs.investigate"), key: "i", onTrigger: investigate },
     copied()
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
-      : { title: "copy details", key: "c", onTrigger: copy },
+      ? { title: language.t("tui.dialogs.copied"), color: theme.text.feedback.success.base, onTrigger: copy }
+      : { title: language.t("tui.dialogs.copyDetailsHint"), key: "c", onTrigger: copy },
   ]
 
   useKeyboard((event) => {
@@ -109,7 +117,11 @@ export function DialogErrorDetails(props: {
         </box>
       }
       footer={{ actions: { primary: actions() } }}
-      legacyFooter={<DialogFooter actions={{ secondary: actions(), primary: [{ title: "scroll", key: "↑/↓" }] }} />}
+      legacyFooter={
+        <DialogFooter
+          actions={{ secondary: actions(), primary: [{ title: language.t("tui.session.scroll"), key: "↑/↓" }] }}
+        />
+      }
     >
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
@@ -123,7 +135,7 @@ export function DialogErrorDetails(props: {
         </text>
       </scrollbox>
       <Show when={props.diagnosticRef}>
-        <text fg={theme.text.muted}>Reference: {props.diagnosticRef}</text>
+        <text fg={theme.text.muted}>{language.t("tui.dialogs.reference", { reference: props.diagnosticRef! })}</text>
       </Show>
     </DialogLayout>
   )

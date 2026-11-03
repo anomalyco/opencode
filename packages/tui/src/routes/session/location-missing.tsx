@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createMemo } from "solid-js"
 import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
@@ -12,6 +13,7 @@ import { DialogWorkspaces, type WorkspaceSelection } from "../../component/dialo
 import { useData } from "../../context/data"
 
 export function SessionLocationMissing(props: { directory: string; projectID: string; sessionID: string }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
@@ -44,12 +46,20 @@ export function SessionLocationMissing(props: { directory: string; projectID: st
               return result.directory
             })
             .catch((error) => {
-              toast.show({ title: "Creating workspace failed", message: errorMessage(error), variant: "error" })
+              toast.show({
+                title: language.t("tui.promptUi.workspaceFailed"),
+                message: errorMessage(error),
+                variant: "error",
+              })
               return undefined
             })
     if (!directory) return
     await client.api.session.move({ sessionID: props.sessionID, directory }).catch((error) => {
-      toast.show({ title: "Failed to move session", message: errorMessage(error), variant: "error" })
+      toast.show({
+        title: language.t("tui.interface.failedToMoveSession"),
+        message: errorMessage(error),
+        variant: "error",
+      })
     })
   }
 
@@ -57,6 +67,7 @@ export function SessionLocationMissing(props: { directory: string; projectID: st
 }
 
 export function SessionLocationUnavailable(props: { directory: string; onMove: () => void }) {
+  const language = useLanguage()
   const paths = useTuiPaths()
   const theme = useTheme()
   const directory = createMemo(() => Locale.truncateMiddle(abbreviateHome(props.directory, paths.home), 72))
@@ -64,17 +75,17 @@ export function SessionLocationUnavailable(props: { directory: string; onMove: (
   return (
     <SessionQuestion
       id="session.location-missing"
-      group="Session recovery"
-      choicesLabel="Recovery actions"
+      group={language.t("tui.details.sessionRecovery")}
+      choicesLabel={language.t("tui.details.recoveryActions")}
       instance={props.directory}
-      title="Session location unavailable"
+      title={language.t("tui.details.sessionLocationUnavailable")}
       body={
         <box paddingLeft={1} gap={1}>
           <text fg={theme.text.muted}>{directory()}</text>
-          <text fg={theme.text.base}>Choose another directory to continue this session.</text>
+          <text fg={theme.text.base}>{language.t("tui.details.chooseAnotherDirectoryToContinueThisSession")}</text>
         </box>
       }
-      options={{ move: "Choose directory" }}
+      options={{ move: language.t("tui.details.chooseDirectory") }}
       onSelect={props.onMove}
     />
   )

@@ -2,7 +2,10 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout, useDialog } from "./dialog"
 
+import { useLanguage } from "../context/language"
+
 export function DialogHelp() {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const shortcuts = Keymap.useShortcuts()
@@ -10,15 +13,27 @@ export function DialogHelp() {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "return", title: "Close help", group: "Dialog", run: () => dialog.clear() },
-      { bind: "escape", title: "Close help", group: "Dialog", run: () => dialog.clear() },
+      {
+        bind: "return",
+        title: language.t("tui.dialogs.closeHelp"),
+        group: language.t("tui.dialog"),
+        run: () => dialog.clear(),
+      },
+      {
+        bind: "escape",
+        title: language.t("tui.dialogs.closeHelp"),
+        group: language.t("tui.dialog"),
+        run: () => dialog.clear(),
+      },
     ],
   }))
 
   return (
     <DialogLayout
-      header={<DialogHeader title="Help" closeLabel="esc/enter" />}
-      footer={{ actions: { primary: [{ title: "ok", key: "enter", onTrigger: () => dialog.clear() }] } }}
+      header={<DialogHeader title={language.t("sidebar.help")} closeLabel="esc/enter" />}
+      footer={{
+        actions: { primary: [{ title: language.t("tui.dialogs.ok"), key: "enter", onTrigger: () => dialog.clear() }] },
+      }}
       legacyFooter={
         <box flexDirection="row" justifyContent="flex-end">
           <box
@@ -27,13 +42,13 @@ export function DialogHelp() {
             backgroundColor={theme.background.action.primary.focused}
             onMouseUp={() => dialog.clear()}
           >
-            <text fg={theme.text.action.primary.focused}>ok</text>
+            <text fg={theme.text.action.primary.focused}>{language.t("tui.dialogs.ok")}</text>
           </box>
         </box>
       }
     >
       <text fg={theme.text.muted}>
-        Press {shortcuts.get("command.palette.show")} to see all available actions and commands in any context.
+        {language.t("tui.help.allCommands", { shortcut: shortcuts.get("command.palette.show") ?? "" })}
       </text>
     </DialogLayout>
   )

@@ -1,3 +1,4 @@
+import { loadDictionary } from "../i18n/translate"
 // Top-level orchestrator for `opencode mini`.
 //
 // Wires the boot sequence, lifecycle (renderer + footer), stream transport,
@@ -195,7 +196,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const log = input.host.diagnostics.trace
   const config = input.config
   const configState: { current: MiniSettings } = { current: resolveMiniSettings() }
-  const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform).then((tuiConfig) => {
+  const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform).then(async (tuiConfig) => {
+    await loadDictionary(tuiConfig.language ?? "en")
     configState.current = resolveMiniSettings(tuiConfig)
     return tuiConfig
   })
@@ -275,7 +277,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormReply: async (next) => {
       if (state.demo?.formReply(next)) return
       try {
-        await state.sdk.session.form.reply(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.reply(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }
@@ -284,7 +289,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormCancel: async (next) => {
       if (state.demo?.formCancel(next)) return
       try {
-        await state.sdk.session.form.cancel(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.cancel(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }

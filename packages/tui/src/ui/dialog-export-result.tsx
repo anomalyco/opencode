@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { createSignal, Show } from "solid-js"
 import { useNewDesigns } from "../config"
 import { useClipboard } from "../context/clipboard"
@@ -7,6 +8,7 @@ import { DialogHeader, DialogLayout, useDialog, type DialogContext } from "./dia
 import { useToast } from "./toast"
 
 export function DialogExportResult(props: { path: string; onClose?: () => void }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const clipboard = useClipboard()
@@ -31,8 +33,8 @@ export function DialogExportResult(props: { path: string; onClose?: () => void }
     commands: [
       {
         bind: "return",
-        title: "Close export result",
-        group: "Dialog",
+        title: language.t("tui.dialogs.closeExportResult"),
+        group: language.t("tui.dialog"),
         run: close,
       },
     ],
@@ -41,19 +43,24 @@ export function DialogExportResult(props: { path: string; onClose?: () => void }
   Keymap.createLayer(() => ({
     mode: "modal",
     enabled: newDesigns(),
-    commands: [{ bind: "c", title: "Copy export path", group: "Dialog", run: copy }],
+    commands: [{ bind: "c", title: language.t("tui.interface.copyExportPath"), group: "Dialog", run: copy }],
   }))
 
   return (
     <DialogLayout
       footerGap={2}
-      header={<DialogHeader title="Session exported" onClose={close} />}
+      header={<DialogHeader title={language.t("tui.dialogs.sessionExported")} onClose={close} />}
       footer={{
         actions: {
           primary: [
             copied()
-              ? { title: "copied", key: "✓", color: theme.text.feedback.success.base, onTrigger: copy }
-              : { title: "copy path", key: "c", onTrigger: copy },
+              ? {
+                  title: language.t("tui.interface.copied"),
+                  key: "✓",
+                  color: theme.text.feedback.success.base,
+                  onTrigger: copy,
+                }
+              : { title: language.t("tui.interface.copyPath"), key: "c", onTrigger: copy },
           ],
         },
       }}
@@ -65,14 +72,15 @@ export function DialogExportResult(props: { path: string; onClose?: () => void }
             backgroundColor={theme.background.action.primary.focused}
             onMouseUp={close}
           >
-            <text fg={theme.text.action.primary.focused}>Close</text>
+            <text fg={theme.text.action.primary.focused}>{language.t("tui.dialogs.close")}</text>
           </box>
         </box>
       }
     >
       <Show when={newDesigns()} fallback={<text fg={theme.text.base}>{props.path}</text>}>
         <text fg={theme.text.base}>
-          Saved to <span style={{ fg: theme.text.muted, underline: true }}>{props.path}</span>
+          {language.t("tui.interface.savedTo")}{" "}
+          <span style={{ fg: theme.text.muted, underline: true }}>{props.path}</span>
         </text>
       </Show>
     </DialogLayout>

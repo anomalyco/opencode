@@ -67,6 +67,7 @@ import type {
   RunTuiConfig,
 } from "./types"
 import { EmptyBorder } from "../ui/border"
+import { useMiniLanguage as useLanguage } from "./language"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 
@@ -222,6 +223,7 @@ export function RunPromptBody(props: {
   onSizeChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
+  const language = useLanguage()
   const renderer = useRenderer()
   let area: TextareaRenderable | undefined
   let pasteTick: ReturnType<typeof setTimeout> | undefined
@@ -286,7 +288,10 @@ export function RunPromptBody(props: {
                 const [failed, setFailed] = createSignal(false)
                 return (
                   <box width={props.layout().images * 2} height="100%" flexShrink={1}>
-                    <Show when={!failed()} fallback={<text fg={props.theme().muted}>No preview</text>}>
+                    <Show
+                      when={!failed()}
+                      fallback={<text fg={props.theme().muted}>{language.t("tui.noPreview")}</text>}
+                    >
                       <image
                         id={`mini-prompt-image-${index()}`}
                         source={image}
@@ -303,7 +308,7 @@ export function RunPromptBody(props: {
             </For>
             <Show when={props.images().length > 3}>
               <text fg={props.theme().muted} wrapMode="none" truncate>
-                +{props.images().length - 3} more
+                +{props.images().length - 3} {language.t("tui.interface.more")}
               </text>
             </Show>
           </box>
@@ -337,6 +342,7 @@ export function RunPromptBody(props: {
 }
 
 export function createPromptState(input: PromptInput): PromptState {
+  const language = useLanguage()
   const renderer = useRenderer()
   const term = useTerminalDimensions()
   const [lines, setLines] = createSignal(TEXTAREA_MIN_ROWS)
@@ -344,7 +350,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
-      return new StyledText([fg(input.theme().muted)('Run a command… "git status"')])
+      return new StyledText([fg(input.theme().muted)(language.t("tui.mini.shellPlaceholder"))])
     }
 
     if (!input.state().first) {
@@ -352,7 +358,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     return new StyledText([
-      fg(input.theme().muted)(`Ask anything, / for commands, @ for context${input.mono() ? "..." : "…"}`),
+      fg(input.theme().muted)(language.t("tui.mini.promptPlaceholder", { ellipsis: input.mono() ? "..." : "…" })),
     ])
   })
 
@@ -511,24 +517,35 @@ export function createPromptState(input: PromptInput): PromptState {
         action: "editor" as const,
         name: "editor",
         display: "/editor",
-        description: "compose in your external editor",
+        description: language.t("tui.mini.composeInYourExternalEditor"),
       } satisfies SlashOption,
       {
         kind: "slash",
         action: "settings" as const,
         name: "settings",
         display: "/settings",
-        description: "configure Mini transcript output",
+        description: language.t("tui.mini.configureMiniTranscriptOutput"),
       } satisfies SlashOption,
-      { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
+      {
+        kind: "slash",
+        name: "new",
+        display: "/new",
+        description: language.t("tui.mini.startANewSession"),
+      } satisfies SlashOption,
       {
         kind: "slash",
         name: "compact",
         display: "/compact",
-        description: "compact older session context to free space",
+        description: language.t("tui.mini.compactOlderSessionContextToFreeSpace"),
       } satisfies SlashOption,
       ...EXIT_COMMANDS.map(
-        (name) => ({ kind: "slash", name, display: `/${name}`, description: "close OpenCode" }) satisfies SlashOption,
+        (name) =>
+          ({
+            kind: "slash",
+            name,
+            display: `/${name}`,
+            description: language.t("tui.mini.closeOpencode"),
+          }) satisfies SlashOption,
       ),
     ]
     const hidden = new Set(builtins.map((item) => item.name))
@@ -1164,7 +1181,7 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.clear",
-        title: "Clear prompt or exit",
+        title: language.t("tui.mini.clearPromptOrExit"),
         group: "Prompt",
         run() {
           if (requestExit()) return
@@ -1179,13 +1196,13 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.paste",
-        title: "Paste",
+        title: language.t("tui.paste"),
         group: "Prompt",
         run: () => paste(),
       },
       {
         id: "session.interrupt",
-        title: "Interrupt session",
+        title: language.t("tui.interruptSession"),
         group: "Session",
         run() {
           if (input.onInterrupt()) return
@@ -1201,7 +1218,7 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.queue",
-        title: "Queue prompt",
+        title: language.t("tui.queuePrompt"),
         group: "Prompt",
         palette: true,
         run() {
@@ -1217,7 +1234,7 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.editor",
-        title: "Open editor",
+        title: language.t("tui.openEditor"),
         group: "Prompt",
         run() {
           void openEditor()
@@ -1232,7 +1249,7 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.history.previous",
-        title: "Previous prompt history",
+        title: language.t("tui.previousPromptHistory"),
         group: "Prompt",
         run(_input: string | undefined, event?: KeyEvent) {
           if (!event) return false
@@ -1241,7 +1258,7 @@ export function createPromptState(input: PromptInput): PromptState {
       },
       {
         id: "prompt.history.next",
-        title: "Next prompt history",
+        title: language.t("tui.nextPromptHistory"),
         group: "Prompt",
         run(_input: string | undefined, event?: KeyEvent) {
           if (!event) return false
@@ -1256,7 +1273,7 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         bind: "!",
-        title: "Shell mode",
+        title: language.t("tui.shellMode"),
         group: "Prompt",
         run() {
           if (shell()) return false
@@ -1273,13 +1290,13 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         bind: "escape",
-        title: "Exit shell mode",
+        title: language.t("tui.exitShellMode"),
         group: "Prompt",
         run: () => setShellMode(false),
       },
       {
         bind: "backspace",
-        title: "Exit shell mode",
+        title: language.t("tui.exitShellMode"),
         group: "Prompt",
         run() {
           if (!area || area.isDestroyed) return false
@@ -1295,25 +1312,25 @@ export function createPromptState(input: PromptInput): PromptState {
     commands: [
       {
         id: "prompt.autocomplete.prev",
-        title: "Previous autocomplete item",
+        title: language.t("tui.promptUi.previousItem"),
         group: "Autocomplete",
         run: () => menu.move(-1),
       },
       {
         id: "prompt.autocomplete.next",
-        title: "Next autocomplete item",
+        title: language.t("tui.promptUi.nextItem"),
         group: "Autocomplete",
         run: () => menu.move(1),
       },
       {
         id: "prompt.autocomplete.hide",
-        title: "Hide autocomplete",
+        title: language.t("tui.promptUi.hide"),
         group: "Autocomplete",
         run: cancelAutocomplete,
       },
       {
         id: "prompt.autocomplete.select",
-        title: "Select autocomplete item",
+        title: language.t("tui.promptUi.select"),
         group: "Autocomplete",
         run() {
           if (mode() === "slash" && options().length === 0) {
@@ -1325,7 +1342,7 @@ export function createPromptState(input: PromptInput): PromptState {
       },
       {
         id: "prompt.autocomplete.complete",
-        title: "Complete autocomplete item",
+        title: language.t("tui.promptUi.complete"),
         group: "Autocomplete",
         run() {
           if (mode() === "slash" && options().length === 0) {

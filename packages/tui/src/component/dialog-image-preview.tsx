@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal } from "solid-js"
 import { Keymap } from "../context/keymap"
@@ -11,6 +12,7 @@ type ImagePreviewItem = Readonly<{
 }>
 
 export function DialogImagePreview(props: { images: readonly ImagePreviewItem[]; initial: number }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
@@ -30,8 +32,18 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "left", title: "Previous image", group: "Dialog", run: () => move(-1) },
-      { bind: "right", title: "Next image", group: "Dialog", run: () => move(1) },
+      {
+        bind: "left",
+        title: language.t("tui.dialogs.previousImage"),
+        group: language.t("tui.dialog"),
+        run: () => move(-1),
+      },
+      {
+        bind: "right",
+        title: language.t("tui.dialogs.nextImage"),
+        group: language.t("tui.dialog"),
+        run: () => move(1),
+      },
     ],
   }))
 
@@ -44,8 +56,8 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
           primary:
             props.images.length > 1
               ? [
-                  { title: "previous", key: "←", onTrigger: () => move(-1) },
-                  { title: "next", key: "→", onTrigger: () => move(1) },
+                  { title: language.t("tui.interface.previous"), key: "←", onTrigger: () => move(-1) },
+                  { title: language.t("tui.interface.next"), key: "→", onTrigger: () => move(1) },
                 ]
               : [],
         },
@@ -60,13 +72,15 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
       legacyFooter={
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text.muted} onMouseUp={() => move(-1)}>
-            {props.images.length > 1 ? "← previous" : ""}
+            {props.images.length > 1 ? language.t("tui.dialogs.previousImageHint") : ""}
           </text>
           <text fg={media.failed() ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" truncate>
-            {media.failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
+            {media.failed()
+              ? language.t("tui.noPreview")
+              : (current().mention?.text ?? language.t("tui.dialogs.image", { number: index() + 1 }))}
           </text>
           <text fg={theme.text.muted} onMouseUp={() => move(1)}>
-            {props.images.length > 1 ? "next →" : ""}
+            {props.images.length > 1 ? language.t("tui.dialogs.nextImageHint") : ""}
           </text>
         </box>
       }

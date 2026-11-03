@@ -21,10 +21,12 @@ import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { usePlugin } from "./context"
+import { useLanguage } from "../context/language"
 
 // Contain render-time plugin crashes: a throwing slot or route must not take
 // down the app or the other plugins. The crash surfaces as one error toast.
 function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
+  const language = useLanguage()
   const toast = useToast()
   return (
     <ErrorBoundary
@@ -34,7 +36,7 @@ function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
         onMount(() =>
           toast.show({
             variant: "error",
-            title: "Plugin",
+            title: language.t("tui.app.plugin"),
             message: `${props.id} crashed in ${props.where}: ${errorMessage(error)}`,
           }),
         )

@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import {
   batch,
   createEffect,
@@ -23,14 +24,7 @@ import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -172,6 +166,7 @@ export function Session(props: {
   const args = useArgs()
   const configState = useConfig()
   const config = configState.data
+  const language = useLanguage()
   const theme = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
@@ -197,7 +192,7 @@ export function Session(props: {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    epilogue.session({ title, sessionID: session()?.id })
+    epilogue.session({ title, sessionID: session()?.id }, language.locale())
   })
   onCleanup(() => epilogue.session())
   const descendantSessionIDs = createMemo(() => {
@@ -256,7 +251,14 @@ export function Session(props: {
   Keymap.createLayer(() => ({
     priority: 10,
     enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
-    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
+    commands: [
+      {
+        bind: "escape,ctrl+c",
+        title: language.t("tui.session.closeSidebar"),
+        group: language.t("command.category.session"),
+        run: props.onToggleSidebar,
+      },
+    ],
   }))
   const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
@@ -349,7 +351,7 @@ export function Session(props: {
       const info = data.session.get(sessionID)
       if (!info) {
         toast.show({
-          message: `Session not found: ${sessionID}`,
+          message: language.t("tui.transcript.sessionNotFound", { sessionID }),
           variant: "error",
           duration: 5000,
         })
@@ -771,8 +773,12 @@ export function Session(props: {
       (error) => error,
     )
     if (!error) return true
-    const label = failureLabel ?? (action === "cancel" ? "delete" : action)
-    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
+
+    toast.show({
+      title: language.t(`tui.transcript.pendingFailed.${failureLabel ?? action}`),
+      message: errorMessage(error),
+      variant: "error",
+    })
     return false
   }
   const mutatePending = async (action: PendingAction, inboxID: string) =>
@@ -788,13 +794,13 @@ export function Session(props: {
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
-        title="Queued prompts"
+        title={language.t("tui.session.queuedPrompts")}
         searchInTitle
-        titlePlaceholder="Search queued prompts"
+        titlePlaceholder={language.t("tui.interface.searchQueuedPrompts")}
         options={queuedPrompts().map((prompt, index) => ({
           title: prompt.text,
           value: prompt.id,
-          footer: `${index + 1} of ${queuedPrompts().length}`,
+          footer: language.t("tui.transcript.position", { current: index + 1, total: queuedPrompts().length }),
         }))}
         onSelect={(option) => {
           void mutatePending("steer", option.value).then((steered) => {
@@ -804,7 +810,7 @@ export function Session(props: {
         actions={[
           {
             command: "queued_prompt.delete",
-            title: "delete",
+            title: language.t("tui.delete"),
             onTrigger: (option) => {
               const last = queuedPrompts().length === 1
               void mutatePending("cancel", option.value).then((cancelled) => {
@@ -814,13 +820,16 @@ export function Session(props: {
           },
           {
             command: "queued_prompt.undo",
-            title: "undo",
+            title: language.t("tui.interface.undo"),
             onTrigger: (option) => {
               const target = prompt()
               const queued = queuedPrompts().find((item) => item.id === option.value)
               if (!target || !queued) return
               if (target.mode === "shell" && target.current.text) {
-                toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
+                toast.show({
+                  message: language.t("tui.interface.leaveShellModeBeforeUndoingAQueuedPrompt"),
+                  variant: "error",
+                })
                 return
               }
               void undoPending(queued.id, queued.payload, "undo")
@@ -831,7 +840,7 @@ export function Session(props: {
                 })
                 .catch((error) =>
                   toast.show({
-                    title: "Failed to undo pending prompt",
+                    title: language.t("tui.transcript.pendingFailed.undo"),
                     message: errorMessage(error),
                     variant: "error",
                   }),
@@ -839,7 +848,7 @@ export function Session(props: {
             },
           },
         ]}
-        footerHints={[{ title: "steer", label: "enter", group: "primary" }]}
+        footerHints={[{ title: language.t("tui.session.steer"), label: "enter", group: "primary" }]}
       />
     ))
   const alignMessage = (messageID: string, top: number) => {
@@ -927,43 +936,43 @@ export function Session(props: {
   const globalCommands = [
     {
       id: "session.page.up",
-      title: "Page up",
-      group: "Session",
+      title: language.t("tui.pageUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-scroll.height / 2),
     },
     {
       id: "session.page.down",
-      title: "Page down",
-      group: "Session",
+      title: language.t("tui.pageDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(scroll.height / 2),
     },
     {
       id: "session.line.up",
-      title: "Line up",
-      group: "Session",
+      title: language.t("tui.session.lineUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-1),
     },
     {
       id: "session.line.down",
-      title: "Line down",
-      group: "Session",
+      title: language.t("tui.session.lineDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(1),
     },
     {
       id: "session.half.page.up",
-      title: "Half page up",
-      group: "Session",
+      title: language.t("tui.session.halfPageUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-scroll.height / 4),
     },
     {
       id: "session.half.page.down",
-      title: "Half page down",
-      group: "Session",
+      title: language.t("tui.session.halfPageDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(scroll.height / 4),
     },
@@ -972,8 +981,8 @@ export function Session(props: {
   const baseAndUnfocusedCommands = [
     {
       id: "session.first",
-      title: "First message",
-      group: "Session",
+      title: language.t("tui.session.firstMessage"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         if (firstJump()) return
@@ -1040,8 +1049,8 @@ export function Session(props: {
     },
     {
       id: "session.last",
-      title: "Last message",
-      group: "Session",
+      title: language.t("tui.session.lastMessage"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         toBottom()
@@ -1052,9 +1061,9 @@ export function Session(props: {
 
   const baseCommands = createMemo(() => [
     {
-      title: "Rename session",
+      title: language.t("tui.renameSession"),
       id: "session.rename",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "rename", arguments: true as const },
       run: (input?: string) => {
         if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
@@ -1067,18 +1076,18 @@ export function Session(props: {
       },
     },
     {
-      title: "Jump to message",
+      title: language.t("tui.session.jumpToMessage"),
       id: "session.timeline",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
       },
     },
     {
-      title: "Fork session",
+      title: language.t("tui.session.forkSession"),
       id: "session.fork",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "fork" },
       run: () => {
         dialog.replace(() => (
@@ -1093,9 +1102,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Compact session",
+      title: language.t("tui.session.compactSession"),
       id: "session.compact",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "compact",
       },
@@ -1117,16 +1126,16 @@ export function Session(props: {
       },
     },
     {
-      title: "Undo previous message",
+      title: language.t("tui.session.undoPreviousMessage"),
       id: "session.undo",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "undo" },
       run: () => {
         const message = messagesBeforeRevert().findLast(
           (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
         )
         if (!message) {
-          toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
+          toast.show({ message: language.t("tui.session.nothingToUndo"), variant: "error", duration: 3000 })
           dialog.clear()
           return
         }
@@ -1144,9 +1153,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Redo",
+      title: language.t("tui.session.redo"),
       id: "session.redo",
-      group: "Session",
+      group: language.t("command.category.session"),
       enabled: !!session()?.revert?.messageID,
       slash: { name: "redo" },
       run: () => {
@@ -1163,11 +1172,11 @@ export function Session(props: {
     {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
-        if (next === "hide") return "Collapse thinking"
-        return "Expand thinking"
+        if (next === "hide") return language.t("tui.transcript.collapseThinking")
+        return language.t("tui.transcript.expandThinking")
       })(),
       id: "session.toggle.thinking",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -1179,9 +1188,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Toggle session scrollbar",
+      title: language.t("tui.session.toggleSessionScrollbar"),
       id: "session.toggle.scrollbar",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -1193,9 +1202,11 @@ export function Session(props: {
       },
     },
     {
-      title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
+      title: groupExploration()
+        ? language.t("tui.session.showToolCallsIndividually")
+        : language.t("tui.session.groupRelatedToolCalls"),
       id: "session.toggle.exploration_grouping",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -1207,9 +1218,9 @@ export function Session(props: {
       },
     },
     {
-      title: `Verbosity: ${Locale.titlecase(verbosity())}`,
+      title: `${language.t("tui.verbosity")}: ${Locale.titlecase(verbosity())}`,
       id: "session.verbosity.cycle",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         const levels = ["low", "medium", "high"] as const
         const next = levels[(levels.indexOf(verbosity()) + 1) % levels.length]
@@ -1222,9 +1233,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Jump to last user message",
+      title: language.t("tui.session.jumpToLastUserMessage"),
       id: "session.messages_last_user",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         const messages = data.session.message.list(route.sessionID)
@@ -1242,46 +1253,48 @@ export function Session(props: {
       },
     },
     {
-      title: "Next message",
+      title: language.t("tui.session.nextMessage"),
       id: "session.message.next",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("next", dialog),
     },
     {
-      title: "Previous message",
+      title: language.t("tui.session.previousMessage"),
       id: "session.message.previous",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("prev", dialog),
     },
     {
-      title: "Next user message",
+      title: language.t("tui.session.nextUserMessage"),
       id: "session.message.user.next",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("next", dialog, true),
     },
     {
-      title: "Previous user message",
+      title: language.t("tui.session.previousUserMessage"),
       id: "session.message.user.previous",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("prev", dialog, true),
     },
     {
-      title: "Copy last assistant message",
+      title: language.t("tui.session.copyLastAssistantMessage"),
       id: "messages.copy",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "copy",
       },
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          (msg) =>
+            msg.type === "assistant" ||
+            (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {
-          toast.show({ message: "No assistant messages found", variant: "error" })
+          toast.show({ message: language.t("tui.session.noAssistantMessagesFound"), variant: "error" })
           dialog.clear()
           return
         }
@@ -1298,7 +1311,7 @@ export function Session(props: {
               : ""
         if (!text) {
           toast.show({
-            message: "No text content found in last assistant message",
+            message: language.t("tui.session.noTextContentFoundInLastAssistantMessage"),
             variant: "error",
           })
           dialog.clear()
@@ -1307,27 +1320,27 @@ export function Session(props: {
 
         clipboard
           .write(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+          .then(() => toast.show({ message: language.t("tui.session.messageCopiedToClipboard"), variant: "success" }))
+          .catch(() => toast.show({ message: language.t("tui.session.failedToCopyToClipboard"), variant: "error" }))
         dialog.clear()
       },
     },
     {
-      title: "Copy session ID",
+      title: language.t("tui.session.copySessionID"),
       id: "session.copy.id",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         clipboard
           .write(route.sessionID)
-          .then(() => toast.show({ message: "Session ID copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy session ID", variant: "error" }))
+          .then(() => toast.show({ message: language.t("tui.session.sessionIDCopiedToClipboard"), variant: "success" }))
+          .catch(() => toast.show({ message: language.t("tui.session.failedToCopySessionID"), variant: "error" }))
         dialog.clear()
       },
     },
     {
-      title: "Copy session transcript",
+      title: language.t("tui.session.copySessionTranscript"),
       id: "session.copy",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: async () => {
         try {
           const sessionData = session()
@@ -1335,17 +1348,17 @@ export function Session(props: {
           const transcript = await client.api.experimental.session.export({ sessionID: sessionData.id })
           const content = formatSessionTranscript(transcript.info, transcript.messages, true)
           await clipboard.write(content)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          toast.show({ message: language.t("tui.session.sessionTranscriptCopiedToClipboard"), variant: "success" })
         } catch {
-          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+          toast.show({ message: language.t("tui.session.failedToCopySessionTranscript"), variant: "error" })
         }
         dialog.clear()
       },
     },
     {
-      title: "Export session transcript",
+      title: language.t("tui.session.exportSessionTranscript"),
       id: "session.export",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "export",
       },
@@ -1370,7 +1383,7 @@ export function Session(props: {
           if (options.action === "copy") {
             await clipboard.write(content)
             dialog.clear()
-            toast.show({ message: "Copied to clipboard", variant: "success" })
+            toast.show({ message: language.t("tui.session.copiedToClipboard"), variant: "success" })
             return
           }
 
@@ -1381,15 +1394,15 @@ export function Session(props: {
           await writeExport(filepath, content)
           await DialogExportResult.show(dialog, filepath)
         } catch {
-          toast.show({ message: "Failed to export session", variant: "error" })
+          toast.show({ message: language.t("tui.session.failedToExportSession"), variant: "error" })
         }
         dialog.clear()
       },
     },
     {
-      title: "Background blocking tools",
+      title: language.t("tui.backgroundBlockingTools"),
       id: "session.background",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void client.api.session.background({ sessionID: route.sessionID })
@@ -1397,9 +1410,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Toggle subagent picker",
+      title: language.t("tui.session.toggleSubagentPicker"),
       id: "session.child.first",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
@@ -1407,16 +1420,16 @@ export function Session(props: {
       },
     },
     {
-      title: "View queued prompts",
+      title: language.t("tui.session.viewQueuedPrompts"),
       id: "session.queued_prompts",
-      group: "Prompt",
+      group: language.t("command.prompt.mode.normal"),
       enabled: queuedPrompts().length > 0,
       run: openQueuedPrompts,
     },
     {
-      title: "Go to parent session",
+      title: language.t("tui.session.goToParentSession"),
       id: "session.parent",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       enabled: !!session()?.parentID,
       run: () => {
@@ -1572,7 +1585,7 @@ export function Session(props: {
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={firstJump()}>
-                <text fg={theme.text.feedback.info.base}>Loading session history…</text>
+                <text fg={theme.text.feedback.info.base}>{language.t("tui.session.loadingSessionHistory")}</text>
               </Show>
               <Show when={!firstJump() && awayFromBottom()}>
                 <box
@@ -1582,10 +1595,8 @@ export function Session(props: {
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  <text
-                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
-                  >
-                    Jump to latest ↓
+                  <text fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}>
+                    {language.t("tui.transcript.jumpLatest")}
                   </text>
                 </box>
               </Show>
@@ -1630,12 +1641,7 @@ export function Session(props: {
                     }}
                   </Show>
                 </Match>
-                <Match
-                  when={
-                    session() &&
-                    currentLocation.error?.location.directory === session()!.location.directory
-                  }
-                >
+                <Match when={session() && currentLocation.error?.location.directory === session()!.location.directory}>
                   <SessionLocationMissing
                     directory={session()!.location.directory}
                     projectID={session()!.projectID}
@@ -1739,6 +1745,7 @@ function TurnTokenUsage(props: {
   previousCache?: CacheUsage
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
+  const language = useLanguage()
   const config = useConfig()
   const theme = useTheme()
   const renderer = useRenderer()
@@ -1765,7 +1772,8 @@ function TurnTokenUsage(props: {
       previousCache = currentCache
       return [
         {
-          finish: message.finish === "tool-calls" ? "tool-call" : (message.finish ?? "unknown"),
+          finish:
+            message.finish === "tool-calls" ? "tool-call" : (message.finish ?? language.t("tui.transcript.unknown")),
           tools: verbose() ? message.content.filter((part) => part.type === "tool") : [],
           newTokens,
           cached: message.tokens.cache.read,
@@ -1776,10 +1784,19 @@ function TurnTokenUsage(props: {
     })
   })
   const columns = createMemo(() => ({
-    step: Math.max("Step".length, ...steps().map((item) => item.finish.length)),
-    newTokens: Math.max("New".length, ...steps().map((item) => item.newTokens.toLocaleString().length)),
-    cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
-    total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
+    step: Math.max(language.t("tui.transcript.step").length, ...steps().map((item) => item.finish.length)),
+    newTokens: Math.max(
+      language.t("tui.transcript.new").length,
+      ...steps().map((item) => language.number(item.newTokens).length),
+    ),
+    cached: Math.max(
+      language.t("tui.transcript.cached").length,
+      ...steps().map((item) => language.number(item.cached).length),
+    ),
+    total: Math.max(
+      language.t("tui.transcript.total").length,
+      ...steps().map((item) => language.number(item.total).length),
+    ),
   }))
   const summary = createMemo(() => {
     const items = steps()
@@ -1806,16 +1823,20 @@ function TurnTokenUsage(props: {
         >
           <text fg={hover() ? theme.text.base : theme.text.muted} wrapMode="none">
             <span>{expanded() ? "- " : "+ "}</span>
-            <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
+            <span style={{ attributes: TextAttributes.BOLD }}>{language.t("tui.session.tokens")}</span>
             <span>
-              : {summary().count} {summary().count === 1 ? "step" : "steps"} · latest:{" "}
-              {summary().latestNewTokens.toLocaleString()} new · {summary().latestCached.toLocaleString()} cached ·{" "}
-              {summary().latestTotal.toLocaleString()} total
+              :{" "}
+              {language.t("tui.transcript.tokenSummary", {
+                steps: language.plural("tui.transcript.steps", summary().count),
+                new: language.number(summary().latestNewTokens),
+                cached: language.number(summary().latestCached),
+                total: language.number(summary().latestTotal),
+              })}
             </span>
             <Show when={summary().reuseDrops > 0}>
               <span style={{ fg: theme.text.feedback.warning.base }}>
                 {" "}
-                · ! {summary().reuseDrops} likely cache {summary().reuseDrops === 1 ? "bust" : "busts"}
+                · ! {language.plural("tui.transcript.cacheBusts", summary().reuseDrops)}
               </span>
             </Show>
           </text>
@@ -1823,12 +1844,12 @@ function TurnTokenUsage(props: {
         <Show when={expanded()}>
           <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
             <text fg={theme.text.muted} attributes={TextAttributes.ITALIC}>
-              {"Step".padEnd(columns().step + 2)}
-              {"New".padStart(columns().newTokens)}
+              {language.t("tui.transcript.step").padEnd(columns().step + 2)}
+              {language.t("tui.transcript.new").padStart(columns().newTokens)}
               {"  "}
-              {"Cached".padStart(columns().cached)}
+              {language.t("tui.transcript.cached").padStart(columns().cached)}
               {"  "}
-              {"Total".padStart(columns().total)}
+              {language.t("tui.transcript.total").padStart(columns().total)}
             </text>
           </box>
           <For each={steps()}>
@@ -1837,17 +1858,17 @@ function TurnTokenUsage(props: {
                 <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.muted}>
                   {item.finish.padEnd(columns().step + 2)}
                   <span style={{ attributes: TextAttributes.BOLD }}>
-                    {item.newTokens.toLocaleString().padStart(columns().newTokens)}
+                    {language.number(item.newTokens).padStart(columns().newTokens)}
                   </span>
                   {"  "}
-                  {item.cached.toLocaleString().padStart(columns().cached)}
+                  {language.number(item.cached).padStart(columns().cached)}
                   {"  "}
-                  {item.total.toLocaleString().padStart(columns().total)}
+                  {language.number(item.total).padStart(columns().total)}
                 </text>
                 <TurnTokenToolCalls tools={item.tools} />
                 <Show when={item.reuseDrop !== undefined}>
                   <text fg={theme.text.feedback.warning.base}>
-                    ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+                    ! {language.plural("tui.transcript.cacheDrop", item.reuseDrop ?? 0)}
                   </text>
                 </Show>
               </box>
@@ -1895,6 +1916,7 @@ function turnTokenToolSummary(tool: SessionMessageAssistantTool) {
 }
 
 function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
+  const language = useLanguage()
   const theme = useTheme()
   const shortcut = Keymap.useShortcut("session.background")
   const running = createMemo(() => {
@@ -1919,9 +1941,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     <Show when={visible() && shortcut()}>
       {(value) => (
         <box marginTop={1} paddingLeft={3} flexShrink={0}>
-          <text fg={theme.text.muted}>
-            Press <span style={{ fg: theme.text.base }}>{value()}</span> to move running work to the background
-          </text>
+          <text fg={theme.text.muted}>{language.t("tui.transcript.backgroundHint", { shortcut: value() })}</text>
         </box>
       )}
     </Show>
@@ -1964,10 +1984,13 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
 }
 
 function ExecutionError(props: { error: NonNullable<Extract<SessionMessageInfo, { type: "idle" }>["error"]> }) {
+  const language = useLanguage()
   const theme = useTheme()
   return (
     <box paddingLeft={3}>
-      <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.error)}</text>
+      <text fg={theme.text.feedback.error.base}>
+        {language.t("tui.interface.error")} {errorMessage(props.error)}
+      </text>
     </box>
   )
 }
@@ -2011,6 +2034,7 @@ function SessionPartView(props: {
 }
 
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
+  const language = useLanguage()
   const ctx = use()
   const config = useConfig()
   const data = useData()
@@ -2036,7 +2060,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         <Switch
           fallback={
             <box paddingLeft={3}>
-              <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.message.error)}</text>
+              <text fg={theme.text.feedback.error.base}>
+                {language.t("tui.transcript.error", { message: errorMessage(props.message.error) })}
+              </text>
             </box>
           }
         >
@@ -2056,13 +2082,21 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
             <span style={{ fg: theme.text.muted }}> · {model()}</span>
           </Show>
           <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
-            <span style={{ fg: theme.text.muted }}> · {Locale.duration(duration())}</span>
+            <span style={{ fg: theme.text.muted }}> · {language.duration(duration())}</span>
           </Show>
           <Show when={config.data.session.tps && tokensPerSecond()}>
-            {(value) => <span style={{ fg: theme.text.muted }}> · {value().toFixed(1)} tok/s</span>}
+            {(value) => (
+              <span style={{ fg: theme.text.muted }}>
+                {" "}
+                ·{" "}
+                {language.t("tui.transcript.tokensPerSecond", {
+                  count: language.number(value(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                })}{" "}
+              </span>
+            )}
           </Show>
           <Show when={interrupted()}>
-            <span style={{ fg: theme.text.muted }}> · interrupted</span>
+            <span style={{ fg: theme.text.muted }}> {language.t("tui.session.interrupted")}</span>
           </Show>
         </text>
       </box>
@@ -2071,13 +2105,14 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
 }
 
 function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   if (props.message.type === "location-switched")
     return (
       <box paddingLeft={3}>
         <text>
-          <span style={{ fg: theme.text.muted }}>↳ Moved to </span>
+          <span style={{ fg: theme.text.muted }}>{language.t("tui.session.movedTo")} </span>
           <span style={{ fg: theme.text.feedback.info.base }}>{props.message.location.directory}</span>
         </text>
       </box>
@@ -2086,11 +2121,14 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
     if (props.message.type === "agent-switched") {
       const agent = Locale.titlecase(props.message.agent)
       if (props.message.previous && props.message.previous !== props.message.agent)
-        return `Switched agent from ${Locale.titlecase(props.message.previous)} to ${agent}`
-      return `Switched agent to ${agent}`
+        return language.t("tui.transcript.agentSwitchedFrom", {
+          previous: Locale.titlecase(props.message.previous),
+          agent,
+        })
+      return language.t("tui.transcript.agentSwitched", { agent })
     }
     if (props.message.type === "model-switched")
-      return switchLabel(props.message.model, ctx.models(), props.message.previous)
+      return switchLabel(props.message.model, ctx.models(), props.message.previous, language.t)
     return ""
   }
   return (
@@ -2101,6 +2139,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 }
 
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2111,19 +2150,26 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const completion = () => source() === "subagent" || source() === "shell"
   const childID = () => (source() === "subagent" ? stringValue(metadata()?.childID) : undefined)
   const state = () => stringValue(metadata()?.state)
-  const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
+  const actor = () =>
+    source() === "shell"
+      ? language.t("tui.details.shell")
+      : stringValue(metadata()?.agent)
+        ? Locale.titlecase(stringValue(metadata()?.agent)!)
+        : language.t("tui.transcript.subagent")
   const text = () => {
-    if (props.message.type === "system") return props.message.description ?? "Instructions updated"
+    if (props.message.type === "system")
+      return props.message.description ?? language.t("tui.transcript.instructionsUpdated")
     if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
   const description = () => (source() === "shell" ? text().replace(/\s+/g, " ").trim() : text())
   const status = () => {
-    if (state() === "completed") return "finished"
-    if (state() === "error") return "failed"
-    return state() ?? "finished"
+    if (state() === "completed" || !state()) return language.t("tui.transcript.finished", { actor: actor() })
+    if (state() === "error") return language.t("tui.transcript.failed", { actor: actor() })
+    if (state() === "cancelled") return language.t("tui.transcript.cancelled", { actor: actor() })
+    return `${actor()} ${state()}`
   }
-  const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
+  const heading = () => `${state() === "completed" ? "↳" : "!"} ${status()}`
   const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
     if (state() === "error") return theme.text.feedback.error.base
@@ -2135,7 +2181,12 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
+        <InlineToolRow
+          icon={source() === "goal" ? "◎" : "◈"}
+          color={theme.text.muted}
+          pending={language.t("tui.transcript.notice")}
+          complete={true}
+        >
           {text()}
         </InlineToolRow>
       }
@@ -2160,15 +2211,17 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
 }
 
 function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { type: "skill" }> }) {
+  const language = useLanguage()
   const theme = useTheme()
   return (
-    <InlineToolRow icon="→" color={theme.text.muted} pending="Skill" complete={true}>
-      Skill {props.message.name}
+    <InlineToolRow icon="→" color={theme.text.muted} pending={language.t("tui.transcript.skill")} complete={true}>
+      {language.t("tui.transcript.skillName", { name: props.message.name })}
     </InlineToolRow>
   )
 }
 
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -2186,7 +2239,10 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
     const input = tokens.input + tokens.cache.read + tokens.cache.write
     const output = tokens.output + tokens.reasoning
     if (input + output <= 0) return
-    return `${Locale.number(input)} in · ${Locale.number(output)} out`
+    return language.t("tui.transcript.compactionUsage", {
+      input: language.number(input),
+      output: language.number(output),
+    })
   }
   return (
     <box>
@@ -2205,11 +2261,11 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           </Switch>
           <text fg={color()}>
             {props.message.status === "completed" && props.message.native?.messages
-              ? "Provider compaction"
-              : "Compaction"}
+              ? language.t("tui.session.providerCompaction")
+              : language.t("tui.session.compaction")}
           </text>
           <Show when={cancelled()}>
-            <text fg={color()}>· cancelled</text>
+            <text fg={color()}>{language.t("tui.session.cancelled")}</text>
           </Show>
           <Show when={usage()}>
             <text fg={color()}>· {usage()}</text>
@@ -2237,13 +2293,14 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
 }
 
 function CompactionQueued() {
+  const language = useLanguage()
   const theme = useTheme()
   return (
     <box flexDirection="row" alignItems="center">
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
       <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
         <text fg={theme.text.muted}>◇</text>
-        <text fg={theme.text.muted}>Compaction queued</text>
+        <text fg={theme.text.muted}>{language.t("tui.session.compactionQueued")}</text>
       </box>
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
     </box>
@@ -2259,6 +2316,7 @@ function RevertMessage(props: {
     readonly deletions: number
   }>
 }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const route = useRouteData("session")
@@ -2293,9 +2351,7 @@ function RevertMessage(props: {
         paddingLeft={2}
         backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
       >
-        <text fg={theme.text.muted}>
-          {props.count} message{props.count === 1 ? "" : "s"} reverted
-        </text>
+        <text fg={theme.text.muted}>{language.plural("tui.transcript.reverted", props.count)}</text>
         <Show when={props.files.length > 0}>
           <box paddingTop={1} paddingBottom={1} flexDirection="column">
             <For each={props.files}>
@@ -2324,20 +2380,19 @@ function RevertMessage(props: {
             </For>
           </box>
         </Show>
-        <text fg={theme.text.muted}>
-          <span style={{ fg: theme.text.base }}>{redoKey()}</span> or /redo to restore
-        </text>
+        <text fg={theme.text.muted}>{language.t("tui.transcript.restore", { shortcut: redoKey() ?? "" })}</text>
       </box>
     </box>
   )
 }
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
+  const language = useLanguage()
   const error = createMemo(() => {
-    if (props.message.status === "killed") return "Command cancelled"
-    if (props.message.status === "timeout") return "Command timed out"
+    if (props.message.status === "killed") return language.t("tui.transcript.commandCancelled")
+    if (props.message.status === "timeout") return language.t("tui.transcript.commandTimedOut")
     if (props.message.exit !== undefined && props.message.exit !== 0)
-      return `Command exited with code ${props.message.exit}`
+      return language.t("tui.transcript.commandExited", { code: props.message.exit })
   })
 
   return (
@@ -2352,6 +2407,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 }
 
 function UserMessage(props: { message: SessionMessageUser }) {
+  const language = useLanguage()
   const ctx = use()
   const newDesigns = useNewDesigns()
   const data = useData()
@@ -2400,11 +2456,11 @@ function UserMessage(props: { message: SessionMessageUser }) {
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
-                  title="Pending steer"
+                  title={language.t("tui.session.pendingSteer")}
                   renderFilter={!newDesigns()}
                   options={[
-                    { title: "Move to queue", value: "queue" as const },
-                    { title: "Delete", value: "cancel" as const },
+                    { title: language.t("tui.session.moveToQueue"), value: "queue" as const },
+                    { title: language.t("tui.session.delete"), value: "cancel" as const },
                   ]}
                   onSelect={(option) => {
                     void updatePendingSteer(option.value)
@@ -2436,7 +2492,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
                         bold: true,
                       }}
                     >
-                      {" skill "}
+                      {` ${language.t("tui.transcript.skillBadge")} `}
                     </span>
                     <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.muted }}>
                       {` ${skill.name} `}
@@ -2450,7 +2506,11 @@ function UserMessage(props: { message: SessionMessageUser }) {
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
                 {(file) => {
-                  const label = file.mime === "application/x-directory" ? "dir" : "file"
+                  const label = language.t(
+                    file.mime === "application/x-directory"
+                      ? "tui.transcript.directoryBadge"
+                      : "tui.transcript.fileBadge",
+                  )
                   return (
                     <text fg={theme.text.base}>
                       <span
@@ -2464,7 +2524,8 @@ function UserMessage(props: { message: SessionMessageUser }) {
                       </span>
                       <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.muted }}>
                         {" "}
-                        {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
+                        {file.name ??
+                          (file.source.type === "uri" ? file.source.uri : language.t("tui.transcript.attachment"))}{" "}
                       </span>
                     </text>
                   )
@@ -2479,6 +2540,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
 }
 
 function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
+  const language = useLanguage()
   const theme = useTheme()
   const [hover, setHover] = createSignal(false)
   const next = createMemo(() => props.prompts[0]?.text.replaceAll("\n", " "))
@@ -2503,7 +2565,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         flexDirection="row"
       >
         <text fg={theme.text.muted} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
-          <span style={{ fg: theme.text.base }}>{props.prompts.length} queued</span>
+          <span style={{ fg: theme.text.base }}>{language.plural("tui.transcript.queued", props.prompts.length)} </span>
           <Show when={next()}>{(text) => <> · {text()}</>}</Show>
         </text>
       </box>
@@ -2523,22 +2585,27 @@ function freeLimitReset(delay: number | undefined, base: number) {
 }
 
 function FreeLimitNotice(props: { message: Pick<SessionMessageAssistant, "error" | "time"> }) {
+  const language = useLanguage()
   const theme = useTheme()
   const reset = createMemo(() =>
     freeLimitReset(props.message.error?.retryAfterMs, props.message.time.completed ?? props.message.time.created),
   )
   return (
     <box paddingLeft={3} flexDirection="column">
-      <text fg={theme.text.muted}>You've used today's free messages.{reset() ? ` They reset at ${reset()}.` : ""}</text>
       <text fg={theme.text.muted}>
-        Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
-        <span style={{ fg: theme.text.base }}>/models</span>
+        {language.t("tui.interface.youVeUsedTodaySFreeMessages")}
+        {reset() ? ` They reset at ${reset()}.` : ""}
+      </text>
+      <text fg={theme.text.muted}>
+        {language.t("tui.interface.upgradeToOpencodeGo")} <span style={{ fg: theme.text.base }}>/connect</span>{" "}
+        {language.t("tui.interface.switchModel")} <span style={{ fg: theme.text.base }}>/models</span>
       </text>
     </box>
   )
 }
 
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
+  const language = useLanguage()
   const theme = useTheme()
   const [seconds, setSeconds] = createSignal(0)
   createEffect(() => {
@@ -2556,8 +2623,15 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
       {(retry) => (
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.warning.base}>
-            ⚠ {seconds() > 0 ? `Retrying in ${seconds()}s` : "Retry due"} · attempt {retry().attempt} ·{" "}
-            {retry().error.message}
+            ⚠{" "}
+            {language.t("tui.transcript.retry", {
+              status:
+                seconds() > 0
+                  ? language.t("tui.transcript.retryIn", { seconds: seconds() })
+                  : language.t("tui.transcript.retryDue"),
+              attempt: retry().attempt,
+              error: retry().error.message,
+            })}
           </text>
         </box>
       )}
@@ -2654,6 +2728,7 @@ function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
 }
 
 function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {
+  const language = useLanguage()
   const ctx = use()
   const dialog = useDialog()
   const images = createMemo(() => (ctx.config.session?.image_preview ? props.images : []))
@@ -2688,7 +2763,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
                   dialog.replace(() => <DialogImagePreview images={images()} initial={index()} />)
                 }}
               >
-                <Show when={!media.failed()} fallback={<text>No preview</text>}>
+                <Show when={!media.failed()} fallback={<text>{language.t("tui.noPreview")}</text>}>
                   <image
                     source={media.source()}
                     fit="cover"
@@ -2705,7 +2780,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
         <Show when={images().length > visible().length}>
           <box width={8} height={height()} flexShrink={1} alignItems="center" justifyContent="center">
             <text wrapMode="none" truncate>
-              +{images().length - visible().length} more
+              {language.plural("tui.transcript.moreImages", images().length - visible().length)}
             </text>
           </box>
         </Show>
@@ -2732,6 +2807,7 @@ type ToolProps = {
   part: SessionMessageAssistantTool
 }
 function GenericTool(props: ToolProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const input = createMemo(() => Object.entries(props.input))
@@ -2769,7 +2845,7 @@ function GenericTool(props: ToolProps) {
             {(value) => (
               <box flexDirection="row">
                 <text flexShrink={0} fg={theme.text.muted}>
-                  output:{" "}
+                  {language.t("tui.transcript.outputLabel")}{" "}
                 </text>
                 <text flexGrow={1} fg={theme.text.base} wrapMode="word">
                   {value()}
@@ -2929,9 +3005,7 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
                   </text>
                 }
@@ -3003,6 +3077,7 @@ function ShellDisplay(props: {
   output?: string
   error?: string
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   const ctx = use()
   const client = useClient()
@@ -3085,7 +3160,7 @@ function ShellDisplay(props: {
       if (props.background && !expanded()) return ""
       if (props.status === "completed" && props.output !== undefined) return stripAnsi(props.output.trim())
       const text = stripAnsi((backgroundOutput() || props.output || "").trim())
-      return outputTruncated() ? `[earlier output omitted]\n${text}` : text
+      return outputTruncated() ? `${language.t("tui.transcript.earlierOutputOmitted")}\n${text}` : text
     }
     return stripAnsi(props.output?.trim() ?? "")
   })
@@ -3110,20 +3185,16 @@ function ShellDisplay(props: {
           when={props.command}
           fallback={
             isRunning() || props.status === "streaming" ? (
-              <Spinner color={color()}>Writing command…</Spinner>
+              <Spinner color={color()}>{language.t("tui.session.writingCommand")}</Spinner>
             ) : (
-              <text fg={theme.text.muted}>Writing command…</text>
+              <text fg={theme.text.muted}>{language.t("tui.session.writingCommand")}</text>
             )
           }
         >
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
+              <text fg={theme.text.base} wrapMode={expanded() ? "word" : "char"} maxHeight={expanded() ? undefined : 2}>
                 {limitedInput()}
               </text>
             }
@@ -3146,7 +3217,7 @@ function ShellDisplay(props: {
           </Show>
         </Show>
         <Show when={props.background}>
-          <StatusBadge raised>Background</StatusBadge>
+          <StatusBadge raised>{language.t("tui.session.background")}</StatusBadge>
         </Show>
       </box>
     </BlockTool>
@@ -3154,6 +3225,7 @@ function ShellDisplay(props: {
 }
 
 function Write(props: ToolProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
@@ -3165,7 +3237,10 @@ function Write(props: ToolProps) {
     <Switch>
       <Match when={props.part.state.status === "completed"}>
         <BlockTool
-          path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
+          path={{
+            label: language.t("tui.transcript.wrote"),
+            value: pathFormatter.format(stringValue(props.input.path)),
+          }}
           part={props.part}
         >
           <line_number fg={theme.text.muted} minWidth={3} paddingRight={1}>
@@ -3181,8 +3256,13 @@ function Write(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write…" complete={stringValue(props.input.path)} part={props.part}>
-          Write {pathFormatter.format(stringValue(props.input.path))}
+        <InlineTool
+          icon="←"
+          pending={language.t("tui.transcript.preparingWrite")}
+          complete={stringValue(props.input.path)}
+          part={props.part}
+        >
+          {language.t("tui.transcript.write", { path: pathFormatter.format(stringValue(props.input.path)) })}
         </InlineTool>
       </Match>
     </Switch>
@@ -3190,19 +3270,29 @@ function Write(props: ToolProps) {
 }
 
 function Glob(props: ToolProps) {
+  const language = useLanguage()
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Finding files…" complete={stringValue(props.input.pattern)} part={props.part}>
-      Glob "{stringValue(props.input.pattern)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+    <InlineTool
+      icon="✱"
+      pending={language.t("tui.transcript.findingFiles")}
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+    >
+      {language.t("tui.transcript.glob", { pattern: stringValue(props.input.pattern) ?? "" })}{" "}
+      <Show when={stringValue(props.input.path)}>
+        {" "}
+        {language.t("tui.transcript.inPath", { path: pathFormatter.format(stringValue(props.input.path)) })}{" "}
+      </Show>
       <Show when={finiteNumber(props.metadata.count)}>
-        ({finiteNumber(props.metadata.count)} {finiteNumber(props.metadata.count) === 1 ? "match" : "matches"})
+        ({language.plural("tui.transcript.matches", finiteNumber(props.metadata.count) ?? 0)})
       </Show>
     </InlineTool>
   )
 }
 
 function Read(props: ToolProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
@@ -3216,22 +3306,24 @@ function Read(props: ToolProps) {
     <>
       <InlineTool
         icon="→"
-        pending="Reading file…"
+        pending={language.t("tui.transcript.readingFile")}
         complete={stringValue(props.input.path)}
         spinner={isRunning()}
         part={props.part}
       >
-        Read {pathFormatter.format(stringValue(props.input.path))}
+        {language.t("tui.transcript.read", { path: pathFormatter.format(stringValue(props.input.path)) })}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
             <text paddingLeft={3} fg={theme.text.muted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
+              ↳ {language.t("tui.transcript.loaded", { path: pathFormatter.format(filepath) })}
             </text>
           </box>
         )}
@@ -3241,35 +3333,58 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
+  const language = useLanguage()
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content…" complete={stringValue(props.input.pattern)} part={props.part}>
-      Grep "{stringValue(props.input.pattern)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+    <InlineTool
+      icon="✱"
+      pending={language.t("tui.transcript.searchingContent")}
+      complete={stringValue(props.input.pattern)}
+      part={props.part}
+    >
+      {language.t("tui.transcript.grep", { pattern: stringValue(props.input.pattern) ?? "" })}{" "}
+      <Show when={stringValue(props.input.path)}>
+        {" "}
+        {language.t("tui.transcript.inPath", { path: pathFormatter.format(stringValue(props.input.path)) })}{" "}
+      </Show>
       <Show when={finiteNumber(props.metadata.matches)}>
-        ({finiteNumber(props.metadata.matches)} {finiteNumber(props.metadata.matches) === 1 ? "match" : "matches"})
+        ({language.plural("tui.transcript.matches", finiteNumber(props.metadata.matches) ?? 0)})
       </Show>
     </InlineTool>
   )
 }
 
 function WebFetch(props: ToolProps) {
+  const language = useLanguage()
   return (
-    <InlineTool icon="%" pending="Fetching from the web…" complete={stringValue(props.input.url)} part={props.part}>
-      WebFetch {stringValue(props.input.url)}
+    <InlineTool
+      icon="%"
+      pending={language.t("tui.transcript.fetchingWeb")}
+      complete={stringValue(props.input.url)}
+      part={props.part}
+    >
+      {language.t("tui.transcript.webfetch", { url: stringValue(props.input.url) ?? "" })}
     </InlineTool>
   )
 }
 
 function WebSearch(props: ToolProps) {
+  const language = useLanguage()
   const ctx = use()
   const provider = createMemo(() => stringValue(props.metadata.provider))
+  // Keep the animated provider inline while allowing translations to place it anywhere.
+  const label = createMemo(() => language.t("tui.transcript.webSearchVia", { provider: "\u0000" }).split("\u0000"))
   return (
-    <InlineTool icon="◈" pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
-      <Show when={provider()} fallback="Web Search">
+    <InlineTool
+      icon="◈"
+      pending={language.t("tui.transcript.searchingWeb")}
+      complete={stringValue(props.input.query)}
+      part={props.part}
+    >
+      <Show when={provider()} fallback={language.t("tui.transcript.webSearch")}>
         {(value) => (
           <>
-            Web Search via{" "}
+            {label()[0]}
             <RetryProvider
               value={{
                 id: `${ctx.sessionID}:${props.part.time.created}:${props.part.id}`,
@@ -3278,6 +3393,7 @@ function WebSearch(props: ToolProps) {
               }}
               enabled={ctx.config.animations ?? true}
             />
+            {label()[1]}
           </>
         )}
       </Show>{" "}
@@ -3287,6 +3403,7 @@ function WebSearch(props: ToolProps) {
 }
 
 function Subagent(props: ToolProps) {
+  const language = useLanguage()
   const { navigate } = useRoute()
   const data = useData()
   const sessionID = createMemo(
@@ -3310,7 +3427,7 @@ function Subagent(props: ToolProps) {
       spinner={isRunning()}
       running={isRunning()}
       complete={description()}
-      pending="Delegating…"
+      pending={language.t("tui.transcript.delegating")}
       part={props.part}
       onClick={() => {
         const id = sessionID()
@@ -3318,11 +3435,23 @@ function Subagent(props: ToolProps) {
       }}
       status={
         isBackgroundSubagent(props.metadata, props.part.state.status) ? (
-          <StatusBadge>Background</StatusBadge>
+          <StatusBadge>{language.t("tui.session.background")}</StatusBadge>
         ) : undefined
       }
     >
-      {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
+      {continuation()
+        ? language.t("tui.transcript.continueSubagent", {
+            description: description() ?? language.t("tui.transcript.subagent"),
+          })
+        : language.t("tui.transcript.delegateSubagent", {
+            agent: Locale.titlecase(
+              stringValue(props.input.agent) ??
+                stringValue(props.input.subagent_type) ??
+                language.t("tui.transcript.general"),
+            ),
+            description: description() ?? language.t("tui.transcript.subagent"),
+          })}{" "}
+      {model() ? ` · ${model()}` : ""}
     </InlineTool>
   )
 }
@@ -3403,6 +3532,7 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
 
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const dialog = useDialog()
@@ -3430,7 +3560,7 @@ function Execute(props: ToolProps) {
         onClick={openDetails}
         onErrorClick={openDetails}
       >
-        execute
+        {language.t("tui.interface.execute")}
       </InlineTool>
       <Index each={calls()}>{(call) => <ExecuteCallView call={call} />}</Index>
       <Show when={showOutput()}>
@@ -3450,6 +3580,7 @@ function Execute(props: ToolProps) {
 }
 
 function Edit(props: ToolProps) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -3470,7 +3601,10 @@ function Edit(props: ToolProps) {
     <Switch>
       <Match when={file()}>
         {(item) => (
-          <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
+          <BlockTool
+            path={{ label: language.t("tui.transcript.edit"), value: pathFormatter.format(path()) }}
+            part={props.part}
+          >
             <box paddingLeft={1} paddingRight={3}>
               <PatchDiff
                 diff={item().patch}
@@ -3501,10 +3635,10 @@ function Edit(props: ToolProps) {
         <BlockTool
           path={
             stringValue(props.input.path)
-              ? { label: "← Edit", value: pathFormatter.format(stringValue(props.input.path)) }
+              ? { label: language.t("tui.transcript.edit"), value: pathFormatter.format(stringValue(props.input.path)) }
               : undefined
           }
-          title={stringValue(props.input.path) ? undefined : "# Preparing edit…"}
+          title={stringValue(props.input.path) ? undefined : language.t("tui.transcript.preparingEdit")}
           part={props.part}
           spinner={props.part.state.status === "streaming"}
         />
@@ -3514,6 +3648,7 @@ function Edit(props: ToolProps) {
 }
 
 function ApplyPatch(props: ToolProps) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -3548,7 +3683,13 @@ function ApplyPatch(props: ToolProps) {
             {(file) => (
               <BlockTool
                 path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+                  label: language.t(
+                    file.type === "add"
+                      ? "tui.transcript.created"
+                      : file.type === "delete"
+                        ? "tui.transcript.deleted"
+                        : "tui.transcript.patched",
+                  ),
                   value: pathFormatter.format(file.relativePath),
                 }}
                 part={props.part}
@@ -3556,9 +3697,7 @@ function ApplyPatch(props: ToolProps) {
                 <Show
                   when={file.type !== "delete"}
                   fallback={
-                    <text fg={theme.diff.text.removed}>
-                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                    </text>
+                    <text fg={theme.diff.text.removed}>-{language.plural("tui.transcript.lines", file.deletions)}</text>
                   }
                 >
                   <box paddingLeft={1} paddingRight={3}>
@@ -3595,7 +3734,13 @@ function ApplyPatch(props: ToolProps) {
             {(file) => (
               <BlockTool
                 path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+                  label: language.t(
+                    file.type === "add"
+                      ? "tui.transcript.created"
+                      : file.type === "delete"
+                        ? "tui.transcript.deleted"
+                        : "tui.transcript.patched",
+                  ),
                   value: pathFormatter.format(file.resource),
                 }}
                 part={props.part}
@@ -3615,13 +3760,19 @@ function ApplyPatch(props: ToolProps) {
           path={
             targets().length === 1
               ? {
-                  label: props.part.state.status === "error" ? "# Patch failed" : "Patching",
+                  label: language.t(
+                    props.part.state.status === "error" ? "tui.transcript.patchFailed" : "tui.transcript.patching",
+                  ),
                   value: pathFormatter.format(targets()[0]),
                 }
               : undefined
           }
           title={
-            targets().length === 1 ? undefined : props.part.state.status === "error" ? "# Patch failed" : "Patching"
+            targets().length === 1
+              ? undefined
+              : language.t(
+                  props.part.state.status === "error" ? "tui.transcript.patchFailed" : "tui.transcript.patching",
+                )
           }
           part={props.part}
           spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
@@ -3634,12 +3785,13 @@ function ApplyPatch(props: ToolProps) {
 }
 
 function TodoWrite(props: ToolProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const todos = createMemo(() => parseTodos(props.input.todos))
   return (
     <Switch>
       <Match when={props.part.state.status === "completed" && todos().length > 0}>
-        <BlockTool title="# Todos" part={props.part}>
+        <BlockTool title={language.t("tui.interface.todos")} part={props.part}>
           <box>
             <For each={todos()}>{(todo) => <TodoItem theme={theme} todo={todo} />}</For>
           </box>
@@ -3660,20 +3812,21 @@ function TodoWrite(props: ToolProps) {
 }
 
 function Question(props: ToolProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const questions = createMemo(() => parseQuestions(props.input.questions))
   const answers = createMemo(() => parseQuestionAnswers(props.metadata.answers))
   const count = createMemo(() => questions().length)
 
   function format(answer?: ReadonlyArray<string>) {
-    if (!answer?.length) return "(no answer)"
+    if (!answer?.length) return language.t("tui.transcript.noAnswer")
     return answer.join(", ")
   }
 
   return (
     <Switch>
       <Match when={answers()}>
-        <BlockTool title="# Questions" part={props.part}>
+        <BlockTool title={language.t("tui.transcript.questions")} part={props.part}>
           <box gap={1}>
             <For each={questions()}>
               {(q, i) => (
@@ -3687,8 +3840,13 @@ function Question(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="→" pending="Asking questions…" complete={count()} part={props.part}>
-          Asked {count()} question{count() !== 1 ? "s" : ""}
+        <InlineTool
+          icon="→"
+          pending={language.t("tui.transcript.askingQuestions")}
+          complete={count()}
+          part={props.part}
+        >
+          {language.plural("tui.transcript.askedQuestions", count())}
         </InlineTool>
       </Match>
     </Switch>
@@ -3696,15 +3854,17 @@ function Question(props: ToolProps) {
 }
 
 function Skill(props: ToolProps) {
+  const language = useLanguage()
   const name = createMemo(() => stringValue(props.metadata.name) ?? stringValue(props.input.id))
   return (
-    <InlineTool icon="→" pending="Loading skill…" complete={name()} part={props.part}>
-      Skill "{name()}"
+    <InlineTool icon="→" pending={language.t("tui.transcript.loadingSkill")} complete={name()} part={props.part}>
+      {language.t("tui.transcript.quotedSkill", { name: name() ?? "" })}
     </InlineTool>
   )
 }
 
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
+  const language = useLanguage()
   const theme = useTheme()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const errors = createMemo(() => {
@@ -3721,7 +3881,11 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
         <For each={errors()}>
           {(diagnostic) => (
             <text fg={theme.text.feedback.error.base}>
-              Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
+              {language.t("tui.transcript.diagnostic", {
+                line: diagnostic.range.start.line + 1,
+                character: diagnostic.range.start.character + 1,
+                message: diagnostic.message,
+              })}
             </text>
           )}
         </For>

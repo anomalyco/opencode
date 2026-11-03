@@ -4,6 +4,7 @@ import { useRenderer } from "@opentui/solid"
 import { truncateFilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
 import { useTheme } from "../../context/theme"
+import { useLanguage } from "../../context/language"
 import { tint } from "../../theme/color"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
@@ -28,6 +29,7 @@ export type DiffViewerFileTreeProps = {
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
+  const language = useLanguage()
   const renderer = useRenderer()
   const theme = useTheme()
   const [sourceHovered, setSourceHovered] = createSignal(false)
@@ -95,7 +97,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
               wrapMode="none"
               selectable={false}
             >
-              {props.source ?? "Files"}
+              {props.source ?? language.t("tui.diff.files")}
             </text>
             <Show when={props.sourceDetail}>
               <text fg={theme.text.muted} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
@@ -104,8 +106,12 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
             </Show>
           </box>
           <text id="diff-review-count" fg={theme.text.muted} wrapMode="none" flexShrink={0}>
-            {reviewedCount()}/{props.files.length}
-            {props.source ? "" : " reviewed"}
+            {props.source
+              ? `${language.number(reviewedCount())}/${language.number(props.files.length)}`
+              : language.t("tui.diff.reviewedCount", {
+                  count: language.number(reviewedCount()),
+                  total: language.number(props.files.length),
+                })}
           </text>
         </box>
         <scrollbox
@@ -121,7 +127,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
               <text />
             </Match>
             <Match when={props.files.length === 0}>
-              <text fg={theme.text.muted}>No files</text>
+              <text fg={theme.text.muted}>{language.t("tui.diff.noFiles")}</text>
             </Match>
             <Match when={props.files.length > 0}>
               <box flexShrink={0} gap={list() ? 1 : 0}>

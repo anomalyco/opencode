@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import type { ModelInfo } from "@opencode/client"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useLocal } from "../context/local"
@@ -58,6 +59,7 @@ function DialogConnectedModels(props: {
   onSelect: (providerID: string, modelID: string) => void
   onConnect: () => void
 }) {
+  const language = useLanguage()
   const local = useLocal()
   const newDesigns = useNewDesigns()
   const data = useData()
@@ -70,7 +72,10 @@ function DialogConnectedModels(props: {
     const value = limits.usage(model)
     if (value) {
       const level = usageLevel(value, model)
-      return { text: `${formatDollars(value.left)} left`, danger: level === "out" || level === "reached" }
+      return {
+        text: language.t("tui.usage.left", { amount: formatDollars(value.left, language) }),
+        danger: level === "out" || level === "reached",
+      }
     }
     if (limits.unlimited(model)) return { text: "No limit" }
     return undefined
@@ -85,7 +90,7 @@ function DialogConnectedModels(props: {
   // Under new designs the detail row shows the price, so the trailing slot only marks favorites.
   const trailing = (model: ModelInfo, favorite: boolean) => {
     if (newDesigns()) return favorite ? <FavoriteMarker /> : undefined
-    return isFreeModel(model) ? "Free" : undefined
+    return isFreeModel(model) ? language.t("tui.dialogs.free") : undefined
   }
   // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
   const freeGroup = (model: ModelInfo) =>
@@ -129,12 +134,12 @@ function DialogConnectedModels(props: {
       })
     }
 
-    const favoriteOptions = toOptions(favorites, "Favorites")
+    const favoriteOptions = toOptions(favorites, language.t("tui.dialogs.favorites"))
     const recentOptions = toOptions(
       recents.filter(
         (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
       ),
-      "Recent",
+      language.t("tui.dialogs.recent"),
     )
 
     const modelOptions = sortModelOptions(
@@ -152,8 +157,16 @@ function DialogConnectedModels(props: {
             providerName: provider?.name ?? model.providerID,
             title: model.name,
             releaseDate: model.time.released,
-            description: newDesigns() ? undefined : favorite ? "(Favorite)" : undefined,
-            category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
+            description: newDesigns()
+              ? undefined
+              : favorite
+                ? language.t("tui.dialogs.favoriteDescription")
+                : undefined,
+            category: connected()
+              ? freeGroup(model)
+                ? language.t("tui.dialogs.free")
+                : (provider?.name ?? model.providerID)
+              : undefined,
             footer: trailing(model, favorite),
             free: isFreeModel(model),
             detail: newDesigns() ? () => <ModelDetail model={model} usage={usage(model)} /> : undefined,
@@ -196,8 +209,8 @@ function DialogConnectedModels(props: {
     return [
       ...favoriteOptions,
       ...recentOptions,
-      ...modelOptions.filter((option) => option.category !== "Free"),
-      ...modelOptions.filter((option) => option.category === "Free"),
+      ...modelOptions.filter((option) => !option.free),
+      ...modelOptions.filter((option) => option.free),
     ]
   })
 
@@ -205,25 +218,19 @@ function DialogConnectedModels(props: {
 
   const title = createMemo(() => {
     const value = provider()
-    if (!value) return "Select model"
+    if (!value) return language.t("tui.dialogs.selectModel")
     return value.name
   })
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
       searchInTitle
-      titlePlaceholder="Search models"
+      titlePlaceholder={language.t("tui.interface.searchModels")}
       options={options()}
       actions={[
         {
           command: "model.dialog.provider",
-          title: newDesigns()
-            ? connected()
-              ? "connect integration"
-              : "view all integrations"
-            : connected()
-              ? "Connect an integration"
-              : "View all integrations",
+          title: language.t(connected() ? "tui.connectAnIntegration" : "tui.dialogs.viewIntegrations"),
           selection: "none",
           onTrigger: props.onConnect,
         },
@@ -236,7 +243,9 @@ function DialogConnectedModels(props: {
         },
         {
           command: "model.dialog.favorite",
-          title: newDesigns() ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite") : "Favorite",
+          title: newDesigns()
+            ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite")
+            : language.t("tui.dialogs.favorite"),
           hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })

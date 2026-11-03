@@ -5,6 +5,7 @@ import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { createStore, produce } from "solid-js/store"
 import { SidebarOnboarding } from "../../src/feature-plugins/sidebar/footer"
+import { ConfigProvider, resolve } from "../../src/config"
 
 function context(options?: {
   dismissed?: boolean
@@ -50,9 +51,11 @@ function context(options?: {
 async function render(input: Context, height = 22) {
   const app = await testRender(
     () => (
-      <box width={38}>
-        <SidebarOnboarding context={input} sessionID="session" />
-      </box>
+      <ConfigProvider config={resolve({}, { terminalSuspend: true })}>
+        <box width={38}>
+          <SidebarOnboarding context={input} sessionID="session" />
+        </box>
+      </ConfigProvider>
     ),
     { width: 38, height },
   )

@@ -1,3 +1,4 @@
+import { createLanguage } from "../i18n/translate"
 import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client"
 
 /** A model as the usage limits read it: its OpenCode IDs, its price and context window, and its provider. */
@@ -71,9 +72,9 @@ export function usageLevel(usage: ModelUsage, model: LimitedModel): UsageLevel {
 }
 
 /** Dollars as limits read: whole amounts without cents, and a sliver as "<$0.01" rather than "$0.00". */
-export function formatDollars(value: number) {
-  if (value > 0 && value < 0.01) return "<$0.01"
-  return new Intl.NumberFormat("en-US", {
+export function formatDollars(value: number, language = createLanguage(() => "en")): string {
+  if (value > 0 && value < 0.01) return `<${formatDollars(0.01, language)}`
+  return new Intl.NumberFormat(language.intl(), {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
@@ -82,12 +83,12 @@ export function formatDollars(value: number) {
 }
 
 /** When limits reset: the day, with the time unless it is midnight here, or just the time when that is today. */
-export function formatReset(at: number) {
+export function formatReset(at: number, language = createLanguage(() => "en")) {
   const date = new Date(at)
   // ICU puts a narrow no-break space before AM/PM, which terminals may draw at the wrong width.
-  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/\u202f/g, " ")
-  if (date.toDateString() === new Date().toDateString()) return `${time} today`
-  const day = date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  const time = date.toLocaleTimeString(language.intl(), { hour: "numeric", minute: "2-digit" }).replace(/\u202f/g, " ")
+  if (date.toDateString() === new Date().toDateString()) return language.t("tui.usage.todayAt", { time })
+  const day = date.toLocaleDateString(language.intl(), { month: "short", day: "numeric" })
   return date.getHours() === 0 && date.getMinutes() === 0 ? day : `${day}, ${time}`
 }
 
@@ -120,31 +121,42 @@ export function goLimitLink(error: { readonly response?: { readonly body: string
  * Who spends from a limit and, when it pools spend across models, which ones. A limit on each model separately names
  * only who spends from it.
  */
-export function limitScope(budget: UsageLimitsBudget, workspace: string | undefined) {
+export function limitScope(
+  budget: UsageLimitsBudget,
+  workspace: string | undefined,
+  language = createLanguage(() => "en"),
+) {
   const who =
     budget.scope === "each"
-      ? "Only you"
+      ? language.t("tui.usage.onlyYou")
       : budget.shared
-        ? `Everyone in ${workspace ?? "the workspace"}`
-        : "You and others"
+        ? language.t("tui.usage.everyone", { workspace: workspace ?? language.t("tui.usage.yourWorkspace") })
+        : language.t("tui.usage.youAndOthers")
   if (budget.per === "model") return who
-  return `${who} · ${limitModels(budget)}`
+  return `${who} · ${limitModels(budget, language)}`
 }
 
-function limitModels(budget: UsageLimitsBudget) {
-  if (budget.coverage === "all") return "All models"
-  const vendors = budget.vendors.length > 0 ? list(budget.vendors) : undefined
-  const price = budget.inputPriceAtLeast === undefined ? undefined : `${formatDollars(budget.inputPriceAtLeast)} per 1M`
-  if (vendors && price) return `${vendors} models over ${price}`
-  if (vendors) return `All ${vendors} models`
-  if (price) return `Models over ${price}`
+function limitModels(budget: UsageLimitsBudget, language: ReturnType<typeof createLanguage>) {
+  if (budget.coverage === "all") return language.t("tui.usage.allModels")
+  const vendors = budget.vendors.length > 0 ? list(budget.vendors, language) : undefined
+  const price =
+    budget.inputPriceAtLeast === undefined
+      ? undefined
+      : language.t("tui.usage.perMillion", { price: formatDollars(budget.inputPriceAtLeast, language) })
+  if (vendors && price) return language.t("tui.usage.vendorPrice", { vendors, price })
+  if (vendors) return language.t("tui.usage.vendorModels", { vendors })
+  if (price) return language.t("tui.usage.priceModels", { price })
   const names = budget.models.map((model) => model.name)
-  if (names.length > 3) return `${names.slice(0, 3).join(", ")} +${names.length - 3} more`
+  if (names.length > 3)
+    return language.t("tui.usage.moreModels", {
+      models: names.slice(0, 3).join(", "),
+      count: language.number(names.length - 3),
+    })
   return names.join(", ")
 }
 
-function list(items: readonly string[]) {
-  return new Intl.ListFormat("en-US", { style: "long", type: "conjunction" }).format(items)
+function list(items: readonly string[], language: ReturnType<typeof createLanguage>) {
+  return new Intl.ListFormat(language.intl(), { style: "long", type: "conjunction" }).format(items)
 }
 
 function limit(budget: UsageLimitsBudget, spent: number): ModelLimit {

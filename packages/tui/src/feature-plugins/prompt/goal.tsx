@@ -4,6 +4,7 @@ import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Acces
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } from "../../ui/dialog"
+import { useLanguage } from "../../context/language"
 
 /**
  * The goal `/goal` set on a Session, from the goal plugin's RPC: fetched when the Session changes or the server
@@ -54,9 +55,9 @@ function goalColor(theme: Plugin.Context["theme"], goal: Goal.State) {
 }
 
 function goalLabel(goal: Goal.State) {
-  if (goal.status === "paused") return "goal paused"
-  if (goal.status === "complete") return "goal met"
-  return "goal"
+  if (goal.status === "paused") return "tui.goal.paused"
+  if (goal.status === "complete") return "tui.goal.met"
+  return "tui.goal.label"
 }
 
 /**
@@ -68,6 +69,7 @@ export function GoalStatus(props: {
   sessionID: string
   goal: Accessor<Goal.State | undefined>
 }) {
+  const language = useLanguage()
   const [hovered, setHovered] = createSignal(false)
   const color = (current: Goal.State) =>
     hovered() ? props.context.theme.text.base : goalColor(props.context.theme, current)
@@ -79,10 +81,10 @@ export function GoalStatus(props: {
           flexShrink={0}
           onMouseOver={() => setHovered(true)}
           onMouseOut={() => setHovered(false)}
-          onMouseUp={() => showGoal(props.context, props.sessionID, props.goal)}
+          onMouseUp={() => showGoal(props.context, props.sessionID, props.goal, language)}
         >
           <text fg={color(current())} wrapMode="none">
-            ◎ {goalLabel(current())}
+            ◎ {language.t(goalLabel(current()))}
           </text>
         </box>
       )}
@@ -91,26 +93,28 @@ export function GoalStatus(props: {
 }
 
 /** Opens the goal dialog for a Session, or explains how to start one. */
-function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Goal.State | undefined>) {
+function showGoal(
+  context: Plugin.Context,
+  sessionID: string,
+  goal: Accessor<Goal.State | undefined>,
+  language: ReturnType<typeof useLanguage>,
+) {
   if (!goal()) {
-    context.ui.toast.show({ message: "No goal is set. Start one with /goal <objective>.", variant: "info" })
+    context.ui.toast.show({ message: language.t("tui.goal.notSet"), variant: "info" })
     return
   }
   context.ui.dialog.show(() => <GoalDialog context={context} sessionID={sessionID} goal={goal} />)
 }
 
-function GoalDialog(props: {
-  context: Plugin.Context
-  sessionID: string
-  goal: Accessor<Goal.State | undefined>
-}) {
+function GoalDialog(props: { context: Plugin.Context; sessionID: string; goal: Accessor<Goal.State | undefined> }) {
+  const language = useLanguage()
   const theme = useTheme().surface("dialog")
   const goal = props.goal
   const run = (text: "pause" | "resume" | "clear") => {
     if (text === "clear") props.context.ui.dialog.clear()
     void props.context.client.session.command({ sessionID: props.sessionID, name: "goal", text }).catch((error) =>
       props.context.ui.toast.show({
-        title: "Failed to update the goal",
+        title: language.t("tui.interface.failedToUpdateTheGoal"),
         message: error instanceof Error ? error.message : String(error),
         variant: "error",
       }),
@@ -120,9 +124,13 @@ function GoalDialog(props: {
     const current = goal()
     if (!current) return []
     return [
-      ...(current.status === "active" ? [{ title: "pause", key: "p", onTrigger: () => run("pause") }] : []),
-      ...(current.status === "paused" ? [{ title: "resume", key: "r", onTrigger: () => run("resume") }] : []),
-      { title: "clear", key: "x", onTrigger: () => run("clear") },
+      ...(current.status === "active"
+        ? [{ title: language.t("tui.interface.pause"), key: "p", onTrigger: () => run("pause") }]
+        : []),
+      ...(current.status === "paused"
+        ? [{ title: language.t("tui.interface.resume"), key: "r", onTrigger: () => run("resume") }]
+        : []),
+      { title: language.t("tui.interface.clear"), key: "x", onTrigger: () => run("clear") },
     ]
   })
 
@@ -131,19 +139,25 @@ function GoalDialog(props: {
     commands: [
       {
         bind: "p",
-        title: "Pause goal",
+        title: language.t("tui.interface.pauseGoal"),
         group: "Dialog",
         enabled: goal()?.status === "active",
         run: () => run("pause"),
       },
       {
         bind: "r",
-        title: "Resume goal",
+        title: language.t("tui.interface.resumeGoal"),
         group: "Dialog",
         enabled: goal()?.status === "paused",
         run: () => run("resume"),
       },
-      { bind: "x", title: "Clear goal", group: "Dialog", enabled: goal() !== undefined, run: () => run("clear") },
+      {
+        bind: "x",
+        title: language.t("tui.interface.clearGoal"),
+        group: "Dialog",
+        enabled: goal() !== undefined,
+        run: () => run("clear"),
+      },
     ],
   }))
 
@@ -151,7 +165,7 @@ function GoalDialog(props: {
     <Show when={goal()}>
       {(current) => (
         <DialogLayout
-          header={<DialogHeader title="Goal" />}
+          header={<DialogHeader title={language.t("tui.interface.goal")} />}
           footer={{ actions: { primary: actions() } }}
           legacyFooter={<DialogFooter actions={{ primary: actions() }} />}
         >

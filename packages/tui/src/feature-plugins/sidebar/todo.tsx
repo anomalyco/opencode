@@ -2,8 +2,10 @@ import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 import { sessionTodos } from "../../util/todo"
+import { useLanguage } from "../../context/language"
 
 export function SidebarTodo(props: { context: Plugin.Context; sessionID: string }) {
+  const language = useLanguage()
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
   const list = createMemo(() =>
@@ -33,9 +35,12 @@ export function SidebarTodo(props: { context: Plugin.Context; sessionID: string 
             <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
           </Show>
           <text fg={theme.text.base}>
-            <b>Todo</b>
+            <b>{language.t("tui.interface.todo")}</b>
             <Show when={list().length > 2 && !view.open}>
-              <span style={{ fg: theme.text.muted }}> ({remaining()} remaining)</span>
+              <span style={{ fg: theme.text.muted }}>
+                {" "}
+                ({language.t("tui.todos.remaining", { count: language.number(remaining()) })})
+              </span>
             </Show>
           </text>
         </box>

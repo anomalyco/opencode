@@ -20,7 +20,7 @@ import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
-import type { RunEntryBody, StreamCommit } from "./types"
+import type { ScrollbackOptions, RunEntryBody, StreamCommit } from "./types"
 
 type ActiveBody = Exclude<RunEntryBody, { type: "none" | "structured" }>
 
@@ -92,6 +92,7 @@ export class RunScrollbackStream {
   private imageSurface: ScrollbackSurface | undefined
   private treeSitterClient: TreeSitterClient | undefined
   private wrote: boolean
+  private language: ScrollbackOptions["language"]
   private shellOutput: () => boolean
   private mono: boolean
   private imagePreview: boolean
@@ -106,6 +107,7 @@ export class RunScrollbackStream {
       wrote?: boolean
       treeSitterClient?: TreeSitterClient
       onThemeRelease?: (theme: RunTheme) => void
+      language?: ScrollbackOptions["language"]
       shellOutput?: () => boolean
       mono?: boolean
       imagePreview?: boolean
@@ -113,6 +115,7 @@ export class RunScrollbackStream {
   ) {
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
+    this.language = options.language
     this.shellOutput = options.shellOutput ?? (() => true)
     this.mono = options.mono ?? false
     this.imagePreview = options.imagePreview ?? false
@@ -396,7 +399,7 @@ export class RunScrollbackStream {
       await image.loadPromise
       if (surface.isDestroyed) return
 
-      const body = entryBody(commit, { mono: this.mono })
+      const body = entryBody(commit, { mono: this.mono, language: this.language })
       if (body.type !== "text") return
       const style = entryLook(commit, this.theme.entry)
       const caption = new TextRenderable(surface.renderContext, {
@@ -465,7 +468,7 @@ export class RunScrollbackStream {
       return
     }
 
-    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono, language: this.language })
     if (body.type === "none") {
       if (entryDone(commit)) {
         this.markRendered(await this.finishActive(false))
@@ -500,7 +503,7 @@ export class RunScrollbackStream {
         commit,
         body: staticBody(commit, body, spaced),
         theme: this.theme,
-        opts: { mono: this.mono },
+        opts: { mono: this.mono, language: this.language },
       }),
     )
     this.markRendered(commit)

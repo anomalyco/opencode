@@ -1,3 +1,7 @@
+import { createLanguage } from "../i18n/translate"
+
+const english = createLanguage(() => "en")
+
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../util/permission"
 import { toolPath } from "./tool"
@@ -45,7 +49,7 @@ export function permissionOptions(stage: PermissionStage): PermissionOption[] {
   return []
 }
 
-export function permissionInfo(request: MiniPermissionRequest, directory?: string, mono = false) {
+export function permissionInfo(request: MiniPermissionRequest, directory?: string, mono = false, t = english.t) {
   const state = request.tool?.state
   const info = permissionPresentation(
     {
@@ -56,6 +60,7 @@ export function permissionInfo(request: MiniPermissionRequest, directory?: strin
       toolMetadata: state?.status === "streaming" ? undefined : state?.metadata,
     },
     (value) => toolPath(value, { home: true, directory }),
+    t,
   )
   if (!mono) return info
   return {
@@ -70,8 +75,8 @@ export function permissionInfo(request: MiniPermissionRequest, directory?: strin
   }
 }
 
-export function permissionLabel(option: PermissionOption): string {
-  return permissionOptionLabel(option)
+export function permissionLabel(option: PermissionOption, t = english.t): string {
+  return permissionOptionLabel(option, t)
 }
 
 export { permissionAlwaysLines }

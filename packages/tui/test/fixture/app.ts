@@ -13,6 +13,7 @@ export async function createAppFixture(
     height?: number
     state?: string
     config?: Config.Info
+    configService?: Config.Interface
     args?: TuiInput["args"]
     fetch?: FetchHandler
     // A renderer whose owner already set up its terminal, such as the simulation renderer.
@@ -40,7 +41,7 @@ export async function createAppFixture(
     run({
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
-      config: {
+      config: input.configService ?? {
         get: async () => config,
         update: async (mutate) => {
           const next = structuredClone(config)

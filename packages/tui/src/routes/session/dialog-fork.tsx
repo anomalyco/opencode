@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
@@ -7,10 +8,10 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { DIALOG_LIST_INSET, DialogHeader, DialogLayout, useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
-import { Locale } from "../../util/locale"
 import { usePromptRestore } from "../../prompt/restore"
 
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
+  const language = useLanguage()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -46,7 +47,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       prompt: prompt && { ...prompt, agents: prompt.agents ?? [] },
     })
     dialog.clear()
-    toast.show({ message: "Forked session", variant: "success", duration: 4000 })
+    toast.show({ message: language.t("tui.details.forkedSession"), variant: "success", duration: 4000 })
   }
 
   onMount(() => {
@@ -56,7 +57,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
 
   const options = createMemo((): DialogSelectOption<string | undefined>[] => [
     {
-      title: "Full session",
+      title: language.t("tui.details.fullSession"),
       value: undefined,
       onSelect: () => fork(),
     },
@@ -67,7 +68,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       .map((message) => ({
         title: message.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: language.date(message.time.created, { timeStyle: "short" }),
         onSelect: () => fork(message.id),
       })),
   ])
@@ -76,12 +77,16 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
     <Show
       when={!pending()}
       fallback={
-        <DialogLayout inset={DIALOG_LIST_INSET} header={<DialogHeader title="Fork session" />}>
-          <Spinner>Forking session…</Spinner>
+        <DialogLayout inset={DIALOG_LIST_INSET} header={<DialogHeader title={language.t("tui.session.forkSession")} />}>
+          <Spinner>{language.t("tui.details.forkingSession")}</Spinner>
         </DialogLayout>
       }
     >
-      <DialogSelect onMove={(option) => props.onMove?.(option.value)} title="Fork session" options={options()} />
+      <DialogSelect
+        onMove={(option) => props.onMove?.(option.value)}
+        title={language.t("tui.session.forkSession")}
+        options={options()}
+      />
     </Show>
   )
 }

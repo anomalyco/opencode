@@ -1,11 +1,13 @@
+import { useLanguage } from "../../context/language"
 import { createMemo, onMount } from "solid-js"
 import { useData } from "../../context/data"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
-import { Locale } from "../../util/locale"
+
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
 
 export function DialogTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
+  const language = useLanguage()
   const data = useData()
   const dialog = useDialog()
 
@@ -21,7 +23,7 @@ export function DialogTimeline(props: { sessionID: string; onMove: (messageID: s
       result.push({
         title: message.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: language.date(message.time.created, { timeStyle: "short" }),
         onSelect: (dialog) => {
           dialog.replace(() => <DialogMessage messageID={message.id} sessionID={props.sessionID} />)
         },
@@ -34,9 +36,9 @@ export function DialogTimeline(props: { sessionID: string; onMove: (messageID: s
   return (
     <DialogSelect
       onMove={(option) => props.onMove(option.value)}
-      title="Timeline"
+      title={language.t("tui.details.timeline")}
       searchInTitle
-      titlePlaceholder="Search timeline"
+      titlePlaceholder={language.t("tui.interface.searchTimeline")}
       options={options()}
     />
   )

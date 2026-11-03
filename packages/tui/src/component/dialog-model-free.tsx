@@ -6,12 +6,14 @@ import { useLocation } from "../context/location"
 import { modelPreferenceKey } from "../model-preference"
 import { DialogSelect } from "../ui/dialog-select"
 import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites } from "./model-options"
+import { useLanguage } from "../context/language"
 
 /** Model picker for users without a connected provider, under the "new-designs" experiment. */
 export function DialogFreeModels(props: {
   onSelect: (providerID: string, modelID: string) => void
   onConnect: () => void
 }) {
+  const language = useLanguage()
   const local = useLocal()
   const data = useData()
   const location = useLocation()
@@ -52,13 +54,13 @@ export function DialogFreeModels(props: {
 
   return (
     <DialogSelect
-      title="Free models"
-      description="Connect a provider for access to more models"
+      title={language.t("tui.interface.freeModels")}
+      description={language.t("tui.interface.connectAProviderForAccessToMoreModels")}
       options={options()}
       actions={[
         {
           command: "model.dialog.provider",
-          title: "connect provider",
+          title: language.t("tui.interface.connectProvider"),
           selection: "none",
           onTrigger: props.onConnect,
         },

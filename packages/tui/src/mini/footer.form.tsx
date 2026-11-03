@@ -35,6 +35,7 @@ import type { FormBodyState } from "./form.shared"
 import type { RunFooterTheme } from "./theme"
 import type { FormCancel, FormReply, MiniFormRequest } from "./types"
 import { stringWidth } from "../util/string-width"
+import { useMiniLanguage as useLanguage } from "./language"
 
 export function RunFormBody(props: {
   request: MiniFormRequest
@@ -46,6 +47,7 @@ export function RunFormBody(props: {
   onState?: (state: FormBodyState) => void
   mono?: boolean
 }) {
+  const language = useLanguage()
   const renderer = useRenderer()
   const dims = useTerminalDimensions()
   const [size, setSize] = createSignal(dims())
@@ -58,7 +60,7 @@ export function RunFormBody(props: {
     setLocalState(value)
     props.onState?.(value)
   }
-  const unsupported = createMemo(() => formUnsupported(props.request))
+  const unsupported = createMemo(() => formUnsupported(props.request, language.t))
   const current = createMemo(() => formCurrent(props.request, state()))
   const answerField = createMemo(() => {
     const field = current()
@@ -69,7 +71,7 @@ export function RunFormBody(props: {
     return field?.type === "external" ? field : undefined
   })
   const confirm = createMemo(() => formConfirm(props.request, state()))
-  const rows = createMemo(() => formRows(current()))
+  const rows = createMemo(() => formRows(current(), language.t))
   const custom = createMemo(() => formCustom(current()))
   const textual = createMemo(() => formTextual(current()))
   const multiple = createMemo(() => current()?.type === "multiselect")
@@ -142,7 +144,7 @@ export function RunFormBody(props: {
   }
 
   const submit = (next = state()) => {
-    const invalid = formValidate(props.request, next)
+    const invalid = formValidate(props.request, next, language.t)
     if (invalid) {
       setState((previous) => formSetError(previous, invalid))
       return
@@ -199,11 +201,13 @@ export function RunFormBody(props: {
     const field = current()
     if (field?.type === "external") {
       if (state().answers[field.key] !== true) {
-        setState((previous) => formSetError(previous, `Acknowledge ${formLabel(field)}`))
+        setState((previous) =>
+          formSetError(previous, language.t("tui.mini.formAcknowledge", { field: formLabel(field) })),
+        )
         return
       }
     } else if (field) {
-      const invalid = formValidateValue(field, state().answers[field.key])
+      const invalid = formValidateValue(field, state().answers[field.key], language.t)
       if (invalid) {
         setState((previous) => formSetError(previous, invalid))
         return
@@ -374,7 +378,7 @@ export function RunFormBody(props: {
                   {value()}
                 </text>
                 <text width="100%" fg={props.theme.muted} flexShrink={0}>
-                  This request remains pending until you dismiss it.
+                  {language.t("tui.mini.thisRequestRemainsPendingUntilYouDismissIt")}
                 </text>
               </box>
             )}
@@ -514,7 +518,7 @@ export function RunFormBody(props: {
                             : props.theme.formfieldText
                         }
                       >
-                        Type your own answer
+                        {language.t("tui.details.typeYourOwnAnswer")}
                       </text>
                     </box>
                   </Show>
@@ -556,7 +560,7 @@ export function RunFormBody(props: {
           flexShrink={0}
           marginTop={compact() ? 0 : 1}
           initialValue={formInput(state(), current())}
-          placeholder={formPlaceholder(answerField())}
+          placeholder={formPlaceholder(answerField(), language.t)}
           placeholderColor={props.theme.muted}
           textColor={props.theme.formfieldText}
           focusedTextColor={props.theme.formfieldFocusedText}
@@ -631,13 +635,13 @@ export function RunFormBody(props: {
           </Show>
           <Show when={!state().submitting}>
             <text height={1} fg={props.theme.muted} wrapMode="none" flexShrink={0}>
-              esc dismiss
+              {language.t("tui.mini.escDismiss")}
             </text>
           </Show>
           <Show when={!state().submitting && size().height >= 10}>
             <text fg={props.theme.muted} wrapMode="word" maxWidth="100%" flexShrink={0}>
-              {size().width >= 56 && rows().length > 0 && !state().editing ? "up/down select  tab next  " : ""}pgup/pgdn
-              scroll
+              {size().width >= 56 && rows().length > 0 && !state().editing ? "up/down select  tab next  " : ""}
+              {language.t("tui.mini.pgupPgdnScroll")}
             </text>
           </Show>
         </box>

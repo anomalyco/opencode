@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { useThemes } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -5,6 +6,7 @@ import { onCleanup } from "solid-js"
 
 /** `onClose` returns to the caller, e.g. Settings, instead of closing every dialog. */
 export function DialogThemeList(props: { onClose?: () => void }) {
+  const language = useLanguage()
   const themes = useThemes()
   const options = Object.keys(themes.all())
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
@@ -23,9 +25,9 @@ export function DialogThemeList(props: { onClose?: () => void }) {
 
   return (
     <DialogSelect
-      title="Themes"
+      title={language.t("tui.themes")}
       searchInTitle
-      titlePlaceholder="Search themes"
+      titlePlaceholder={language.t("tui.interface.searchThemes")}
       options={options}
       current={initial}
       onCancel={props.onClose}

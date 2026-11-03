@@ -33,6 +33,7 @@ import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { PatchDiff } from "../component/patch-diff"
+import { useMiniLanguage as useLanguage } from "./language"
 
 function buttons(
   list: PermissionOption[],
@@ -43,12 +44,13 @@ function buttons(
   onSelect: (option: PermissionOption) => void,
   mono: boolean,
 ) {
+  const language = useLanguage()
   return (
     <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
       <For each={list}>
         {(option) => (
           <box
-            width={stringWidth(permissionLabel(option)) + 2}
+            width={stringWidth(permissionLabel(option, language.t)) + 2}
             height={1}
             flexShrink={0}
             paddingLeft={1}
@@ -66,7 +68,7 @@ function buttons(
               fg={option === selected ? theme.actionFocusedText : theme.actionSecondaryText}
               attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
             >
-              {permissionLabel(option)}
+              {permissionLabel(option, language.t)}
             </text>
           </box>
         )}
@@ -84,6 +86,7 @@ export function RejectField(props: {
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const language = useLanguage()
   const renderer = useRenderer()
   let area: TextareaRenderable | undefined
 
@@ -111,7 +114,7 @@ export function RejectField(props: {
       minHeight={1}
       maxHeight={3}
       wrapMode="word"
-      placeholder="Tell OpenCode what to do differently"
+      placeholder={language.t("tui.tellOpenCodeWhatToDoDifferently")}
       placeholderColor={props.theme.muted}
       textColor={props.theme.formfieldText}
       focusedTextColor={props.theme.formfieldFocusedText}
@@ -148,13 +151,14 @@ export function RunPermissionBody(props: {
   onReply: (input: PermissionReply) => void | Promise<void>
   mono?: boolean
 }) {
+  const language = useLanguage()
   const dims = useTerminalDimensions()
   const [size, setSize] = createSignal(dims())
   const width = () => size().width
   const compact = () => width() < 56 || size().height < 12
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
   const stage = createMemo(() => state().stage)
-  const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono))
+  const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono, language.t))
   const ft = createMemo(() => toolFiletype(info().file))
   let scroll: ScrollBoxRenderable | undefined
   const scrollbar = createMemo(() => ({
@@ -168,7 +172,8 @@ export function RunPermissionBody(props: {
     permissionOptions(stage()).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
   const busy = createMemo(() => state().submitting)
-  const controlsWidth = () => opts().reduce((total, option) => total + stringWidth(permissionLabel(option)) + 3, -1)
+  const controlsWidth = () =>
+    opts().reduce((total, option) => total + stringWidth(permissionLabel(option, language.t)) + 3, -1)
   const hint = () =>
     compact() && width() < 56
       ? "pgup/pgdn scroll"
@@ -323,7 +328,7 @@ export function RunPermissionBody(props: {
           {title()}
         </text>
         <Show when={!compact() && stage() === "reject"}>
-          <text fg={props.theme.muted}>Tell OpenCode what to do differently</text>
+          <text fg={props.theme.muted}>{language.t("tui.tellOpenCodeWhatToDoDifferently")}</text>
         </Show>
       </box>
 
@@ -486,7 +491,7 @@ export function RunPermissionBody(props: {
                   </Show>
                   <Show when={!info().diff && !info().patch && info().lines.length === 0}>
                     <text width="100%" fg={props.theme.muted} flexShrink={0}>
-                      No diff provided
+                      {language.t("tui.noDiffProvided")}
                     </text>
                   </Show>
                 </box>
@@ -551,7 +556,7 @@ export function RunPermissionBody(props: {
                   </>
                 }
               >
-                pgup/pgdn<span style={{ fg: props.theme.muted }}> scroll</span>
+                pgup/pgdn<span style={{ fg: props.theme.muted }}> {language.t("tui.session.scroll")}</span>
               </Show>
             </text>
           </Show>

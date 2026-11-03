@@ -1,15 +1,16 @@
+import { createLanguage } from "../../i18n/translate"
 import type { SessionStatsInfo } from "@opencode/client"
 import { TokenUsage } from "@opencode/schema/token-usage"
 
-export function statsMetrics(stats: SessionStatsInfo) {
+export function statsMetrics(stats: SessionStatsInfo, language = createLanguage(() => "en")) {
   return [
     {
-      label: "tokens",
+      label: language.t("tui.stats.tokenMetric"),
       value: TokenUsage.total(stats.tokens),
     },
-    { label: "best streak", value: stats.streak },
-    { label: "active days", value: stats.activeDays },
-    { label: "sessions", value: stats.sessions },
+    { label: language.t("tui.stats.bestStreak"), value: stats.streak },
+    { label: language.t("tui.stats.activeDays"), value: stats.activeDays },
+    { label: language.t("tui.stats.sessions"), value: stats.sessions },
   ]
 }
 

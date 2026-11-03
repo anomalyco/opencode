@@ -1,3 +1,7 @@
+import { DialogLanguage } from "./dialog-language"
+import type { TranslationKey } from "../i18n/translate"
+import en from "../i18n/en"
+import { useLanguage } from "../context/language"
 import { createMemo, createSignal } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useThemes } from "../context/theme"
@@ -7,14 +11,14 @@ import { useToast } from "../ui/toast"
 import { DialogThemeList } from "./dialog-theme-list"
 
 type Setting = {
-  title: string
-  category: string
+  title: TranslationKey
+  category: TranslationKey
   path: string[]
   /** Shown below the list while the setting is selected, under the "new-designs" experiment. */
-  description: string
+  description: TranslationKey
   default: unknown
   values?: readonly unknown[]
-  labels?: readonly string[]
+  labels?: readonly TranslationKey[]
   step?: number
   min?: number
   max?: number
@@ -26,10 +30,18 @@ type Setting = {
 
 export const settings: Setting[] = [
   {
-    title: "Theme",
-    category: "Appearance",
+    title: "command.category.language",
+    category: "settings.general.section.appearance",
+    path: ["language"],
+    description: "tui.interface.languageUsedAcrossTheTerminalInterface",
+    default: "en",
+    keywords: ["language", "locale", "russian", "русский", "язык", "english"],
+  },
+  {
+    title: "command.category.theme",
+    category: "settings.general.section.appearance",
     path: ["theme", "name"],
-    description: "Color theme used across the interface",
+    description: "tui.interface.colorThemeUsedAcrossTheInterface",
     default: "opencode",
     keywords: ["color scheme", "colors"],
     open: (dialog) =>
@@ -38,198 +50,206 @@ export const settings: Setting[] = [
       )),
   },
   {
-    title: "Color mode",
-    category: "Appearance",
+    title: "tui.colorMode",
+    category: "settings.general.section.appearance",
     path: ["theme", "mode"],
-    description: "Dark or light variant, or follow the system",
+    description: "tui.interface.darkOrLightVariantOrFollowTheSystem",
     default: "system",
     values: ["system", "dark", "light"],
+    labels: ["tui.system", "tui.dark", "tui.light"],
     keywords: ["dark mode", "light mode", "system theme"],
   },
   {
-    title: "Animations",
-    category: "Appearance",
+    title: "tui.animations",
+    category: "settings.general.section.appearance",
     path: ["animations"],
-    description: "Whether spinners and transitions animate",
+    description: "tui.interface.whetherSpinnersAndTransitionsAnimate",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["motion", "effects"],
   },
   {
-    title: "Sidebar",
-    category: "Session",
+    title: "tui.sidebar",
+    category: "command.category.session",
     path: ["session", "sidebar"],
-    description: "Whether the sidebar shows when there is room",
+    description: "tui.interface.whetherTheSidebarShowsWhenThereIsRoom",
     default: "auto",
     values: ["hide", "auto"],
+    labels: ["tui.hide", "tui.auto"],
     keywords: ["side panel"],
   },
   {
-    title: "Scrollbar",
-    category: "Session",
+    title: "tui.scrollbar",
+    category: "command.category.session",
     path: ["session", "scrollbar"],
-    description: "Whether a scrollbar is shown next to the chat",
+    description: "tui.interface.whetherAScrollbarIsShownNextToThe",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["scroll bar"],
   },
   {
-    title: "Thinking",
-    category: "Session",
+    title: "settings.timeline.category.thinking",
+    category: "command.category.session",
     path: ["session", "thinking"],
-    description: "Whether model thinking is shown in the chat",
+    description: "tui.interface.whetherModelThinkingIsShownInTheChat",
     default: "hide",
     values: ["hide", "show"],
+    labels: ["tui.hide", "tui.show"],
     keywords: ["reasoning", "chain of thought"],
   },
   {
-    title: "Markdown",
-    category: "Session",
+    title: "tui.markdown",
+    category: "command.category.session",
     path: ["session", "markdown"],
-    description: "Whether chat markdown is rendered or shown as source",
+    description: "tui.interface.whetherChatMarkdownIsRenderedOrShownAs",
     default: "rendered",
     values: ["source", "rendered"],
+    labels: ["tui.source", "tui.rendered"],
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
-    title: "Tool grouping",
-    category: "Session",
+    title: "tui.toolGrouping",
+    category: "command.category.session",
     path: ["session", "grouping"],
-    description: "Whether consecutive reads and searches are grouped",
+    description: "tui.interface.whetherConsecutiveReadsAndSearchesAreGrouped",
     default: "auto",
     values: ["none", "auto"],
+    labels: ["tui.none", "tui.auto"],
     keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
-    title: "Verbosity",
-    category: "Session",
+    title: "tui.verbosity",
+    category: "command.category.session",
     path: ["session", "verbosity"],
-    description: "How much tool activity is shown in the chat",
+    description: "tui.interface.howMuchToolActivityIsShownInThe",
     default: "medium",
     values: ["low", "medium", "high"],
     keywords: ["detail", "activity", "summary", "transcript"],
   },
   {
-    title: "Transcript images",
-    category: "Session",
+    title: "tui.transcriptImages",
+    category: "command.category.session",
     path: ["session", "image_preview"],
-    description: "Whether images are shown in the chat",
+    description: "tui.interface.whetherImagesAreShownInTheChat",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["attachments", "images", "tool output"],
   },
   {
-    title: "TPS",
-    category: "Session",
+    title: "tui.tps",
+    category: "command.category.session",
     path: ["session", "tps"],
-    description: "Whether tokens per second are shown for responses",
+    description: "tui.interface.whetherTokensPerSecondAreShownForResponses",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["tokens per second", "throughput"],
   },
   {
-    title: "New session location",
-    category: "Session",
+    title: "tui.newSessionLocation",
+    category: "command.category.session",
     path: ["session", "new_location"],
-    description: "Directory new sessions start in",
+    description: "tui.interface.directoryNewSessionsStartIn",
     default: "launch",
     values: ["launch", "inherit"],
-    labels: ["launch directory", "active session"],
+    labels: ["tui.launchDirectory", "tui.activeSession"],
     keywords: ["directory", "cwd", "inherit"],
   },
   {
-    title: "Permissions",
-    category: "Session",
+    title: "command.category.permissions",
+    category: "command.category.session",
     path: ["session", "permissions"],
-    description: "Whether permission requests ask you or auto accept",
+    description: "tui.interface.whetherPermissionRequestsAskYouOrAutoAccept",
     default: "prompt",
     values: ["prompt", "autoaccept"],
-    labels: ["prompt", "auto accept"],
+    labels: ["tui.prompt", "tui.autoAccept"],
     keywords: ["approve", "accept", "permission requests"],
   },
   {
-    title: "Mode",
-    category: "Tabs",
+    title: "tui.tabs.mode",
+    category: "titlebar.tabs",
     path: ["tabs", "mode"],
-    description: "Whether sessions open in tabs",
+    description: "tui.interface.whetherSessionsOpenInTabs",
     default: "auto",
     values: ["off", "on", "auto"],
   },
   {
-    title: "Scope",
-    category: "Tabs",
+    title: "tui.scope",
+    category: "titlebar.tabs",
     path: ["tabs", "scope"],
-    description: "Whether tabs are per directory or shared everywhere",
+    description: "tui.interface.whetherTabsArePerDirectoryOrSharedEverywhere",
     default: "cwd",
     values: ["cwd", "global"],
-    labels: ["current directory", "global"],
+    labels: ["tui.currentDirectory", "tui.global"],
   },
   {
-    title: "Layout",
-    category: "Tabs",
+    title: "tui.layout",
+    category: "titlebar.tabs",
     path: ["tabs", "layout"],
-    description: "Whether tabs run along the top or down the side",
+    description: "tui.interface.whetherTabsRunAlongTheTopOrDown",
     default: "horizontal",
     values: ["horizontal", "vertical"],
+    labels: ["tui.horizontal", "tui.vertical"],
     keywords: ["sidebar", "orientation", "left"],
   },
   {
-    title: "Indicators",
-    category: "Tabs",
+    title: "tui.indicators",
+    category: "titlebar.tabs",
     path: ["tabs", "indicators"],
-    description: "Whether tabs show status icons or always numbers",
+    description: "tui.interface.whetherTabsShowStatusIconsOrAlwaysNumbers",
     default: "status",
     values: ["status", "numbers"],
-    labels: ["status icons", "always show numbers"],
+    labels: ["tui.statusIcons", "tui.alwaysShowNumbers"],
     keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
-    title: "Layout",
-    category: "Diffs",
+    title: "tui.layout",
+    category: "tui.diffs",
     path: ["diffs", "view"],
-    description: "Whether diffs are side by side or in one column",
+    description: "tui.interface.whetherDiffsAreSideBySideOrIn",
     default: "auto",
     values: ["auto", "split", "unified"],
+    labels: ["tui.auto", "tui.split", "tui.unified"],
     keywords: ["diff layout", "split diff", "unified diff"],
   },
   {
-    title: "Wrapping",
-    category: "Diffs",
+    title: "tui.wrapping",
+    category: "tui.diffs",
     path: ["diffs", "wrap"],
-    description: "Whether long lines in diffs wrap",
+    description: "tui.interface.whetherLongLinesInDiffsWrap",
     default: "word",
     values: ["none", "word"],
+    labels: ["tui.none", "tui.word"],
     keywords: ["diff wrap", "word wrap", "line wrap"],
   },
   {
-    title: "File tree",
-    category: "Diffs",
+    title: "settings.general.row.showFileTree.title",
+    category: "tui.diffs",
     path: ["diffs", "tree"],
-    description: "Whether a file tree is shown next to diffs",
+    description: "tui.interface.whetherAFileTreeIsShownNextTo",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["diff files"],
   },
   {
-    title: "Single patch",
-    category: "Diffs",
+    title: "tui.singlePatch",
+    category: "tui.diffs",
     path: ["diffs", "single"],
-    description: "Whether diffs show one file at a time",
+    description: "tui.interface.whetherDiffsShowOneFileAtATime",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["one file", "selected file"],
   },
   {
-    title: "Scroll speed",
-    category: "Input",
+    title: "tui.scrollSpeed",
+    category: "tui.input",
     path: ["scroll", "speed"],
-    description: "How far each scroll step moves",
+    description: "tui.interface.howFarEachScrollStepMoves",
     default: 3,
     step: 0.25,
     min: 0.25,
@@ -238,59 +258,60 @@ export const settings: Setting[] = [
     keywords: ["scrolling"],
   },
   {
-    title: "Acceleration",
-    category: "Input",
+    title: "tui.acceleration",
+    category: "tui.input",
     path: ["scroll", "acceleration"],
-    description: "Whether scrolling speeds up the faster you scroll",
+    description: "tui.interface.whetherScrollingSpeedsUpTheFasterYouScroll",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["scroll acceleration"],
   },
   {
-    title: "Mouse",
-    category: "Input",
+    title: "tui.mouse",
+    category: "tui.input",
     path: ["mouse"],
-    description: "Whether the interface responds to the mouse",
+    description: "tui.interface.whetherTheInterfaceRespondsToTheMouse",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["mouse capture"],
   },
   {
-    title: "Editor context",
-    category: "Input",
+    title: "tui.editorContext",
+    category: "tui.input",
     path: ["prompt", "editor"],
-    description: "Whether your editor's selection is added to prompts",
+    description: "tui.interface.whetherYourEditorSSelectionIsAddedTo",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["file context", "prompt context", "editor selection"],
   },
   {
-    title: "Large pastes",
-    category: "Input",
+    title: "tui.largePastes",
+    category: "tui.input",
     path: ["prompt", "paste"],
-    description: "Whether large pastes are summarized or shown in full",
+    description: "tui.interface.whetherLargePastesAreSummarizedOrShownIn",
     default: "compact",
     values: ["compact", "full"],
+    labels: ["tui.compact", "tui.full"],
     keywords: ["paste summary", "clipboard", "pasted content"],
   },
   {
-    title: "Image previews",
-    category: "Input",
+    title: "tui.imagePreviews",
+    category: "tui.input",
     path: ["prompt", "image_preview"],
-    description: "Whether attached images are previewed in the prompt",
+    description: "tui.interface.whetherAttachedImagesArePreviewedInThePrompt",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["attachments", "clipboard", "images", "prompt"],
   },
   {
-    title: "Leader timeout",
-    category: "Input",
+    title: "tui.leaderTimeout",
+    category: "tui.input",
     path: ["leader", "timeout"],
-    description: "How long the leader key waits for the next key",
+    description: "tui.interface.howLongTheLeaderKeyWaitsForThe",
     default: 2000,
     step: 250,
     min: 250,
@@ -299,30 +320,30 @@ export const settings: Setting[] = [
     keywords: ["leader key", "shortcut timeout"],
   },
   {
-    title: "Notifications",
-    category: "Alerts",
+    title: "settings.tab.notifications",
+    category: "tui.alerts",
     path: ["attention", "notifications"],
-    description: "Whether to notify when a session needs attention",
+    description: "tui.interface.whetherToNotifyWhenASessionNeedsAttention",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["system notifications", "desktop notifications", "alerts"],
   },
   {
-    title: "Sounds",
-    category: "Alerts",
+    title: "tui.sounds",
+    category: "tui.alerts",
     path: ["attention", "sound"],
-    description: "Whether a sound plays when a session needs attention",
+    description: "tui.interface.whetherASoundPlaysWhenASessionNeeds",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["audio", "sound effects", "alerts"],
   },
   {
-    title: "Volume",
-    category: "Alerts",
+    title: "tui.volume",
+    category: "tui.alerts",
     path: ["attention", "volume"],
-    description: "Volume of alert sounds",
+    description: "tui.interface.volumeOfAlertSounds",
     default: 0.4,
     step: 0.1,
     min: 0,
@@ -331,42 +352,43 @@ export const settings: Setting[] = [
     keywords: ["sound volume", "audio volume"],
   },
   {
-    title: "Release highlights",
-    category: "Alerts",
+    title: "tui.releaseHighlights",
+    category: "tui.alerts",
     path: ["highlights"],
-    description: "Whether release highlights are shown after an update",
+    description: "tui.interface.whetherReleaseHighlightsAreShownAfterAnUpdate",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["what's new", "changelog", "release notes"],
   },
   {
-    title: "Window title",
-    category: "Terminal",
+    title: "tui.windowTitle",
+    category: "command.category.terminal",
     path: ["terminal", "title"],
-    description: "Whether the window title shows the current session",
+    description: "tui.interface.whetherTheWindowTitleShowsTheCurrentSession",
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["terminal title", "tab title"],
   },
   {
-    title: "Copy behavior",
-    category: "Terminal",
+    title: "tui.copyBehavior",
+    category: "command.category.terminal",
     path: ["terminal", "copy"],
-    description: "Whether selecting text copies it",
+    description: "tui.interface.whetherSelectingTextCopiesIt",
     default: process.platform === "win32" ? "manual" : "select",
     values: ["manual", "select"],
+    labels: ["tui.manual", "tui.select"],
     keywords: ["selection", "clipboard"],
   },
   {
-    title: "Developer tools",
-    category: "Debug",
+    title: "tui.developerTools",
+    category: "tui.debug",
     path: ["debug", "devtools"],
-    description: "Whether the developer tools bar is shown",
+    description: "tui.interface.whetherTheDeveloperToolsBarIsShown",
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["debug bar", "developer tools"],
   },
 ]
@@ -376,9 +398,10 @@ export function settingID(setting: Setting) {
 }
 
 export function DialogConfig(props: { current?: string }) {
+  const language = useLanguage()
+  const dialog = useDialog()
   const config = useConfig()
   const newDesigns = useNewDesigns()
-  const dialog = useDialog()
   const toast = useToast()
   const themes = useThemes()
   const current = Math.max(
@@ -402,22 +425,24 @@ export function DialogConfig(props: { current?: string }) {
       : setting.values
   const display = (setting: Setting) => {
     const current = value(setting)
+    if (settingID(setting) === "language") return language.label(language.locale())
     if (setting.format) return setting.format(current)
     const index = setting.values?.indexOf(current)
-    return index === undefined || index < 0 ? String(current) : (setting.labels?.[index] ?? String(current))
+    const label = index === undefined || index < 0 ? undefined : setting.labels?.[index]
+    return label ? language.t(label) : String(current)
   }
   const options = createMemo(() =>
     settings.map((setting, index) => ({
-      title: setting.title,
-      category: setting.category,
-      searchText: setting.keywords?.join(" "),
+      title: language.t(setting.title),
+      category: language.t(setting.category),
+      searchText: [en[setting.title], ...(setting.keywords ?? [])].join(" "),
       footer: newDesigns() ? (
         <DialogSelectChoice value={display(setting)} active={selected() === index} open={setting.open !== undefined} />
       ) : (
         display(setting)
       ),
       footerOverhang: newDesigns() ? 2 : undefined,
-      detail: newDesigns() ? setting.description : undefined,
+      detail: newDesigns() ? language.t(setting.description) : undefined,
       value: index,
     })),
   )
@@ -425,6 +450,10 @@ export function DialogConfig(props: { current?: string }) {
   async function change(direction: number, index = selected()) {
     if (saving()) return
     const setting = settings[index]
+    if (settingID(setting) === "language") {
+      dialog.replace(() => <DialogLanguage />)
+      return
+    }
     const current = value(setting)
     const choices = values(setting)
     const next = choices
@@ -446,9 +475,9 @@ export function DialogConfig(props: { current?: string }) {
 
   return (
     <DialogSelect
-      title="Settings"
+      title={language.t("command.category.settings")}
       searchInTitle
-      titlePlaceholder="Search settings"
+      titlePlaceholder={language.t("tui.interface.searchSettings")}
       options={options()}
       // Under new designs the opening setting is focused without the current-item marker; changing a value keeps the
       // selection where it is.
@@ -462,18 +491,18 @@ export function DialogConfig(props: { current?: string }) {
         if (newDesigns() && open) return open(dialog)
         void change(1, option.value)
       }}
-      footerHints={newDesigns() ? [] : [{ title: "change", label: "←/→" }]}
+      footerHints={newDesigns() ? [] : [{ title: language.t("tui.change"), label: "←/→" }]}
       bindings={[
         {
           bind: "left",
-          title: "Previous value",
-          group: "Settings",
+          title: language.t("tui.previousValue"),
+          group: language.t("command.category.settings"),
           run: () => void change(-1),
         },
         {
           bind: "right",
-          title: "Next value",
-          group: "Settings",
+          title: language.t("tui.nextValue"),
+          group: language.t("command.category.settings"),
           run: () => void change(1),
         },
       ]}

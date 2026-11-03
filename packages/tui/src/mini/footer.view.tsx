@@ -62,6 +62,7 @@ import type {
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
+import { useMiniLanguage as useLanguage } from "./language"
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
@@ -127,6 +128,7 @@ type RunFooterViewProps = {
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
+  const language = useLanguage()
   const renderer = useRenderer()
   const term = useTerminalDimensions()
   const width = createMemo(() => term().width)
@@ -466,14 +468,19 @@ export function RunFooterView(props: RunFooterViewProps) {
       })
     }
     if (foregroundSubagents() && backgroundShortcut()) {
-      items.push({ id: "background", key: backgroundShortcut(), label: "bg", expanded: "background" })
+      items.push({
+        id: "background",
+        key: backgroundShortcut(),
+        label: language.t("tui.mini.bg"),
+        expanded: "background",
+      })
     }
     return items
   })
   const commandHint = createMemo(() => {
     if (!prompt() || takeover() || shell()) return
     if (command()) {
-      return { key: command(), label: "menu" }
+      return { key: command(), label: language.t("tui.mini.menu") }
     }
   })
   const statuslineLayout = createMemo(() => {
@@ -485,7 +492,7 @@ export function RunFooterView(props: RunFooterViewProps) {
         text: statusText(),
         expanded: footerDetails() && busy() && interruptLabel() ? `${interruptLabel()} interrupt` : undefined,
       },
-      escape: shell() && !takeover() ? { key: "esc", label: "normal" } : undefined,
+      escape: shell() && !takeover() ? { key: "esc", label: language.t("tui.devtools.normal") } : undefined,
       work: contextHintCandidates(),
       model: info ? { name: info.model, variant: info.variant } : undefined,
       agent: agentStatus(),
@@ -550,7 +557,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "app.clear",
-        title: "Clear screen",
+        title: language.t("tui.mini.clearScreen"),
         group: "System",
         run: clearScreen,
       },
@@ -562,13 +569,13 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "command.palette.show",
-        title: "Open command palette",
+        title: language.t("tui.mini.openCommandPalette"),
         group: "Prompt",
         run: openCommand,
       },
       {
         id: "variant.cycle",
-        title: "Cycle model variant",
+        title: language.t("tui.mini.cycleModelVariant"),
         group: "Model",
         run: props.onCycle,
       },
@@ -581,7 +588,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "session.background",
-        title: "Background subagents",
+        title: language.t("tui.mini.backgroundSubagents"),
         group: "Session",
         run: () => props.onBackground?.(),
       },
@@ -593,7 +600,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "session.child.first",
-        title: "View subagents",
+        title: language.t("tui.mini.viewSubagents"),
         group: "Session",
         run: openSubagentMenu,
       },
@@ -605,7 +612,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "session.queued_prompts",
-        title: "View pending prompts",
+        title: language.t("tui.mini.viewPendingPrompts"),
         group: "Prompt",
         run: openQueuedMenu,
       },
@@ -622,7 +629,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "composer.subagent.interrupt",
-        title: "Interrupt subagent",
+        title: language.t("tui.session.interruptSubagent"),
         group: "Session",
         run: () => {
           const current = selectedTab()

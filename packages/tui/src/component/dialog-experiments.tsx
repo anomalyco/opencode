@@ -1,3 +1,5 @@
+import type { TranslationKey } from "../i18n/translate"
+import { useLanguage } from "../context/language"
 import { createMemo, createSignal } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { DIALOG_LIST_INSET } from "../ui/dialog"
@@ -7,8 +9,8 @@ import { useToast } from "../ui/toast"
 
 type Experiment = {
   id: string
-  title: string
-  description: string
+  title: TranslationKey
+  description: TranslationKey
 }
 
 // In-flight features anyone can opt into. Each entry is temporary: an
@@ -17,17 +19,18 @@ type Experiment = {
 export const experiments: Experiment[] = [
   {
     id: "new-designs",
-    title: "New designs",
-    description: "Preview the new TUI designs",
+    title: "tui.experiments.newDesigns",
+    description: "tui.experiments.newDesignsDescription",
   },
   {
     id: "client-mcp",
-    title: "TUI tools",
-    description: "Let the agent open terminals in this TUI (requires server support)",
+    title: "tui.experiments.tools",
+    description: "tui.experiments.toolsDescription",
   },
 ]
 
 export function DialogExperiments() {
+  const language = useLanguage()
   const config = useConfig()
   const newDesigns = useNewDesigns()
   const theme = useTheme()
@@ -39,9 +42,9 @@ export function DialogExperiments() {
 
   const options = createMemo(() =>
     experiments.map((experiment) => ({
-      title: experiment.title,
-      searchText: experiment.description,
-      footer: enabled(experiment) ? "on" : "off",
+      title: language.t(experiment.title),
+      searchText: language.t(experiment.description),
+      footer: language.t(enabled(experiment) ? "tui.on" : "tui.off"),
       value: experiment,
     })),
   )
@@ -63,30 +66,30 @@ export function DialogExperiments() {
 
   return (
     <DialogSelect
-      title="Experiments"
+      title={language.t("tui.details.experiments")}
       options={options()}
       renderFilter={experiments.length > 0}
       onMove={(option) => setSelected(option.value)}
       onSelect={(option) => void change(option.value)}
       emptyView={
         <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
-          <text fg={theme.text.muted}>No experiments available</text>
+          <text fg={theme.text.muted}>{language.t("tui.details.noExperimentsAvailable")}</text>
         </box>
       }
-      footerHints={experiments.length > 0 && !newDesigns() ? [{ title: "change", label: "←/→" }] : []}
+      footerHints={experiments.length > 0 && !newDesigns() ? [{ title: language.t("tui.change"), label: "←/→" }] : []}
       bindings={
         experiments.length > 0
           ? [
               {
                 bind: "left",
-                title: "Previous value",
-                group: "Experiments",
+                title: language.t("tui.previousValue"),
+                group: language.t("tui.details.experiments"),
                 run: () => void change(),
               },
               {
                 bind: "right",
-                title: "Next value",
-                group: "Experiments",
+                title: language.t("tui.nextValue"),
+                group: language.t("tui.details.experiments"),
                 run: () => void change(),
               },
             ]

@@ -8,12 +8,19 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
 import { groupID } from "./anchors"
-import { instructionPaths, type PartRef, type SessionEntry, type SessionGroup, type SessionNode } from "./grouping/session"
+import {
+  instructionPaths,
+  type PartRef,
+  type SessionEntry,
+  type SessionGroup,
+  type SessionNode,
+} from "./grouping/session"
 import { summarizeActivity } from "./activity-summary"
 import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
 import { resolvePart } from "./rows"
 import { generateThinkingSyntax } from "./thinking-syntax"
+import { useLanguage } from "../../context/language"
 
 type Renderers = {
   message: (messageID: string) => SessionMessageInfo | undefined
@@ -61,6 +68,7 @@ function Group(props: GroupProps) {
 }
 
 function GroupContent(props: GroupProps) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const disclosure = useDisclosure(props)
@@ -184,7 +192,10 @@ function GroupContent(props: GroupProps) {
             >
               {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
               <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
-              <Show when={props.completed && thoughts().length > 1}> · {thoughts().length} steps</Show>
+              <Show when={props.completed && thoughts().length > 1}>
+                {" "}
+                · {thoughts().length} {language.t("tui.interface.steps")}
+              </Show>
               <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
             </InlineToolRow>
             <Show when={expanded()}>
@@ -233,6 +244,7 @@ function ActivityGroup(props: GroupProps) {
 
 /** Consecutive instruction loads, summarized by the number of distinct files. */
 function InstructionsGroup(props: GroupProps) {
+  const language = useLanguage()
   const theme = useTheme()
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
@@ -255,7 +267,7 @@ function InstructionsGroup(props: GroupProps) {
         onMouseOut={() => setHover(false)}
         onMouseUp={() => disclosure.toggle()}
       >
-        Instructions: {files()} {files() === 1 ? "file" : "files"}
+        {language.t("tui.interface.instructions")} {files()} {files() === 1 ? "file" : "files"}
       </InlineToolRow>
       <Show when={disclosure.expanded()}>
         <Children {...props} nodes={props.node.children} mode="normal" />

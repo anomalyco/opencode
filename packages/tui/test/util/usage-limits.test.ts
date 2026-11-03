@@ -83,7 +83,13 @@ describe("util.usage-limits", () => {
   })
 
   test("writes dollars and resets the way limits read", () => {
-    expect([6, 1.2, 0.004, 0, 1240].map(formatDollars)).toEqual(["$6", "$1.20", "<$0.01", "$0", "$1,240"])
+    expect([6, 1.2, 0.004, 0, 1240].map((value) => formatDollars(value))).toEqual([
+      "$6",
+      "$1.20",
+      "<$0.01",
+      "$0",
+      "$1,240",
+    ])
 
     setSystemTime(new Date(2026, 9, 24, 9))
     expect(formatReset(new Date(2026, 9, 24, 17).getTime())).toBe("5:00 PM today")

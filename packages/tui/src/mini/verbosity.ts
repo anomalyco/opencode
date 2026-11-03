@@ -1,3 +1,7 @@
+import { createLanguage } from "../i18n/translate"
+
+const english = createLanguage(() => "en")
+
 import type { MiniSettingChange, MiniSettings, MiniVerbosity } from "./types"
 
 const levels: readonly MiniVerbosity[] = ["quiet", "default", "everything"]
@@ -31,18 +35,18 @@ const presets = {
 } as const satisfies Record<MiniVerbosity, VerbosityKnobs>
 
 const labels = {
-  quiet: "Quiet",
-  default: "Default",
-  everything: "Everything",
-  custom: "Custom",
+  quiet: "tui.mini.verbosityQuiet",
+  default: "tui.mini.verbosityDefault",
+  everything: "tui.mini.verbosityEverything",
+  custom: "tui.mini.verbosityCustom",
 } as const
 
 export function verbosityPreset(level: MiniVerbosity): VerbosityKnobs {
   return { ...presets[level] }
 }
 
-export function verbosityLabel(level: MiniVerbosity | "custom") {
-  return labels[level]
+export function verbosityLabel(level: MiniVerbosity | "custom", t = english.t) {
+  return t(labels[level])
 }
 
 export function matchMiniVerbosity(settings: MiniSettings): MiniVerbosity | "custom" {

@@ -16,6 +16,8 @@ import {
 } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
 
+import { useLanguage } from "../context/language"
+
 const options = ["no", "yes"] as const
 
 export type WorkspaceFileChangesChoice = (typeof options)[number]
@@ -40,6 +42,7 @@ export function DialogWorkspaceFileChanges(props: {
   confirm?: { title: string; key: string }
 }) {
   const dialog = useDialog()
+  const language = useLanguage()
   const theme = useTheme().surface("dialog")
   const overlayTheme = useTheme()
   const config = useConfig().data
@@ -63,7 +66,7 @@ export function DialogWorkspaceFileChanges(props: {
     dialog.clear()
   }
 
-  const confirmAction = () => props.confirm ?? { title: "confirm", key: "enter" }
+  const confirmAction = () => props.confirm ?? { title: language.t("tui.confirm"), key: "enter" }
 
   useKeyboard((evt) => {
     // Escape needs no handling here: the dialog closes on escape, which resolves as a cancel.
@@ -97,11 +100,11 @@ export function DialogWorkspaceFileChanges(props: {
 
   return (
     <DialogLayout
-      header={<DialogHeader title={props.title ?? "File Changes Found"} />}
+      header={<DialogHeader title={props.title ?? language.t("tui.dialogs.fileChangesFound")} />}
       footer={{
         actions: {
           primary: [
-            { title: "cancel", key: "esc", onTrigger: () => choose("no") },
+            { title: language.t("tui.cancel"), key: "esc", onTrigger: () => choose("no") },
             { title: confirmAction().title, key: confirmAction().key, onTrigger: () => choose("yes") },
           ],
         },
@@ -120,7 +123,9 @@ export function DialogWorkspaceFileChanges(props: {
                   dialog.clear()
                 }}
               >
-                <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.muted}>{item}</text>
+                <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.muted}>
+                  {language.t(item === "yes" ? "tui.form.yes" : "tui.form.no")}
+                </text>
               </box>
             )}
           </For>
@@ -129,7 +134,7 @@ export function DialogWorkspaceFileChanges(props: {
     >
       <box gap={1}>
         <text fg={theme.text.muted} wrapMode="word">
-          {props.message ?? "Do you want to move these changes with the session?"}
+          {props.message ?? language.t("tui.dialogs.moveChanges")}
         </text>
         <DialogBleed>
           <scrollbox

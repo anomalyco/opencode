@@ -9,6 +9,7 @@ import type { FooterSubagentDetail, FooterSubagentTab } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
 import { stringWidth } from "../util/string-width"
 import { footerMenuText } from "./footer.menu"
+import { useMiniLanguage as useLanguage } from "./language"
 
 export const SUBAGENT_INSPECTOR_ROWS = 14
 
@@ -59,6 +60,7 @@ export function RunFooterSubagentBody(props: {
   shellOutput?: () => boolean
   mono?: boolean
 }) {
+  const language = useLanguage()
   const dims = useTerminalDimensions()
   const [size, setSize] = createSignal(dims())
   const width = () => size().width
@@ -195,7 +197,7 @@ export function RunFooterSubagentBody(props: {
               <Show when={interruptHint()}>
                 {(hint) => (
                   <text fg={footer().muted} wrapMode="none" flexShrink={0}>
-                    {hint()} interrupt
+                    {hint()} {language.t("tui.transcript.interrupt")}
                   </text>
                 )}
               </Show>
@@ -227,7 +229,7 @@ export function RunFooterSubagentBody(props: {
             rows()
           ) : (
             <text width="100%" fg={footer().muted} wrapMode="word" flexShrink={0}>
-              No subagent activity yet
+              {language.t("tui.mini.noSubagentActivityYet")}
             </text>
           )}
         </box>
@@ -235,7 +237,7 @@ export function RunFooterSubagentBody(props: {
       <Show when={!headerControls()}>
         <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
           <text height={1} fg={footer().actionSecondaryText} wrapMode="none" flexShrink={0} onMouseUp={props.onClose}>
-            esc back
+            {language.t("tui.details.escBack")}
           </text>
           <Show when={interruptHint()}>
             {(hint) => (
@@ -246,7 +248,7 @@ export function RunFooterSubagentBody(props: {
           </Show>
           <Show when={width() >= 56}>
             <text height={1} fg={footer().muted} wrapMode="none" flexShrink={0}>
-              pgup/pgdn scroll
+              {language.t("tui.mini.pgupPgdnScroll")}
             </text>
             <Show when={props.total() > 1 && props.index() > 0}>
               <text
@@ -256,7 +258,7 @@ export function RunFooterSubagentBody(props: {
                 flexShrink={0}
                 onMouseUp={() => props.onCycle(1)}
               >
-                tab next {props.index()}/{props.total()}
+                {language.t("tui.mini.tabNext")} {props.index()}/{props.total()}
               </text>
             </Show>
           </Show>

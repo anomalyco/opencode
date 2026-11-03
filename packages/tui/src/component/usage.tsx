@@ -24,6 +24,8 @@ import {
   usageLevel,
   type ModelUsage,
 } from "../util/usage-limits"
+import { createLanguage } from "../i18n/translate"
+import { useLanguage } from "../context/language"
 
 /**
  * The OpenCode Console limits on this location's models. Limits load once; `refresh` reloads them, since spend moves
@@ -59,16 +61,20 @@ export function useUsageLimits() {
 }
 
 /** How a model's limits read where they are short on space: nothing while there's plenty left. */
-export function limitLabel(usage: ModelUsage | undefined, model: ModelInfo) {
+export function limitLabel(usage: ModelUsage | undefined, model: ModelInfo, language = createLanguage(() => "en")) {
   if (!usage) return undefined
   const level = usageLevel(usage, model)
   if (level === "plenty") return undefined
-  if (level === "reached") return { text: "Limit reached", danger: true }
-  return { text: `${formatDollars(usage.left)} left`, danger: level === "out" }
+  if (level === "reached") return { text: language.t("tui.usage.limitReached"), danger: true }
+  return {
+    text: language.t("tui.usage.left", { amount: formatDollars(usage.left, language) }),
+    danger: level === "out",
+  }
 }
 
 /** `/usage`: the models the workspace limits, with what each has left. */
 export function DialogUsage() {
+  const language = useLanguage()
   const limits = useUsageLimits()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
@@ -93,18 +99,23 @@ export function DialogUsage() {
       <Match when={limits.info()}>
         {(info) => (
           <DialogSelect
-            title="Usage"
+            title={language.t("tui.interface.usage")}
             description={[
-              info().workspace.name ? `Workspace: ${info().workspace.name}` : undefined,
-              rows().length > 0 ? `Resets ${formatReset(resets())}` : undefined,
+              info().workspace.name
+                ? language.t("tui.usage.workspace", { name: info().workspace.name ?? "" })
+                : undefined,
+              rows().length > 0 ? language.t("tui.usage.resets", { time: formatReset(resets(), language) }) : undefined,
             ]
               .filter(Boolean)
               .join(" · ")}
-            placeholder="Search models"
+            placeholder={language.t("tui.interface.searchModels")}
             options={rows().map((row) => ({
               title: row.model.name,
               value: key(row.model),
-              footer: selected() === key(row.model) ? `${formatDollars(row.usage.left)} left` : undefined,
+              footer:
+                selected() === key(row.model)
+                  ? language.t("tui.usage.left", { amount: formatDollars(row.usage.left, language) })
+                  : undefined,
               footerColor: row.level === "out" || row.level === "reached" ? theme.text.feedback.error.base : undefined,
               onSelect: () => dialog.replace(() => <DialogUsageModel model={row.model} />),
             }))}
@@ -112,7 +123,7 @@ export function DialogUsage() {
             emptyView={
               <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
                 <text fg={theme.text.muted} wrapMode="word">
-                  No limits apply to your models. Paid models stop only if the workspace runs out of credits.
+                  {language.t("tui.interface.noLimitsApplyToYourModelsPaidModels")}
                 </text>
               </box>
             }
@@ -120,15 +131,15 @@ export function DialogUsage() {
         )}
       </Match>
       <Match when={limits.info() === null}>
-        <DialogLayout header={<DialogHeader title="Usage" />}>
+        <DialogLayout header={<DialogHeader title={language.t("tui.interface.usage")} />}>
           <text fg={theme.text.muted} wrapMode="word">
-            Sign in to OpenCode Console with /connect to see your workspace's usage limits.
+            {language.t("tui.interface.signInToOpencodeConsoleWithConnectTo")}
           </text>
         </DialogLayout>
       </Match>
       <Match when={true}>
-        <DialogLayout header={<DialogHeader title="Usage" />}>
-          <text fg={theme.text.muted}>Loading…</text>
+        <DialogLayout header={<DialogHeader title={language.t("tui.interface.usage")} />}>
+          <text fg={theme.text.muted}>{language.t("tui.interface.loading")}</text>
         </DialogLayout>
       </Match>
     </Switch>
@@ -137,6 +148,7 @@ export function DialogUsage() {
 
 /** Every limit on one model, the one setting what's left marked. */
 export function DialogUsageModel(props: { model: ModelInfo }) {
+  const language = useLanguage()
   const limits = useUsageLimits()
   const theme = useTheme().surface("dialog")
   const usage = () => limits.usage(props.model)
@@ -154,24 +166,31 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
         <DialogHeader
           titleView={
             <text fg={theme.text.base}>
-              <span style={{ fg: theme.text.muted }}>Usage › </span>
+              <span style={{ fg: theme.text.muted }}>{language.t("tui.interface.usage2")} </span>
               {props.model.name}
             </text>
           }
         />
       }
     >
-      <Show when={usage()} fallback={<text fg={theme.text.muted}>No limits apply to {props.model.name}.</text>}>
+      <Show
+        when={usage()}
+        fallback={
+          <text fg={theme.text.muted}>{language.t("tui.usage.noModelLimits", { model: props.model.name })}</text>
+        }
+      >
         {(value) => (
           <box gap={1}>
             <box>
               <text fg={short() ? theme.text.feedback.error.base : theme.text.base} attributes={TextAttributes.BOLD}>
-                {formatDollars(value().left)} remaining
+                {language.t("tui.usage.remaining", { amount: formatDollars(value().left, language) })}
               </text>
-              <text fg={theme.text.muted}>Resets {formatReset(value().resetsAt)}</text>
+              <text fg={theme.text.muted}>
+                {language.t("tui.usage.resets", { time: formatReset(value().resetsAt, language) })}
+              </text>
             </box>
             <box>
-              <text fg={theme.text.muted}>Limits</text>
+              <text fg={theme.text.muted}>{language.t("tui.interface.limits")}</text>
               <For each={value().limits}>
                 {(item, index) => (
                   <box>
@@ -188,11 +207,14 @@ export function DialogUsageModel(props: { model: ModelInfo }) {
                       >
                         {index() === 0 ? "•" : "-"}{" "}
                       </span>
-                      {formatDollars(item.spent)} used of {formatDollars(item.budget.limit)}
+                      {language.t("tui.usage.spent", {
+                        spent: formatDollars(item.spent, language),
+                        limit: formatDollars(item.budget.limit, language),
+                      })}
                     </text>
                     <box paddingLeft={2}>
                       <text fg={theme.text.muted} wrapMode="word">
-                        {limitScope(item.budget, workspace())}
+                        {limitScope(item.budget, workspace(), language)}
                       </text>
                     </box>
                   </box>
@@ -211,6 +233,7 @@ const warned = new Set<string>()
 
 /** Reloads limits as the session's turns end, and warns once as the selected model runs low and once at its limit. */
 export function useUsageAlerts(sessionID: () => string) {
+  const language = useLanguage()
   const data = useData()
   const local = useLocal()
   const toast = useToast()
@@ -235,24 +258,28 @@ export function useUsageAlerts(sessionID: () => string) {
     warned.add(key)
     if (level === "reached") {
       toast.show({
-        title: `${model.name} limit reached`,
-        message: `Resets ${formatReset(usage.resetsAt)}`,
+        title: language.t("tui.usage.modelLimitReached", { model: model.name }),
+        message: language.t("tui.usage.resets", { time: formatReset(usage.resetsAt, language) }),
         variant: "error",
-        action: { label: "Switch model", run: () => keymap.dispatch("model.list") },
+        action: { label: language.t("tui.switchModel"), run: () => keymap.dispatch("model.list") },
       })
       return
     }
     toast.show({
-      title: `Running low on ${model.name}`,
-      message: `${formatDollars(usage.left)} left · resets ${formatReset(usage.resetsAt)}`,
+      title: language.t("tui.usage.modelRunningLow", { model: model.name }),
+      message: language.t("tui.usage.leftResets", {
+        amount: formatDollars(usage.left, language),
+        time: formatReset(usage.resetsAt, language),
+      }),
       variant: "warning",
-      action: { label: "View usage", run: () => keymap.dispatch("usage.show") },
+      action: { label: language.t("tui.interface.viewUsage"), run: () => keymap.dispatch("usage.show") },
     })
   })
 }
 
 /** Why a turn stopped at a usage limit or for lack of credits, and how to keep going; nothing for other errors. */
 export function useLimitNotice(message: () => SessionMessageAssistant) {
+  const language = useLanguage()
   const limits = useUsageLimits()
   const shortcut = Keymap.useShortcut("model.list")
   return createMemo(() => {
@@ -260,29 +287,36 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
     const error = value.error
     if (!error) return
     const reset = refusalReset(error) ?? retryReset(error, value.time.completed ?? value.time.created)
-    const resets = reset === undefined ? "" : `Resets ${formatReset(reset)}. `
+    const resets =
+      reset === undefined ? "" : language.t("tui.usage.resets", { time: formatReset(reset, language) }) + ". "
     const name =
       limits.models().find((item) => item.providerID === value.model.providerID && item.id === value.model.id)?.name ??
       value.model.id
     if (error.type === "provider.go-limit")
       return {
-        title: `OpenCode Go ${[goLimitName(error), "usage limit reached"].filter(Boolean).join(" ")}`,
-        body: `${resets}Switch to a free model with`,
+        title: language.t("tui.usage.goLimitReached", { limit: goLimitName(error) ?? "" }).trim(),
+        body: resets + language.t("tui.usage.switchFreeWith"),
         key: shortcut() ?? "/models",
-        link: { label: "Or turn on Extra Usage on your Go page to keep going now:", href: goLimitLink(error) },
+        link: { label: language.t("tui.interface.orTurnOnExtraUsageOnYourGo"), href: goLimitLink(error) },
       }
     if (error.type === "provider.model-budget-limit")
-      return { title: `${name} usage limit reached`, body: `${resets}Switch model with`, key: shortcut() ?? "/models" }
+      return {
+        title: language.t("tui.usage.modelLimitReached", { model: name }),
+        body: resets + language.t("tui.usage.switchWith"),
+        key: shortcut() ?? "/models",
+      }
     if (error.type === "provider.budget-limit")
       return {
-        title: "Usage limit reached",
-        body: `${resets}Paid models are paused. Switch to a free model with`,
+        title: language.t("tui.interface.usageLimitReached"),
+        body: resets + language.t("tui.usage.paidPaused"),
         key: shortcut() ?? "/models",
       }
     if (error.status === 402 && limits.served(value.model.providerID))
       return {
-        title: `${limits.info()?.workspace.name ?? "Your workspace"} is out of credits`,
-        body: "Paid models are paused until an admin adds credits in OpenCode Console.",
+        title: language.t("tui.usage.noCredits", {
+          workspace: limits.info()?.workspace.name ?? language.t("tui.usage.yourWorkspace"),
+        }),
+        body: language.t("tui.usage.waitForCredits"),
       }
     return undefined
   })
@@ -291,6 +325,7 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
 export function UsageLimitNotice(props: {
   notice: { title: string; body: string; key?: string; link?: { label: string; href: string } }
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   return (
     <box
@@ -309,7 +344,7 @@ export function UsageLimitNotice(props: {
           {(key) => (
             <>
               {" "}
-              <span style={{ fg: theme.text.base }}>{key()}</span> to continue.
+              <span style={{ fg: theme.text.base }}>{key()}</span> {language.t("tui.usage.toContinue")}
             </>
           )}
         </Show>

@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { createMemo, createSignal, For } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
@@ -11,6 +12,7 @@ import { useTuiApp } from "../context/runtime"
 import { useNewDesigns } from "../config"
 
 export function DialogDebug() {
+  const language = useLanguage()
   const theme = useTheme()
   const dialog = useDialog()
   const route = useRoute()
@@ -26,12 +28,18 @@ export function DialogDebug() {
   const entries = createMemo(() => {
     const model = local.model.current()
     return [
-      { label: "Version", value: `${app.version} (${app.channel})` },
-      { label: "Date", value: new Date().toISOString() },
-      { label: "OS", value: describeOS() },
-      { label: "Terminal", value: describeTerminal() },
-      { label: "Session ID", value: route.data.type === "session" ? route.data.sessionID : "n/a" },
-      { label: "Model", value: model ? `${model.providerID}/${model.modelID}` : "n/a" },
+      { label: language.t("tui.devtools.version"), value: `${app.version} (${app.channel})` },
+      { label: language.t("tui.dialogs.date"), value: new Date().toISOString() },
+      { label: language.t("tui.dialogs.os"), value: describeOS() },
+      { label: language.t("command.category.terminal"), value: describeTerminal() },
+      {
+        label: language.t("tui.dialogs.sessionID"),
+        value: route.data.type === "session" ? route.data.sessionID : language.t("tui.dialogs.notApplicable"),
+      },
+      {
+        label: language.t("tui.dialogs.model"),
+        value: model ? `${model.providerID}/${model.modelID}` : language.t("tui.dialogs.notApplicable"),
+      },
     ]
   })
 
@@ -43,18 +51,25 @@ export function DialogDebug() {
       .write(text)
       .then(() => {
         setCopied(true)
-        toast.show({ message: "Debug info copied to clipboard", variant: "info" })
+        toast.show({ message: language.t("tui.dialogs.debugCopied"), variant: "info" })
       })
       .catch(toast.error)
   }
 
   Keymap.createLayer(() => ({
     mode: "modal",
-    commands: [{ bind: newDesigns() ? "c" : "return", title: "Copy debug info", group: "Dialog", run: copy }],
+    commands: [
+      {
+        bind: newDesigns() ? "c" : "return",
+        title: language.t("tui.dialogs.copyDebug"),
+        group: language.t("tui.dialog"),
+        run: copy,
+      },
+    ],
   }))
 
   const copyAction = () => ({
-    title: copied() ? "✓ copied" : "copy",
+    title: copied() ? language.t("tui.dialogs.copied") : language.t("tui.session.copy"),
     key: newDesigns() ? "c" : "enter",
     color: copied() ? theme.text.feedback.success.base : undefined,
     onTrigger: copy,
@@ -62,12 +77,17 @@ export function DialogDebug() {
 
   return (
     <DialogLayout
-      header={<DialogHeader title="Debug" description="Share this when reporting an issue" />}
+      header={
+        <DialogHeader
+          title={language.t("tui.debug")}
+          description={language.t("tui.interface.shareThisWhenReportingAnIssue")}
+        />
+      }
       footer={{
         actions: { primary: [copyAction()] },
         get children() {
           if (newDesigns()) return undefined
-          return <text fg={theme.text.muted}>Share this when reporting an issue.</text>
+          return <text fg={theme.text.muted}>{language.t("tui.dialogs.shareDebug")}</text>
         },
       }}
     >

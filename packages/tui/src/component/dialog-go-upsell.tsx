@@ -19,6 +19,7 @@ import { errorMessage } from "../util/error"
 import { credentialConnections } from "./dialog-integration"
 import { DialogModel } from "./dialog-model"
 import "./go-upsell-art"
+import { useLanguage } from "../context/language"
 
 export const GO_URL = "https://opencode.ai/go"
 const ACTIONS = ["don't show again", "dismiss", "subscribe"] as const
@@ -42,6 +43,7 @@ export function DialogGoUpsell(props: {
   onSubscribe: () => void
   onDontShowAgain: () => void
 }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
@@ -95,13 +97,18 @@ export function DialogGoUpsell(props: {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "return", title: "Confirm Go option", group: "Dialog", run: () => run(selected()) },
-      { bind: "left", title: "Previous Go option", group: "Dialog", run: () => step(-1) },
-      { bind: "up", title: "Previous Go option", group: "Dialog", run: () => step(-1) },
-      { bind: "shift+tab", title: "Previous Go option", group: "Dialog", run: () => step(-1) },
-      { bind: "right", title: "Next Go option", group: "Dialog", run: () => step(1) },
-      { bind: "down", title: "Next Go option", group: "Dialog", run: () => step(1) },
-      { bind: "tab", title: "Next Go option", group: "Dialog", run: () => step(1) },
+      {
+        bind: "return",
+        title: language.t("tui.interface.confirmGoOption"),
+        group: "Dialog",
+        run: () => run(selected()),
+      },
+      { bind: "left", title: language.t("tui.interface.previousGoOption"), group: "Dialog", run: () => step(-1) },
+      { bind: "up", title: language.t("tui.interface.previousGoOption"), group: "Dialog", run: () => step(-1) },
+      { bind: "shift+tab", title: language.t("tui.interface.previousGoOption"), group: "Dialog", run: () => step(-1) },
+      { bind: "right", title: language.t("tui.interface.nextGoOption"), group: "Dialog", run: () => step(1) },
+      { bind: "down", title: language.t("tui.interface.nextGoOption"), group: "Dialog", run: () => step(1) },
+      { bind: "tab", title: language.t("tui.interface.nextGoOption"), group: "Dialog", run: () => step(1) },
     ],
   }))
 
@@ -152,10 +159,16 @@ export function DialogGoUpsell(props: {
           />
         </box>
       </Show>
-      <box zIndex={1} paddingLeft={inset()} paddingRight={inset()} paddingBottom={short() ? 0 : 1} gap={short() ? 0 : 1}>
+      <box
+        zIndex={1}
+        paddingLeft={inset()}
+        paddingRight={inset()}
+        paddingBottom={short() ? 0 : 1}
+        gap={short() ? 0 : 1}
+      >
         <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
           <text attributes={TextAttributes.BOLD} fg={theme.text.base} bg={textBg()}>
-            Free limit reached
+            {language.t("tui.interface.freeLimitReached")}
           </text>
           <text fg={theme.text.muted} bg={textBg()} onMouseUp={() => dialog.clear()}>
             esc
@@ -166,10 +179,11 @@ export function DialogGoUpsell(props: {
           fallback={
             <scrollbox maxHeight={bodyMaxHeight()} flexShrink={1}>
               <text fg={theme.text.muted} bg={textBg()} wrapMode="word">
-                You've used today's free messages.{props.reset ? ` Resets at ${props.reset}.` : ""}
+                {language.t("tui.interface.youVeUsedTodaySFreeMessages")}
+                {props.reset ? ` Resets at ${props.reset}.` : ""}
               </text>
               <text fg={theme.text.muted} bg={textBg()} wrapMode="word">
-                OpenCode Go gives you reliable access to the best open-source models for $10/month.
+                {language.t("tui.interface.opencodeGoGivesYouReliableAccessToThe")}
               </text>
               <Link href={GO_URL} fg={primary()} bg={textBg()} wrapMode="none" />
             </scrollbox>
@@ -177,10 +191,11 @@ export function DialogGoUpsell(props: {
         >
           <box>
             <text fg={theme.text.muted} bg={textBg()} wrapMode="word">
-              You've used today's free messages.{props.reset ? ` Resets at ${props.reset}.` : ""}
+              {language.t("tui.interface.youVeUsedTodaySFreeMessages")}
+              {props.reset ? ` Resets at ${props.reset}.` : ""}
             </text>
             <text fg={theme.text.muted} bg={textBg()} wrapMode="word">
-              OpenCode Go gives you reliable access to the best open-source models for $10/month.
+              {language.t("tui.interface.opencodeGoGivesYouReliableAccessToThe")}
             </text>
           </box>
           <box ref={setAnchor} height={7} paddingBottom={1} alignItems="center" justifyContent="flex-end">
@@ -208,6 +223,7 @@ export function DialogGoUpsell(props: {
 }
 
 function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribed: () => void }) {
+  const language = useLanguage()
   const data = useData()
   const currentLocation = useLocation()
   const location = currentLocation.ref ?? data.location.default()
@@ -221,7 +237,9 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
   const [attempt, setAttempt] = createSignal<IntegrationAttempt>()
   const integration = createMemo(() => data.location.integration.list(location)?.find((item) => item.id === "opencode"))
   const method = createMemo(() =>
-    integration()?.methods.find((item): item is IntegrationOAuthMethod => item.type === "oauth" && item.id === "device"),
+    integration()?.methods.find(
+      (item): item is IntegrationOAuthMethod => item.type === "oauth" && item.id === "device",
+    ),
   )
 
   let started = false
@@ -386,7 +404,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
     if (!current) return
     Open.openUrl(current.url).catch(() =>
       toast.show({
-        message: "Could not open the browser. Copy the URL and continue manually.",
+        message: language.t("tui.form.browserFailed"),
         variant: "error",
       }),
     )
@@ -398,7 +416,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
     const value = current.instructions.match(OAUTH_CODE)?.[0] ?? current.url
     clipboard
       .write(value)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: language.t("tui.session.copiedToClipboard"), variant: "info" }))
       .catch(toast.error)
   }
 
@@ -406,8 +424,13 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
     mode: "modal",
     enabled: () => Boolean(attempt()),
     commands: [
-      { bind: newDesigns() ? "return" : "o", title: "Open authorization URL", group: "Dialog", run: open },
-      { bind: "c", title: "Copy authorization details", group: "Dialog", run: copy },
+      {
+        bind: newDesigns() ? "return" : "o",
+        title: language.t("tui.dialogs.openAuthorizationURL"),
+        group: "Dialog",
+        run: open,
+      },
+      { bind: "c", title: language.t("tui.dialogs.copyAuthorization"), group: "Dialog", run: copy },
     ],
   }))
 
@@ -425,7 +448,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
                   key: "c",
                   onTrigger: copy,
                 },
-                { title: "open link", key: "enter", onTrigger: open },
+                { title: language.t("tui.details.openLink"), key: "enter", onTrigger: open },
               ]
             : [],
         },
@@ -435,8 +458,8 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
           actions={{
             secondary: attempt()
               ? [
-                  { title: "open", key: "o" },
-                  { title: "copy", key: "c" },
+                  { title: language.t("tui.dialogs.openHint"), key: "o" },
+                  { title: language.t("tui.session.copy"), key: "c" },
                 ]
               : [],
           }}

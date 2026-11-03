@@ -2,6 +2,8 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout, useDialog } from "./dialog"
 
+import { useLanguage } from "../context/language"
+
 export type DialogAlertProps = {
   title: string
   message: string
@@ -9,6 +11,7 @@ export type DialogAlertProps = {
 }
 
 export function DialogAlert(props: DialogAlertProps) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
 
@@ -22,8 +25,8 @@ export function DialogAlert(props: DialogAlertProps) {
     commands: [
       {
         bind: "return",
-        title: "Confirm alert",
-        group: "Dialog",
+        title: language.t("tui.dialogs.confirmAlert"),
+        group: language.t("tui.dialog"),
         run: confirm,
       },
     ],
@@ -31,7 +34,7 @@ export function DialogAlert(props: DialogAlertProps) {
   return (
     <DialogLayout
       header={<DialogHeader title={props.title} />}
-      footer={{ actions: { primary: [{ title: "ok", key: "enter", onTrigger: confirm }] } }}
+      footer={{ actions: { primary: [{ title: language.t("tui.dialogs.ok"), key: "enter", onTrigger: confirm }] } }}
       legacyFooter={
         <box flexDirection="row" justifyContent="flex-end">
           <box
@@ -40,7 +43,7 @@ export function DialogAlert(props: DialogAlertProps) {
             backgroundColor={theme.background.action.primary.focused}
             onMouseUp={confirm}
           >
-            <text fg={theme.text.action.primary.focused}>ok</text>
+            <text fg={theme.text.action.primary.focused}>{language.t("tui.dialogs.ok")}</text>
           </box>
         </box>
       }

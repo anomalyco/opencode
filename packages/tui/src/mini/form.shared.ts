@@ -11,6 +11,10 @@ import {
   formToggleMultiselect,
   formValidateValue,
 } from "../util/form"
+import { createLanguage } from "../i18n/translate"
+
+const english = createLanguage(() => "en")
+
 import type { FormAnswerField } from "../util/form"
 import type { FormReply, MiniFormRequest } from "./types"
 
@@ -47,17 +51,15 @@ export function formSync(state: FormBodyState, form: FormInfo): FormBodyState {
   return state.formID === form.id ? state : createFormBodyState(form)
 }
 
-export function formUnsupported(form: FormInfo): string | undefined {
-  if (!Array.isArray(form.fields) || form.fields.length === 0) return "This form has no supported fields."
+export function formUnsupported(form: FormInfo, t = english.t): string | undefined {
+  if (!Array.isArray(form.fields) || form.fields.length === 0) return t("tui.mini.formNoFields")
   for (const field of form.fields as ReadonlyArray<FormField | Record<string, unknown>>) {
-    if (!field || typeof field !== "object" || typeof field.type !== "string") return "This form uses an unknown field."
-    if (!("key" in field) || typeof field.key !== "string") return "This form uses an invalid field."
-    if ("when" in field && Array.isArray(field.when) && field.when.length > 0)
-      return "Conditional forms are not supported in Mini yet."
-    if (field.type === "string" && "pattern" in field && field.pattern !== undefined)
-      return "Pattern-constrained forms are not supported in Mini yet."
+    if (!field || typeof field !== "object" || typeof field.type !== "string") return t("tui.mini.formUnknownField")
+    if (!("key" in field) || typeof field.key !== "string") return t("tui.mini.formInvalidField")
+    if ("when" in field && Array.isArray(field.when) && field.when.length > 0) return t("tui.mini.formConditional")
+    if (field.type === "string" && "pattern" in field && field.pattern !== undefined) return t("tui.mini.formPattern")
     if (!["string", "number", "integer", "boolean", "multiselect", "external"].includes(field.type))
-      return `Field type ${field.type} is not supported in Mini yet.`
+      return t("tui.mini.formFieldType", { type: field.type })
   }
 }
 
@@ -81,9 +83,9 @@ export function formSingle(form: FormInfo) {
   )
 }
 
-export function formPlaceholder(field: FormField | undefined) {
-  if (field?.type === "string") return field.placeholder ?? "Type your answer"
-  return "Enter a number"
+export function formPlaceholder(field: FormField | undefined, t = english.t) {
+  if (field?.type === "string") return field.placeholder ?? t("tui.mini.formTypeAnswer")
+  return t("tui.mini.formNumber")
 }
 
 export function formMove(state: FormBodyState, form: FormInfo, direction: -1 | 1): FormBodyState {
@@ -123,15 +125,15 @@ export function formSetDraft(state: FormBodyState, field: FormField | undefined,
   return { ...state, custom: { ...state.custom, [field.key]: value } }
 }
 
-export function formValidate(form: FormInfo, state: FormBodyState): string | undefined {
-  const unsupported = formUnsupported(form)
+export function formValidate(form: FormInfo, state: FormBodyState, t = english.t): string | undefined {
+  const unsupported = formUnsupported(form, t)
   if (unsupported) return unsupported
   for (const field of form.fields) {
     if (field.type === "external") {
-      if (state.answers[field.key] !== true) return `Acknowledge ${formLabel(field)}`
+      if (state.answers[field.key] !== true) return t("tui.mini.formAcknowledge", { field: formLabel(field) })
       continue
     }
-    const invalid = formValidateValue(field, state.answers[field.key])
+    const invalid = formValidateValue(field, state.answers[field.key], t)
     if (invalid) return `${formLabel(field)}: ${invalid}`
   }
 }
@@ -186,14 +188,14 @@ export function formPick(state: FormBodyState, form: FormInfo): FormBodyState {
   return formSetField(next, form, formSingle(form) ? state.field : state.field + 1)
 }
 
-export function formCommitInput(state: FormBodyState, form: FormInfo, text: string): FormBodyState {
+export function formCommitInput(state: FormBodyState, form: FormInfo, text: string, t = english.t): FormBodyState {
   const field = formCurrent(form, state)
   if (!field || field.type === "external" || field.type === "boolean") return state
   const input = text.trim()
   const value = !input ? undefined : field.type === "number" || field.type === "integer" ? Number(input) : input
   if (field.type === "multiselect") {
     const values = formSetMultiselectCustom(state.answers[field.key], state.custom[field.key], input)
-    const invalid = formValidateValue(field, values)
+    const invalid = formValidateValue(field, values, t)
     if (invalid) return formSetError(state, invalid)
     return {
       ...state,
@@ -203,7 +205,7 @@ export function formCommitInput(state: FormBodyState, form: FormInfo, text: stri
       error: "",
     }
   }
-  const invalid = formValidateValue(field, value)
+  const invalid = formValidateValue(field, value, t)
   if (invalid) return formSetError(state, invalid)
   return {
     ...state,
@@ -225,8 +227,8 @@ export function formAcknowledge(state: FormBodyState, form: FormInfo): FormBodyS
   return formSetField(next, form, formSingle(form) ? state.field : state.field + 1)
 }
 
-export function formDisplay(field: FormAnswerField, value: FormValue | undefined) {
-  return formDisplayValue(field, value, "")
+export function formDisplay(field: FormAnswerField, value: FormValue | undefined, t = english.t) {
+  return formDisplayValue(field, value, "", t)
 }
 
 export function formErrorMessage(error: unknown) {
