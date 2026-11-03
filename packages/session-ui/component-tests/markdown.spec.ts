@@ -511,13 +511,16 @@ story("keeps inline code geometry when a completed stream turns it into a file l
   const code = harness.locator(":not(pre) > code")
   await expect(code).toHaveText("src/file.ts")
   await expect(code).not.toHaveAttribute("data-inline-code-kind")
+
   const geometry = () =>
     code.evaluate((element) => {
       const next = document.createRange()
       next.selectNodeContents(element.nextSibling!)
       const box = element.getBoundingClientRect()
+
       return { left: box.left, right: box.right, next: next.getBoundingClientRect().left }
     })
+
   const before = await geometry()
   await harness.getByLabel("Streaming").uncheck()
   await expect(code).toHaveAttribute("data-inline-code-kind", "path")
