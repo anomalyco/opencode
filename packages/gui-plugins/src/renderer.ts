@@ -29,6 +29,8 @@ import sources from "./sources"
 import sourcesRenderer from "./sources/renderer"
 import goal from "./goal"
 import goalRenderer from "./goal/renderer"
+import pullRequest from "./pull-request"
+import pullRequestRenderer from "./pull-request/renderer"
 
 // The window renders once every built-in is active, so the small renderer entries load with the app, like the
 // features they replaced. Heavy UI stays behind `lazy()` inside them.
@@ -52,4 +54,5 @@ export const builtins = compose({
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
   goal: { ...goal, windowEntry: eager(goalRenderer) },
+  "pull-request": { ...pullRequest, windowEntry: eager(pullRequestRenderer) },
 })
