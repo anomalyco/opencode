@@ -630,3 +630,11 @@
     --text-stronger: rgba(255, 255, 255, 0.936);
   }
 }
+
+/* CJK system fonts ship fixed weights, so 440 and 530 snap up to Medium and Semibold. */
+:lang(zh),
+:lang(ja),
+:lang(ko) {
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+}
