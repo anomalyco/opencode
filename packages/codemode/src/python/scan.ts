@@ -1,15 +1,16 @@
 import { Result } from "effect"
 import { normalizeError } from "../interpreter/errors.js"
 import { fail, type Token } from "./lexer.js"
-import { type Body, type Expr, parsePython } from "./parser.js"
+import { type Binding, type Body, type Expr, parsePython } from "./parser.js"
 
 /** Scheduled checks may only use the tools root as the start of a statically named call. */
 export function scanPythonTools(code: string) {
   return Result.try({
     try: () => {
       const paths = new Set<string>()
-      const binding = (name: string | undefined, site: Token) => {
-        if (name === "tools") fail(site, "Schedule checks cannot rebind tools.", "UnsupportedSyntax")
+      const binding = (target: Binding | undefined, site: Token) => {
+        if (target === "tools" || (Array.isArray(target) && target.includes("tools")))
+          fail(site, "Schedule checks cannot rebind tools.", "UnsupportedSyntax")
       }
       function visit(expr: Expr): void {
         switch (expr.kind) {
@@ -31,6 +32,12 @@ export function scanPythonTools(code: string) {
           case "index":
             visit(expr.target)
             return visit(expr.key)
+          case "slice":
+            visit(expr.target)
+            if (expr.start) visit(expr.start)
+            if (expr.stop) visit(expr.stop)
+            if (expr.step) visit(expr.step)
+            return
           case "unary":
             return visit(expr.arg)
           case "binary":
@@ -47,13 +54,18 @@ export function scanPythonTools(code: string) {
             }
             return
           case "list":
+          case "tuple":
+          case "fstring":
             return expr.items.forEach(visit)
           case "comprehension":
-            binding(expr.name, expr.site)
+            binding(expr.binding, expr.site)
             visit(expr.item)
             visit(expr.source)
             if (expr.guard) visit(expr.guard)
             return
+          default:
+            expr satisfies never
+            throw new Error("Unsupported expression in schedule check.")
         }
       }
       function block(body: Body): void {
@@ -64,6 +76,10 @@ export function scanPythonTools(code: string) {
               break
             case "assign":
               visit(stmt.target)
+              visit(stmt.expr)
+              break
+            case "unpack":
+              binding(stmt.names, stmt.site)
               visit(stmt.expr)
               break
             case "return":
@@ -77,7 +93,7 @@ export function scanPythonTools(code: string) {
               block(stmt.otherwise)
               break
             case "for":
-              binding(stmt.name, stmt.site)
+              binding(stmt.binding, stmt.site)
               visit(stmt.source)
               block(stmt.body)
               break
@@ -102,6 +118,7 @@ export function scanPythonTools(code: string) {
               break
             default:
               stmt satisfies never
+              throw new Error("Unsupported statement in schedule check.")
           }
         }
       }

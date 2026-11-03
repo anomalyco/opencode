@@ -24,7 +24,8 @@
     "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "test:cpython": "bun run script/cpython.ts"
   },
   "dependencies": {
     "acorn": "8.15.0",

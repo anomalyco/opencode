@@ -21,15 +21,30 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       Python truthiness for containers, and structural list/dict equality. Numbers are doubles, not arbitrary-precision integers.
 - [x] Assignment to names and subscripts, negative sequence indices, `+=`, `-=`, `*=`, `if`/`elif`/`else`, `for`/`while`,
       `pass`, `break`, `continue`, and single-`for` list comprehensions with an optional `if`.
-- [x] `def` and `async def` with positional parameters, closures, `await`, `asyncio.gather(*calls)`, and `try`/`except Exception`.
+- [x] `def` and `async def` with required parameters passed by position or name, closures, `await`, `asyncio.gather(*calls)`, and `try`/`except Exception`.
       Async functions, tools and declared async extensions return single-use coroutines. `await` runs one; `gather`
       schedules each distinct coroutine once and returns an awaitable result in input order. An unscheduled coroutine cannot
       cross the host boundary. `asyncio` is prebound; `import asyncio` is also accepted.
 - [x] `print`, `len`, `str`, `bool`, `list`, `range`, list `.append`, and dictionary `.get`/`.keys`/`.values`/`.items`.
-      `range` and dictionary views produce lists. Dot access on records reads own fields (including host extension functions);
-      dictionary subscripts never read inherited members. Tool calls take one input dictionary or no arguments.
+      `range` and dictionary views produce lists. Dot access on records prefers own fields (including host extension functions)
+      over same-named dictionary methods. Dictionary subscripts never read inherited members. Tools and synchronous `search` accept one input dictionary,
+      keyword arguments, or no arguments. Keyword calls use the same host validation, hooks and call budget.
+- [x] List, tuple and Unicode code-point string slices: `seq[start:stop:step]`. Bounds and steps accept safe integers,
+      including negative values, or `None`/omission for defaults. A zero step is an error.
+- [x] Immutable tuple literals (`()`, `(x,)`, `x, y`), indexing, slicing, concatenation, iteration and equality. Tuples
+      cross the host boundary as JSON arrays. Dictionary `.items()` returns a list of key/value tuples.
+- [x] Flat name unpacking in assignment, `for`, and list comprehensions; optional parentheses, exact arity. Accepts lists,
+      tuples, strings and dictionary keys. For example, `a, b = await asyncio.gather(...)` and `for k, v in row.items():`.
+- [x] Single-line `f'...'` / `f"..."` (also `F`): ordinary subset expressions, left-to-right `str` display, doubled
+      `{{` and `}}` for literal braces, normal string escapes. Container display uses the subset's quoted string representation.
+- [x] Stable `sorted(iterable, key=None, reverse=False)` on lists, tuples, strings or dictionary keys. Returns a fresh
+      list. Compare numbers (including booleans) or strings in Unicode code-point order. A synchronous callable key (e.g.
+      `len` or a `def`) runs once per item in input order. `key` and `reverse` are keyword-only; `reverse` accepts integers/booleans.
 - [x] Explicit top-level `return`, final top-level expression, or `null` if neither supplies a result.
-- [ ] Slices, unpacking assignments, tuples, sets, generators, default/keyword parameters and f-strings.
+- [ ] Slice assignment; nested/starred or list unpacking targets; `tuple()`; sequence ordering; sets and generators.
+- [ ] Defaults, variadic/keyword-only parameter declarations, `**kwargs`, and `*args` after a keyword. Other built-ins,
+      methods and extensions are positional-only. No lambdas, f-string conversions (`!r`), format specs (`:.2f`), debug
+      fields (`{x=}`), multiline or nested f-strings.
 - [x] Python signatures in the catalog and discovery results; statically authorized Python schedule checks.
 - [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers and classes.
 

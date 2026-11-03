@@ -4,24 +4,27 @@ import { pythonKeywords } from "./names.js"
 export type Expr = { site: Token } & (
   | { kind: "literal"; value: string | number | boolean | null }
   | { kind: "name"; name: string }
-  | { kind: "list"; items: Expr[] }
+  | { kind: "list" | "tuple" | "fstring"; items: Expr[] }
   | { kind: "dict"; pairs: [Expr, Expr][] }
-  | { kind: "comprehension"; item: Expr; name: string; source: Expr; guard?: Expr }
+  | { kind: "comprehension"; item: Expr; binding: Binding; source: Expr; guard?: Expr }
   | { kind: "attribute"; target: Expr; name: string }
   | { kind: "index"; target: Expr; key: Expr }
-  | { kind: "call"; target: Expr; args: { spread: boolean; expr: Expr }[] }
+  | { kind: "slice"; target: Expr; start?: Expr; stop?: Expr; step?: Expr }
+  | { kind: "call"; target: Expr; args: { spread: boolean; keyword?: string; expr: Expr }[] }
   | { kind: "unary"; op: string; arg: Expr }
   | { kind: "binary"; op: string; left: Expr; right: Expr }
   | { kind: "compare"; left: Expr; rest: { op: string; right: Expr }[] }
 )
 export type Body = Stmt[]
+export type Binding = string | string[]
 export type Stmt = { site: Token } & (
   | { kind: "expr"; expr: Expr }
   | { kind: "assign"; target: Extract<Expr, { kind: "name" | "index" }>; op: string; expr: Expr }
+  | { kind: "unpack"; names: string[]; expr: Expr }
   | { kind: "return"; expr?: Expr }
   | { kind: "pass" | "break" | "continue" | "asyncio" }
   | { kind: "if"; branches: { test: Expr; body: Body }[]; otherwise: Body }
-  | { kind: "for"; name: string; source: Expr; body: Body }
+  | { kind: "for"; binding: Binding; source: Expr; body: Body }
   | { kind: "while"; test: Expr; body: Body }
   | { kind: "function"; name: string; params: string[]; async: boolean; body: Body }
   | { kind: "try"; body: Body; name?: string; handler: Body }
@@ -88,9 +91,9 @@ export function parsePython(source: string): Body {
       return { kind: "if", site, branches, otherwise: eat("else") ? suite() : [] }
     }
     if (eat("for")) {
-      const target = name()
+      const target = binding()
       need("in")
-      return { kind: "for", site, name: target, source: expression(), body: suite(true) }
+      return { kind: "for", site, binding: target, source: tupleExpression(), body: suite(true) }
     }
     if (eat("while")) return { kind: "while", site, test: expression(), body: suite(true) }
     if (site.text === "async" || site.text === "def") {
@@ -121,7 +124,7 @@ export function parsePython(source: string): Body {
   }
   function simple(site: Token): Stmt {
     if (eat("return"))
-      return peek().type === "newline" ? { kind: "return", site } : { kind: "return", site, expr: expression() }
+      return peek().type === "newline" ? { kind: "return", site } : { kind: "return", site, expr: tupleExpression() }
     if (eat("break") || eat("continue")) {
       if (!loops) fail(site, `'${site.text}' outside a loop.`)
       return { kind: site.text === "break" ? "break" : "continue", site }
@@ -131,12 +134,42 @@ export function parsePython(source: string): Body {
       if (!eat("asyncio")) fail(site, "Only the built-in asyncio module is available.", "UnsupportedSyntax")
       return { kind: "asyncio", site }
     }
-    const target = expression()
+    const target = tupleExpression()
     if (!["=", "+=", "-=", "*="].includes(peek().text)) return { kind: "expr", site, expr: target }
     const op = take().text
+    if (target.kind === "tuple" && op === "=" && target.items.length) {
+      const names = target.items.map((item) =>
+        item.kind === "name" ? item.name : fail(item.site, "Unpacking targets must be a flat sequence of names."),
+      )
+      return { kind: "unpack", site, names, expr: tupleExpression() }
+    }
     if (target.kind !== "name" && target.kind !== "index")
       fail(site, "Expected a name or subscript as assignment target.")
-    return { kind: "assign", site, target, op, expr: expression() }
+    return { kind: "assign", site, target, op, expr: tupleExpression() }
+  }
+  function binding(): Binding {
+    const grouped = eat("(")
+    const first = name()
+    const names = [first]
+    const unpack = eat(",")
+    if (unpack) {
+      while (peek().text !== (grouped ? ")" : "in")) {
+        names.push(name())
+        if (!eat(",")) break
+      }
+    }
+    if (grouped) need(")")
+    return unpack ? names : first
+  }
+  function tupleExpression(): Expr {
+    const first = expression()
+    if (!eat(",")) return first
+    const items = [first]
+    while (peek().type !== "newline" && !["=", ":", ")", "}"].includes(peek().text)) {
+      items.push(expression())
+      if (!eat(",")) break
+    }
+    return { kind: "tuple", site: first.site, items }
   }
   function list<A>(end: string, item: () => A): A[] {
     const items: A[] = []
@@ -150,7 +183,8 @@ export function parsePython(source: string): Body {
   function atom(): Expr {
     const site = peek()
     if (eat("(")) {
-      const result = expression()
+      if (eat(")")) return { kind: "tuple", site, items: [] }
+      const result = tupleExpression()
       need(")")
       return result
     }
@@ -158,12 +192,12 @@ export function parsePython(source: string): Body {
       if (eat("]")) return { kind: "list", site, items: [] }
       const item = expression()
       if (eat("for")) {
-        const target = name()
+        const target = binding()
         need("in")
         const source = expression()
         const guard = eat("if") ? expression() : undefined
         need("]")
-        return { kind: "comprehension", site, item, name: target, source, ...(guard && { guard }) }
+        return { kind: "comprehension", site, item, binding: target, source, ...(guard && { guard }) }
       }
       const items = [item]
       while (eat(",") && peek().text !== "]") items.push(expression())
@@ -180,6 +214,22 @@ export function parsePython(source: string): Body {
           return [key, expression()]
         }),
       }
+    if (site.type === "fstart") {
+      take()
+      const items: Expr[] = []
+      while (peek().type !== "fend") {
+        if (peek().type === "ftext") {
+          const text = take()
+          items.push({ kind: "literal", site: text, value: stringLiteral(text) })
+          continue
+        }
+        kind("field")
+        items.push(tupleExpression())
+        kind("endfield")
+      }
+      take()
+      return { kind: "fstring", site, items }
+    }
     if (site.type === "string") return { kind: "literal", site, value: stringLiteral(take()) }
     if (site.type === "number") {
       const value = Number(take().text)
@@ -209,11 +259,36 @@ export function parsePython(source: string): Body {
       while (true) {
         if (eat(".")) left = { kind: "attribute", site, target: left, name: name() }
         else if (eat("[")) {
-          left = { kind: "index", site, target: left, key: expression() }
+          const start = peek().text !== ":" ? expression() : undefined
+          if (eat(":")) {
+            const stop = ![":", "]"].includes(peek().text) ? expression() : undefined
+            const step = eat(":") && peek().text !== "]" ? expression() : undefined
+            left = {
+              kind: "slice",
+              site,
+              target: left,
+              ...(start && { start }),
+              ...(stop && { stop }),
+              ...(step && { step }),
+            }
+          } else left = { kind: "index", site, target: left, key: start! }
           need("]")
-        } else if (eat("("))
-          left = { kind: "call", site, target: left, args: list(")", () => ({ spread: eat("*"), expr: expression() })) }
-        else break
+        } else if (eat("(")) {
+          const keywords = new Set<string>()
+          const args = list(")", () => {
+            if (peek().type === "name" && tokens[at + 1]?.text === "=") {
+              const here = peek()
+              const keyword = name()
+              need("=")
+              if (keywords.has(keyword)) fail(here, `Repeated keyword '${keyword}'.`)
+              keywords.add(keyword)
+              return { keyword, spread: false, expr: expression() }
+            }
+            if (keywords.size) fail(peek(), "Positional arguments must precede keyword arguments.")
+            return { spread: eat("*"), expr: expression() }
+          })
+          left = { kind: "call", site, target: left, args }
+        } else break
       }
     }
     while (true) {

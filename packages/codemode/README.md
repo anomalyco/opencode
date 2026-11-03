@@ -66,7 +66,7 @@ const result = await Effect.runPromise(
 import asyncio
 
 async def lookup(id):
-    return await tools.orders.lookup({"id": id})
+    return await tools.orders.lookup(id=id)
 
 orders = await asyncio.gather(*[lookup(id) for id in ids])
 return [order["id"] for order in orders if order["status"] == "open"]
@@ -76,7 +76,8 @@ return [order["id"] for order in orders if order["status"] == "open"]
 )
 ```
 
-Both languages use the same tools, bindings, extension hooks, limits, result format and cancellation. `search({...})`
+Both languages use the same tools, bindings, extension hooks, limits, result format and cancellation. Python tool calls
+accept keyword arguments, one input dictionary, or no arguments. `search(query="orders")` (or `search({...})`)
 returns catalog data synchronously; `print(...)` writes to the result's logs. In Python, calling an `async def`, a tool,
 or a declared async extension creates a coroutine. `await` runs it; `asyncio.gather(...)` schedules coroutines to run
 concurrently when the caller next suspends. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
@@ -84,6 +85,13 @@ the entire program's syntax before it starts. See the [Python subset and differe
 
 OpenCode's `execute` tool, catalog, discovery results, and new scheduled code checks use Python. Keys marked `NotRequired`
 can be omitted. Previously saved schedule checks retain their original runtime.
+
+#### Local CPython comparison
+
+From `packages/codemode`, `bun run test:cpython` runs the checked-in programs in **both** Code Mode and the installed CPython 3.
+`bun run test:cpython slices sorted` selects groups; `PYTHON=/path/to/python3` selects the reference executable. No pip packages are needed.
+It compares returned JSON, printed lines, and admitted tool calls; negative fixtures must raise the named exception in CPython and fail at runtime (not at parse time) in Code Mode. The `micropython` group runs [unmodified upstream fixtures](./test/cpython/micropython/README.md).
+The reference process executes trusted test fixtures only. CPython is not used to run agent code or needed by the shipped interpreter.
 
 ## API
 

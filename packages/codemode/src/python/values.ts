@@ -1,6 +1,6 @@
 import { type Interpreter } from "../interpreter/interpreter.js"
 import { checkArrayLength, checkStringLength, MAX_VALUE_DEPTH } from "../interpreter/limits.js"
-import { rangeError, typeError } from "../interpreter/model.js"
+import { type AstNode, rangeError, typeError } from "../interpreter/model.js"
 import { fn } from "../interpreter/native.js"
 import { Arr, define, ErrorObj, getOwn, hasOwn, keys, Obj, type Value } from "../interpreter/objects.js"
 import { rejectCircularInsertion } from "../interpreter/references.js"
@@ -9,6 +9,8 @@ import { ToolReference } from "../tool-runtime.js"
 
 // Only ordinary records are dictionaries. Interpreter machinery never exposes its fields or prototype.
 export const dict = (v: Value): v is Obj => v instanceof Obj && v.constructor === Obj
+// Tuples cross the JSON boundary as arrays, but are distinct, immutable sequences inside Python.
+export class Tuple extends Arr {}
 export const list = <R>(ctx: Interpreter<R>, items: Value[] = []) => new Arr(ctx.builtins.Array, items)
 export const truth = (v: Value): boolean => (v instanceof Arr ? v.items.length > 0 : dict(v) ? v.props.size > 0 : !!v)
 
@@ -30,11 +32,19 @@ export function arity(name: string, args: Value[], min: number, max = min) {
   if (args.length < min || args.length > max)
     throw typeError(`${name} expects ${min === max ? min : `${min} to ${max}`} arguments, got ${args.length}.`)
 }
-export function values(v: Value): Iterable<Value> {
+export function values(v: Value, site?: AstNode): Iterable<Value> {
   if (v instanceof Arr) return v.items
   if (typeof v === "string") return v
-  if (dict(v)) return keys(v)
-  throw typeError("Expected a list, string or dictionary.")
+  if (dict(v)) return dictionaryKeys(v)
+  throw typeError("Expected a list, tuple, string or dictionary.", site)
+}
+function* dictionaryKeys(v: Obj) {
+  const length = v.props.size
+  for (const [key, slot] of v.props) {
+    if (typeof key !== "string" || !slot.enumerable) continue
+    yield key
+    if (length !== v.props.size) throw typeError("Dictionary changed size during iteration.")
+  }
 }
 export function size(v: Value): number {
   if (v instanceof Arr) return v.items.length
@@ -68,6 +78,7 @@ export function subscript(v: Value, key: Value): Value {
   return getOwn(v, k) ?? null
 }
 export function put(v: Value, key: Value, value: Value) {
+  if (v instanceof Tuple) throw typeError("Tuples do not support item assignment.")
   if (v instanceof Arr) {
     const at = position(key, v.items.length)
     rejectCircularInsertion(v, value, "List")
@@ -81,7 +92,7 @@ export function put(v: Value, key: Value, value: Value) {
 
 export function attribute<R>(ctx: Interpreter<R>, v: Value, name: string): Value {
   if (v instanceof ToolReference) return new ToolReference([...v.path, name])
-  if (v instanceof Arr && name === "append")
+  if (v instanceof Arr && !(v instanceof Tuple) && name === "append")
     return fn(ctx.builtins, name, 1, (_, args) => {
       arity(name, args, 1)
       rejectCircularInsertion(v, args[0], "List")
@@ -99,12 +110,17 @@ export function attribute<R>(ctx: Interpreter<R>, v: Value, name: string): Value
         return hasOwn(v, key) ? getOwn(v, key) : (args[1] ?? null)
       })
     if (name === "keys" || name === "values" || name === "items")
-      return fn(ctx.builtins, name, 0, (_, args) => {
+      return fn(ctx.builtins, name, 0, function* (_, args): Eval<Value> {
         arity(name, args, 0)
-        return list(
-          ctx,
-          keys(v).map((k) => (name === "keys" ? k : name === "values" ? getOwn(v, k) : list(ctx, [k, getOwn(v, k)]))),
-        )
+        checkArrayLength(v.props.size)
+        const result = list(ctx)
+        for (const k of dictionaryKeys(v)) {
+          if (ctx.runner.tick()) yield Slice
+          result.items.push(
+            name === "keys" ? k : name === "values" ? getOwn(v, k) : new Tuple(ctx.builtins.Array, [k, getOwn(v, k)]),
+          )
+        }
+        return result
       })
   }
   throw typeError(`No attribute '${name}'.`)
@@ -126,6 +142,7 @@ function* equal<R>(ctx: Interpreter<R>, a: Value, b: Value, seen = new Map<Obj, 
   const matches = seen.get(a) ?? new Set<Obj>()
   seen.set(a, matches.add(b))
   if (a instanceof Arr && b instanceof Arr) {
+    if (a instanceof Tuple !== b instanceof Tuple) return false
     if (a.items.length !== b.items.length) return false
     for (let i = 0; i < a.items.length; i++)
       if (!(yield* equal(ctx, a.items[i], b.items[i], seen, depth + 1))) return false
@@ -147,7 +164,9 @@ export function* binary<R>(ctx: Interpreter<R>, op: string, a: Value, b: Value):
     return op === "not in"
   }
   if (op === "+" && a instanceof Arr && b instanceof Arr) {
+    if (a instanceof Tuple !== b instanceof Tuple) throw typeError("Cannot concatenate lists and tuples.")
     checkArrayLength(a.items.length + b.items.length)
+    if (a instanceof Tuple) return new Tuple(ctx.builtins.Array, a.items.concat(b.items))
     return list(ctx, a.items.concat(b.items))
   }
   if (typeof a === "string" && typeof b === "string") {
@@ -198,7 +217,7 @@ export function* display<R>(ctx: Interpreter<R>, args: Value[]): Eval<string> {
     if (depth > MAX_VALUE_DEPTH) throw rangeError("Value nested too deeply to print.")
     if (v instanceof Arr || dict(v)) {
       const array = v instanceof Arr
-      add(array ? "[" : "{")
+      add(v instanceof Tuple ? "(" : array ? "[" : "{")
       let i = 0
       for (const item of values(v)) {
         if (i++) add(", ")
@@ -208,7 +227,7 @@ export function* display<R>(ctx: Interpreter<R>, args: Value[]): Eval<string> {
           yield* visit(getOwn(v, stringKey(item)), depth + 1)
         }
       }
-      return add(array ? "]" : "}")
+      return add(v instanceof Tuple ? (i === 1 ? ",)" : ")") : array ? "]" : "}")
     }
     if (v == null) return add("None")
     if (typeof v === "boolean") return add(v ? "True" : "False")

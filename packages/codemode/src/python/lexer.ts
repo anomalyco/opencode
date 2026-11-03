@@ -12,7 +12,7 @@ export function tokenize(source: string): Token[] {
   const indents = [0]
   const brackets: string[] = []
   const pattern =
-    /[ \t]+|#.*|[A-Za-z_][A-Za-z_0-9]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|==|!=|<=|>=|\/\/|\*\*|\+=|-=|\*=|[()[\]{}:,.+*/%<>=-]/gy
+    /[ \t]+|#.*|[fF]["']|[A-Za-z_][A-Za-z_0-9]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|==|!=|<=|>=|\/\/|\*\*|\+=|-=|\*=|[()[\]{}:,.+*/%<>=-]/gy
   let line = 1
   let offset = 0
   const token = (type: string, text: string, column: number): Token => ({
@@ -41,14 +41,24 @@ export function tokenize(source: string): Token[] {
           if (at !== indents.at(-1)) fail(token("indent", "", at), "Inconsistent indentation.")
         }
       }
-      while (at < row.length) {
+      // Replacement fields use the ordinary expression tokens, with their own bracket stack.
+      // Never reparse a cooked string: escaped braces must not become executable fields.
+      function lex(stack: string[], field = false) {
         pattern.lastIndex = at
         const text = pattern.exec(row)?.[0]
         if (!text) fail(token("invalid", row[at]!, at), `Unexpected ${JSON.stringify(row[at])}.`)
         const start = at
         at += text.length
-        if (text.startsWith("#")) break
-        if (/^\s/.test(text)) continue
+        if (text.startsWith("#")) {
+          if (field) fail(token("invalid", text, start), "Comments in f-string fields are not supported.")
+          at = row.length
+          return
+        }
+        if (/^\s/.test(text)) return
+        if (/^[fF]["']$/.test(text)) {
+          if (field) fail(token("invalid", text, start), "Nested f-strings are not supported.", "UnsupportedSyntax")
+          return formatted(text, start)
+        }
         const type = /^[a-z_]/i.test(text)
           ? "name"
           : /^(?:\d|\.\d)/.test(text)
@@ -58,9 +68,38 @@ export function tokenize(source: string): Token[] {
               : "operator"
         const item = token(type, text, start)
         tokens.push(item)
-        if (["(", "[", "{"].includes(text)) brackets.push(text === "(" ? ")" : text === "[" ? "]" : "}")
-        if ([")", "]", "}"].includes(text) && brackets.pop() !== text) fail(item, `Unexpected '${text}'.`)
+        if (["(", "[", "{"].includes(text)) stack.push(text === "(" ? ")" : text === "[" ? "]" : "}")
+        if ([")", "]", "}"].includes(text) && stack.pop() !== text) fail(item, `Unexpected '${text}'.`)
       }
+      function formatted(text: string, start: number): void {
+        tokens.push(token("fstart", text, start))
+        let from = at
+        while (at < row.length) {
+          const c = row[at]
+          if (c === "\\" || ((c === "{" || c === "}") && row[at + 1] === c)) {
+            at += 2
+            continue
+          }
+          if (c !== text[1] && c !== "{" && c !== "}") {
+            at++
+            continue
+          }
+          if (from < at) tokens.push(token("ftext", row.slice(from, at), from))
+          if (c === text[1]) {
+            tokens.push(token("fend", c, at++))
+            return
+          }
+          if (c === "}") fail(token("invalid", c, at), "Unmatched '}' in f-string.")
+          tokens.push(token("field", "{", at++))
+          const nested: string[] = []
+          while (at < row.length && (nested.length || row[at] !== "}")) lex(nested, true)
+          if (row[at] !== "}") fail(token("invalid", "", at), "Unclosed f-string field.")
+          tokens.push(token("endfield", "}", at++))
+          from = at
+        }
+        fail(token("invalid", text, start), "Unclosed f-string.")
+      }
+      while (at < row.length) lex(brackets)
       if (!brackets.length) tokens.push(token("newline", "", row.length))
     }
     line++
@@ -73,7 +112,8 @@ export function tokenize(source: string): Token[] {
 }
 
 export function stringLiteral(site: Token): string {
-  return site.text.slice(1, -1).replace(/\\(u[\da-fA-F]{4}|x[\da-fA-F]{2}|.)/g, (_, escape: string) => {
+  const raw = site.type === "ftext" ? site.text.replaceAll("{{", "{").replaceAll("}}", "}") : site.text.slice(1, -1)
+  return raw.replace(/\\(u[\da-fA-F]{4}|x[\da-fA-F]{2}|.)/g, (_, escape: string) => {
     if (escape.length > 1) return String.fromCharCode(parseInt(escape.slice(1), 16))
     if (escape === "n") return "\n"
     if (escape === "t") return "\t"

@@ -76,7 +76,7 @@ const description = [
   "Run a Python subset in a confined Code Mode runtime to call tools and process their results.",
   "For HTTP use `response = await fetch(url)` then `return await response.json()` or `return await response.text()`. There is no filesystem, package loading, or sleep.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Use the exact tool path with one dictionary (or no arguments), e.g. `await tools.orders["get-order"]({"id": 42})`. Keys marked `NotRequired` may be omitted.',
+  'Use the exact tool path with one dictionary, keyword arguments, or no arguments, e.g. `await tools.orders["get-order"](id=42)`. Keys marked `NotRequired` may be omitted.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Tool calls do not start until awaited or scheduled. Run independent calls concurrently with `await asyncio.gather(call1, call2)`. Use `try`/`except Exception` for failures and `print(...)` for logs.",
 ].join("\n")

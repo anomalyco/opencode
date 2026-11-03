@@ -1,15 +1,16 @@
 import { toBoundary, type Json } from "../data.js"
 import { type Interpreter } from "../interpreter/interpreter.js"
 import { locate, materialize } from "../interpreter/errors.js"
-import { checkArrayLength } from "../interpreter/limits.js"
-import { rangeError, referenceError, typeError } from "../interpreter/model.js"
+import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
+import { type AstNode, rangeError, referenceError, typeError } from "../interpreter/model.js"
 import { fn } from "../interpreter/native.js"
-import { Coroutine, define, Obj, PromiseObj, record, type Value } from "../interpreter/objects.js"
+import { Coroutine, define, Native, Obj, PromiseObj, record, type Value } from "../interpreter/objects.js"
 import { combinator } from "../interpreter/promises.js"
 import { Call, type Eval, Interruption, Slice } from "../interpreter/runner.js"
 import { ToolReference } from "../tool-runtime.js"
-import { type Body, type Expr, parsePython } from "./parser.js"
+import { type Binding, type Body, type Expr, parsePython } from "./parser.js"
 import { type pythonNames } from "./names.js"
+import { slice, sorted } from "./sequence.js"
 import {
   arity,
   attribute,
@@ -23,6 +24,7 @@ import {
   stringKey,
   subscript,
   truth,
+  Tuple,
   values,
 } from "./values.js"
 
@@ -69,6 +71,7 @@ export function compilePython(source: string) {
         arity("bool", args, 0, 1)
         return truth(args[0])
       }),
+      sorted: fn(builtins, "sorted", 1, (_, args, site) => sorted(ctx, args, new Map(), site)),
       list: fn(builtins, "list", 1, function* (_, args): Eval<Value> {
         arity("list", args, 0, 1)
         const result = list(ctx)
@@ -100,6 +103,7 @@ export function compilePython(source: string) {
       asyncio,
     }
     const scope: Scope = { locals: new Map(), parent: { locals: new Map([...Object.entries(names), ...globals]) } }
+    const parameters = new WeakMap<Native, Map<string, number>>()
     const lookup = (scope: Scope, expr: Extract<Expr, { kind: "name" }>): Value => {
       for (let frame: Scope | undefined = scope; frame; frame = frame.parent) {
         if (frame.locals.has(expr.name)) {
@@ -109,6 +113,23 @@ export function compilePython(source: string) {
         }
       }
       throw referenceError(`Name '${expr.name}' is not defined.`, expr.site)
+    }
+    function* bind(binding: Binding, value: Value, scope: Scope, site: AstNode): Eval<void> {
+      if (typeof binding === "string") {
+        scope.locals.set(binding, value)
+        return
+      }
+      // Do not change any target until the arity is known. Read at most one extra item.
+      const iter = values(value, site)[Symbol.iterator]()
+      const items: Value[] = []
+      for (const _ of binding) {
+        if (ctx.runner.tick()) yield Slice
+        const item = iter.next()
+        if (item.done) throw typeError(`Not enough values to unpack (expected ${binding.length}).`, site)
+        items.push(item.value)
+      }
+      if (!iter.next().done) throw typeError(`Too many values to unpack (expected ${binding.length}).`, site)
+      binding.forEach((name, i) => scope.locals.set(name, items[i]))
     }
     function* evaluate(expr: Expr, scope: Scope): Eval<Value> {
       if (ctx.runner.tick()) yield Slice
@@ -122,8 +143,26 @@ export function compilePython(source: string) {
             return attribute(ctx, yield* evaluate(expr.target, scope), expr.name)
           case "index":
             return subscript(yield* evaluate(expr.target, scope), yield* evaluate(expr.key, scope))
+          case "slice":
+            return yield* slice(
+              ctx,
+              yield* evaluate(expr.target, scope),
+              expr.start && (yield* evaluate(expr.start, scope)),
+              expr.stop && (yield* evaluate(expr.stop, scope)),
+              expr.step && (yield* evaluate(expr.step, scope)),
+            )
+          case "fstring": {
+            let result = ""
+            for (const item of expr.items) {
+              const text = yield* display(ctx, [yield* evaluate(item, scope)])
+              checkStringLength(result.length + text.length)
+              result += text
+            }
+            return result
+          }
+          case "tuple":
           case "list": {
-            const result = list(ctx)
+            const result = expr.kind === "tuple" ? new Tuple(builtins.Array) : list(ctx)
             for (const item of expr.items) result.items.push(yield* evaluate(item, scope))
             return result
           }
@@ -137,7 +176,7 @@ export function compilePython(source: string) {
             const result = list(ctx)
             const inner = { locals: new Map<string, Value>(), parent: scope }
             for (const value of values(yield* evaluate(expr.source, scope))) {
-              inner.locals.set(expr.name, value)
+              yield* bind(expr.binding, value, inner, expr.site)
               if (expr.guard && !truth(yield* evaluate(expr.guard, inner))) continue
               checkArrayLength(result.items.length + 1)
               result.items.push(yield* evaluate(expr.item, inner))
@@ -147,9 +186,15 @@ export function compilePython(source: string) {
           case "call": {
             const callable = yield* evaluate(expr.target, scope)
             const args: Value[] = []
+            const kw = new Map<string, Value>()
             for (const arg of expr.args) {
               const value = yield* evaluate(arg.expr, scope)
+              if (arg.keyword !== undefined) {
+                kw.set(arg.keyword, value)
+                continue
+              }
               if (!arg.spread) {
+                checkArrayLength(args.length + 1)
                 args.push(value)
                 continue
               }
@@ -157,6 +202,27 @@ export function compilePython(source: string) {
                 if (ctx.runner.tick()) yield Slice
                 checkArrayLength(args.length + 1)
                 args.push(item)
+              }
+            }
+            if (kw.size) {
+              if (callable instanceof ToolReference || callable === names.search) {
+                if (args.length) throw typeError("Use a single input dictionary or keywords, not both.")
+                const input = new Obj(null)
+                for (const [k, v] of kw) define(input, k, v)
+                args.push(input)
+              } else if (callable === names.sorted) {
+                return yield* sorted(ctx, args, kw, expr.site)
+              } else {
+                const params = callable instanceof Native && parameters.get(callable)
+                if (!params) throw typeError("This callable does not accept keyword arguments.")
+                const positional = args.length
+                for (const [name, v] of kw) {
+                  const index = params.get(name)
+                  if (index === undefined) throw typeError(`Unexpected keyword argument '${name}'.`)
+                  if (index < positional) throw typeError(`Multiple values for argument '${name}'.`)
+                  args[index] = v
+                }
+                if (positional + kw.size !== params.size) throw typeError("Missing required function argument.")
               }
             }
             return (yield* ctx.call(callable, undefined, args, expr.site)) ?? null
@@ -210,6 +276,9 @@ export function compilePython(source: string) {
           case "asyncio":
             scope.locals.set("asyncio", asyncio)
             break
+          case "unpack":
+            yield* bind(stmt.names, yield* evaluate(stmt.expr, scope), scope, stmt.site)
+            break
           case "assign": {
             // Simple assignment evaluates the RHS first. Augmented assignment reads its target exactly once, first.
             const target = stmt.target
@@ -242,7 +311,7 @@ export function compilePython(source: string) {
           }
           case "for": {
             for (const v of values(yield* evaluate(stmt.source, scope))) {
-              scope.locals.set(stmt.name, v)
+              yield* bind(stmt.binding, v, scope, stmt.site)
               const flow = yield* block(stmt.body, scope)
               if (flow?.kind === "break") break
               if (flow?.kind === "return") return flow
@@ -259,20 +328,19 @@ export function compilePython(source: string) {
           }
           case "function": {
             const locals = localNames(stmt.body)
-            scope.locals.set(
-              stmt.name,
-              fn(builtins, stmt.name, stmt.params.length, function* (_, args, site) {
-                arity(stmt.name, args, stmt.params.length)
-                const inner = { locals: new Map<string, Value>(locals.map((k) => [k, unbound])), parent: scope }
-                stmt.params.forEach((p, i) => inner.locals.set(p, args[i]))
-                const run = function* (): Eval<Value> {
-                  const result = yield* block(stmt.body, inner)
-                  return result?.kind === "return" ? result.value : null
-                }
-                if (stmt.async) return new Coroutine(run(), site)
-                return (yield new Call(run())) as Value
-              }),
-            )
+            const func = fn(builtins, stmt.name, stmt.params.length, function* (_, args, site) {
+              arity(stmt.name, args, stmt.params.length)
+              const inner = { locals: new Map<string, Value>(locals.map((k) => [k, unbound])), parent: scope }
+              stmt.params.forEach((p, i) => inner.locals.set(p, args[i]))
+              const run = function* (): Eval<Value> {
+                const result = yield* block(stmt.body, inner)
+                return result?.kind === "return" ? result.value : null
+              }
+              if (stmt.async) return new Coroutine(run(), site)
+              return (yield new Call(run())) as Value
+            })
+            parameters.set(func, new Map(stmt.params.map((name, i) => [name, i])))
+            scope.locals.set(stmt.name, func)
             break
           }
           case "try": {
@@ -305,12 +373,14 @@ function localNames(body: Body): string[] {
     switch (stmt.kind) {
       case "assign":
         return stmt.target.kind === "name" ? [stmt.target.name] : []
+      case "unpack":
+        return stmt.names
       case "function":
         return [stmt.name]
       case "asyncio":
         return ["asyncio"]
       case "for":
-        return [stmt.name, ...localNames(stmt.body)]
+        return [stmt.binding, ...localNames(stmt.body)].flat()
       case "while":
         return localNames(stmt.body)
       case "if":
