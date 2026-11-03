@@ -4,41 +4,24 @@ import { asc, eq, or } from "drizzle-orm"
 import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
+import { JobList } from "./job/list.js"
+import { type Recovery, RecoverySchema } from "./job/recovery.js"
 import { JobTable } from "./job/sql.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 
+export type { Recovery }
+
 const Background = Schema.Struct({
   id: Schema.String,
   notificationID: SessionMessage.ID,
-  recovery: Schema.Union([
-    Schema.Struct({
-      kind: Schema.Literal("shell"),
-      sessionID: SessionSchema.ID,
-      shellID: Schema.String,
-      command: Schema.String,
-    }),
-    Schema.Struct({
-      kind: Schema.Literal("subagent"),
-      parentSessionID: SessionSchema.ID,
-      childSessionID: SessionSchema.ID,
-      agent: Schema.String,
-      description: Schema.String,
-    }),
-    Schema.Struct({
-      kind: Schema.Literal("image"),
-      sessionID: SessionSchema.ID,
-      path: Schema.String,
-      model: Schema.String,
-    }),
-  ]),
+  recovery: RecoverySchema,
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
 })
 
 export type Background = typeof Background.Type
-export type Recovery = Background["recovery"]
 export type Status = Background["status"]
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
@@ -142,6 +125,7 @@ export interface Interface {
   readonly cancelSession: (sessionID: SessionSchema.ID) => Effect.Effect<Info[]>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
+  readonly backgroundJobs: Effect.Effect<readonly JobList.Item[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
 }
 
@@ -560,6 +544,7 @@ export const make = Effect.gen(function* () {
     cancelSession,
     pendingBackground,
     runningBackground,
+    backgroundJobs: JobList.read(db, state.jobs),
     completeBackground,
   })
 })
