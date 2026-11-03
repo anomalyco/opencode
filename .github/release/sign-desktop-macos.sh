@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # sign-desktop-macos.sh <out dir> <app tarball>...: signs each unsigned .app inside-out with hardened runtime,
 # notarizes them in one submission, staples them, and only then builds opencode-desktop-mac-<arch>.{zip,dmg,app.tar.gz}
-# from the stapled apps. Dry runs sign ad-hoc and skip notarization. Dev and beta trade larger files for faster
-# packaging (zip and dmg at zlib level 1) and skip the .app.tar.gz, which only the retired Tauri updater feed read.
+# from the stapled apps, putting each app into the disk image layout packed next to its tarball. Dry runs sign ad-hoc
+# and skip notarization. Dev and beta trade larger files for faster packaging (zip and dmg at zlib level 1) and skip
+# the .app.tar.gz, which only the retired Tauri updater feed read.
 # Notarization reads APPLE_NOTARY_KEY (the .p8 contents), APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID.
 . "$(dirname "$0")/lib.sh"
 
 out=$1
 shift
 mkdir -p "$out"
-apps=$(mktemp -d)
+apps=$(mktemp -d) layouts=$(mktemp -d)
 identity=- timestamp=--timestamp=none
 zip_level=() dmg_level=() preview=false
 case "$OPENCODE_CHANNEL" in dev | beta) preview=true ;; esac
@@ -36,6 +37,7 @@ for tarball in "$@"; do
     die "Expected exactly one .app bundle in $tarball"
   fi
   app=$(bundle "$arch")
+  cp "${tarball%.app.tar}.layout.dmg" "$layouts/$arch.dmg"
 
   # Every nested Mach-O file and bundle, deepest first, then the app itself.
   list=$(mktemp)
@@ -79,10 +81,20 @@ for dir in "$apps"/*; do
     spctl --assess --type execute --verbose=2 "$app"
   fi
   ditto -c -k ${zip_level[@]+"${zip_level[@]}"} --sequesterRsrc --keepParent "$app" "$out/opencode-desktop-mac-$arch.zip"
-  staging=$(mktemp -d)
-  ditto "$app" "$staging/$name"
-  ln -s /Applications "$staging/Applications"
-  hdiutil create -volname "${name%.app}" -srcfolder "$staging" -fs HFS+ -format UDZO ${dmg_level[@]+"${dmg_level[@]}"} -ov "$out/opencode-desktop-mac-$arch.dmg"
+  # The layout holds the background, icon positions and volume icon around an empty app folder. Only that folder
+  # and the Applications link may be visible, so the image ships nothing but the stapled app beside the link.
+  hdiutil convert "$layouts/$arch.dmg" -format UDRW -o "$layouts/$arch-rw.dmg"
+  volume=$(mktemp -d)
+  hdiutil attach "$layouts/$arch-rw.dmg" -nobrowse -noautoopen -mountpoint "$volume"
+  if [ "$(ls "$volume")" != "$(printf 'Applications\n%s' "$name")" ] || [ "$(readlink "$volume/Applications")" != /Applications ] ||
+    [ -n "$(ls -A "$volume/$name")" ]; then
+    die "Unexpected disk image layout: $(ls -A "$volume")"
+  fi
+  rmdir "$volume/$name"
+  ditto "$app" "$volume/$name"
+  hdiutil detach "$volume"
+  hdiutil resize -sectors min "$layouts/$arch-rw.dmg"
+  hdiutil convert "$layouts/$arch-rw.dmg" -format UDZO ${dmg_level[@]+"${dmg_level[@]}"} -ov -o "$out/opencode-desktop-mac-$arch.dmg"
   if [ "$preview" = true ]; then continue; fi
   COPYFILE_DISABLE=1 tar --no-mac-metadata -czf "$out/opencode-desktop-mac-$arch.app.tar.gz" -C "$dir" "$name"
 done

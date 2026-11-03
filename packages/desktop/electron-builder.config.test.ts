@@ -88,12 +88,24 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
-test.each(channels)("macOS bundle for $channel", ({ channel }) => {
+test.each(channels)("macOS bundle for $channel", async ({ channel }) => {
   const config = load(channel)
   expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
   expect(config.dmg?.icon).toBe(channel === "prod" ? "resources/icons/icon.icns" : undefined)
-  // The prod override must keep the rest of the shared macOS settings.
+  // The prod overrides must keep the rest of the shared macOS settings and disk image layout.
   expect(config.mac?.target).toEqual(["dmg", "zip"])
+  expect(config.dmg).toMatchObject({
+    title: "${productName}",
+    background: "icons/dmg/background.png",
+    contents: [
+      { x: 180, y: 210, type: "file" },
+      { x: 480, y: 210, type: "link", path: "/Applications" },
+    ],
+  })
+
+  // electron-builder combines the background with its @2x image only when both exist; otherwise Retina blurs it.
+  for (const file of ["icons/dmg/background.png", "icons/dmg/background@2x.png"])
+    expect(await Bun.file(path.join(import.meta.dirname, file)).exists(), file).toBe(true)
 
   for (const key of [
     "NSMicrophoneUsageDescription",
