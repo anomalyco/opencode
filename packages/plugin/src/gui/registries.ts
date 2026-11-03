@@ -266,6 +266,16 @@ export interface Panel {
   readonly region: "side"
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
+  /**
+   * Gives the panel a side region width of its own, for content that wants less room or more than other tabs. While the
+   * side pane shows one of the panel's tabs, the region takes the width the user last dragged it to on this panel,
+   * app-wide, else this one; other tabs keep the conversation's width. The host keeps the conversation at its minimum
+   * width and the region at least `narrow`. Omit it to share the conversation's width, unless `Layout.side.resize`
+   * stored one for the panel.
+   * - A number: CSS pixels.
+   * - `narrow`: the narrowest the region goes.
+   */
+  readonly width?: number | "narrow"
   /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
   readonly transient?: boolean
   /**

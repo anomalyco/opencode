@@ -155,6 +155,8 @@ export const layoutSchema = Persistence.struct({
     tab: Schema.Literals(["changes", "all"]),
   }),
   session: Persistence.struct({ width: Schema.Finite }),
+  // The side region's width per panel (`${plugin}:${panel id}`) that sizes itself, app-wide.
+  panelWidths: Schema.optional(Persistence.record(Schema.Finite)),
   mobileSidebar: Persistence.struct({ opened: Schema.Boolean }),
   sessionTabs: Persistence.record(Persistence.fallback(sessionTabsSchema, () => ({ all: [] }))),
   sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
@@ -490,6 +492,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }
 
           setStore("session", "width", width)
+        },
+      },
+      /** The side region's width while a panel that sizes itself shows, keyed `${plugin}:${panel id}`. */
+      panelWidth: {
+        get: (panel: string) => store.panelWidths?.[panel],
+        set(panel: string, width: number) {
+          // A plugin passes this width; a non-finite one would fail the stored layout's decode.
+          if (!Number.isFinite(width)) return
+
+          if (!store.panelWidths) {
+            setStore("panelWidths", { [panel]: width })
+
+            return
+          }
+
+          setStore("panelWidths", panel, width)
         },
       },
       mobileSidebar: {

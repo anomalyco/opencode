@@ -892,6 +892,26 @@ export interface Layout {
      * ```
      */
     menu(): readonly SessionPanelMenuItem[]
+    /**
+     * The side region width the user dragged to, or `resize` stored, while one of your panel's tabs shows; undefined
+     * when none is stored, as before the app interface mounts. Reactive.
+     *
+     * @param panel - Your `Panel`'s id.
+     */
+    width(panel: string): number | undefined
+    /**
+     * Stores the side region width for your panel, as a drag on one of its tabs does; it applies while the side pane
+     * shows one of the panel's tabs, and the user's next drag replaces it. Waits until the app interface mounts.
+     *
+     * @param panel - Your `Panel`'s id.
+     * @param width - CSS pixels. The host keeps the conversation at its minimum width and the region at its own.
+     *
+     * @example
+     * ```ts
+     * ctx.layout.side.resize("quota", 360)
+     * ```
+     */
+    resize(panel: string, width: number): void
   }
   /**
    * The inner sidebar preference every side panel shares, which `usePanel().sidebar` also reads inside a panel render.
