@@ -28,9 +28,11 @@ Use references for documentation, shared libraries, examples, or source from
 another repository.
 
 With the [sandbox](/sandbox) enabled, registered references are trusted as
-read-only roots for agent operations, even when they are outside the workspace.
-Their contents may be read without a separate sandbox approval; registering a
-reference does not grant write access. Sandbox read exclusions still apply.
+readable roots for agent operations, even when they are outside the workspace.
+Their contents may be read without a separate sandbox approval. Registering a
+reference does not grant write access or remove existing write access: references
+inside the workspace or another writable root remain writable unless separately
+protected. Sandbox read exclusions still apply.
 
 ## Local
 
