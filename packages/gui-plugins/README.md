@@ -250,13 +250,19 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 | [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
 | [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
 | [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                    |
-| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
+| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`, `new-session.hero`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
 | [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
 | [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
 owning screen show the host's location details without this slot.
+
+`new-session.hero` is the new session screen's wordmark. It has one owner: the contribution that sorts last by `order`,
+so a plugin's hero at the default `order` replaces the built-in wordmark (`src/wordmark/`, `order: -1`). It renders in
+the wordmark's place and receives the panel as `stage`, the composer's `box` and `area`, the bottom `tip`, the user's
+interface `sounds` setting, and `focus()` to return the keyboard to the composer. Render effects that span the panel
+into `stage` with `Portal`, and restore every host element you move, fade or disable.
 
 `session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
 the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a
@@ -705,6 +711,7 @@ export const builtins = compose({
   "microsoft-office": microsoftOffice,
   sources,
   goal,
+  wordmark,
 })
 ```
 
@@ -730,6 +737,7 @@ export const builtins = compose({
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
   goal: { ...goal, windowEntry: eager(goalRenderer) },
+  wordmark: { ...wordmark, windowEntry: eager(wordmarkRenderer) },
 })
 ```
 

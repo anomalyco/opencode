@@ -9,7 +9,7 @@ const EMPTY = { x: 5.5 / 78, y: 0.5 / 14 }
 
 story("draws the wordmark as pins and stops animating once settled", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
-  await mount("app-new-session-wordmark--pin-board")
+  await mount("plugins-wordmark--pin-board")
 
   const empty = await pinPixel(page, EMPTY)
   await expect.poll(() => pinPixel(page)).not.toEqual(empty)
@@ -18,7 +18,7 @@ story("draws the wordmark as pins and stops animating once settled", async ({ mo
 
 story("knocks pins out from the panel but never from the composer", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
-  await mount("app-new-session-wordmark--pin-board")
+  await mount("plugins-wordmark--pin-board")
   await expect.poll(() => requestedFrames(page)).toBe(0)
   const before = await pinPixel(page)
 
@@ -33,7 +33,7 @@ story("knocks pins out from the panel but never from the composer", async ({ mou
 
 story("shows a static pin board with reduced motion", async ({ mount, page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
-  await mount("app-new-session-wordmark--pin-board")
+  await mount("plugins-wordmark--pin-board")
   const empty = await pinPixel(page, EMPTY)
   await expect.poll(() => pinPixel(page)).not.toEqual(empty)
   await expect.poll(() => requestedFrames(page)).toBe(0)

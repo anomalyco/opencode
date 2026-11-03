@@ -708,6 +708,36 @@ export interface SlotMap {
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
+  /**
+   * The new session screen's hero: the wordmark above the composer, and any easter egg it hides. One contribution
+   * shows, the one that sorts last by `order` (ties go to the later contribution), so a plugin's hero at the default
+   * `order` replaces the built-in wordmark, which uses -1. Without one the host shows the plain wordmark. The render
+   * sits in the hero's place in the layout; draw effects that span the panel into `stage`. The elements are the host's:
+   * an effect that moves, fades or disables one restores what it changed when it ends or unmounts.
+   */
+  readonly "new-session.hero": {
+    /**
+     * The new session panel. It clips its content and positions absolute children, so render full-panel effects into
+     * it with `Portal` from `solid-js/web`, and listen to its pointer events for play anywhere on it.
+     */
+    readonly stage: HTMLElement
+    /** The composer below the hero. */
+    readonly composer: {
+      /** The composer's rounded surface. Read its geometry and colours; do not restyle it. */
+      readonly box: HTMLElement
+      /**
+       * The composer with its location row. An effect may move, fade or disable it, as a game that takes the panel
+       * does.
+       */
+      readonly area: HTMLElement
+    }
+    /** The tip pinned to the panel's bottom edge, such as the hint to connect a provider, while one shows. */
+    readonly tip: HTMLElement | undefined
+    /** Whether the user has interface sounds on (Settings › Notifications). Read it before each sound. */
+    readonly sounds: boolean
+    /** Moves keyboard focus back to the composer, as when a game that took the keyboard ends. */
+    focus(): void
+  }
 }
 
 /** Content for one of the host's slots, typed by `at`. */
@@ -715,7 +745,7 @@ export type Slot = {
   [At in keyof SlotMap]: {
     /** The slot; see `SlotMap`. */
     readonly at: At
-    /** Slot contents render in ascending order. Defaults to 0. */
+    /** Slot contents render in ascending order; `new-session.hero` shows only the last. Defaults to 0. */
     readonly order?: number
     /**
      * Renders the content once; its own reactivity updates it. Session and active fields are reactive getters, so read

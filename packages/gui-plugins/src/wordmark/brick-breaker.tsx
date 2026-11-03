@@ -1,7 +1,7 @@
 import { For, onCleanup, onMount } from "solid-js"
 import type { PinBoardHandle } from "./pin-board"
-import { PinSound } from "./pin-sound"
-import type { LodgerBall } from "./wordmark"
+import type { PinSound } from "./pin-sound"
+import type { Hero, LodgerBall } from "./wordmark"
 
 const LIVES = 3
 const ENTER = 0.85
@@ -15,10 +15,11 @@ type Box = { x: number; y: number; w: number; h: number; r: number }
  * into the paddle. Like Arkanoid, the ball waits on the paddle until it is served with a click or Space.
  */
 export function NewSessionBrickBreaker(props: {
-  panel: HTMLElement
+  hero: Hero
+  logo: HTMLElement
   board: PinBoardHandle
   ball: LodgerBall
-  sound: () => boolean
+  sound: PinSound
   onDone: () => void
 }) {
   let paddle!: HTMLDivElement
@@ -29,7 +30,13 @@ export function NewSessionBrickBreaker(props: {
 
   onMount(() =>
     onCleanup(
-      mountGame({ panel: props.panel, paddle, hud, score, spares, walls }, props.board, props.ball, props.sound, props.onDone),
+      mountGame(
+        { hero: props.hero, logo: props.logo, paddle, hud, score, spares, walls },
+        props.board,
+        props.ball,
+        props.sound,
+        props.onDone,
+      ),
     ),
   )
 
@@ -70,7 +77,8 @@ export function NewSessionBrickBreaker(props: {
 
 function mountGame(
   parts: {
-    panel: HTMLElement
+    hero: Hero
+    logo: HTMLElement
     paddle: HTMLDivElement
     hud: HTMLDivElement
     score: HTMLSpanElement
@@ -79,14 +87,14 @@ function mountGame(
   },
   board: PinBoardHandle,
   ball: LodgerBall,
-  sound: () => boolean,
+  sound: PinSound,
   onDone: () => void,
 ) {
-  const panel = parts.panel
-  const wrap = panel.querySelector<HTMLElement>('[data-slot="new-session-composer"]')
-  const form = wrap?.querySelector<HTMLElement>('[data-component="composer"]')
-  const tip = panel.querySelector<HTMLElement>('[data-component="new-session-tip"]')
-  const surface = form ? getComputedStyle(form).backgroundColor : ""
+  const panel = parts.hero.stage
+  const wrap = parts.hero.composer.area
+  const form = parts.hero.composer.box
+  const tip = parts.hero.tip
+  const surface = getComputedStyle(form).backgroundColor
   // The arena is exactly as wide as the wordmark, like Arkanoid's tall, narrow playfield.
   const view = { left: 0, top: 0, w: 0, h: 0, l: 0, r: 0 }
   const g = { phase: "enter" as Phase, t0: performance.now() / 1000, last: 0, raf: 0, lives: LIVES, score: 0 }
@@ -107,12 +115,11 @@ function mountGame(
     view.h = r.height
     // Walls sit on the wordmark's outer pin edges, using the board's integer pitch and rounded origin, so the
     // ball can only reach the top by breaking through.
-    const logo = panel.querySelector('[data-slot="wordmark-box"]')?.getBoundingClientRect()
-    const pitch = logo ? Math.max(3, Math.round(logo.width / 78)) : 0
-    const x0 = logo ? Math.round(logo.left - r.left + (logo.width - pitch * 78) / 2) : 0
-    const c = composerBox()
-    view.l = logo ? x0 : Math.max(0, c.x)
-    view.r = logo ? x0 + pitch * 78 : Math.min(view.w, c.x + c.w)
+    const logo = parts.logo.getBoundingClientRect()
+    const pitch = Math.max(3, Math.round(logo.width / 78))
+    const x0 = Math.round(logo.left - r.left + (logo.width - pitch * 78) / 2)
+    view.l = x0
+    view.r = x0 + pitch * 78
     parts.walls[0].style.transform = `translateX(${view.l - 1}px)`
     parts.walls[1].style.transform = `translateX(${view.r}px)`
     pad.w = Math.max(84, Math.min(136, (view.r - view.l) * 0.15))
@@ -123,9 +130,8 @@ function mountGame(
 
   function composerBox(): Box {
     const p = panel.getBoundingClientRect()
-    const r = form?.getBoundingClientRect()
-    if (!r) return { x: p.width / 2 - 60, y: p.height - 64, w: 120, h: 12, r: 6 }
-    const radius = form ? parseFloat(getComputedStyle(form).borderTopLeftRadius) : 12
+    const r = form.getBoundingClientRect()
+    const radius = parseFloat(getComputedStyle(form).borderTopLeftRadius)
     return { x: r.left - p.left, y: r.top - p.top, w: r.width, h: r.height, r: radius || 12 }
   }
 
@@ -182,7 +188,7 @@ function mountGame(
     if (k >= 1 && !b.landed) {
       b.landed = true
       bump(Math.PI / 2, 0.32)
-      if (sound()) PinSound.paddle(b.x, view.w)
+      sound.paddle(b.x, view.w)
     }
     // Once it has shrunk enough to read as a paddle, it takes on the colour of the pins it is about to break.
     if (t >= 0.3) parts.paddle.style.background = "var(--v2-icon-icon-muted)"
@@ -205,7 +211,7 @@ function mountGame(
     if (drop >= 1 && !b.landed) {
       b.landed = true
       bump(Math.PI / 2, 0.36)
-      if (sound()) PinSound.paddle(b.x, view.w)
+      sound.paddle(b.x, view.w)
     }
   }
 
@@ -219,7 +225,7 @@ function mountGame(
     rally.combo = 0
     pad.kickAt = performance.now() / 1000
     bump(Math.PI / 2, 0.3)
-    if (sound()) PinSound.paddle(b.x, view.w)
+    sound.paddle(b.x, view.w)
     setPhase("play")
   }
 
@@ -235,20 +241,15 @@ function mountGame(
         b.x = Math.max(view.l + r, Math.min(view.r - r, b.x))
         b.vx = b.x <= view.l + r ? Math.abs(b.vx) : -Math.abs(b.vx)
         bump(0, 0.22)
-        if (sound()) PinSound.bounce(b.x, view.w, 4000)
+        sound.bounce(b.x, view.w, 4000)
       }
       if (b.y < r) {
         b.y = r
         b.vy = Math.abs(b.vy)
         bump(Math.PI / 2, 0.22)
-        if (sound()) PinSound.bounce(b.x, view.w, 4000)
+        sound.bounce(b.x, view.w, 4000)
       }
-      if (
-        b.vy > 0 &&
-        b.y + r >= pad.y &&
-        b.y - r < pad.y + pad.h &&
-        Math.abs(b.x - pad.x) <= pad.w / 2 + r * 0.6
-      ) {
+      if (b.vy > 0 && b.y + r >= pad.y && b.y - r < pad.y + pad.h && Math.abs(b.x - pad.x) <= pad.w / 2 + r * 0.6) {
         // Classic paddle control: where the ball lands sets its angle, up to 60° from vertical.
         const off = Math.max(-1, Math.min(1, (b.x - pad.x) / (pad.w / 2)))
         const a = off * (Math.PI / 3) + Math.max(-0.15, Math.min(0.15, pad.v / 6000))
@@ -260,7 +261,7 @@ function mountGame(
         b.y = pad.y - r
         pad.kickAt = now
         bump(Math.PI / 2, 0.34)
-        if (sound()) PinSound.paddle(b.x, view.w)
+        sound.paddle(b.x, view.w)
       }
       // Each hit carves a round bite out of the wordmark rather than a single pin.
       const hit = board.collide(b.x, b.y, r, r * 0.55, b.vx, b.vy)
@@ -272,7 +273,7 @@ function mountGame(
         g.score += hit.count * 10 * Math.min(8, rally.combo)
         b.squintUntil = now + 0.14
         bump(side ? 0 : Math.PI / 2, 0.26)
-        if (sound()) PinSound.brick(b.x, view.w, rally.combo)
+        sound.brick(b.x, view.w, rally.combo)
         if (!board.left()) return finish("win")
       }
       // A nearly flat rally never comes back down, so keep at least a quarter of the speed vertical.
@@ -283,7 +284,7 @@ function mountGame(
       }
       if (b.y - r > view.h) {
         setPhase("miss")
-        if (sound()) PinSound.sweep({ duration: 0.45, columns: 78, reverse: true })
+        sound.sweep({ duration: 0.45, columns: 78, reverse: true })
         return
       }
     }
@@ -311,7 +312,7 @@ function mountGame(
     parts.paddle.style.background = surface
     board.restore()
     ball.done()
-    if (sound()) PinSound.sweep({ duration: 0.9, columns: 78, reverse: kind !== "win" })
+    sound.sweep({ duration: 0.9, columns: 78, reverse: kind !== "win" })
   }
 
   // The paddle grows back into the composer, then the composer content fades in over it.
@@ -329,7 +330,7 @@ function mountGame(
       pad.tilt * (1 - e),
     )
     if (t >= 0.75) {
-      if (wrap) wrap.style.opacity = ""
+      wrap.style.opacity = ""
       if (tip) tip.style.opacity = ""
       parts.paddle.style.opacity = "0"
     }
@@ -423,14 +424,12 @@ function mountGame(
     tip.style.opacity = "0"
   }
   draw(start.composer, 0)
-  if (wrap) {
-    if (wrap.contains(document.activeElement) && document.activeElement instanceof HTMLElement)
-      document.activeElement.blur()
-    wrap.style.transition = "opacity 160ms ease-out"
-    wrap.style.opacity = "0"
-    wrap.style.pointerEvents = "none"
-    wrap.inert = true
-  }
+  if (wrap.contains(document.activeElement) && document.activeElement instanceof HTMLElement)
+    document.activeElement.blur()
+  wrap.style.transition = "opacity 160ms ease-out"
+  wrap.style.opacity = "0"
+  wrap.style.pointerEvents = "none"
+  wrap.inert = true
   board.play()
   const resize = new ResizeObserver(layout)
   resize.observe(panel)
@@ -455,7 +454,6 @@ function mountGame(
       tip.style.opacity = ""
       tip.style.transition = ""
     }
-    if (!wrap) return
     wrap.style.opacity = ""
     wrap.style.transition = ""
     wrap.style.pointerEvents = ""

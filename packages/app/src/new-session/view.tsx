@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
+import { Logo } from "@opencode/ui/logo"
 import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
@@ -33,11 +34,9 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
+import { PluginSlot } from "@/runtime/plugin/render"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 import { NewSessionBranch } from "./workspace/selector"
-import { NewSessionBrickBreaker } from "./brick-breaker"
-import { NewSessionPinBoard, type PinBoardHandle } from "./pin-board"
-import { NewSessionWordmark, type LodgerBall } from "./wordmark"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
@@ -49,15 +48,9 @@ export const ProviderTipSchema = Persistence.struct({
   dismissedAt: Schema.Finite,
 })
 
-type WordmarkState = {
-  box?: HTMLDivElement
-  mode: "flat" | "open" | "closing"
-  game: boolean
-}
-
-type BrickBreakerHandles = {
-  board?: PinBoardHandle
-  ball?: LodgerBall
+type HeroState = {
+  stage?: HTMLDivElement
+  area?: HTMLDivElement
 }
 
 export function NewSessionView(props: {
@@ -74,7 +67,7 @@ export function NewSessionView(props: {
 
   const settings = useSettings()
 
-  const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
+  const [hero, setHero] = createStore<HeroState>({})
 
   const location = (project?: PromptProject) =>
     props.location({
@@ -84,14 +77,10 @@ export function NewSessionView(props: {
       },
     })
 
-  // Imperative handles for the brick breaker; they are not reactive state.
-  const handles: BrickBreakerHandles = {}
-  let panel!: HTMLDivElement
-
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
-        ref={panel}
+        ref={(stage) => setHero("stage", stage)}
         data-component="new-session"
         class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
@@ -101,19 +90,33 @@ export function NewSessionView(props: {
         />
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <NewSessionWordmark
-              ref={(box) => setWordmark("box", box)}
-              sound={settings.sounds.interfaceEnabled}
-              onOpen={() => setWordmark("mode", "open")}
-              onClose={() => setWordmark("mode", "closing")}
-              onFlat={() => setWordmark("mode", "flat")}
-              onPlay={(ball) => {
-                handles.ball = ball
-                setWordmark("game", true)
-              }}
-            />
+            <Show when={hero.stage && hero.area && { stage: hero.stage, area: hero.area }}>
+              {(parts) => (
+                <PluginSlot
+                  at="new-session.hero"
+                  single
+                  fallback={<NewSessionWordmark />}
+                  input={{
+                    stage: parts().stage,
+                    composer: {
+                      area: parts().area,
+                      get box() {
+                        return parts().area.querySelector<HTMLElement>('[data-component="composer"]') ?? parts().area
+                      },
+                    },
+                    get tip() {
+                      return parts().stage.querySelector<HTMLElement>('[data-component="new-session-tip"]') ?? undefined
+                    },
+                    get sounds() {
+                      return settings.sounds.interfaceEnabled()
+                    },
+                    focus: () => props.composer.restoreFocus(),
+                  }}
+                />
+              )}
+            </Show>
             <div class="mt-8 flex flex-col gap-3">
-              <div data-slot="new-session-composer" class="flex flex-col gap-1">
+              <div ref={(area) => setHero("area", area)} data-slot="new-session-composer" class="flex flex-col gap-1">
                 <div class="relative z-10">
                   <Composer model={props.composer} />
                 </div>
@@ -137,33 +140,17 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <Show when={wordmark.mode !== "flat" && wordmark.box}>
-          {(logo) => (
-            <NewSessionPinBoard
-              logo={logo()}
-              sound={settings.sounds.interfaceEnabled}
-              entrance="chain"
-              closing={wordmark.mode === "closing"}
-              ref={(board) => (handles.board = board)}
-            />
-          )}
-        </Show>
-        <Show when={wordmark.game && handles.board && handles.ball && { board: handles.board, ball: handles.ball }}>
-          {(game) => (
-            <NewSessionBrickBreaker
-              panel={panel}
-              board={game().board}
-              ball={game().ball}
-              sound={settings.sounds.interfaceEnabled}
-              onDone={() => {
-                setWordmark("game", false)
-                props.composer.restoreFocus()
-              }}
-            />
-          )}
-        </Show>
         <NewSessionTips selection={props.composer.model.selection} onDone={props.composer.restoreFocus} />
       </div>
+    </div>
+  )
+}
+
+/** The plain wordmark, shown while no plugin fills the hero. */
+function NewSessionWordmark() {
+  return (
+    <div aria-hidden="true" class="mx-auto w-full max-w-[720px] text-v2-background-bg-inverse">
+      <Logo class="mx-auto block aspect-[234/42] h-auto w-4/5" />
     </div>
   )
 }

@@ -950,7 +950,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of five window slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -967,6 +967,8 @@ ctx.add(Slot, {
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
+- `new-session.hero` is the wordmark above the new session composer. It has one owner; see
+  [Easter eggs](#easter-eggs).
 - `order` sorts the items in one slot.
 
 `session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
@@ -978,6 +980,40 @@ ctx.add(Slot, {
   render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
 })
 ```
+
+#### Easter eggs
+
+`new-session.hero` replaces the wordmark on the new session screen with your own, such as a game hidden in the logo.
+One contribution shows: the one that sorts last by `order`, with ties going to the later contribution. The built-in
+wordmark uses `order: -1`, so your hero replaces it at the default `order`. Disable your plugin to bring the built-in
+back.
+
+```tsx
+import { Portal } from "solid-js/web"
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "new-session.hero",
+  render: (input) => (
+    <>
+      <Logo onClick={() => input.sounds && chime()} />
+      <Portal mount={input.stage}>
+        <Confetti />
+      </Portal>
+    </>
+  ),
+})
+```
+
+- The render takes the wordmark's place in the layout. Render effects that span the panel into `stage` with `Portal`.
+  The panel clips its content and positions absolute children.
+- `composer.box` is the composer's rounded surface, for its geometry and colours. `composer.area` is the composer with
+  its location row; a game may move, fade or disable it.
+- `tip` is the tip at the bottom of the panel while one shows.
+- `sounds` is the user's interface sounds setting. Read it before each sound.
+- `focus()` returns the keyboard to the composer, for example when a game ends.
+- The panel's elements belong to the host. Restore everything you change on them when your effect ends or unmounts.
+- Third-party heroes show in the desktop app only. The web app runs built-in plugins only.
 
 #### Reference
 
@@ -991,6 +1027,13 @@ interface SlotMap {
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "new-session.hero": {
+    stage: HTMLElement
+    composer: { box: HTMLElement; area: HTMLElement }
+    tip: HTMLElement | undefined
+    sounds: boolean
+    focus(): void
+  }
 }
 ```
 
