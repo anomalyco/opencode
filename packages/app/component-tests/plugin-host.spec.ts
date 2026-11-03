@@ -1529,6 +1529,64 @@ story("a selected plugin theme that never returns shows the default theme once p
   })
 })
 
+story(
+  "a panel with a width of its own sizes the side region and keeps the width the user drags it to",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountPanelWidths, until, Panel } = await import(fixture)
+
+      const panel = (id: string, width?: "narrow") => ({
+        id: `${id}-plugin`,
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(Panel, {
+              id,
+              region: "side",
+              width,
+              list: (input: { open: readonly string[] }) =>
+                input.open.includes("main") ? [{ id: "main", title: id }] : [],
+              render: () => null,
+            }),
+        }),
+      })
+
+      // The row is 1200px wide: the chat panel and the side region share 1192px beside the 8px gap.
+      const host = mountPanelWidths({
+        definitions: [panel("quota", "narrow"), panel("files")],
+        active: "quota-plugin:main",
+        width: 1200,
+      })
+
+      // The chat panel is on screen at this width, and the divider's handle starts a drag from it.
+      const settle = (width: number) => until(() => host.chat() === width && host.handle() === width)
+
+      // `narrow` leaves the side region its minimum, 320px.
+      await settle(872)
+      host.drag(700)
+      await settle(700)
+      const dragged = { widths: host.widths(), conversation: host.conversation() }
+
+      // A panel without a width keeps the conversation's, and a drag on it changes only that.
+      host.select("files-plugin:main")
+      await settle(600)
+      host.drag(650)
+      await settle(650)
+      const shared = { widths: host.widths(), conversation: host.conversation() }
+
+      host.select("quota-plugin:main")
+      await settle(700)
+      host.unmount()
+
+      return { dragged, shared }
+    }, fixture)
+
+    expect(result).toEqual({
+      dragged: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 600, resized: false } },
+      shared: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 650, resized: true } },
+    })
+  },
+)
+
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)

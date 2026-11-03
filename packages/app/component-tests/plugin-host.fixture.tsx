@@ -40,6 +40,8 @@ import { createHostApis } from "../src/runtime/plugin/host-apis"
 import { createInstalled } from "../src/runtime/plugin/installed"
 import { pluginEnabled, type Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
+import { createSessionScreenLayout } from "../src/session/screen-layout"
+import type { SessionModel } from "../src/session/model"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
 import { PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
 import { ThemeProvider, useTheme } from "@opencode/ui/theme/context"
@@ -86,7 +88,7 @@ const layout: BuiltinLayout = {
   hide() {},
   state: () => "closed",
   stored: () => [],
-  side: { opened: () => false, toggle() {}, menu: () => [] },
+  side: { opened: () => false, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
   sidebar: { opened: () => true },
   scroll: { get: () => undefined, set() {} },
   settings() {},
@@ -382,7 +384,7 @@ function standIn(overrides: Partial<Interface>): Interface {
       hide() {},
       state: () => "closed",
       stored: () => [],
-      side: { opened: () => true, toggle() {}, menu: () => [] },
+      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => false },
       scroll: { get: () => undefined, set() {} },
     },
@@ -421,6 +423,124 @@ function RealHost(props: ParentProps<{ definitions: readonly Entry[]; captured: 
       {props.children}
     </PluginHostProvider>
   )
+}
+
+/**
+ * Mounts the real host, the side region and the session screen's layout in a row `width` pixels wide, with every
+ * panel's `main` tab stored. `select(key)` selects a tab as the user does; `drag(width)` drags the divider to that chat
+ * panel width, once `handle()` shows the row is measured. The chat panel (`data-testid="chat"`) takes the width the
+ * layout gives it. The conversation's own width
+ * and the per-panel widths are in-memory stores, read back through `conversation()` and `widths()`.
+ */
+export function mountPanelWidths(input: { definitions: readonly Entry[]; active: string; width: number }) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const captured: Captured = {}
+  const [active, setActive] = createSignal(input.active)
+
+  const [conversation, setConversation] = createStore<{ width: number; resized: boolean }>({
+    width: 600,
+    resized: false,
+  })
+
+  const [widths, setWidths] = createStore<Record<string, number>>({})
+  const layouts: ReturnType<typeof createSessionScreenLayout>[] = []
+
+  const value = { key: "fixture\na", id: "a", tab: "a", pending: false, location: { directory: "/repo" }, visit: {} }
+
+  // SAFETY: the region passes the session through; the test's plugins read nothing of it.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const view = () => value as unknown as MountedSession
+
+  // SAFETY: the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
+  const model = {
+    isDesktop: () => true,
+    identity: { params: { id: "a" } },
+    layout: {
+      view: () => ({
+        side: { opened: () => true },
+        session: {
+          width: () => conversation.width,
+          resized: () => conversation.resized,
+          resize: (width: number) => setConversation({ width, resized: true }),
+        },
+      }),
+    },
+  }
+
+  // SAFETY: the screen layout reads only `isDesktop`, `identity.params.id` and the view's side and session fields.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = model as unknown as SessionModel
+
+  function Screen() {
+    const host = usePluginHost()
+    const all = () => host.items(Panel).map((item) => `${item.plugin}:main`)
+
+    const region = createRegion({
+      region: "side",
+      view,
+      screen,
+      tabs: () => ({
+        tabs: () => ({ all: all(), active: active() }),
+        all,
+        active,
+        setAll() {},
+        setActive: (key) => key && setActive(key),
+        close() {},
+        remap() {},
+      }),
+      closed: createClosedTabs(),
+      open() {},
+      side: () => ({ opened: () => true, toggle() {} }),
+    })
+
+    const layout = createSessionScreenLayout(session, {
+      wide: region.wide,
+      panel: region.pane("side").selected,
+      widths: { get: (panel) => widths[panel], set: (panel, width) => setWidths(panel, width) },
+    })
+
+    layouts.push(layout)
+
+    return (
+      <div ref={layout.panel.ref} style={{ display: "flex", gap: "8px", width: `${input.width}px` }}>
+        <div data-testid="chat" style={{ "flex-shrink": "0", width: layout.panel.width() }} />
+        <div data-testid="side" style={{ flex: "1" }} />
+      </div>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <RealHost definitions={input.definitions} captured={captured}>
+              <Screen />
+            </RealHost>
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    select: (key: string) => setActive(key),
+    drag: (width: number) => layouts[0]?.panel.resize(width),
+    /** The chat panel width the divider's handle starts a drag from, once the row is measured. */
+    handle: () => layouts[0]?.panel.resizedWidth(),
+    chat: () => container.querySelector<HTMLElement>('[data-testid="chat"]')?.getBoundingClientRect().width,
+    conversation: () => ({ ...conversation }),
+    widths: () => ({ ...widths }),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
 }
 
 /**
