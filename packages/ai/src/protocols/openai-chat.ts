@@ -1139,6 +1139,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let lifecycle = state.lifecycle
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
+    // Some providers (e.g. Poe routing Claude models) send tool-call deltas
+    // after the finish_reason chunk. Ignore the extra chunk rather than
+    // failing: this is a provider non-compliance, not a malformed shape.
     if (
       state.finishReason !== undefined &&
       toolDeltas.some(
@@ -1149,11 +1152,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
           Boolean(tool.custom?.input),
       )
     )
-      return yield* ProviderShared.eventError(
-        ADAPTER,
-        "OpenAI Chat received content after the finish reason",
-        ProviderShared.encodeJson(event),
-      )
+      return [state, events] as const
 
     const reasoningField = state.reasoningField ?? reasoning?.field
     const reasoningTextObserved = state.reasoningTextObserved || reasoning !== undefined

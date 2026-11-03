@@ -695,9 +695,12 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("rejects tool changes after a terminal chunk", () =>
+  it.effect("ignores tool-call deltas that arrive after a terminal chunk", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
+      // Some providers (e.g. Poe routing Claude) send tool-call chunks after
+      // finish_reason. The extra chunk should be silently dropped; the stream
+      // must complete with the content that arrived before the finish.
+      const result = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -707,15 +710,10 @@ describe("OpenAI-compatible Chat route", () => {
             ),
           ),
         ),
-        Effect.flip,
       )
 
-      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
-      expect(error.reason._tag).toBe("InvalidProviderOutput")
-      if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
-        choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
-      })
+      const textEvents = result.events.filter((e) => e._tag === "TextDelta")
+      expect(textEvents.length).toBeGreaterThan(0)
     }),
   )
 })
