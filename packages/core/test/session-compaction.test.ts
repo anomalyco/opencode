@@ -384,6 +384,16 @@ test("compaction prompts prohibit task execution", () => {
     expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
+test("compaction prompt asks the summary to carry loaded skills", () => {
+  const prompt = SessionCompaction.buildPrompt(false, false, [
+    { id: "effect", name: "Effect" },
+    { id: "report", name: "Report" },
+  ])
+  expect(prompt).toContain("<session_skills>")
+  expect(prompt).toContain("Effect, Report")
+  expect(SessionCompaction.buildPrompt(false)).not.toContain("<session_skills>")
+})
+
 it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service

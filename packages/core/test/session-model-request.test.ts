@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { LanguageModel, Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
+import { OpenAIChat } from "@opencode/ai/protocols"
+import { Agent } from "@opencode/core/agent"
+import { baseTranscript, boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { Effect } from "effect"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -244,5 +248,29 @@ describe("SessionModelRequest.boundImages", () => {
         value: [{ type: "text" }, { type: "file", name: "second.png" }],
       },
     })
+  })
+})
+
+describe("SessionModelRequest.baseTranscript", () => {
+  test("keeps loaded skills in the system prompt", () => {
+    const model = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "test", provider: "test", route: OpenAIChat.route }),
+      {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        cost: [],
+        limit: { context: 200_000, output: 32_000 },
+      },
+    )
+    const transcript = baseTranscript({
+      agent: Agent.Info.default(Agent.ID.make("build")),
+      model,
+      tools: { definitions: [], execute: () => Effect.die("unused") },
+      initial: [],
+      messages: [],
+      loadedSkills: [{ id: "effect", name: "Effect" }],
+    })
+
+    expect(transcript.system.map((part) => part.text).join("\n")).toContain("<loaded_skills>")
+    expect(transcript.system.map((part) => part.text).join("\n")).toContain("<skill>Effect</skill>")
   })
 })

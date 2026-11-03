@@ -25,6 +25,7 @@ import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
 import { Instructions } from "../instructions/index.js"
 import { Model } from "../model.js"
+import { Permission } from "../permission.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
 import type { SessionContext } from "./context.js"
@@ -36,6 +37,7 @@ import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import { SessionRecentText } from "./recent-text.js"
+import { SessionSkills } from "./skills.js"
 import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
 
@@ -204,11 +206,21 @@ const SUMMARY_RULES = `Rules:
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
-export const buildPrompt = (update: boolean, legacy = false) => {
+export const buildPrompt = (update: boolean, legacy = false, skills: ReadonlyArray<SessionSkills.Loaded> = []) => {
   const shared = [
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
+    ...(skills.length
+      ? [
+          [
+            "<session_skills>",
+            "These skills were available to the coding agent during this session. In the summary's Important Context section, include exactly one bullet listing these skill names (comma-separated) so later turns know they exist and can load them with the skill tool:",
+            skills.map((skill) => skill.name).join(", "),
+            "</session_skills>",
+          ].join("\n"),
+        ]
+      : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -464,7 +476,15 @@ export const layer = Layer.effect(
       const keepID = background ? undefined : split.keepID
 
       const previous = previousCompaction(messages)
-      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
+      const sessionSkills = SessionSkills.loaded(
+        messages,
+        Permission.merge(context.agent.info.permissions, context.session.permissions ?? []),
+      )
+      const prompt = buildPrompt(
+        previous !== undefined,
+        previous?.summary.includes(LEGACY_HEADING) ?? false,
+        sessionSkills,
+      )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
       const prepared = yield* prepare(context, messages, budget)
@@ -977,6 +997,10 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
     tools: context.tools,
     initial: context.initial,
     messages,
+    loadedSkills: SessionSkills.loaded(
+      messages,
+      Permission.merge(context.agent.info.permissions, context.session.permissions ?? []),
+    ),
   })
 
 /**
