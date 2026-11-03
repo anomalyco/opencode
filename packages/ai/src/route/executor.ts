@@ -229,7 +229,14 @@ export const stream = (
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient
+    const client = yield* HttpClient.HttpClient
+    // Request middleware can supply an external trace parent. Effect otherwise
+    // overwrites it (and adds B3 from a different trace) just before sending.
+    const http = HttpClient.transform(client, (effect, request) =>
+      Object.hasOwn(request.headers, "traceparent")
+        ? effect.pipe(Effect.provideService(HttpClient.TracerPropagationEnabled, false))
+        : effect,
+    )
     const executeOnce = (request: HttpClientRequest.HttpClientRequest, middleware?: HttpMiddleware) =>
       Effect.gen(function* () {
         if (!middleware)
