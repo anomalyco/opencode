@@ -210,6 +210,7 @@ export default function Layout(props: ParentProps) {
         "--session-header-inset-end": verticalTabs() ? "10px" : "12px",
         "--sidebar-inset-start": "11px",
         "--sidebar-inset-end": "3px",
+        "--sidebar-divider-bleed": preferences.appearance.tabLayout() === "inbox" ? "var(--shell-inline-inset)" : "0px",
         // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
         // retain outer-outline clearance.
         "--shell-top-inset": bottomTitlebar()
@@ -248,7 +249,7 @@ export default function Layout(props: ParentProps) {
             <div
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
-              class="absolute inset-0 overflow-hidden [contain:layout_style_paint]"
+              class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
               classList={{ "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown() }}
             >
               {/* Under a peek's contents, so they dim over the sidebar's own background, as when docking, rather than
@@ -263,7 +264,7 @@ export default function Layout(props: ParentProps) {
               <div
                 ref={(element) => setState("tabsMount", element)}
                 data-slot="vertical-tabs-mount"
-                class="absolute inset-y-0 end-0 contain-strict will-change-[opacity] flex min-h-0 flex-col bg-v2-background-bg-deep ps-[var(--sidebar-inset-start)] pe-[var(--sidebar-inset-end)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+                class="absolute inset-y-0 end-0 contain-strict [overflow-clip-margin:var(--sidebar-divider-bleed,0px)] will-change-[opacity] flex min-h-0 flex-col bg-v2-background-bg-deep ps-[var(--sidebar-inset-start)] pe-[var(--sidebar-inset-end)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]"
                 style={{
                   width: `${state.tabsWidth}px`,
                   "padding-bottom": "max(10px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
