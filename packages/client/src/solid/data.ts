@@ -1058,6 +1058,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.tool.input.started":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          // At-least-once delivery (#61401): a re-delivered started event
+          // carries the same tool id — appending would leave two same-id
+          // tool parts, the first stuck at "streaming".
+          if (assistant.content.some((part) => part.type === "tool" && part.id === event.data.id)) return
           assistant.content.push({
             type: "tool",
             id: event.data.id,
