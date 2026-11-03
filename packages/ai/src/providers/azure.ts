@@ -4,14 +4,7 @@ import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/c
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
-import {
-  HttpOptions,
-  ProviderConfigurationError,
-  ProviderID,
-  mergeHttpOptions,
-  type ModelID,
-  type ProviderOptions,
-} from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
@@ -164,10 +157,7 @@ export const configure = (input: Config) => {
       id: modelID,
       provider: id,
       providerOptions,
-      http: mergeHttpOptions(
-        media.http,
-        target.query === undefined ? undefined : new HttpOptions({ query: target.query }),
-      ),
+      http: { ...media.http, query: { ...media.http?.query, ...target.query } },
     })
   }
 
