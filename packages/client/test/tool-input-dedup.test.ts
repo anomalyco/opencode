@@ -63,11 +63,3 @@ test("never appends a duplicate tool part on a re-delivered session.tool.input.s
     setup.dispose()
   }
 })
-
-async function wait(check: () => boolean) {
-  const started = Date.now()
-  while (!check()) {
-    if (Date.now() - started > 2_000) throw new Error("Timed out waiting for condition")
-    await Bun.sleep(10)
-  }
-}
