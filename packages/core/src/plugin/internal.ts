@@ -3,6 +3,7 @@ export * as PluginInternal from "./internal.js"
 import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import type { Generation } from "./service.js"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
@@ -303,10 +304,13 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
-      (plugin): Plugin => ({
-        id: plugin.id,
-        effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
-      }),
+      (plugin) =>
+        ({
+          id: plugin.id,
+          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          revision: "internal",
+          source: { type: "builtin" },
+        }) satisfies Generation,
     )
   return {
     pre: resolve(pre),

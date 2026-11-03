@@ -486,11 +486,10 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
   }
 }
 
-const textContent = (text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
-  providerMetadata === undefined ? { type: "text", text } : { type: "text", text, providerMetadata }
+type ContentKind = "text" | "reasoning"
 
-const reasoningContent = (text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
-  providerMetadata === undefined ? { type: "reasoning", text } : { type: "reasoning", text, providerMetadata }
+const contentPart = (type: ContentKind, text: string, providerMetadata: ProviderMetadata | undefined): ContentPart =>
+  providerMetadata === undefined ? { type, text } : { type, text, providerMetadata }
 
 const contentWith = (state: ResponseState, content: ReadonlyArray<ContentPart>): ResponseState => ({
   ...state,
@@ -505,72 +504,64 @@ const replaceContent = (state: ResponseState, index: number, part: ContentPart) 
     state.message.content.map((item, itemIndex) => (itemIndex === index ? part : item)),
   )
 
-const ensureText = (state: ResponseState, id: string, providerMetadata?: ProviderMetadata): ResponseState => {
-  if (state.textParts[id]) return state
-  return {
-    ...appendContent(state, textContent("", providerMetadata)),
-    textParts: {
-      ...state.textParts,
-      [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
-    },
-  }
+const contentParts = (state: ResponseState, type: ContentKind) =>
+  type === "text" ? state.textParts : state.reasoningParts
+
+const withContentParts = (
+  state: ResponseState,
+  type: ContentKind,
+  parts: Readonly<Record<string, ContentAssembly>>,
+): ResponseState => (type === "text" ? { ...state, textParts: parts } : { ...state, reasoningParts: parts })
+
+const ensureContent = (
+  state: ResponseState,
+  type: ContentKind,
+  id: string,
+  providerMetadata?: ProviderMetadata,
+): ResponseState => {
+  const parts = contentParts(state, type)
+  if (parts[id]) return state
+  return withContentParts(appendContent(state, contentPart(type, "", providerMetadata)), type, {
+    ...parts,
+    [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
+  })
 }
 
-const reduceTextDelta = (state: ResponseState, event: TextDelta): ResponseState => {
-  const started = ensureText(state, event.id, event.providerMetadata)
-  const current = started.textParts[event.id]
+const reduceContentDelta = (
+  state: ResponseState,
+  type: ContentKind,
+  event: TextDelta | ReasoningDelta,
+): ResponseState => {
+  const started = ensureContent(state, type, event.id, event.providerMetadata)
+  const parts = contentParts(started, type)
+  const current = parts[event.id]
   if (!current) return started
   const text = current.text + event.text
   const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(started, current.contentIndex, textContent(text, providerMetadata)),
-    textParts: { ...started.textParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const reduceTextEnd = (state: ResponseState, event: TextEnd): ResponseState => {
-  const current = state.textParts[event.id]
-  if (!current) return state
-  const text = event.text ?? current.text
-  const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(state, current.contentIndex, textContent(text, providerMetadata)),
-    textParts: { ...state.textParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const ensureReasoning = (state: ResponseState, id: string, providerMetadata?: ProviderMetadata): ResponseState => {
-  if (state.reasoningParts[id]) return state
-  return {
-    ...appendContent(state, reasoningContent("", providerMetadata)),
-    reasoningParts: {
-      ...state.reasoningParts,
-      [id]: { contentIndex: state.message.content.length, text: "", providerMetadata },
+  return withContentParts(
+    replaceContent(started, current.contentIndex, contentPart(type, text, providerMetadata)),
+    type,
+    {
+      ...parts,
+      [event.id]: { ...current, text, providerMetadata },
     },
-  }
+  )
 }
 
-const reduceReasoningDelta = (state: ResponseState, event: ReasoningDelta): ResponseState => {
-  const started = ensureReasoning(state, event.id, event.providerMetadata)
-  const current = started.reasoningParts[event.id]
-  if (!current) return started
-  const text = current.text + event.text
-  const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(started, current.contentIndex, reasoningContent(text, providerMetadata)),
-    reasoningParts: { ...started.reasoningParts, [event.id]: { ...current, text, providerMetadata } },
-  }
-}
-
-const reduceReasoningEnd = (state: ResponseState, event: ReasoningEnd): ResponseState => {
-  const current = state.reasoningParts[event.id]
+const reduceContentEnd = (state: ResponseState, type: ContentKind, event: TextEnd | ReasoningEnd): ResponseState => {
+  const parts = contentParts(state, type)
+  const current = parts[event.id]
   if (!current) return state
   const text = event.text ?? current.text
   const providerMetadata = event.providerMetadata ?? current.providerMetadata
-  return {
-    ...replaceContent(state, current.contentIndex, reasoningContent(text, providerMetadata)),
-    reasoningParts: { ...state.reasoningParts, [event.id]: { ...current, text, providerMetadata } },
-  }
+  return withContentParts(
+    replaceContent(state, current.contentIndex, contentPart(type, text, providerMetadata)),
+    type,
+    {
+      ...parts,
+      [event.id]: { ...current, text, providerMetadata },
+    },
+  )
 }
 
 const reduceToolInputStart = (state: ResponseState, event: ToolInputStart): ResponseState => ({
@@ -642,17 +633,17 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
     case "compaction":
       return appendContent(next, event)
     case "text-start":
-      return ensureText(next, event.id, event.providerMetadata)
+      return ensureContent(next, "text", event.id, event.providerMetadata)
     case "text-delta":
-      return reduceTextDelta(next, event)
+      return reduceContentDelta(next, "text", event)
     case "text-end":
-      return reduceTextEnd(next, event)
+      return reduceContentEnd(next, "text", event)
     case "reasoning-start":
-      return ensureReasoning(next, event.id, event.providerMetadata)
+      return ensureContent(next, "reasoning", event.id, event.providerMetadata)
     case "reasoning-delta":
-      return reduceReasoningDelta(next, event)
+      return reduceContentDelta(next, "reasoning", event)
     case "reasoning-end":
-      return reduceReasoningEnd(next, event)
+      return reduceContentEnd(next, "reasoning", event)
     case "tool-input-start":
       return reduceToolInputStart(next, event)
     case "tool-input-delta":

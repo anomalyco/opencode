@@ -8,6 +8,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Document, Event, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Layer, Schema, Stream } from "effect"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -74,12 +75,4 @@ const limits = Effect.fnUntraced(function* (image: Image.Interface) {
   const error = yield* image.normalize("pixel.png", content).pipe(Effect.flip, Effect.orDie)
   if (error._tag !== "Image.SizeError") return yield* Effect.die(error)
   return { maxWidth: error.maxWidth, maxHeight: error.maxHeight, maxBytes: error.maxBytes }
-})
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  yield* Effect.die(new Error("Timed out waiting for image config reload"))
 })

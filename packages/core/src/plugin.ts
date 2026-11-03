@@ -13,7 +13,7 @@ import { PluginHost } from "./plugin/host.js"
 import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
 
-export { awaitActivation, type Generation, type Interface, Service } from "./plugin/service.js"
+export { awaitActivation, type Failure, type Generation, type Interface, Service } from "./plugin/service.js"
 
 const layer = Layer.effect(
   Service,
@@ -40,6 +40,7 @@ const layer = Layer.effect(
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
+    const snapshot = () => [...Array.from(active.values()).map(slotInfo), ...discovered]
     // A changed `./gui-experimental` bundle alone restarts nothing; its revision is part of what changes, so the event
     // tells the app to reload it.
     const publish = State.changes(
@@ -128,7 +129,7 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition })
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
+                inventory = snapshot()
                 yield* publish(inventory)
                 return
               }
@@ -180,7 +181,7 @@ const layer = Layer.effect(
                     })
                   }
 
-                  inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
+                  inventory = snapshot()
                 }),
               )
               yield* publish(inventory)
@@ -204,7 +205,7 @@ const layer = Layer.effect(
               if (closed) return
               // Failure is already recorded on its exact activation, so an old queued item
               // cannot disable a replacement and teardown need not wait for this worker.
-              inventory = [...Array.from(active.values()).map(slotInfo), ...discovered]
+              inventory = snapshot()
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
               yield* publish(inventory)
               if (Exit.isFailure(refreshed))

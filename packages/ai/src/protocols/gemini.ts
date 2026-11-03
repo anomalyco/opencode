@@ -299,6 +299,9 @@ const lowerContentPart = Effect.fnUntraced(function* (part: TextPart | MediaPart
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
+const signatureMetadata = (key: string, signature: string | undefined) =>
+  signature ? providerMetadata(key, { thoughtSignature: signature }) : undefined
+
 const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
   const value = metadata?.[key]
   return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
@@ -595,18 +598,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       lifecycle,
       events,
       state.reasoningId,
-      state.reasoningSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
+      signatureMetadata(state.providerMetadataKey, state.reasoningSignature),
     )
   if (state.textId !== undefined)
     lifecycle = Lifecycle.textEnd(
       lifecycle,
       events,
       state.textId,
-      state.textSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+      signatureMetadata(state.providerMetadataKey, state.textSignature),
     )
   Lifecycle.finish(lifecycle, events, {
     reason: {
@@ -683,6 +682,19 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
   let nextTextId = nextState.nextTextId
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
+  const signed = (signature: string | undefined) => signatureMetadata(state.providerMetadataKey, signature)
+  const endReasoning = () => {
+    if (reasoningId === undefined) return
+    lifecycle = Lifecycle.reasoningEnd(lifecycle, events, reasoningId, signed(reasoningSignature))
+    reasoningId = undefined
+    reasoningSignature = undefined
+  }
+  const endText = () => {
+    if (textId === undefined) return
+    lifecycle = Lifecycle.textEnd(lifecycle, events, textId, signed(textSignature))
+    textId = undefined
+    textSignature = undefined
+  }
 
   for (const input of candidate.content.parts ?? []) {
     if (
@@ -710,63 +722,27 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       events.push(
         LLMEvent.media({
           media: Media.base64(part.inlineData.data, part.inlineData.mimeType),
-          providerMetadata: signature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       continue
     }
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
-        if (textId !== undefined) {
-          lifecycle = Lifecycle.textEnd(
-            lifecycle,
-            events,
-            textId,
-            textSignature
-              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
-              : undefined,
-          )
-          textId = undefined
-          textSignature = undefined
-        }
+        endText()
         if (reasoningId === undefined) {
           reasoningId = `reasoning-${nextReasoningId}`
           nextReasoningId += 1
         }
-        lifecycle = Lifecycle.reasoningDelta(
-          lifecycle,
-          events,
-          reasoningId,
-          part.text,
-          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
-        )
+        lifecycle = Lifecycle.reasoningDelta(lifecycle, events, reasoningId, part.text, signed(signature))
         continue
       }
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
+      endReasoning()
       if (textId === undefined) {
         textId = `text-${nextTextId}`
         nextTextId += 1
       }
-      lifecycle = Lifecycle.textDelta(
-        lifecycle,
-        events,
-        textId,
-        part.text,
-        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, textId, part.text, signed(textSignature))
       textSignature = undefined
       continue
     }
@@ -781,37 +757,15 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
-      if (textId !== undefined) {
-        lifecycle = Lifecycle.textEnd(
-          lifecycle,
-          events,
-          textId,
-          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-        )
-        textId = undefined
-        textSignature = undefined
-      }
+      endReasoning()
+      endText()
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       hasToolCalls = true

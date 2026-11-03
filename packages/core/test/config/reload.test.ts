@@ -36,6 +36,7 @@ import { AppProcess } from "@opencode/util/process"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
@@ -526,11 +527,3 @@ function referenceConfig(file: string, references: Record<string, string>) {
 function title(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for config plugin reloads")
-})

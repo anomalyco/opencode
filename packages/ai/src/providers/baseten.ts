@@ -2,13 +2,13 @@ import { Effect } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { SystemOne } from "../protocols/system-one.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
@@ -54,20 +54,15 @@ const decisionProtocol = DecisionRoute.protocol({
 })
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const auth = AuthOptions.bearer(input, "BASETEN_API_KEY")
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth,
-  })
+  const options = bearerRouteDefaults(input, "BASETEN_API_KEY", baseURL)
+  const configured = route.with(options)
   const decisionRoute = DecisionRoute.make({
     id: decisionProtocol.id,
     provider: id,
     providerMetadataKey: "baseten",
     protocol: decisionProtocol,
-    endpoint: Endpoint.path("/systemone", { baseURL: endpoint ?? baseURL }),
-    auth,
+    endpoint: Endpoint.path("/systemone", { baseURL: options.endpoint.baseURL }),
+    auth: options.auth,
     headers: input.headers,
     http: input.http,
   })

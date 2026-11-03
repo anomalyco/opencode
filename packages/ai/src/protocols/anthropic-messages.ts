@@ -536,11 +536,7 @@ const ANTHROPIC_BREAKPOINT_CAP = 4
 
 const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefined) => {
   if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
-  if (breakpoints.remaining <= 0) {
-    breakpoints.dropped += 1
-    return undefined
-  }
-  breakpoints.remaining -= 1
+  if (!Cache.take(breakpoints)) return undefined
   return { type: "ephemeral" as const, ...(cache.ttl === undefined ? {} : { ttl: cache.ttl }) }
 }
 
@@ -706,109 +702,57 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
     } satisfies AnthropicVideoBlock
   }
   const fileId = fileIdFromMetadata(part.metadata)
+  const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => {
+    const transformations = transformationsFromMetadata(part.metadata)
+    return {
+      type: "image",
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(transformations === undefined ? {} : { transformations }),
+    }
+  }
+  const document = (source: AnthropicDocumentBlock["source"]): AnthropicDocumentBlock => {
+    const title = documentTitleFromPart(part)
+    const context = documentContextFromMetadata(part.metadata)
+    const citations = citationsFromMetadata(part.metadata)
+    return {
+      type: "document",
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(title === undefined ? {} : { title }),
+      ...(context === undefined ? {} : { context }),
+      ...(citations === undefined ? {} : { citations }),
+    }
+  }
 
   // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
   if (fileId) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "file" as const, file_id: fileId },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    return {
-      type: "document" as const,
-      source: { type: "file" as const, file_id: fileId },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+    if (mime.startsWith("image/")) return image({ type: "file", file_id: fileId })
+    return document({ type: "file", file_id: fileId })
   }
 
   const rawString = ProviderShared.mediaUrl(part.media)?.trim()
   // SDK URL sources: URLImageSource:3817 / URLPDFSource:3823 {type:"url", url}
   if (rawString && isHttpUrl(rawString)) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    if (mime === "application/pdf")
-      return {
-        type: "document" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-        ...(documentContextFromMetadata(part.metadata) === undefined
-          ? {}
-          : { context: documentContextFromMetadata(part.metadata)! }),
-        ...(citationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { citations: citationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicDocumentBlock
+    if (mime.startsWith("image/")) return image({ type: "url", url: rawString })
+    if (mime === "application/pdf") return document({ type: "url", url: rawString })
   }
 
   const media = yield* ProviderShared.requireInlineMedia("Anthropic Messages", part.media)
 
   // SDK PlainTextSource:2716 {type:"text", media_type:"text/plain", data}
-  if (mime === "text/plain") {
-    const textData = Buffer.from(media.base64, "base64").toString("utf8")
-    return {
-      type: "document" as const,
-      source: { type: "text" as const, media_type: "text/plain" as const, data: textData },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
-  }
+  if (mime === "text/plain")
+    return document({
+      type: "text",
+      media_type: "text/plain",
+      data: Buffer.from(media.base64, "base64").toString("utf8"),
+    })
 
   if (media.mime === "application/pdf")
-    return {
-      type: "document" as const,
-      source: {
-        type: "base64" as const,
-        media_type: "application/pdf" as const,
-        data: media.base64,
-      },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+    return document({ type: "base64", media_type: "application/pdf", data: media.base64 })
   if (!media.mime.startsWith("image/"))
     return yield* invalid(`Anthropic Messages does not support media type ${part.media.mediaType}`)
-  return {
-    type: "image" as const,
-    source: {
-      type: "base64" as const,
-      media_type: media.mime,
-      data: media.base64,
-    },
-    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-    ...(transformationsFromMetadata(part.metadata) === undefined
-      ? {}
-      : { transformations: transformationsFromMetadata(part.metadata)! }),
-  } satisfies AnthropicImageBlock
+  return image({ type: "base64", media_type: media.mime, data: media.base64 })
 })
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
@@ -1082,11 +1026,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           cache_control: cacheControl(breakpoints, part.cache),
         }))
   const messages = yield* lowerMessages(flattened.request, breakpoints)
-  if (breakpoints.dropped > 0) {
-    yield* Effect.logWarning(
-      `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
-    )
-  }
+  yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
   const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS

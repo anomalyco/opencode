@@ -4,12 +4,12 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ZAIChat } from "../protocols/zai-chat.js"
 import { ZAIMessages } from "../protocols/zai-messages.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
-import { toConfig } from "./settings.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("zai-coding-plan")
 
@@ -59,12 +59,7 @@ const responsesRoute = Route.make({
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
-  const defaults = {
-    ...rest,
-    endpoint: baseURL === undefined ? undefined : { baseURL },
-    auth: AuthOptions.bearer(input, "ZAI_API_KEY"),
-  }
+  const defaults = bearerRouteDefaults(input, "ZAI_API_KEY")
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({ id: modelID, compatibility: ZAIChat.compatibility })
   const messages = (modelID: string | ModelID) =>

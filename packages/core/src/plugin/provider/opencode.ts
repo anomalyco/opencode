@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Clock, Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -19,6 +19,7 @@ import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
@@ -174,7 +175,6 @@ export const OpencodePlugin = define<
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
-    const bus = yield* Bus.Service
     const client = yield* HttpClient.HttpClient
     // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
     // and whether it evaluates the policies it is being sent.
@@ -335,14 +335,8 @@ export const OpencodePlugin = define<
       execute: (input: WebSearch.ProviderInput) =>
         Effect.gen(function* () {
           const active = yield* ctx.integration.connection.active("opencode")
-          if (
-            !active ||
-            (connection.type === "credential"
-              ? active.type !== "credential" || active.id !== connection.id
-              : active.type !== "env" || active.name !== connection.name)
-          ) {
+          if (!active || IntegrationConnection.key(active) !== IntegrationConnection.key(connection))
             return yield* Effect.fail(new Error("OpenCode Console connection changed"))
-          }
           const credential = yield* ctx.integration.connection.resolve(active)
           if (!credential || credential.type === "external")
             return yield* Effect.fail(new Error("OpenCode Console is not connected"))
@@ -495,11 +489,7 @@ export const OpencodePlugin = define<
         onlyIfMissing: true,
       })
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
-      Stream.runForEach(() => refresh().pipe(Effect.andThen(poll()))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()
   }),
 })

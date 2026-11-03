@@ -10,6 +10,7 @@ import { Provider } from "@opencode/core/provider"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -21,20 +22,6 @@ const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input 
   const host = yield* PluginHost.make(plugin, "test")
   yield* make(origin, interval).effect(host)
 })
-
-function eventually<A>(
-  effect: Effect.Effect<A>,
-  predicate: (value: A) => boolean,
-  remaining = 3000,
-): Effect.Effect<A, Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
-}
 
 const remoteModel = (id: string, max_model_len = 32_768, owned_by = "vllm") => ({
   id,
@@ -142,10 +129,7 @@ describe("VLLMPlugin", () => {
           expect(yield* modelState.get(providerID, Model.ID.make("second-model"))).toBeUndefined()
 
           state.failing = false
-          yield* eventually(
-            modelState.get(providerID, Model.ID.make("second-model")),
-            (model) => model !== undefined,
-          )
+          yield* eventually(modelState.get(providerID, Model.ID.make("second-model")), (model) => model !== undefined)
           expect(yield* modelState.get(providerID, Model.ID.make("first-model"))).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
@@ -278,10 +262,7 @@ describe("VLLMPlugin", () => {
             requests.splice(0)
             yield* config.setEntries([configuration({ baseURL }), configuration({ apiKey: "next-secret" })])
             yield* bus.publish(Event.Updated, {})
-            yield* eventually(
-              providers.get(providerID),
-              (provider) => provider?.settings?.apiKey === "next-secret",
-            )
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "next-secret")
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/health" })
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/v1/models" })
           }),

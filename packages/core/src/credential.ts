@@ -1,6 +1,6 @@
 export * as Credential from "./credential.js"
 
-import { asc, desc, eq } from "drizzle-orm"
+import { asc, desc, eq, type SQL } from "drizzle-orm"
 import { Cause, Context, Effect, Fiber, Layer, Schema } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { CredentialLegacy } from "@opencode/schema/credential-legacy"
@@ -104,6 +104,38 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie, Effect.map(storedRows)),
     )
+    const rows = (where?: SQL) =>
+      db
+        .select()
+        .from(CredentialTable)
+        .where(where)
+        .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
+        .all()
+        .pipe(Effect.orDie, Effect.map(storedRows))
+    type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+    const currentActive = (tx: Transaction, integrationID: Integration.ID) =>
+      tx
+        .select({ id: CredentialTable.id, active: CredentialTable.active })
+        .from(CredentialTable)
+        .where(eq(CredentialTable.integration_id, integrationID))
+        .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
+        .get()
+    const deactivateAll = (tx: Transaction, integrationID: Integration.ID) =>
+      tx.update(CredentialTable).set({ active: false }).where(eq(CredentialTable.integration_id, integrationID)).run()
+    const switchActive = (tx: Transaction, integrationID: Integration.ID, id: ID) =>
+      Effect.gen(function* () {
+        yield* deactivateAll(tx, integrationID)
+        yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, id)).run()
+      })
+    const logFailure =
+      (message: string, fields: Record<string, unknown>) =>
+      <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.onError((cause) =>
+            Effect.logError(message, { ...fields, errors: ErrorSummary.from(Cause.squash(cause)) }),
+          ),
+          Effect.orDie,
+        )
 
     return Service.of({
       lock: Effect.fn("Credential.lock")((id, operation) =>
@@ -123,13 +155,7 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      all: () =>
-        db
-          .select()
-          .from(CredentialTable)
-          .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
-          .all()
-          .pipe(Effect.orDie, Effect.map(storedRows)),
+      all: () => rows(),
       list,
       get: Effect.fn("Credential.get")(function* (id) {
         const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
@@ -145,19 +171,9 @@ const layer = Layer.effect(
         const activated = yield* db
           .transaction((tx) =>
             Effect.gen(function* () {
-              const current = yield* tx
-                .select({ id: CredentialTable.id, active: CredentialTable.active })
-                .from(CredentialTable)
-                .where(eq(CredentialTable.integration_id, credential.integrationID))
-                .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
-                .get()
+              const current = yield* currentActive(tx, credential.integrationID)
               const activate = input.activate !== false || !current
-              if (activate)
-                yield* tx
-                  .update(CredentialTable)
-                  .set({ active: false })
-                  .where(eq(CredentialTable.integration_id, credential.integrationID))
-                  .run()
+              if (activate) yield* deactivateAll(tx, credential.integrationID)
               // Legacy rows have no active flag and the newest one is selected, so pin it before inserting a newer row.
               if (!activate && current && !current.active)
                 yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, current.id)).run()
@@ -175,14 +191,10 @@ const layer = Layer.effect(
             }),
           )
           .pipe(
-            Effect.onError((cause) =>
-              Effect.logError("credential create failed", {
-                credentialID: credential.id,
-                integrationID: credential.integrationID,
-                errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
-            Effect.orDie,
+            logFailure("credential create failed", {
+              credentialID: credential.id,
+              integrationID: credential.integrationID,
+            }),
           )
         yield* Effect.logInfo("credential created", {
           credentialID: credential.id,
@@ -205,31 +217,13 @@ const layer = Layer.effect(
             Effect.gen(function* () {
               const credential = yield* tx.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get()
               if (!credential?.integration_id) return
-              const active = yield* tx
-                .select({ id: CredentialTable.id })
-                .from(CredentialTable)
-                .where(eq(CredentialTable.integration_id, credential.integration_id))
-                .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
-                .get()
+              const active = yield* currentActive(tx, credential.integration_id)
               if (active?.id === id) return
-              yield* tx
-                .update(CredentialTable)
-                .set({ active: false })
-                .where(eq(CredentialTable.integration_id, credential.integration_id))
-                .run()
-              yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, id)).run()
+              yield* switchActive(tx, credential.integration_id, id)
               return credential.integration_id
             }),
           )
-          .pipe(
-            Effect.onError((cause) =>
-              Effect.logError("credential activate failed", {
-                credentialID: id,
-                errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
-            Effect.orDie,
-          )
+          .pipe(logFailure("credential activate failed", { credentialID: id }))
         if (integrationID) {
           yield* Effect.logInfo("credential activated", { integrationID, credentialID: id })
           yield* bus.publish(Event.Switched, { integrationID, credentialID: id }, { global: true })
@@ -242,15 +236,7 @@ const layer = Layer.effect(
           .from(CredentialTable)
           .where(eq(CredentialTable.id, id))
           .get()
-          .pipe(
-            Effect.onError((cause) =>
-              Effect.logError("credential update lookup failed", {
-                credentialID: id,
-                errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
-            Effect.orDie,
-          )
+          .pipe(logFailure("credential update lookup failed", { credentialID: id }))
         if (!credential?.integrationID) {
           yield* Effect.logWarning("credential update skipped", { credentialID: id, reason: "credential_missing" })
           return
@@ -262,16 +248,7 @@ const layer = Layer.effect(
           .where(eq(CredentialTable.id, id))
           .returning({ id: CredentialTable.id })
           .get()
-          .pipe(
-            Effect.onError((cause) =>
-              Effect.logError("credential update failed", {
-                credentialID: id,
-                integrationID: credential.integrationID,
-                errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
-            Effect.orDie,
-          )
+          .pipe(logFailure("credential update failed", { credentialID: id, integrationID: credential.integrationID }))
         if (!updated) {
           yield* Effect.logWarning("credential update skipped", { credentialID: id, reason: "credential_removed" })
           return
@@ -291,14 +268,7 @@ const layer = Layer.effect(
             Effect.gen(function* () {
               const credential = yield* tx.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get()
               if (!credential) return
-              const active = credential.integration_id
-                ? yield* tx
-                    .select({ id: CredentialTable.id })
-                    .from(CredentialTable)
-                    .where(eq(CredentialTable.integration_id, credential.integration_id))
-                    .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
-                    .get()
-                : undefined
+              const active = credential.integration_id ? yield* currentActive(tx, credential.integration_id) : undefined
               yield* tx.delete(CredentialTable).where(eq(CredentialTable.id, id)).run()
               if (!credential.integration_id || active?.id !== id)
                 return { switched: false as const, integrationID: credential.integration_id }
@@ -308,18 +278,7 @@ const layer = Layer.effect(
                 .where(eq(CredentialTable.integration_id, credential.integration_id))
                 .orderBy(desc(CredentialTable.time_created), desc(CredentialTable.id))
                 .get()
-              if (replacement) {
-                yield* tx
-                  .update(CredentialTable)
-                  .set({ active: false })
-                  .where(eq(CredentialTable.integration_id, credential.integration_id))
-                  .run()
-                yield* tx
-                  .update(CredentialTable)
-                  .set({ active: true })
-                  .where(eq(CredentialTable.id, replacement.id))
-                  .run()
-              }
+              if (replacement) yield* switchActive(tx, credential.integration_id, replacement.id)
               return {
                 switched: true as const,
                 integrationID: credential.integration_id,
@@ -327,15 +286,7 @@ const layer = Layer.effect(
               }
             }),
           )
-          .pipe(
-            Effect.onError((cause) =>
-              Effect.logError("credential remove failed", {
-                credentialID: id,
-                errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
-            Effect.orDie,
-          )
+          .pipe(logFailure("credential remove failed", { credentialID: id }))
         if (!removed) return
         yield* Effect.logInfo("credential removed", {
           credentialID: id,

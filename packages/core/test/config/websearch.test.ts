@@ -8,6 +8,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigWebSearch } from "@opencode/schema/config/websearch"
 import { Effect } from "effect"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -42,11 +43,3 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
 function configured(websearch: ConfigWebSearch.Selection): Document {
   return new Document({ type: "document", info: new Info({ websearch }) })
 }
-
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  yield* Effect.die(new Error("Timed out waiting for websearch config reload"))
-})

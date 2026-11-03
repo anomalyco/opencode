@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Logger, Ref, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import {
   ai,
@@ -22,8 +22,8 @@ import {
   LLMClient,
   RequestExecutor,
   WebSocketTransport,
+  type ChannelCreate,
   type ChannelObservation,
-  type WebSocketChannelDriver,
 } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -46,67 +46,52 @@ const model = OpenAIResponses.route
 
 const xaiModel = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.5")
 
-const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
-  create: () => Effect.succeed({ message, mode: "full" }),
-  observe: (_create, frame): Effect.Effect<ChannelObservation, AIError> => {
-    const event = ProviderShared.decodeJson(frame)
-    if (!ProviderShared.isRecord(event)) return Effect.die("Expected event")
-    if (event.type === "response.completed") return Effect.succeed({ type: "completed", frame })
-    if (event.type === "response.incomplete") return Effect.succeed({ type: "incomplete", frame })
-    if (event.type === "error" || event.type === "response.failed")
-      return Effect.succeed({
-        type: "provider-failure",
-        error: new AIError({
-          reason: new TransportError({
-            message: "provider rejected request",
-            body: frame,
-            cause: new Error("provider cause"),
-            http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
-            transport: "websocket",
-            operation: "read",
-            phase: "receive",
-          }),
+const baseChannelObserve = (_create: ChannelCreate, frame: string): Effect.Effect<ChannelObservation, AIError> => {
+  const event = ProviderShared.decodeJson(frame)
+  if (!ProviderShared.isRecord(event)) return Effect.die("Expected event")
+  if (event.type === "response.completed") return Effect.succeed({ type: "completed", frame })
+  if (event.type === "response.incomplete") return Effect.succeed({ type: "incomplete", frame })
+  if (event.type === "error" || event.type === "response.failed")
+    return Effect.succeed({
+      type: "provider-failure",
+      error: new AIError({
+        reason: new TransportError({
+          message: "provider rejected request",
+          body: frame,
+          cause: new Error("provider cause"),
+          http: new HttpContext({ url: "https://provider.test", status: 200, headers: { "x-trace": "trace-1" } }),
+          transport: "websocket",
+          operation: "read",
+          phase: "receive",
         }),
-      })
-    return Effect.succeed({ type: "frame", frame })
-  },
-})
+      }),
+    })
+  return Effect.succeed({ type: "frame", frame })
+}
 
 /** Classifies error frames the way the production channel does, so recovery can read the canonical reason. */
-const classifyingChannelDriver = (message: string): WebSocketChannelDriver => {
-  const base = baseChannelDriver(message)
-  const decodeEvent = Schema.decodeUnknownSync(OpenResponses.protocol.stream.event)
-  return {
-    ...base,
-    observe: (create, frame) =>
-      base.observe(create, frame).pipe(
-        Effect.map((observation) =>
-          observation.type === "provider-failure"
-            ? {
-                ...observation,
-                error: OpenResponses.providerFailure(decodeEvent(frame), "stream error", frame),
-              }
-            : observation,
-        ),
-      ),
-  }
-}
+const classifyingChannelObserve = (create: ChannelCreate, frame: string, event: OpenResponses.Event) =>
+  baseChannelObserve(create, frame).pipe(
+    Effect.map(
+      (observation): ChannelObservation =>
+        observation.type === "provider-failure"
+          ? { ...observation, error: OpenResponses.providerFailure(event, "stream error", frame) }
+          : observation,
+    ),
+  )
 
 const continuationDriver = (
   request: Readonly<Record<string, unknown>>,
-  base = baseChannelDriver,
+  base: OpenResponsesContinuation.DriverInput["base"] = baseChannelObserve,
   continuation?: OpenResponsesContinuation.Shape,
-) => {
-  const message = ProviderShared.encodeJson(request)
-  return OpenResponsesContinuation.driver({
+) =>
+  OpenResponsesContinuation.driver({
     id: "openai-responses",
     name: "OpenAI Responses",
     request,
-    message,
-    base: base(message),
+    base,
     continuation,
   })
-}
 
 const checkpoint = (observation: ChannelObservation) => {
   if (observation.type !== "completed" || !observation.checkpoint) throw new Error("Expected checkpoint")
@@ -948,7 +933,7 @@ describe("OpenAI Responses route", () => {
         store: false,
         input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "First" }] }],
       }
-      const first = continuationDriver(firstRequest, classifyingChannelDriver)
+      const first = continuationDriver(firstRequest, classifyingChannelObserve)
       const saved = checkpoint(
         yield* first.observe(
           yield* first.create(undefined),
@@ -963,7 +948,7 @@ describe("OpenAI Responses route", () => {
             { type: "message", role: "user", content: [{ type: "input_text", text: "Second" }] },
           ],
         },
-        classifyingChannelDriver,
+        classifyingChannelObserve,
       )
       // Codex reports a stale previous_response_id as a plain invalid_request_error.
       const stale = ProviderShared.encodeJson({
@@ -1026,7 +1011,7 @@ describe("OpenAI Responses route", () => {
 
       const trimmed = yield* continuationDriver(
         secondRequest,
-        baseChannelDriver,
+        baseChannelObserve,
         ({ instructions: _, ...rest }) => rest,
       ).create(saved)
       expect(trimmed.mode).toBe("incremental")
@@ -1039,7 +1024,7 @@ describe("OpenAI Responses route", () => {
       })
 
       // Declining the continuation sends the step in full and never sends a previous_response_id.
-      const declined = yield* continuationDriver(secondRequest, baseChannelDriver, () => undefined).create(saved)
+      const declined = yield* continuationDriver(secondRequest, baseChannelObserve, () => undefined).create(saved)
       expect(declined.mode).toBe("full")
       expect(JSON.parse(declined.message)).toEqual(secondRequest)
     }),
