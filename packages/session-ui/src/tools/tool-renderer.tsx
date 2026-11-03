@@ -2043,7 +2043,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
             <Dynamic
               component={fileComponent}
               mode="text"
-              file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
+              file={{ name: "execute.py", contents: props.code, cacheKey: checksum(props.code) }}
               overflow="wrap"
             />
           </ExecuteDetailsSection>

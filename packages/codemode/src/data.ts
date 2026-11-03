@@ -8,6 +8,7 @@ import {
   Arr,
   Bytes,
   Callable,
+  Coroutine,
   define,
   ErrorObj,
   get,
@@ -62,6 +63,8 @@ const walk = <R>(
     const toJSON = settled instanceof Obj ? get(settled, "toJSON") : undefined
     const own = toJSON instanceof Callable ? yield* ctx.call(toJSON, settled, [key]) : settled
     const value = replacer === undefined ? own : yield* replacer([key, own], holder)
+    if (value instanceof Coroutine)
+      throw invalidData("A coroutine cannot cross to the host; await it first.", value.site)
     if (value === undefined || typeofValue(value) === "function") return undefined
     if (typeof value === "number") return Number.isFinite(value) ? value : null
     if (value === null || typeof value === "string" || typeof value === "boolean") return value

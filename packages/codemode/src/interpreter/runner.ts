@@ -275,6 +275,17 @@ export class Runner<R> {
     this.queue.push(job)
   }
 
+  /** Start a coroutine on the next queue turn. Unlike a JS promise resolver, a task returns its value verbatim. */
+  schedule(body: Eval<Value>, site?: AstNode): PromiseObj {
+    const result = this.newPromise()
+    const boundary = new AsyncBoundary(
+      (end) => this.settle(result, end.ok ? end : abrupt(locate(end.error, site))),
+      result,
+    )
+    this.enqueue(() => ({ task: new Task([{ body, boundary }]), input: normal(undefined) }))
+    return result
+  }
+
   /**
    * Starts host work now; its completion settles through `settle` in a later job, in completion order. A defect is
    * located at `site`, the call that started the work.

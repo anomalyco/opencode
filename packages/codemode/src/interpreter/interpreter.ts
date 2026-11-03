@@ -77,6 +77,7 @@ import { globals } from "./globals.js"
 import {
   assign,
   Callable,
+  Coroutine,
   define,
   frozen,
   get,
@@ -393,6 +394,7 @@ export class Interpreter<R> {
   private readonly globalScope: ReadonlyMap<string, Binding>
   private readonly modules = new Map<string, Value>()
   private readonly namespaces = new Map<string, Obj>()
+  private readonly lazyHostCalls: boolean
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
@@ -400,11 +402,13 @@ export class Interpreter<R> {
     readonly services: Context.Context<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
+    readonly lazyHostCalls?: boolean
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
     this.builtins = options.builtins
     this.logs = options.logs ?? []
+    this.lazyHostCalls = options.lazyHostCalls ?? false
     this.runner = new Runner(this, options.services)
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
@@ -459,6 +463,18 @@ export class Interpreter<R> {
   /** Calls into the program; a built-in passes its own call site so failures inside are located there. */
   call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value> {
     return this.root.call(callable, thisValue, args, site)
+  }
+
+  /** JS starts host work at the call site; Python starts the same bridge only when the coroutine runs. */
+  asyncHostCall(work: Eval<Value>, site?: AstNode): Eval<Value> | Coroutine {
+    if (!this.lazyHostCalls) return work
+    const ctx = this
+    return new Coroutine(
+      (function* (): Eval<Value> {
+        return (yield* ctx.awaitValue(yield* work, site)) ?? null
+      })(),
+      site,
+    )
   }
 
   /** Await: suspends the innermost async body until `value` settles. */
@@ -1983,7 +1999,7 @@ class Frame<R> {
       if (callable.path.length === 0) {
         throw typeError("The tools root is not callable.", callee ?? node)
       }
-      return this.createToolCallPromise(callable.path, args, node)
+      return this.ctx.asyncHostCall(this.createToolCallPromise(callable.path, args, node), node)
     }
     throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
   }

@@ -101,7 +101,7 @@ function* invokePromiseMethod<R>(
 // Promise.all, allSettled, race, and any: each element is resolved to a promise and observed through a reaction, so
 // the result settles in the job where the deciding element's reaction runs, or at once for an empty input. A failure
 // while iterating rejects the result.
-function* combinator<R>(
+export function* combinator<R>(
   ctx: Interpreter<R>,
   name: "all" | "allSettled" | "race" | "any",
   iterable: Value,

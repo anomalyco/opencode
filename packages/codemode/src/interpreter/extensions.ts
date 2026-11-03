@@ -3,6 +3,7 @@ import { type Extension, isAsync } from "../extension.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
+import type { Eval } from "./runner.js"
 import { createErrorValue } from "./intrinsics.js"
 import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
 import { type AstNode, PendingThrow, rangeError, Throw, typeError } from "./model.js"
@@ -162,32 +163,34 @@ export const extensionGlobals = <R>(
     // and a count cross.
     const name: unknown = value.name
     const length: unknown = value.length
+    const async = isAsync(value)
+    const invoke = function* (values: Value[], site?: AstNode): Eval<Value> {
+      const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
+      const cross = (reason: unknown) => new Throw(fromHost(reason, label))
+      const call = describe?.(args)
+      const hooks = ctx.tools.hooks
+      const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
+      const after = call && hooks["extension.after"]
+      const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
+        (after ? hooked(call, undefined, after, effect) : effect).pipe(
+          Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
+        )
+      // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+      if (async)
+        return pending(
+          Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
+          site,
+        )
+      if (before) yield ctx.runner.blocking(before)
+      const host = callHost<R>(value, args)
+      if (host.async) return pending(settle(host.effect), site)
+      return (yield ctx.runner.blocking(settle(host.effect))) as Value
+    }
     return fn(
       builtins,
       typeof name === "string" ? name : "",
       typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
-      function* (_, values, site) {
-        const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-        const cross = (reason: unknown) => new Throw(fromHost(reason, label))
-        const call = describe?.(args)
-        const hooks = ctx.tools.hooks
-        const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
-        const after = call && hooks["extension.after"]
-        const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
-          (after ? hooked(call, undefined, after, effect) : effect).pipe(
-            Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
-          )
-        // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
-        if (isAsync(value))
-          return pending(
-            Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
-            site,
-          )
-        if (before) yield ctx.runner.blocking(before)
-        const host = callHost<R>(value, args)
-        if (host.async) return pending(settle(host.effect), site)
-        return (yield ctx.runner.blocking(settle(host.effect))) as Value
-      },
+      (_, values, site) => (async ? ctx.asyncHostCall(invoke(values, site), site) : invoke(values, site)),
     )
   }
 

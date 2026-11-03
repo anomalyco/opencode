@@ -12,6 +12,26 @@ Check off items as support lands and add unchecked items for significant gaps. T
 the ultimate source of truth. Upstream test262 files run verbatim from `test/test262`; a failing file is listed in
 `test/test262/skipped.txt` and its gap is an unchecked item here (see `test/test262/README.md`).
 
+## Experimental Python subset
+
+- [x] Opt-in `language: "python"`; same host tools, search, bindings, extensions, call hooks, limits and output boundary.
+- [x] Space-indented blocks, comments, multiline bracketed expressions, single/double-quoted strings, decimal numbers,
+      booleans, `None`, lists, and string-keyed dictionaries. Programs are limited to 65,536 UTF-16 code units.
+- [x] Arithmetic (including `//`, `%`, `**`), comparisons and comparison chains, `in`, short-circuit `and`/`or`/`not`,
+      Python truthiness for containers, and structural list/dict equality. Numbers are doubles, not arbitrary-precision integers.
+- [x] Assignment to names and subscripts, negative sequence indices, `+=`, `-=`, `*=`, `if`/`elif`/`else`, `for`/`while`,
+      `pass`, `break`, `continue`, and single-`for` list comprehensions with an optional `if`.
+- [x] `def` and `async def` with positional parameters, closures, `await`, `asyncio.gather(*calls)`, and `try`/`except Exception`.
+      Async functions, tools and declared async extensions return single-use coroutines. `await` runs one; `gather`
+      schedules each distinct coroutine once and returns an awaitable result in input order. An unscheduled coroutine cannot
+      cross the host boundary. `asyncio` is prebound; `import asyncio` is also accepted.
+- [x] `print`, `len`, `str`, `bool`, `list`, `range`, list `.append`, and dictionary `.get`/`.keys`/`.values`/`.items`.
+      `range` and dictionary views produce lists. Dot access on records reads own fields (including host extension functions);
+      dictionary subscripts never read inherited members. Tool calls take one input dictionary or no arguments.
+- [x] Explicit top-level `return`, final top-level expression, or `null` if neither supplies a result.
+- [ ] Slices, unpacking assignments, tuples, sets, generators, default/keyword parameters and f-strings.
+- [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers, classes, and Python-specific catalog signatures.
+
 ## Source and execution model
 
 - [x] JavaScript parsed with the latest syntax accepted by Acorn, then restricted by the interpreter allowlist.

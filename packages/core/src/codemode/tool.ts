@@ -73,12 +73,12 @@ export type Inventory = {
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+  "Run a Python subset in a confined Code Mode runtime to call tools and process their results. Use Python syntax, not JavaScript.",
+  "For HTTP use `response = await fetch(url)` then `return await response.json()` or `return await response.text()`. There is no filesystem, package loading, or sleep.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+  'Use the exact tool path with one Python dictionary (or no arguments), e.g. `await tools.orders["get-order"]({"id": 42})`. Catalog signatures describe data using TypeScript types, not executable code.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  "Tool calls do not start until awaited or scheduled. Run independent calls concurrently with `await asyncio.gather(call1, call2)`. Use `try`/`except Exception` for failures and `print(...)` for logs.",
 ].join("\n")
 
 export const create = (
@@ -269,6 +269,7 @@ function runtime(inventory: Inventory) {
   if (cached) return cached
   const tools = inventoryTools(inventory)
   const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+    language: "python",
     tools,
     extensions: [CodeModeFetch.extension],
     hooks: runHooks,
@@ -278,7 +279,7 @@ function runtime(inventory: Inventory) {
 }
 
 /**
- * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ * Saved schedule checks use JavaScript, matching their static tool scanner, with no model step or `fetch`.
  */
 export const check = (
   inventory: Inventory,
@@ -287,7 +288,7 @@ export const check = (
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
-  CodeMode.make({ tools: inventoryTools(inventory), hooks: runHooks, limits })
+  CodeMode.make({ language: "javascript", tools: inventoryTools(inventory), hooks: runHooks, limits })
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {

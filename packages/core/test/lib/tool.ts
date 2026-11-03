@@ -14,6 +14,12 @@ export const toolIdentity = {
   messageID: SessionMessage.ID.make("msg_tool_test"),
 }
 
+/** Embed test inputs in execute source without changing quoted strings that contain JSON keywords. */
+export const pythonLiteral = (input: unknown) =>
+  JSON.stringify(input).replace(/"(?:\\.|[^"\\])*"|true|false|null/g, (token) =>
+    token === "true" ? "True" : token === "false" ? "False" : token === "null" ? "None" : token,
+  )
+
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
 

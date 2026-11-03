@@ -26,16 +26,15 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll)
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
 test("execute describes invariant Code Mode behavior", () => {
-  expect(createCodeMode(new Map()).description).toBe(
-    [
-      "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-      'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-    ].join("\n"),
-  )
+  const description = createCodeMode(new Map()).description
+  expect(description).toContain("Run a Python subset")
+  expect(description).toContain("await asyncio.gather")
+  expect(description).toContain("final top-level expression")
+})
+
+test("execute rejects JavaScript rather than falling back to it", async () => {
+  const result = await Effect.runPromise(createCodeMode(new Map()).execute({ code: "const n = 1; return n" }, context))
+  expect(result.output).toMatchObject({ error: true, toolCalls: [] })
 })
 
 test("execute rejects filesystem fetches", async () => {
@@ -71,7 +70,7 @@ describe("fetch permissions", () => {
       createCodeMode(
         new Map(),
         permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }),
-      ).execute({ code: `return await (await fetch("${url}", { method: "POST" })).text()` }, context),
+      ).execute({ code: `return await (await fetch("${url}", {"method": "POST"})).text()` }, context),
     )
 
     expect(result.output.output).toBe("ok")
@@ -98,7 +97,7 @@ describe("fetch permissions", () => {
     })
     const result = await Effect.runPromise(
       createCodeMode(new Map(), denied).execute(
-        { code: `try { await fetch("${server.url.origin}/redirect") } catch (e) { return e.message }` },
+        { code: `try:\n    await fetch("${server.url.origin}/redirect")\nexcept Exception as e:\n    return str(e)` },
         context,
       ),
     )
@@ -115,7 +114,7 @@ describe("fetch permissions", () => {
     })
     const result = await Effect.runPromise(
       createCodeMode(new Map(), corrected).execute(
-        { code: `try { await fetch("${url}") } catch (e) { return e.message }` },
+        { code: `try:\n    await fetch("${url}")\nexcept Exception as e:\n    return str(e)` },
         context,
       ),
     )
@@ -133,7 +132,7 @@ describe("fetch permissions", () => {
     })
     const result = await Effect.runPromise(
       createCodeMode(new Map(), denied).execute(
-        { code: `const [denied] = await Promise.allSettled([fetch("${url}")]); return denied.status` },
+        { code: `try:\n    await asyncio.gather(fetch("${url}"))\nexcept Exception:\n    return "rejected"` },
         context,
       ),
     )
@@ -284,7 +283,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     const progress: Array<Tool.Metadata> = []
     return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
       .execute(
-        { code: `return await tools.echo({ value: "${id}" })` },
+        { code: `return await tools.echo({"value": "${id}"})` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.map((result) => ({ output: result.output.output, progress })))
@@ -301,13 +300,13 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     })),
   )
   expect(
-    (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({ value: "x" })' }, context))).output
+    (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({"value": "x"})' }, context))).output
       .output,
   ).toBe("call_execute:x")
   expect(conversions).toBe(1)
 
   await Effect.runPromise(
-    createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
+    createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({"value": "next"})' }, context),
   )
   expect(conversions).toBe(2)
 })
@@ -346,7 +345,7 @@ it.effect("execute sends at most one progress update per 100 ms with the latest 
     const progress: Array<Tool.Metadata> = []
     const fiber = yield* progressCodeMode(started, Effect.sleep("250 millis"))
       .execute(
-        { code: "for (const i of [1, 2, 3]) await tools.step({}); await tools.wait({}); return await tools.step({})" },
+        { code: "for i in range(3):\n    await tools.step()\nawait tools.wait()\nreturn await tools.step()" },
         { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.forkChild({ startImmediately: true }))
@@ -373,7 +372,7 @@ it.effect("interrupted execute sends its latest progress rows before it settles"
     const progress: Array<Tool.Metadata> = []
     const fiber = yield* progressCodeMode(started, Effect.never)
       .execute(
-        { code: "await tools.step({}); await tools.step({}); return await tools.wait({})" },
+        { code: "await tools.step()\nawait tools.step()\nreturn await tools.wait()" },
         { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.forkChild({ startImmediately: true }))

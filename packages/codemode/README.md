@@ -16,7 +16,7 @@ The idea of code mode was originally introduced by Cloudflare. See
 - **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
   globals the host adds through extensions. Timers, `process`, filesystem access, packages, and `export` are
   unavailable.
-- **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
+- **Unfinished work is interrupted.** In JavaScript, tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
   becomes `null`.
@@ -50,6 +50,40 @@ const result = await Effect.runPromise(
 ```
 
 `result` is always a [`CodeMode.Result`](#results).
+
+### Experimental Python interpreter
+
+Select Python on the host with `CodeMode.make({ language: "python", tools })` or
+`CodeMode.execute({ language: "python", tools, code })`. Omitting `language` still selects JavaScript.
+The Python subset is interpreted in-process, without a Python installation, package loader or access to host objects.
+For example, using `lookupOrder` above:
+
+```ts
+const runtime = CodeMode.make({ language: "python", tools: { orders: { lookup: lookupOrder } } })
+const result = await Effect.runPromise(
+  runtime.execute(
+    `
+import asyncio
+
+async def lookup(id):
+    return await tools.orders.lookup({"id": id})
+
+orders = await asyncio.gather(*[lookup(id) for id in ids])
+return [order["id"] for order in orders if order["status"] == "open"]
+`,
+    { ids: ["order_42", "order_51"] },
+  ),
+)
+```
+
+Both languages use the same tools, bindings, extension hooks, limits, result format and cancellation. `search({...})`
+returns catalog data synchronously; `print(...)` writes to the result's logs. In Python, calling an `async def`, a tool,
+or a declared async extension creates a coroutine. `await` runs it; `asyncio.gather(...)` schedules coroutines to run
+concurrently when the caller next suspends. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
+the entire program's syntax before it starts. See the [Python subset and differences](./interpreter-support.md#experimental-python-subset).
+
+On this branch, OpenCode's agent-facing `execute` tool selects Python. Catalog signatures describe data in TypeScript
+notation; call the listed paths with Python dictionaries. Saved schedule checks and their static scanner still use JavaScript.
 
 ## API
 

@@ -24,6 +24,15 @@ const lookup: CodeModeCatalog.Tool = {
 }
 
 describe("CodeModeInstructions", () => {
+  it.effect("switches an unchanged catalog from JavaScript to Python when a session resumes", () =>
+    Effect.gen(function* () {
+      const inventory = { tools: [echo] }
+      const old = CodeModeCatalog.summarize(inventory)
+      const update = yield* readUpdate(CodeModeInstructions.make(inventory), { values: { "core/codemode": old } })
+      expect(update.text).toContain("as Python inside the `execute` tool")
+      expect(update.text).toContain(echo.signature)
+    }),
+  )
   it.effect("instructs the model not to call execute while the catalog is empty", () =>
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [] }))
@@ -47,7 +56,7 @@ describe("CodeModeInstructions", () => {
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
-        "The tools listed below cannot be called directly: they only work as JavaScript inside the `execute` tool.",
+        "The tools listed below cannot be called directly: they only work as Python inside the `execute` tool.",
       )
       expect(initialized.text).toContain("The catalog is complete.")
       expect(initialized.text).toContain("## Code Mode tools (call only inside `execute`)")

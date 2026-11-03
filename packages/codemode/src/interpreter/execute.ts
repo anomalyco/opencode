@@ -7,7 +7,7 @@ import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
-import type { Runner } from "./runner.js"
+import type { Eval, Runner } from "./runner.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -15,6 +15,7 @@ export const executeProgram = <R>(
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
+  language: "javascript" | "python" = "javascript",
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -35,12 +36,27 @@ export const executeProgram = <R>(
     let runner: Runner<R> | undefined
 
     const base = Effect.gen(function* () {
-      const parsed = parseProgram(code)
-      if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] } satisfies Result
+      let main: (ctx: Interpreter<R>) => Eval<DataValue | undefined>
+      if (language === "python") {
+        const { compilePython } = yield* Effect.promise(() => import("../python/index.js"))
+        const run = compilePython(code)
+        main = (ctx) => run(ctx, globals?.(ctx) ?? [])
+      } else {
+        const parsed = parseProgram(code)
+        if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] } satisfies Result
+        main = (ctx) => ctx.main(parsed.program)
+      }
       const services = yield* Effect.context<R>()
-      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
+      const ctx = new Interpreter<R>({
+        tools,
+        services,
+        builtins,
+        logs,
+        lazyHostCalls: language === "python",
+        globals: language === "python" ? undefined : globals,
+      })
       runner = ctx.runner
-      const outcome = yield* runner.run(ctx.main(parsed.program))
+      const outcome = yield* runner.run(main(ctx))
       if (!outcome.ok) {
         return { ok: false, error: normalizeError(outcome.error), ...logged(), toolCalls: tools.calls } satisfies Result
       }

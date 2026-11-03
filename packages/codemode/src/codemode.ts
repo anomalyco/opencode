@@ -4,6 +4,7 @@ import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
+import { pythonNames } from "./python/names.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
@@ -46,6 +47,8 @@ export type ResolvedExecutionLimits = {
 
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
 export type Options<Provided extends Record<string, unknown> = {}, Extensions extends ReadonlyArray<Extension> = []> = {
+  /** The confined language to execute. Defaults to JavaScript; Python is an experimental subset. */
+  language?: "javascript" | "python"
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
   /** Hooks around every tool and extension call the program makes; see `Hooks`. */
@@ -66,7 +69,7 @@ export type ExecuteOptions<
   Provided extends Record<string, unknown> = {},
   Extensions extends ReadonlyArray<Extension> = [],
 > = Options<Provided, Extensions> & {
-  /** Source for one program in the supported JavaScript subset. */
+  /** Source for one program in the selected language. */
   code: string
   /** Read-only JSON values bound in the program's outer global scope (shadowable by top-level declarations). */
   bindings?: Readonly<Record<string, DataValue>>
@@ -166,12 +169,15 @@ export const make = <
 >(
   options: Options<Provided, Extensions> = {},
 ): Runtime<Environment<Provided, Extensions>> => {
+  const language = options.language ?? "javascript"
   const prepared = ToolRuntime.prepare<Environment<Provided, Extensions>>(
     (options.tools ?? {}) as Tools<Services<Provided>>,
+    language,
   )
   const limits = resolveExecutionLimits(options.limits)
   const extensions = options.extensions ?? []
-  const bound = new Set(globalNames)
+  if (language !== "python" && language !== "javascript") throw new TypeError(`Unknown Code Mode language: ${language}`)
+  const bound = new Set<string>(language === "python" ? pythonNames : globalNames)
   for (const extension of extensions) {
     for (const name of Object.keys(extension.globals)) {
       if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
@@ -183,9 +189,16 @@ export const make = <
       return prepared.catalog
     },
     execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-        ...extensionGlobals(ctx, extensions),
-      ]),
+      executeProgram(
+        code,
+        prepared,
+        limits,
+        options.hooks ?? {},
+        (ctx) => [
+          ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+          ...extensionGlobals(ctx, extensions),
+        ],
+        language,
+      ),
   }
 }

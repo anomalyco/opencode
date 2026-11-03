@@ -20,7 +20,7 @@ import { initRepo } from "./fixture/git"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, toolIdentity } from "./lib/tool"
+import { executeTool, pythonLiteral, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer, PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -88,7 +88,7 @@ it.effect("groups available models by provider with paging", () =>
           type: "tool-call",
           id: `call-${JSON.stringify(input)}`,
           name: "execute",
-          input: { code: `return await tools.opencode.models(${JSON.stringify(input)})` },
+          input: { code: `return await tools.opencode.models(${pythonLiteral(input)})` },
         },
       }).pipe(Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")))
 
@@ -198,7 +198,7 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
         call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
       })
     const call = (name: string, input: Record<string, unknown>) =>
-      program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
+      program(`return await tools.opencode.${name}(${pythonLiteral(input)})`)
     const run = (name: string, input: Record<string, unknown>) =>
       call(name, input).pipe(
         Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
@@ -239,7 +239,7 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     })
     expect(
       yield* program(
-        `try { await tools.opencode.worktree_remove(${JSON.stringify({ directory })}) } catch (error) { return error.message }`,
+        `try:\n    await tools.opencode.worktree_remove(${JSON.stringify({ directory })})\nexcept Exception as error:\n    return str(error)`,
       ),
     ).toMatchObject({ content: [{ type: "text", text: "Keep this worktree" }] })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(true)

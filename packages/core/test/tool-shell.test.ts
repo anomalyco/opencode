@@ -814,7 +814,7 @@ describe("ShellTool", () => {
               type: "tool-call",
               id: "call-parallel-shells",
               name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              input: { code: `return await asyncio.gather(tools.shell(${inputs[0]}), tools.shell(${inputs[1]}))` },
             },
           }).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")

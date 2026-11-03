@@ -139,6 +139,23 @@ export abstract class Opaque extends Obj {
   }
 }
 
+/** A Python coroutine owns one suspended body; creating or discarding it runs nothing. */
+export class Coroutine extends Opaque {
+  override readonly tag = "coroutine"
+  constructor(
+    private body: Eval<Value> | undefined,
+    readonly site?: AstNode,
+  ) {
+    super(null)
+  }
+  *run(): Eval<Value> {
+    if (!this.body) throw typeError("Cannot reuse an already awaited coroutine.")
+    const body = this.body
+    this.body = undefined
+    return yield* body
+  }
+}
+
 export abstract class Callable extends Opaque {
   override readonly tag = "Function"
   constructor(

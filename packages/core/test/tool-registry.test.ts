@@ -424,17 +424,18 @@ describe("Tool", () => {
           id: "call-nonletter-names",
           name: "execute",
           input: {
-            code: `const results = await Promise.all([
-              tools["2d_get_scene"]({ text: "digit" }),
-              tools["123"]({ text: "numeric" }),
-              tools._lookup({ text: "underscore" }),
-              tools["-lookup"]({ text: "hyphen" }),
-              tools["123"]._private["-tools"]["2d_get_scene"]({ text: "namespaced" }),
-            ]); return results.map(result => result.text).join(",");`,
+            code: `results = await asyncio.gather(
+    tools["2d_get_scene"]({"text": "digit"}),
+    tools["123"]({"text": "numeric"}),
+    tools._lookup({"text": "underscore"}),
+    tools["-lookup"]({"text": "hyphen"}),
+    tools["123"]._private["-tools"]["2d_get_scene"]({"text": "namespaced"}),
+)
+return [result["text"] for result in results]`,
           },
         },
       })
-      expect(result.content).toEqual([{ type: "text", text: "digit,numeric,underscore,hyphen,namespaced" }])
+      expect(JSON.parse(result.output.output)).toEqual(["digit", "numeric", "underscore", "hyphen", "namespaced"])
     }),
   )
 
@@ -502,7 +503,7 @@ describe("Tool", () => {
           type: "tool-call",
           id: "namespace-search",
           name: "execute",
-          input: { code: 'return search({ query: "pricing operations" })' },
+          input: { code: 'return search({"query": "pricing operations"})' },
         },
       })
       expect(result.output).toMatchObject({ output: expect.stringContaining("tools.registry.search") })
@@ -513,10 +514,10 @@ describe("Tool", () => {
           id: "callable-namespace",
           name: "execute",
           input: {
-            code: `return await Promise.all([
-              tools.registry.search({ text: "search" }),
-              tools.registry.search.sales({ text: "sales" }),
-            ])`,
+            code: `return await asyncio.gather(
+              tools.registry.search({"text": "search"}),
+              tools.registry.search.sales({"text": "sales"}),
+            )`,
           },
         },
       })
@@ -554,14 +555,14 @@ describe("Tool", () => {
             id: `namespace-${query}`,
             name: "execute",
             input: {
-              code: `return search({ query: ${JSON.stringify(query)} }).items.map(item => item.path).join(",")`,
+              code: `return [item["path"] for item in search({"query": ${JSON.stringify(query)}})["items"]]`,
             },
           },
         })
-      expect((yield* search(advertised, "archival")).output).toMatchObject({ output: "tools.acme.echo" })
-      expect((yield* search(advertised, "billing")).output).toMatchObject({ output: "" })
-      expect((yield* search(current, "archival")).output).toMatchObject({ output: "" })
-      expect((yield* search(current, "billing")).output).toMatchObject({ output: "tools.acme.echo" })
+      expect(JSON.parse((yield* search(advertised, "archival")).output.output)).toEqual(["tools.acme.echo"])
+      expect(JSON.parse((yield* search(advertised, "billing")).output.output)).toEqual([])
+      expect(JSON.parse((yield* search(current, "archival")).output.output)).toEqual([])
+      expect(JSON.parse((yield* search(current, "billing")).output.output)).toEqual(["tools.acme.echo"])
     }),
   )
 
@@ -583,10 +584,10 @@ describe("Tool", () => {
           id: "top-level-callable",
           name: "execute",
           input: {
-            code: `return await Promise.all([
-              tools.pricing({ text: "pricing" }),
-              tools.pricing.sales({ text: "sales" }),
-            ])`,
+            code: `return await asyncio.gather(
+              tools.pricing({"text": "pricing"}),
+              tools.pricing.sales({"text": "sales"}),
+            )`,
           },
         },
       })
@@ -1218,7 +1219,7 @@ describe("Tool", () => {
           type: "tool-call",
           id: "call-execute",
           name: "execute",
-          input: { code: 'return await tools.echo({ text: "request" })' },
+          input: { code: 'return await tools.echo({"text": "request"})' },
         },
         progress: (update) => Effect.sync(() => progress.push(update)),
       })

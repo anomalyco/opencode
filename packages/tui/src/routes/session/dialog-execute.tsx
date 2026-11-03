@@ -151,7 +151,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
                 Code
               </text>
               <Show when={code()} fallback={<text fg={contentTheme.text.muted}>Waiting for code…</text>}>
-                {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} />}
+                {(value) => <GutteredCode content={value()} filetype="python" digits={digits()} />}
               </Show>
             </box>
             <box>
@@ -241,7 +241,7 @@ function wrappedRows(text: string | undefined, width: number) {
 // One shared left-aligned gutter keeps the title and every line number on the
 // same column, and keeps code and output on one content column. The gutter
 // follows the wrapped layout so continuation rows stay unnumbered.
-function GutteredCode(props: { content: string; filetype: "typescript" | "json"; digits: number }) {
+function GutteredCode(props: { content: string; filetype: "python" | "json"; digits: number }) {
   const theme = useTheme()
   const syntax = useThemes().currentSyntax
   const [info, setInfo] = createSignal<LineInfo>()

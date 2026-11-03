@@ -14,6 +14,7 @@ import {
 import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
+import { pythonKeywords } from "./python/names.js"
 
 export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
 
@@ -108,11 +109,16 @@ const SearchOutput = Schema.Struct({
   remaining: NonNegativeInt,
   next: Schema.NullOr(Schema.Struct({ offset: NonNegativeInt })),
 })
-export const toolExpression = (path: string) =>
+export const toolExpression = (path: string, language: "javascript" | "python" = "javascript") =>
   "tools" +
   path
     .split(".")
-    .map((segment) => (identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`))
+    .map((segment) =>
+      identifierSegment.test(segment) &&
+      !(language === "python" && (segment.includes("$") || pythonKeywords.has(segment)))
+        ? `.${segment}`
+        : `[${JSON.stringify(segment)}]`,
+    )
     .join("")
 
 export class ToolReference {
@@ -169,7 +175,7 @@ const flattenTools = <R>(
   ]
 }
 
-const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
+const describeTool = <R>(visible: VisibleTool<R>, expression: string): ToolDescription => {
   let signature: string | undefined
   return {
     path: visible.path,
@@ -178,7 +184,7 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
       // Search ranks paths and descriptions first; only returned matches need their schemas rendered.
       // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
       return (signature ??= [
-        toolExpression(visible.path),
+        expression,
         isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
         `: Promise<${outputTypeScript(visible.tool, true)}>`,
       ].join(""))
@@ -194,6 +200,7 @@ export type Prepared<R = never> = {
 }
 
 export type SearchEntry = {
+  readonly expression: string
   readonly description: ToolDescription
   /** The path split into words, so `zones` matches `get_zones` as a word rather than as a substring of `timezones`. */
   readonly pathWords: ReadonlyArray<string>
@@ -264,14 +271,14 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
       const exact =
         pathQuery === ""
           ? undefined
-          : scoped.find(
-              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-            )
+          : scoped.find((entry) => entry.description.path === pathQuery || entry.expression === trimmed)
       const ranked = exact !== undefined ? [exact] : rank(scoped, query)
-      const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
-        ...description,
-        path: toolExpression(description.path),
-      }))
+      const items = ranked
+        .slice(offset, offset + (request.limit ?? defaultSearchLimit))
+        .map(({ description, expression }) => ({
+          ...description,
+          path: expression,
+        }))
       const remaining = Math.max(0, ranked.length - offset - items.length)
       return {
         items,
@@ -287,8 +294,9 @@ export const searchSignature = (() => {
   return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
-  description: describeTool(visible),
+const toSearchEntry = <R>(visible: VisibleTool<R>, expression: string): SearchEntry => ({
+  expression,
+  description: describeTool(visible, expression),
   pathWords: tokenize(visible.path),
   searchText: [
     visible.path,
@@ -302,7 +310,7 @@ const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
     .toLowerCase(),
 })
 
-export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
+export const prepare = <R>(tools: Tools<R>, language: "javascript" | "python" = "javascript"): Prepared<R> => {
   const root = toolTrie(tools)
   let searchIndex: ReadonlyArray<SearchEntry> | undefined
   let catalog: ReadonlyArray<ToolDescription> | undefined
@@ -316,7 +324,7 @@ export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
       // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
       return (searchIndex ??= flattenTools(root)
         .sort((left, right) => compareText(left.path, right.path))
-        .map(toSearchEntry))
+        .map((tool) => toSearchEntry(tool, toolExpression(tool.path, language))))
     },
   }
 }
@@ -345,9 +353,7 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
     )[0]
     throw new ToolRuntimeError(
       "UnknownTool",
-      closest
-        ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
-        : `Unknown tool '${name}'.`,
+      closest ? `Unknown tool '${name}'. Did you mean ${closest.expression}?` : `Unknown tool '${name}'.`,
       ["Use search to find available tools."],
     )
   }

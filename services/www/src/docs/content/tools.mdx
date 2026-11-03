@@ -224,15 +224,17 @@ Permission: `subagent` with the selected agent ID as its resource.
 
 ### Execute
 
-`execute` runs JavaScript in Code Mode so the agent can call and combine tools
+`execute` runs a confined Python subset in Code Mode so the agent can call and combine tools
 from the catalog. It is useful for parallel independent calls and for processing
 results without adding every intermediate value to the model context.
 
-```text
-Read package.json and README.md in parallel, then return their relevant setup details.
+```python
+matches = search({"query": "models"})
+return [item["path"] for item in matches["items"]]
 ```
 
-The runtime has no direct filesystem access, imports, or timers. It provides
+Await tool calls to run them, or use `await asyncio.gather(call1, call2)` to run independent calls concurrently.
+The runtime has no direct filesystem access, external packages, or timers. It provides
 `fetch` for HTTP requests; everything else goes through tools in its catalog.
 Denying `execute` with resource `*` removes Code Mode and every tool reached only
 through it, including MCP tools from servers that do not set `codemode: false`.

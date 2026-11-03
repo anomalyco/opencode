@@ -8,9 +8,9 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `# Code Mode
 
-The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
+The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as Python inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. For example: \`return search({"query": "orders"})["items"]\`. Each result's \`path\` is the complete call expression: write it out as Python, for example \`await tools.orders.lookup({"id": 42})\`. Do not use it as a key such as \`tools[path]\`.
 
 - ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
@@ -114,7 +114,7 @@ ${render(current)}`
   if (diff.removed.length > 0) {
     parts.push(
       `The following tools are no longer available and must not be called: ${diff.removed
-        .map((entry) => toolExpression(entry.path))
+        .map((entry) => toolExpression(entry.path, "python"))
         .join(", ")}.`,
     )
   }
@@ -124,17 +124,24 @@ ${render(current)}`
 }
 
 const key = Instructions.Key.make("core/codemode")
-const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
+// Include the interpreter in the stored instruction hash so a resumed JS session receives the Python guidance.
+const codec = Schema.toCodecJson(
+  Schema.Struct({ ...CodeModeCatalog.Summary.fields, language: Schema.optionalKey(Schema.Literal("python")) }),
+)
 
 export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
-  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
+  const catalog =
+    inventory === undefined
+      ? Instructions.removed
+      : { ...CodeModeCatalog.summarize(inventory), language: "python" as const }
   return Instructions.make({
     key,
     codec,
     read: Effect.succeed(catalog),
     render: {
       initial: render,
-      changed: update,
+      changed: (previous, current) =>
+        previous.language === current.language ? update(previous, current) : render(current),
       removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
     },
   })
