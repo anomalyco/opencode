@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const png = Buffer.from(
@@ -360,8 +360,13 @@ story("keeps favicon space stable across loading and failure without fetching pr
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
   const docs = markdown.getByRole("link", { name: "docs" })
   const image = docs.locator(".markdown-link-favicon img")
+
+  const globe = (link: Locator) =>
+    link.locator(".markdown-link-favicon").evaluate((icon) => getComputedStyle(icon, "::before").visibility)
+
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
   await expect(image).toHaveCSS("opacity", "0")
+  expect(await globe(docs)).toBe("visible")
   expect((await docs.locator(".markdown-link-favicon").boundingBox())?.width).toBe(14)
   // A late web font swap also changes the link width; measure after fonts settle.
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
@@ -369,6 +374,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
   release()
   await expect(image).toHaveAttribute("data-loaded", "")
   await expect(image).toHaveCSS("opacity", "1")
+  expect(await globe(docs)).toBe("hidden")
   await expect(image).not.toHaveAttribute("role", "button")
   expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
   expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
@@ -384,6 +390,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
   await expect(
     markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img"),
   ).not.toHaveAttribute("data-loaded", "")
+  expect(await globe(markdown.getByRole("link", { name: "missing" }))).toBe("visible")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   expect(requested).toHaveLength(2)

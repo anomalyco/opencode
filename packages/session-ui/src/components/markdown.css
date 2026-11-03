@@ -167,6 +167,11 @@
     mask-image: url("./markdown-github.svg");
   }
 
+  /* The globe is a placeholder: hide it once the favicon loads, or it shows through transparent favicons. */
+  .markdown-link-favicon:has(img[data-loaded])::before {
+    visibility: hidden;
+  }
+
   .markdown-link-favicon img {
     position: absolute;
     inset: 0;
