@@ -57,8 +57,12 @@ export type Editor = {
 export type Estimate = { readonly measured: number; readonly estimated: number }
 
 export type Trigger =
-  /** `overflow`: the provider just rejected this context as too long. `estimate` is `estimatePrompt(context)`. */
-  | { readonly reason: "auto" | "overflow"; readonly context: SessionContext.Loaded; readonly estimate?: Estimate }
+  /** `overflow` exceeds tokens; `payload` exceeds bytes. `estimate` is `estimatePrompt(context)`. */
+  | {
+      readonly reason: "auto" | "overflow" | "payload"
+      readonly context: SessionContext.Loaded
+      readonly estimate?: Estimate
+    }
   /** `inputID` is the `/compact` inbox item, whose message shows the outcome. */
   | { readonly reason: "manual"; readonly context: SessionContext.Loaded; readonly inputID: SessionMessage.ID }
 
@@ -292,7 +296,7 @@ export const layer = Layer.effect(
       const settings = state.get()
       const context = trigger.context
 
-      // Only the user compacts when automatic compaction is off, overflow included.
+      // Only the user compacts when automatic compaction is off, including provider size rejections.
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
       if (
         trigger.reason === "auto" &&
@@ -303,7 +307,7 @@ export const layer = Layer.effect(
       precomputed.delete(context.session.id)
       const native = context.model.compaction?.type === "native"
       const model = yield* selectModel(context, settings.buffer, native)
-      // The provider just rejected this context, so the estimate ran low; the first attempt already aims below it.
+      // Token overflow means the estimate ran low. A byte rejection need not reduce the token budget.
       const budget =
         trigger.reason === "overflow"
           ? Math.min(model.cap, Math.floor(total(trigger.estimate ?? estimatePrompt(context)) * SHRINK_STEPS[0]))
@@ -404,6 +408,7 @@ export const layer = Layer.effect(
       const usable =
         settings.precompute &&
         trigger.reason !== "overflow" &&
+        trigger.reason !== "payload" &&
         context.model.compaction?.type !== "native" &&
         index >= 0 &&
         tailTokens(context, index) <= tailLimit(settings.keep, budget)
@@ -522,8 +527,8 @@ export const layer = Layer.effect(
           fit: fit - overhead,
           history: withoutTail(prepared.request, keepID),
           measured,
-          // The provider just rejected this conversation, so sending it unchanged again would be rejected too.
-          text: trigger.reason === "overflow",
+          // Token overflow shrinks the transcript; byte overflow first removes inline media without shrinking text.
+          text: trigger.reason === "overflow" || trigger.reason === "payload",
         },
         background,
       )

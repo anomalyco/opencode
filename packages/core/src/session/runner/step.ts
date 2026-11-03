@@ -54,7 +54,7 @@ interface Input {
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
-  readonly recoverOverflow: Effect.Effect<boolean>
+  readonly recoverOverflow: (reason: "overflow" | "payload") => Effect.Effect<boolean>
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -154,14 +154,19 @@ export const make = Effect.gen(function* () {
         if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(joined, toolRuns)
 
+        const rejection =
+          streamFailure instanceof AIError && streamFailure.reason._tag === "InvalidRequest"
+            ? streamFailure.reason.classification
+            : undefined
         if (
           !publisher.record().outputStarted &&
-          isContextOverflowFailure(streamFailure) &&
-          (yield* restore(input.recoverOverflow))
+          (rejection === "context-overflow" || rejection === "payload-too-large") &&
+          (yield* restore(input.recoverOverflow(rejection === "payload-too-large" ? "payload" : "overflow")))
         ) {
-          yield* Effect.logWarning("provider rejected the request as too long; compacting", {
+          yield* Effect.logWarning("provider rejected the request size; compacting", {
             sessionID: input.sessionID,
             model: input.model.ref,
+            classification: rejection,
             message: streamFailure?.message,
           })
           return Outcome.Compacted()

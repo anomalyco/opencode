@@ -3615,6 +3615,105 @@ describe("SessionRunnerLLM", () => {
     )
   })
 
+  for (const streamed of [false, true]) {
+    scenario(
+      `recovers a ${streamed ? "streamed" : "raw"} payload rejection without resending inline media`,
+      function* (s) {
+        const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        const prompt = yield* s.session.prompt({
+          sessionID,
+          text: "Earlier question ".repeat(700),
+          files: [{ uri: `data:image/png;base64,${image}` }],
+          resume: false,
+        })
+        yield* s.llm.push(TestLLM.text("Earlier answer", "text-earlier"))
+        yield* s.resume
+        s.currentModel = recoveryModel
+        s.requests.length = 0
+        yield* s.admit("Continue the screenshot review")
+        yield* s.llm.push(
+          streamed
+            ? TestLLM.failAfter(payloadTooLarge(), LLMEvent.stepStart({ index: 0 }))
+            : Stream.fail(payloadTooLarge()),
+          TestLLM.text("## Objective\n- Continue the screenshot review", "payload-summary"),
+          TestLLM.text("Recovered", "payload-recovered"),
+        )
+        yield* s.resume
+
+        expect(s.requests).toHaveLength(3)
+        expect(s.requests[0].messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
+        expect(s.requests[1].tools).toEqual([])
+        expect(
+          s.requests[1].messages.every((message) => message.content.every((part) => part.type === "text")),
+        ).toBeTrue()
+        expect(userTexts(s.requests[1])[0]).toContain("Earlier question ".repeat(700))
+        expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
+        expect(userTexts(s.requests[2])[0]).toContain("Continue the screenshot review")
+        expect((yield* s.messages).find((message) => message.id === prompt.id)).toMatchObject({
+          type: "user",
+          files: [{ data: image, mime: "image/png", source: { type: "inline" } }],
+        })
+        expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
+        yield* replaySessionProjection(sessionID)
+        expect(yield* s.context).toContainEqual(expect.objectContaining({ type: "compaction", status: "completed" }))
+        expect((yield* s.context).at(-1)).toMatchObject({ type: "assistant", finish: "stop" })
+      },
+    )
+  }
+
+  scenario("does not recover a payload rejection when automatic compaction is disabled", function* (s) {
+    yield* setupOverflowRecovery(s)
+    const compaction = yield* SessionCompaction.Service
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
+    yield* s.llm.push(Stream.fail(payloadTooLarge()))
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  })
+
+  scenario("stops after a second payload rejection instead of compacting again", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(
+      Stream.fail(payloadTooLarge()),
+      TestLLM.text("## Objective\n- Recover once", "payload-summary"),
+      Stream.fail(payloadTooLarge()),
+    )
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(3)
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", status: "completed" },
+      { type: "assistant", finish: "error", error: { message: "Too large" } },
+    ])
+  })
+
+  scenario("retains history and the original payload error when recovery compaction fails", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(Stream.fail(payloadTooLarge()), Stream.fail(invalidRequest()))
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toContainEqual(
+      expect.objectContaining({ type: "user", text: "Earlier question ".repeat(700) }),
+    )
+    expect(yield* s.context).toContainEqual(expect.objectContaining({ type: "compaction", status: "failed" }))
+  })
+
+  scenario("does not recover a payload rejection after durable assistant output", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        payloadTooLarge(),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "payload-partial" }),
+        LLMEvent.textDelta({ id: "payload-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "payload-partial" }),
+      ),
+    )
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+    expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({ finish: "error" }, [Expected.text("Partial")]))
+  })
+
   scenario("forces one compaction and retries after provider context overflow", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
