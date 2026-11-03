@@ -37,6 +37,7 @@
   "workspaces": {
     "packages": [
       "packages/*",
+      "packages/codemode/lua",
       "services/*",
       "packages/console/*",
       "packages/stats/*"
@@ -165,6 +166,8 @@
     "solid-js": "catalog:"
   },
   "patchedDependencies": {
+    "luaparse@0.3.1": "packages/codemode/lua/patches/luaparse.patch",
+    "v8lua@0.1.1": "packages/codemode/lua/patches/v8lua.patch",
     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
     "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",

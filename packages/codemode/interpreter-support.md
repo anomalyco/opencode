@@ -3,7 +3,7 @@
 This is the checkable support matrix for CodeMode's confined JavaScript interpreter. It tracks the language and
 standard-library surface that programs can use today, plus concrete gaps that may be implemented later.
 
-There is also a [standalone Lua 5.1 interpreter experiment](lua/README.md). It is not selectable in Code Mode and does not change the JavaScript support described here.
+There is also a [standalone Lua 5.1 interpreter written in JavaScript](lua/README.md). Its synchronous `runLua(source)` API supports Lua coroutines and multiple results without native code or Wasm. It is not selectable in Code Mode and does not change the JavaScript support described here. See the experiment's README for its tested subset and limitations.
 
 - `[x]` means the feature is implemented at the scope described here.
 - `[ ]` means a concrete compatibility gap remains.

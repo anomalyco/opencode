@@ -6,8 +6,15 @@ CORE := $(SRC)/liblua.a
 CLI := $(SRC)/lua
 DEBUG := $(BUILD)/debug/lua-5.1.5/src
 .DELETE_ON_ERROR:
-.PHONY: all cli test conformance test-debug
-all: $(CORE)
+.PHONY: all cli test test-c conformance conformance-c test-debug
+all: test
+test:
+	node --test test/*.test.mjs
+
+conformance: $(SUITE)/.prepared
+	node test/upstream.mjs $(SUITE)
+
+# Optional C comparison targets; never used by index.js or the JS tests.
 cli: $(CLI)
 
 $(BUILD)/source.tgz:
@@ -26,7 +33,7 @@ $(CORE): $(SRC)/value-ops.inc vm.c
 $(CLI): $(CORE)
 	$(MAKE) -C $(SRC) CC="$(CC)" MYCFLAGS="-std=gnu99 -DLUA_USE_POSIX" lua
 
-test: $(CLI)
+test-c: $(CLI)
 	$(CLI) test/vm.lua
 
 $(SUITE)/.prepared: Makefile
@@ -40,7 +47,7 @@ $(SUITE)/.prepared: Makefile
 	mv $(BUILD)/big.lua $(SUITE)/big.lua
 	touch $@
 
-conformance: $(CLI) $(SUITE)/.prepared
+conformance-c: $(CLI) $(SUITE)/.prepared
 	cd $(SUITE) && LUA_INIT= LUA_PATH='?;./?.lua' "$(abspath $(CLI))" all.lua
 
 # The internal API/allocator checks need a different ABI. Never link the

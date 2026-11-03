@@ -1,0 +1,39 @@
+diff --git a/src/runtime.js b/src/runtime.js
+--- a/src/runtime.js
++++ b/src/runtime.js
+@@ -139,7 +139,6 @@
+ 
+ // --- dependency injection (set by interp / string lib) ---
+ let closureCall = null;
+-let stringLibrary = null;
+ let stringMetatable = undefined;
+ let currentInterp = null;
+ 
+@@ -147,6 +146,5 @@
+ export function setStringLibrary(tbl) {
+-  stringLibrary = tbl;
+   stringMetatable = new LuaTable();
+   stringMetatable.set('__index', tbl);
+ }
+ 
+@@ -155,1 +153,15 @@
+-const typeMetatables = Object.create(null);
++let typeMetatables = Object.create(null);
++// Scope the module's dynamic bindings to one synchronous host invocation.
++export function withRuntime(interp, call, run) {
++  const previous = [currentInterp, closureCall, stringMetatable, typeMetatables];
++  currentInterp = interp;
++  closureCall = call;
++  stringMetatable = undefined;
++  typeMetatables = Object.create(null);
++  try {
++    return run();
++  } finally {
++    [currentInterp, closureCall, stringMetatable, typeMetatables] = previous;
++  }
++}
++
+@@ -367,3 +379,0 @@
+-    if (typeof obj === 'string') {
+-      return stringLibrary === null ? undefined : stringLibrary.get(key);
+-    }
