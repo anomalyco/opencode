@@ -1257,6 +1257,9 @@ export function createData(config: CreateDataInput) {
               cost: event.data.cost,
               tokens: event.data.tokens,
             })
+            // Register the settlement event id so a re-delivered ended event
+            // hits the append guard instead of adding a duplicate row (#61426).
+            index.set(SessionMessage.ID.fromEvent(event.id), position)
             return
           }
           message.append(draft, index, {
