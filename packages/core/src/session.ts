@@ -505,7 +505,10 @@ const layer = Layer.effect(
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
-      active: execution.active,
+      // Busy: an active execution, or backgrounded work that will wake the Session when it reports back.
+      active: Effect.all([execution.active, jobs.heldSessions]).pipe(
+        Effect.map(([draining, held]) => new Set([...draining, ...held])),
+      ),
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })

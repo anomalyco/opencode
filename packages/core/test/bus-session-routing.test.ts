@@ -13,6 +13,7 @@ import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { WorkspaceID } from "@opencode/schema/workspace-id"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -170,6 +171,22 @@ describe("Bus Session routing", () => {
       expect(
         history.filter((event): event is Event.Payload => !Bus.isSynced(event)).every((event) => !event.location),
       ).toBe(true)
+    }),
+  )
+
+  it.effect("routes a Session's status to wherever the Session lives now", () =>
+    Effect.gen(function* () {
+      yield* seed()
+      const bus = yield* Bus.Service
+      const first = yield* watch(bus, a)
+      const second = yield* watch(bus, b)
+      const busy = yield* bus.publish(SessionStatusEvent.Status, { sessionID: id, status: { type: "busy" } })
+      const moved = yield* bus.publish(SessionEvent.Moved, { sessionID: id, location: b, projectID: Project.ID.global })
+      const idle = yield* bus.publish(SessionStatusEvent.Status, { sessionID: id, status: { type: "idle" } })
+      const done = yield* bus.publish(Done, {})
+
+      expect(yield* Fiber.join(first)).toEqual([busy, moved, done])
+      expect(yield* Fiber.join(second)).toEqual([moved, idle, done])
     }),
   )
 

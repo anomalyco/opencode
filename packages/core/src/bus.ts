@@ -12,6 +12,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -211,8 +212,11 @@ export function configured(options?: Options) {
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
 
-        const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
-          Object.hasOwn(SessionEvent.All.cases, event.type)
+        // A Session's status follows the Session like its own events, so moves never misroute it.
+        const isSessionEvent = (
+          event: Event.Payload,
+        ): event is SessionEvent.Event | Event.Payload<typeof SessionStatusEvent.Status> =>
+          Object.hasOwn(SessionEvent.All.cases, event.type) || event.type === SessionStatusEvent.Status.type
 
         const prepareRoutes = Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
           const updates = new Map<SessionID, Location.Ref | undefined>()

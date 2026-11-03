@@ -1,6 +1,7 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Semaphore } from "effect"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
@@ -26,8 +27,8 @@ export interface Interface {
   /**
    * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
    * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
-   * Returns whether an active execution was interrupted. Compose with `awaitIdle` when
-   * settlement matters.
+   * Without `resume`, also cancels the backgrounded work keeping the Session busy.
+   * Returns whether anything was interrupted. Compose with `awaitIdle` when settlement matters.
    */
   readonly interrupt: (
     sessionID: SessionSchema.ID,
@@ -81,6 +82,27 @@ export const layer = Layer.effect(
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
     })
+    // The busy scalar clients see: published only when it changes, and only once the Session is
+    // idle for good (its execution settled and no backgrounded work is left to wake it).
+    const busy = new Set<SessionSchema.ID>()
+    const statusLock = yield* Semaphore.make(1)
+    const refreshStatus = (sessionID: SessionSchema.ID): Effect.Effect<void> =>
+      reportLifecycle(
+        sessionID,
+        Effect.gen(function* () {
+          const next = (yield* coordinator.isActive(sessionID)) || (yield* jobs.heldSessions).has(sessionID)
+          if (next === busy.has(sessionID)) return
+          if (next) busy.add(sessionID)
+          else busy.delete(sessionID)
+          // Routed by the Session's owner, never the caller's Location.
+          yield* bus.publish(
+            SessionStatusEvent.Status,
+            { sessionID, status: { type: next ? "busy" : "idle" } },
+            { global: true },
+          )
+        }).pipe(statusLock.withPermits(1)),
+      )
+    yield* jobs.registerHoldListener(refreshStatus)
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
@@ -111,7 +133,7 @@ export const layer = Layer.effect(
         reportLifecycle(
           sessionID,
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
-        ),
+        ).pipe(Effect.andThen(refreshStatus(sessionID))),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
@@ -143,6 +165,7 @@ export const layer = Layer.effect(
             )
           }),
         ),
+      idle: refreshStatus,
     })
 
     return Service.of({
@@ -151,7 +174,7 @@ export const layer = Layer.effect(
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
-          if (!options?.resume) return interrupted
+          if (!options?.resume) return (yield* jobs.cancelHeld(sessionID)).length > 0 || interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
           // promotes them, and a control item behind a queued prompt waits its turn.

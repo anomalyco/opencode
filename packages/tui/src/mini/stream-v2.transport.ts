@@ -1416,6 +1416,17 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       ])
       return
     }
+    if (event.type === "session.status") {
+      // The server owns busyness: a Session hydrated as running may be held only by background work.
+      if (event.data.status.type === "idle") {
+        if (state.rootActive) paintIdle(blockerStatus(state.view))
+        return
+      }
+      if (state.rootActive) return
+      state.rootActive = true
+      write([], { phase: "running" })
+      return
+    }
     if (event.type === "session.execution.started") {
       state.executionEpoch++
       state.rootActive = true

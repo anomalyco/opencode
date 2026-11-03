@@ -221,7 +221,7 @@ export const Plugin = {
               })
 
               if (immediate) {
-                yield* jobs.background(job.id)
+                yield* jobs.background(job.id, { detach: true })
                 const partial = input.background === true ? undefined : yield* shell.snapshot(info.id)
                 return backgroundResult(info.id, info.file, partial)
               }

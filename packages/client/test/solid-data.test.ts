@@ -1445,6 +1445,49 @@ test("adds running sessions created while disconnected to their family", async (
   }
 })
 
+test("keeps a Session running after its turn ends until the server reports it idle", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  const status = (type: "busy" | "idle", created: number) =>
+    setup.emit({
+      id: `evt_status_${created}`,
+      created,
+      type: "session.status",
+      data: { sessionID: "ses_bg", status: { type } },
+    })
+
+  try {
+    status("busy", 1)
+    setup.emit({
+      id: "evt_bg_done",
+      created: 2,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "ses_bg", seq: 2, version: 1 },
+      data: { sessionID: "ses_bg" },
+    })
+    // Backgrounded work will still report back and wake the turn.
+    expect(setup.data.session.status("ses_bg")).toBe("running")
+    status("idle", 3)
+    expect(setup.data.session.status("ses_bg")).toBe("idle")
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("hydrates idle on reconnect when a Session's background work ended while disconnected", async () => {
+  let active: Record<string, { type: "running" }> = { ses_bg: { type: "running" } }
+  const setup = activityFixture(() => Response.json({ data: active }))
+
+  try {
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.status("ses_bg") === "running")
+    active = {}
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.status("ses_bg") === "idle")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("ignores activity snapshots from an older connection", async () => {
   const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
   const setup = activityFixture(() => {
