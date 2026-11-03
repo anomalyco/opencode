@@ -2,7 +2,7 @@
 // stress fixture (a 12-turn and a 72-turn session with every tool and diffs up to 300 lines, and a subagent's child
 // session), paginated as the server does. Every case starts from a fresh document, so each run pays what the first
 // visit pays: lazy chunks, the first history page and the first render.
-import { bench, web, type Case } from "@hona/strobe-bench"
+import { bench, web, type Case } from "@hona/strobe"
 import { draftHref, sessionHref } from "../e2e/utils/app"
 import { messages } from "../e2e/utils/markdown-sessions"
 import { mockOpenCodeServer } from "../e2e/utils/mock-server"

@@ -1,4 +1,4 @@
-import { bench, script } from "@hona/strobe-bench"
+import { bench, script } from "@hona/strobe"
 
 // A scripted agent session through the real SessionStep.attempt, each model response 400 ms after
 // the request, with snapshots on (a real store) or off. Compare the two series for what snapshots add

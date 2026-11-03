@@ -1,6 +1,6 @@
 // A reply streaming into a long session: 160 markdown deltas (bold text, tables, code fences) at 40 a second, from a
 // server that never waits for the renderer. Per-delta cost that grows with the reply or the history shows up here.
-import { bench, web, type Case } from "@hona/strobe-bench"
+import { bench, web, type Case } from "@hona/strobe"
 import { reviewDiffs } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview } from "./fixtures/review"

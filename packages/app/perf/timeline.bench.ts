@@ -1,5 +1,5 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
-import { bench, web } from "@hona/strobe-bench"
+import { bench, web } from "@hona/strobe"
 import { editTools } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { composer, mockTimelineSession, oldestPrompt, timeline } from "./fixtures/timeline"

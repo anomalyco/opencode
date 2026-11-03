@@ -36,7 +36,7 @@
   "license": "MIT",
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
-    "@hona/strobe-bench": "catalog:",
+    "@hona/strobe": "catalog:",
     "@playwright/test": "catalog:",
     "@sentry/vite-plugin": "catalog:",
     "@tailwindcss/vite": "4.3.3",

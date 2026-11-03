@@ -1,4 +1,4 @@
-import { bench, script, type Context } from "@hona/strobe-bench"
+import { bench, script, type Context } from "@hona/strobe"
 
 type Ctx = Context<{ fixture: string }>
 

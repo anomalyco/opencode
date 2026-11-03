@@ -30,7 +30,7 @@
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.3",
     "@effect/platform-node": "catalog:",
-    "@hona/strobe-bench": "catalog:",
+    "@hona/strobe": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode/app": "workspace:*",
     "@opencode/gui-plugins": "workspace:*",

@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test"
-import type { MockRequest, MockResponse, PrepareContext } from "@hona/strobe-bench"
+import type { MockRequest, MockResponse, PrepareContext } from "@hona/strobe"
 
 type Handler = Parameters<Page["route"]>[1]
 

@@ -1,4 +1,4 @@
-import { bench, script } from "@hona/strobe-bench"
+import { bench, script } from "@hona/strobe"
 
 export default bench({
   targets: { core: script("./location.ts") },

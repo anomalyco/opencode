@@ -1,6 +1,6 @@
 // The composer with a lot in it: a 44,000-character saved draft, and a long prompt history with screenshots. At
 // 1440×900.
-import { bench, web } from "@hona/strobe-bench"
+import { bench, web } from "@hona/strobe"
 import { fixture, mockStressTimeline } from "../e2e/utils/session-fixture"
 import { countDraftEncodes, draftEnd, mockLargeDraft, recalled, seedHistory } from "./fixtures/composer"
 import { installProjects } from "./fixtures/home"

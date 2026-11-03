@@ -1,4 +1,4 @@
-import { app, bench, command, type LaunchContext, type Milestone } from "@hona/strobe-bench"
+import { app, bench, command, type LaunchContext, type Milestone } from "@hona/strobe"
 import { Service } from "@opencode/client/service"
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"

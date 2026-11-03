@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { Page } from "@playwright/test"
-import { bench, web, type Case } from "@hona/strobe-bench"
+import { bench, web, type Case } from "@hona/strobe"
 import { pageMessagesFrom, sessionHref } from "../e2e/utils/app"
 import { expected, messages } from "../e2e/utils/markdown-sessions"
 import { mockOpenCodeServer, type MockSession } from "../e2e/utils/mock-server"

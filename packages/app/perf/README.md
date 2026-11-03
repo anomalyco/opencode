@@ -69,9 +69,12 @@ strobe bench packages/desktop/perf/startup.bench.ts --target desktop --base app:
 bun packages/core/perf/snapshot.ts medium opencode
 strobe bench packages/core/perf/snapshot.bench.ts --base origin/dev --head .
 
-# The interactive report.
+# The interactive report, and the tables and rerun command for a pull request body.
 strobe report experiment <exp_…> --open
+strobe report experiment <exp_…> --format pr
 ```
+
+`bunx strobe` runs the strobe version pinned in the root catalog (`@hona/strobe`); a `strobe` on your PATH also works.
 
 Set `OPENCODE_PERF_SESSION` to a session export to add two cases to `tabs.bench.ts` on your own session: open it cold,
 and switch to it warm.
@@ -135,7 +138,7 @@ strobe bench packages/app/perf/timeline.bench.ts --filter "scroll*" --bisect <go
 - Do not throttle the CPU or the network: make the workload bigger instead. A parameter that sweeps sizes runs two by
   default (`{ run, more }`); `--params all` runs the curve.
 - Fixtures shared with the e2e suites live in `e2e/utils`; ones only benchmarks use live in `fixtures/`.
-  `bun run typecheck:e2e` checks both and every bench file, against `@hona/strobe-bench`'s types; strobe runs its
+  `bun run typecheck:e2e` checks both and every bench file, against `@hona/strobe`'s types; strobe runs its
   own copy of that package. Validate a new or changed file with `--check` before a long run.
 
 ## `strobe.json`

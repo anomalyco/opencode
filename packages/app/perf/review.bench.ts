@@ -1,6 +1,6 @@
 // The review pane on a large change: 1 to 10,000 changed files of 100 changed lines each (4 KB to 40 MB of patches),
 // 100 files to a folder, at 1366×768.
-import { bench, web } from "@hona/strobe-bench"
+import { bench, web } from "@hona/strobe"
 import { scalingDiffs, scalingRows } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"

@@ -1,6 +1,6 @@
 // One long diff in the review pane: `src/routes.ts` as a full-context patch of 1,559 lines (60 KB), highlighted in a
 // worker, or 15,599 lines (603 KB), past the size above which the viewer renders plain text. At 1366×768.
-import { bench, web, type Case } from "@hona/strobe-bench"
+import { bench, web, type Case } from "@hona/strobe"
 import { reviewDiffs, routesDiff } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"

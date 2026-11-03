@@ -1,6 +1,6 @@
 // Home with a large session index: 500 to 20,000 root sessions across 12 folders, at 1440×900. Home always shows
 // the newest 64, so what grows with the index is the work of handling it, not what is on screen.
-import { bench, web } from "@hona/strobe-bench"
+import { bench, web } from "@hona/strobe"
 import { eventSource } from "./fixtures/events"
 import { mockHome } from "./fixtures/home"
 import { cached } from "./fixtures/mock"

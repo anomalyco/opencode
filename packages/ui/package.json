@@ -111,7 +111,7 @@
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {
-    "@hona/strobe-bench": "catalog:",
+    "@hona/strobe": "catalog:",
     "@solidjs/meta": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
