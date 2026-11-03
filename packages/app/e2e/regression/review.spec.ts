@@ -774,6 +774,14 @@ test("artifact actions copy and download content, switch source, and follow the 
     "---",
     "description: Release checklist",
     "mode: primary",
+    "model: opencode/test",
+    "temperature: 0.2",
+    "steps: 12",
+    "color: accent",
+    "hidden: false",
+    'title: "Release"',
+    "tools:",
+    "  write: false",
     "---",
     "",
     "# Notes",
@@ -889,8 +897,33 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(panel.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
   const paper = panel.locator('[data-slot="artifact-markdown-page"]')
   await expect(paper.getByRole("heading")).toHaveText(["Notes"])
-  await expect(paper.locator("code.language-yaml")).toHaveText("description: Release checklist\nmode: primary")
+  await expect(paper.locator("code.language-yaml")).toHaveCount(0)
   await expect(paper.locator("hr")).toHaveCount(1)
+  const terms = paper.getByRole("term")
+  await expect(terms).toHaveText(["description", "mode", "model", "temperature", "steps", "color"])
+  await paper.getByRole("button", { name: "Show all 9 properties", exact: true }).click()
+  await expect(terms).toHaveText([
+    "description",
+    "mode",
+    "model",
+    "temperature",
+    "steps",
+    "color",
+    "hidden",
+    "title",
+    "tools",
+  ])
+  await expect(paper.getByRole("definition")).toHaveText([
+    "Release checklist",
+    "primary",
+    "opencode/test",
+    "0.2",
+    "12",
+    "accent",
+    "false",
+    "Release",
+    "write: false",
+  ])
   await expect(paper).toHaveCSS("border-radius", "8px")
   await expect(paper).toHaveAttribute("data-component", "document-surface")
   expect(await paper.evaluate((element) => getComputedStyle(element, "::after").borderTopStyle)).toBe("solid")

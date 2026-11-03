@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bytesFromContent, contentBytes, parseDelimited, previewMarkdown, resolveArtifactPath } from "./artifact"
+import { bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath, splitFrontmatter } from "./artifact"
 
 describe("binary content helpers", () => {
   test("reads size and independent byte copies from raw bytes", () => {
@@ -58,17 +58,60 @@ describe("resolveArtifactPath", () => {
   })
 })
 
-describe("previewMarkdown", () => {
+describe("splitFrontmatter", () => {
+  const release = [{ key: "description", value: "Release", code: false }]
+  const primary = [{ key: "mode", value: "primary", code: false }]
+
   test.each([
-    ["LF frontmatter and body", "---\ndescription: Release\nmode: primary\n---\n# Title", "```yaml\ndescription: Release\nmode: primary\n```\n\n# Title"],
-    ["CRLF and UTF-8 BOM", "\uFEFF---\r\ndescription: Release\r\n---\r\n# Title\r\n", "```yaml\ndescription: Release\n```\n\n# Title\r\n"],
-    ["frontmatter at EOF", "---\nmode: primary\n---", "```yaml\nmode: primary\n```"],
-    ["frontmatter with trailing blank lines only", "---\nmode: primary\n---\n\n", "```yaml\nmode: primary\n```"],
-    ["empty frontmatter before a later thematic break", "---\n---\n\nBody\n\n---\n\nFooter", "\nBody\n\n---\n\nFooter"],
-    ["whitespace-only frontmatter", "---\n  \n---\n# Title", "# Title"],
-    ["backticks inside frontmatter", "---\ndesc: |\n  ```ts\n  const x = 1\n  ```\n---\n# Title", "````yaml\ndesc: |\n  ```ts\n  const x = 1\n  ```\n````\n\n# Title"],
-  ])("rewrites %s", (_, input, expected) => {
-    expect(previewMarkdown(input)).toBe(expected)
+    ["LF frontmatter and body", "---\ndescription: Release\n---\n# Title", { properties: release, body: "# Title" }],
+    ["CRLF and UTF-8 BOM", "\uFEFF---\r\ndescription: Release\r\n---\r\n# Title\r\n", { properties: release, body: "# Title\r\n" }],
+    ["frontmatter at EOF", "---\nmode: primary\n---", { properties: primary, body: "" }],
+    ["frontmatter with trailing blank lines only", "---\nmode: primary\n---\n\n", { properties: primary, body: "\n" }],
+    ["empty frontmatter before a later thematic break", "---\n---\n\nBody\n\n---\n\nFooter", { body: "\nBody\n\n---\n\nFooter" }],
+    ["whitespace-only frontmatter", "---\n  \n---\n# Title", { body: "# Title" }],
+  ])("splits %s", (_, input, expected) => {
+    expect(splitFrontmatter(input)).toEqual(expected)
+  })
+
+  test("reads scalars, block scalars, and nested values", () => {
+    const yaml = [
+      "# reviewer agent",
+      'description: "Reviews code"',
+      "tools:",
+      "  write: false",
+      "  bash: false",
+      "skills:",
+      "- review",
+      "prompt: |",
+      "  Line one",
+      "",
+      "  Line two",
+      "summary: >",
+      "  Folded",
+      "  text",
+      "note: first",
+      "  second",
+      "empty:",
+      "",
+    ].join("\n")
+
+    expect(splitFrontmatter(`---\n${yaml}\n---\nBody`).properties).toEqual([
+      { key: "description", value: "Reviews code", code: false },
+      { key: "tools", value: "write: false\nbash: false", code: true },
+      { key: "skills", value: "- review", code: true },
+      { key: "prompt", value: "Line one\n\nLine two", code: false },
+      { key: "summary", value: "Folded text", code: false },
+      { key: "note", value: "first second", code: false },
+      { key: "empty", value: "", code: false },
+    ])
+  })
+
+  test.each([
+    ["a line that is not a key", "---\njust text\n---\n# Title", { body: "```yaml\njust text\n```\n\n# Title" }],
+    ["a top-level list", "---\n- one\n- two\n---", { body: "```yaml\n- one\n- two\n```" }],
+    ["backticks in unreadable frontmatter", "---\n- ```ts\n---\n# Title", { body: "````yaml\n- ```ts\n````\n\n# Title" }],
+  ])("keeps %s as a YAML block", (_, input, expected) => {
+    expect(splitFrontmatter(input)).toEqual(expected)
   })
 
   test.each([
@@ -79,6 +122,6 @@ describe("previewMarkdown", () => {
     ["leading blank line before delimiter", "\n---\ndescription: Release\n---\n# Title"],
     ["delimiter after prose", "Intro\n---\ndescription: Release\n---\n# Title"],
   ])("leaves %s untouched", (_, input) => {
-    expect(previewMarkdown(input)).toBe(input)
+    expect(splitFrontmatter(input)).toEqual({ body: input })
   })
 })
