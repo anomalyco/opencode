@@ -500,6 +500,30 @@ it.effect("auto compaction estimates current content against the buffered prompt
     }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [swapped] })).toBe(21)
     expect(yield* due({ ...grown, messages: [swapped] })).toBe(false)
+    const otherVariant = {
+      ...assistant,
+      id: SessionMessage.ID.create(),
+      model: { ...assistant.model, variant: Model.VariantID.make("fast") },
+    }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [otherVariant] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [otherVariant] })).toBe(false)
+    const otherAgent = { ...assistant, id: SessionMessage.ID.create(), agent: Agent.ID.make("other") }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [otherAgent] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [otherAgent] })).toBe(false)
+    const nativeWindow = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      model: assistant.model,
+      native: { messages: [] },
+      summary: "",
+      time: { created: 0, completed: 0 },
+    })
+    // Usage from another agent cannot measure the encrypted native window for this request.
+    expect(yield* due({ ...grown, messages: [nativeWindow, otherAgent] }, { measured: 90_000, estimated: 0 })).toBe(
+      false,
+    )
     expect(
       SessionCompaction.estimateContext({
         ...grown,

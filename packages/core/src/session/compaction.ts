@@ -349,7 +349,7 @@ export const layer = Layer.effect(
       if (due(context, ceiling, estimate)) return
       if (total(estimate) < ceiling * PRECOMPUTE_RATIO) return
 
-      const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
+      const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context))
       const anchor = context.messages[anchorIndex]
       if (anchorIndex <= 0 || anchor?.type !== "assistant" || !anchor.tokens) return
       if (anchor.tokens.input + anchor.tokens.cache.read + anchor.tokens.cache.write < PRECOMPUTE_MIN_TOKENS) return
@@ -425,7 +425,7 @@ export const layer = Layer.effect(
       const last = messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
-      const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
+      const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context))
       if (measured < messages.findLastIndex(SessionHistory.isNativeCompaction)) return false
       return total(estimate ?? estimatePrompt(context)) >= ceiling
     }
@@ -1102,12 +1102,7 @@ export const estimateContext = (context: SessionContext.Loaded) => total(estimat
 
 /** The size of the prompt `context` sends. */
 export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
-  const anchorIndex = context.messages.findLastIndex(
-    (message) =>
-      message.type === "assistant" &&
-      message.model.id === context.model.ref.id &&
-      hasMeasuredPrompt(message, context.model.ref),
-  )
+  const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context))
   const anchor = context.messages[anchorIndex]
   const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))
   // TODO: Pass compaction history the runner has already shaped. This and `recentUserMessages` repeat the
@@ -1162,27 +1157,21 @@ const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"], output = RE
 const inputWindow = (limit: SessionContext.Loaded["model"]["limit"]) =>
   limit.input && limit.context ? Math.min(limit.input, limit.context) : limit.input || limit.context
 
-/**
- * Another provider's count may describe a native window this model cannot replay. History then holds the original
- * messages that window stood for, which the count leaves out, so only the current provider's counts are trusted.
- */
-const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.Loaded["model"]["ref"]) =>
+/** Measurements only describe requests with the same provider, model, variant, and agent. */
+const hasMeasuredPrompt = (message: SessionMessage.Info, context: SessionContext.Loaded) =>
   message.type === "assistant" &&
-  message.model.providerID === model.providerID &&
+  message.model.providerID === context.model.ref.providerID &&
+  message.model.id === context.model.ref.id &&
+  message.model.variant === context.model.ref.variant &&
+  message.agent === context.agent.id &&
   !message.error &&
   message.tokens !== undefined &&
   message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
 
-/** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
+/** The prompt size from a matching measured anchor, when one exists. */
 const measuredPrompt = (context: SessionContext.Loaded) => {
-  const anchor = context.messages.findLast((message) => hasMeasuredPrompt(message, context.model.ref))
-  if (
-    anchor?.type !== "assistant" ||
-    anchor.model.id !== context.model.ref.id ||
-    anchor.model.variant !== context.model.ref.variant ||
-    anchor.agent !== context.agent.id
-  )
-    return undefined
+  const anchor = context.messages.findLast((message) => hasMeasuredPrompt(message, context))
+  if (anchor?.type !== "assistant") return undefined
   return estimatePrompt(context)
 }
 
