@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "conformance": "bun test/upstream.mjs"
   },
   "dependencies": {
     "luaparse": "0.3.1",
