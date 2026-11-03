@@ -3,5 +3,6 @@
 }
 
 [data-color-scheme="dark"] [data-component="terminal-quote"] {
-  background-color: var(--v2-background-bg-layer-01);
+  background-color: var(--v2-background-bg-layer-02);
+  border-color: var(--v2-border-border-strong);
 }
