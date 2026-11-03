@@ -974,6 +974,9 @@ export function createData(config: CreateDataInput) {
           const position = index.get(event.data.assistantMessageID)
           const existing = position === undefined ? undefined : draft[position]
           if (existing?.type === "assistant") {
+            // SSE delivery is at-least-once (#61401): a re-delivered
+            // step.started must not regress a message that already settled.
+            if (existing.time.completed !== undefined) return
             existing.agent = event.data.agent
             existing.model = event.data.model
             existing.retry = undefined
