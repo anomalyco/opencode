@@ -2,14 +2,20 @@ export * as SessionModelRequest from "./model-request.js"
 
 import {
   ai,
+  AssistantMessage,
+  type ContentPart,
   GenerationOptions,
   type GenerationOptionsFields,
   LanguageModel,
   type LLM,
   type LLMRequest,
   type Media,
+  type MediaPart,
   Message,
   SystemPart,
+  ToolMessage,
+  type ToolResultPart,
+  UserMessage,
 } from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
@@ -161,29 +167,46 @@ const mediaBytes = (media: Media.Asset) => {
 const replaceMedia = (
   messages: LLMRequest["messages"],
   replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
-) =>
-  messages.map((message) => {
-    if (message.role === "system") return message
-    const content = message.content.map((part) => {
-      if (part.type === "media") {
-        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
-        return text === undefined ? part : Message.text(text)
-      }
-      if (part.type !== "tool-result" || part.result.type !== "content") return part
-      const result = part.result
-      const value = result.value.map((item): Content => {
-        if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
-        return text === undefined ? item : { type: "text", text }
-      })
-      return value.every((item, index) => item === result.value[index])
-        ? part
-        : { ...part, result: { ...result, value } }
+) => {
+  const media = (part: MediaPart) => {
+    const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+    return text === undefined ? part : Message.text(text)
+  }
+  const toolResult = (part: ToolResultPart) => {
+    if (part.result.type !== "content") return part
+    const result = part.result
+    const value = result.value.map((item): Content => {
+      if (item.type !== "file") return item
+      const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
+      return text === undefined ? item : { type: "text", text }
     })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : Message.make({ ...message, content })
+    return value.every((item, index) => item === result.value[index]) ? part : { ...part, result: { ...result, value } }
+  }
+  return messages.map((message) => {
+    switch (message.role) {
+      case "system":
+        return message
+      case "user": {
+        const content = message.content.map((part) => (part.type === "media" ? media(part) : part))
+        return sameParts(content, message.content) ? message : new UserMessage({ ...message, content })
+      }
+      case "assistant": {
+        const content = message.content.map((part) => {
+          if (part.type === "media") return media(part)
+          return part.type === "tool-result" ? toolResult(part) : part
+        })
+        return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+      }
+      case "tool": {
+        const content = message.content.map(toolResult)
+        return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
+      }
+    }
   })
+}
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const unsupportedParts = (
   messages: LLMRequest["messages"],

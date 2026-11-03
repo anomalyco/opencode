@@ -12,10 +12,13 @@
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import {
+  AssistantMessage,
   type LLMRequest,
-  Message,
+  type Message,
   SystemMessage,
   ToolDefinition,
+  ToolMessage,
+  UserMessage,
   type ContentPart,
   type ToolEntry,
 } from "./schema/messages.js"
@@ -148,18 +151,7 @@ const markMessageAt = (
   const existing = target.content[markAt]
   if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const next =
-    target.role === "system"
-      ? new SystemMessage({
-          ...target,
-          content: target.content.map((part, i) =>
-            i === markAt && part.type === "text" ? { ...part, cache: hint } : part,
-          ),
-        })
-      : Message.make({
-          ...target,
-          content: target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part)),
-        })
+  const next = cachePartAt(target, markAt, hint)
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
   // closure dispatch and identity copies show up in profiling.
@@ -167,6 +159,22 @@ const markMessageAt = (
   result[index] = next
   return result
 }
+
+const cachePartAt = (message: Message, index: number, hint: CacheHint): Message => {
+  switch (message.role) {
+    case "system":
+      return new SystemMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "user":
+      return new UserMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "assistant":
+      return new AssistantMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "tool":
+      return new ToolMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+  }
+}
+
+const cacheContentAt = <Part extends ContentPart>(content: ReadonlyArray<Part>, index: number, hint: CacheHint) =>
+  content.map((part, i) => (i === index ? { ...part, cache: hint } : part))
 
 const markMessages = (
   messages: ReadonlyArray<Message>,

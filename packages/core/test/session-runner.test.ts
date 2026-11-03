@@ -1791,7 +1791,7 @@ describe("SessionRunnerLLM", () => {
       expect(
         s.requests
           .at(-1)
-          ?.messages.flatMap((message) => message.content)
+          ?.messages.flatMap((message) => [...message.content])
           .some((part) => part.type === "compaction"),
       ).toBe(false)
       expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])

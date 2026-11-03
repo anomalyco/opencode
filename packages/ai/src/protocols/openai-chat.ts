@@ -509,7 +509,6 @@ const lowerUserMessage = Effect.fnUntraced(function* (message: UserMessage, opti
       content.push(yield* lowerMedia(part))
       continue
     }
-    return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
   }
   if (content.every((part) => part.type === "text" && part.cache_control === undefined))
     return {
@@ -580,8 +579,6 @@ const lowerToolMessages = Effect.fnUntraced(function* (message: ToolMessage, opt
   const messages: OpenAIChatMessage[] = []
   const attachments: OpenAIChatUserContent[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["tool-result"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
       messages.push(
         toolMessage(

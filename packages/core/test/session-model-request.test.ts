@@ -149,14 +149,15 @@ describe("SessionModelRequest.unsupportedParts", () => {
         ],
       },
     })
-    const unsupported = Message.make({ role: "tool", content: [tool, Message.text("caption")] })
+    const untouched = ToolResultPart.make({ id: "call_3", name: "read", result: "done" })
+    const unsupported = Message.make({ role: "tool", content: [tool, untouched] })
     const result = unsupportedParts([text, supported, unsupported], capabilities(["text"]))
 
     expect(result[0]).toBe(text)
     expect(result[1]).toBe(supported)
     expect(result[2]).not.toBe(unsupported)
     expect(result[2]).toBeInstanceOf(ToolMessage)
-    expect(result[2]?.content[1]).toEqual(Message.text("caption"))
+    expect(result[2]?.content[1]).toEqual(untouched)
     expect(result[2]?.content[0]).toMatchObject({
       type: "tool-result",
       result: {

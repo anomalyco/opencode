@@ -1,5 +1,6 @@
 export * as ClaudeSessionHooks from "./session.js"
 
+import { AssistantMessage, ToolMessage, type ToolResultPart } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { RequestKind } from "./language-model/request-kind.js"
@@ -7,6 +8,16 @@ import { ClaudeProvider } from "./provider.js"
 
 // OpenCode records stopped tools (including a plain permission rejection) with this structured error.
 const isAborted = Schema.is(Schema.Struct({ error: Schema.Struct({ type: Schema.Literal("aborted") }) }))
+
+const flagToolError = (part: ToolResultPart): ToolResultPart => {
+  if (part.result.type !== "error") return part
+  const flags = {
+    ...part.providerMetadata?.[ClaudeProvider.ID],
+    toolError: true,
+    toolAborted: isAborted(part.result.value),
+  }
+  return { ...part, providerMetadata: { ...part.providerMetadata, [ClaudeProvider.ID]: flags } }
+}
 
 export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx: Context) {
   yield* ctx.session.hook(
@@ -29,17 +40,11 @@ export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx:
         delete event.options.maxTokens
         // Preserve tool error status before the AI SDK bridge flattens error results to plain text.
         event.messages = event.messages.map((message) => {
-          if (message.role === "system") return message
-          const content = message.content.map((part) => {
-            if (part.type !== "tool-result" || part.result.type !== "error") return part
-            const flags = {
-              ...part.providerMetadata?.[ClaudeProvider.ID],
-              toolError: true,
-              toolAborted: isAborted(part.result.value),
-            }
-            return { ...part, providerMetadata: { ...part.providerMetadata, [ClaudeProvider.ID]: flags } }
-          })
-          return { ...message, content }
+          if (message.role === "tool")
+            return new ToolMessage({ ...message, content: message.content.map(flagToolError) })
+          if (message.role !== "assistant") return message
+          const content = message.content.map((part) => (part.type === "tool-result" ? flagToolError(part) : part))
+          return new AssistantMessage({ ...message, content })
         })
       }),
     { providerID: ClaudeProvider.ID },

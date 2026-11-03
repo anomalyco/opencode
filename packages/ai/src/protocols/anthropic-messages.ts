@@ -838,7 +838,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           content.push(yield* lowerMedia(part, request, breakpoints))
           continue
         }
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
       if (content.length > 0) messages.push({ role: "user", content })
       continue
@@ -896,8 +895,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: AnthropicToolResultBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),

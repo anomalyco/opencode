@@ -246,21 +246,25 @@ export class SystemMessage extends Schema.Class<SystemMessage>("LLM.SystemMessag
 export class UserMessage extends Schema.Class<UserMessage>("LLM.UserMessage")({
   id: Schema.optional(Schema.String),
   role: Schema.Literal("user"),
-  content: Schema.Array(ContentPart),
+  content: Schema.Array(Schema.Union([TextPart, MediaPart]).pipe(Schema.toTaggedUnion("type"))),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 
 export class AssistantMessage extends Schema.Class<AssistantMessage>("LLM.AssistantMessage")({
   id: Schema.optional(Schema.String),
   role: Schema.Literal("assistant"),
-  content: Schema.Array(ContentPart),
+  content: Schema.Array(
+    Schema.Union([TextPart, ReasoningPart, ToolCallPart, ToolResultPart, MediaPart, CompactionPart]).pipe(
+      Schema.toTaggedUnion("type"),
+    ),
+  ),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}
 
 export class ToolMessage extends Schema.Class<ToolMessage>("LLM.ToolMessage")({
   id: Schema.optional(Schema.String),
   role: Schema.Literal("tool"),
-  content: Schema.Array(ContentPart),
+  content: Schema.Array(ToolResultPart),
 }) {}
 
 export type Message = SystemMessage | UserMessage | AssistantMessage | ToolMessage
@@ -268,16 +272,26 @@ export type Message = SystemMessage | UserMessage | AssistantMessage | ToolMessa
 export type ContentPartInput = Exclude<ContentPart, MediaPart> | MediaPartInput
 
 export namespace Message {
-  export type ContentInput = string | ContentPartInput | ReadonlyArray<ContentPartInput>
-  export type SystemContentInput = string | TextPart | ReadonlyArray<TextPart>
+  export type ContentInput<Part extends { readonly type: string } = ContentPartInput> =
+    | string
+    | Part
+    | ReadonlyArray<Part>
+  export type SystemContentInput = ContentInput<TextPart>
+  export type UserContentInput = ContentInput<TextPart | MediaPartInput>
+  export type AssistantContentInput = ContentInput<
+    Exclude<AssistantMessage["content"][number], MediaPart> | MediaPartInput
+  >
   type RoleInput<Props, Content> = Omit<Props, "content"> & { readonly content: Content }
   export type SystemInput = RoleInput<
     ConstructorParameters<typeof SystemMessage>[0],
-    string | SystemMessage["content"][number] | SystemMessage["content"]
+    ContentInput<SystemMessage["content"][number]>
   >
-  export type UserInput = RoleInput<ConstructorParameters<typeof UserMessage>[0], ContentInput>
-  export type AssistantInput = RoleInput<ConstructorParameters<typeof AssistantMessage>[0], ContentInput>
-  export type ToolInput = RoleInput<ConstructorParameters<typeof ToolMessage>[0], ContentInput>
+  export type UserInput = RoleInput<ConstructorParameters<typeof UserMessage>[0], UserContentInput>
+  export type AssistantInput = RoleInput<ConstructorParameters<typeof AssistantMessage>[0], AssistantContentInput>
+  export type ToolInput = RoleInput<
+    ConstructorParameters<typeof ToolMessage>[0],
+    ToolResultPart | ReadonlyArray<ToolResultPart>
+  >
   export type Input = SystemInput | UserInput | AssistantInput | ToolInput
 }
 
@@ -296,8 +310,12 @@ const content = <Part extends { readonly type: string }>(
   input: string | Part | ReadonlyArray<Part>,
 ): Array<TextPart | Part> => (typeof input === "string" ? [text(input)] : isParts(input) ? [...input] : [input])
 
-const contentWithMedia = (input: Message.ContentInput): ContentPart[] =>
-  content(input).map((part) => (part.type === "media" ? mediaPart(part) : part))
+function contentWithMedia(input: Message.UserContentInput): UserMessage["content"]
+function contentWithMedia(input: Message.AssistantContentInput): AssistantMessage["content"]
+function contentWithMedia(input: Message.ContentInput): ReadonlyArray<ContentPart>
+function contentWithMedia(input: Message.ContentInput): ReadonlyArray<ContentPart> {
+  return content(input).map((part) => (part.type === "media" ? mediaPart(part) : part))
+}
 
 function make(input: SystemMessage | Message.SystemInput): SystemMessage
 function make(input: UserMessage | Message.UserInput): UserMessage
@@ -319,7 +337,7 @@ function make(input: Message | Message.Input): Message {
     case "tool":
       return input instanceof ToolMessage
         ? input
-        : new ToolMessage({ ...input, content: contentWithMedia(input.content) })
+        : new ToolMessage({ ...input, content: isParts(input.content) ? [...input.content] : [input.content] })
   }
   // Untyped callers can still pass an unknown role; reject it the way the schema does.
   return Schema.decodeUnknownSync(messageSchema)(input)
@@ -332,8 +350,8 @@ export const Message = withStatics(messageSchema, {
     mediaPart({ type: "media", media, ...options }),
   content: contentWithMedia,
   make,
-  user: (input: Message.ContentInput) => make({ role: "user", content: input }),
-  assistant: (input: Message.ContentInput) => make({ role: "assistant", content: input }),
+  user: (input: Message.UserContentInput) => make({ role: "user", content: input }),
+  assistant: (input: Message.AssistantContentInput) => make({ role: "assistant", content: input }),
   /**
    * Add an operator-authored instruction at this chronological point in the
    * conversation. This is distinct from the initial `LLMRequest.system`
