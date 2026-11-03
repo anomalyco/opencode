@@ -1,13 +1,19 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
 import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation, sandboxSessionScope } from "../../util/permission"
+import {
+  permissionAlwaysLines,
+  permissionDetailsOverflow,
+  permissionOptionLabel,
+  permissionPresentation,
+  sandboxSessionScope,
+} from "../../util/permission"
 import { tint } from "../../theme/color"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig, useCursorStyle } from "../../config"
@@ -120,6 +126,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     stage: "permission" as PermissionStage,
   })
   const [detailsRows, setDetailsRows] = createSignal(0)
+  const dimensions = useTerminalDimensions()
+  let permissionScroll: ScrollBoxRenderable | undefined
   const pathFormatter = usePathFormatter()
   const session = createMemo(() => data.session.get(props.request.sessionID))
 
@@ -145,7 +153,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
         decision: value,
         message,
         ...(props.request.action === "sandbox.exec" || props.request.action === "sandbox.workspace"
-          ? { experimental: { acknowledgeSandbox: true, ...(props.request.action === "sandbox.exec" && value === "always" ? { saveSandboxPrefix: true } : {}) } }
+          ? {
+              experimental: {
+                acknowledgeSandbox: true,
+                ...(props.request.action === "sandbox.exec" && value === "always" ? { saveSandboxPrefix: true } : {}),
+              },
+            }
           : {}),
       })
       .catch((error: unknown) => toast.error(error))
@@ -177,7 +190,73 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             },
             pathFormatter.format,
           )
-          const presentationBody = () =>
+          const detailsOverflow = (option: string) => {
+            const details = current.sandboxDetails
+            if (!details) return false
+            return permissionDetailsOverflow(
+              [
+                ...(details.reason ? [`Reason: ${details.reason}`] : []),
+                ...(details.directory ? [`Directory: ${details.directory}`] : []),
+                ...(option === "always" ? (props.request.save ?? []).map((prefix) => `Session prefix: ${prefix}`) : []),
+                ...(option === "always" ? sandboxSessionScope : details.scope),
+              ],
+              dimensions().width,
+              dimensions().height,
+              11,
+            )
+          }
+          const detailsView = (option: string) => (
+            <Show when={current.sandboxDetails}>
+              {(details) => (
+                <box
+                  id="session.permission.details"
+                  flexDirection="column"
+                  paddingLeft={2}
+                  flexShrink={0}
+                  onSizeChange={function () {
+                    setDetailsRows(this.height)
+                  }}
+                >
+                  <Show when={details().reason}>
+                    <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
+                      <span style={{ fg: theme.text.feedback.warning.base }}>Reason: </span>
+                      {details().reason}
+                    </text>
+                  </Show>
+                  <Show when={details().directory}>
+                    <text width="100%" fg={theme.text.feedback.info.base} wrapMode="word" flexShrink={0}>
+                      <span style={{ fg: theme.text.feedback.warning.base }}>Directory: </span>
+                      {details().directory}
+                    </text>
+                  </Show>
+                  <Show when={option === "always"}>
+                    <For each={props.request.save}>
+                      {(prefix) => (
+                        <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
+                          <span style={{ fg: theme.text.feedback.warning.base }}>Session prefix: </span>
+                          {prefix}
+                        </text>
+                      )}
+                    </For>
+                  </Show>
+                  <For each={option === "always" ? sandboxSessionScope : details().scope}>
+                    {(line) => (
+                      <text
+                        width="100%"
+                        fg={tint(theme.text.feedback.warning.base, theme.text.base, 0.55)}
+                        wrapMode="word"
+                        flexShrink={0}
+                      >
+                        {line}
+                      </text>
+                    )}
+                  </For>
+                </box>
+              )}
+            </Show>
+          )
+
+          const presentationBody = (option: string) =>
             props.request.action === "edit" ? (
               <EditBody file={current.file} diff={current.diff} patch={current.patch} />
             ) : props.request.action === "external_directory" ? (
@@ -195,6 +274,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 width="100%"
                 flexGrow={1}
                 minHeight={0}
+                ref={(item) => (permissionScroll = item)}
                 viewportOptions={{ paddingLeft: 1 }}
                 scrollAcceleration={scrollAcceleration()}
                 verticalScrollbarOptions={{
@@ -205,6 +285,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 }}
               >
                 <box width="100%" flexDirection="column" flexShrink={0}>
+                  <Show when={detailsOverflow(option)}>{(_visible) => detailsView(option)}</Show>
                   <For each={current.lines}>
                     {(line) => (
                       <text
@@ -231,7 +312,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text.feedback.warning.base}>{"△"}</text>
-                <text fg={theme.text.base}>Permission required</text>
+                <text fg={theme.text.base}>
+                  Permission required
+                  <Show when={current.sandboxDetails && detailsOverflow(option)}>
+                    <span style={{ fg: theme.text.muted }}> pgup/pgdn scroll</span>
+                  </Show>
+                </text>
               </box>
               <Show when={props.request.action !== "shell" && current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
@@ -241,49 +327,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                   <text fg={theme.text.base}>{current.title}</text>
                 </box>
               </Show>
-              <Show when={current.sandboxDetails}>
-                {(details) => (
-                  <box
-                    id="session.permission.details"
-                    flexDirection="column"
-                    paddingLeft={2}
-                    flexShrink={0}
-                    onSizeChange={function () {
-                      setDetailsRows(this.height)
-                    }}
-                  >
-                    <Show when={details().reason}>
-                      <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
-                        <span style={{ fg: theme.text.feedback.warning.base }}>Reason: </span>
-                        {details().reason}
-                      </text>
-                    </Show>
-                    <Show when={details().directory}>
-                      <text width="100%" fg={theme.text.feedback.info.base} wrapMode="word" flexShrink={0}>
-                        <span style={{ fg: theme.text.feedback.warning.base }}>Directory: </span>
-                        {details().directory}
-                      </text>
-                    </Show>
-                    <Show when={option === "always"}>
-                      <For each={props.request.save}>
-                        {(prefix) => (
-                          <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
-                            <span style={{ fg: theme.text.feedback.warning.base }}>Session prefix: </span>
-                            {prefix}
-                          </text>
-                        )}
-                      </For>
-                    </Show>
-                    <For each={option === "always" ? sandboxSessionScope : details().scope}>
-                      {(line) => (
-                        <text width="100%" fg={tint(theme.text.feedback.warning.base, theme.text.base, 0.55)} wrapMode="word" flexShrink={0}>
-                          {line}
-                        </text>
-                      )}
-                    </For>
-                  </box>
-                )}
-              </Show>
+              <Show when={!detailsOverflow(option)}>{(_visible) => detailsView(option)}</Show>
             </box>
           )
 
@@ -294,8 +338,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               instance={props.request.id}
               header={header}
               extraHeight={() => detailsRows()}
+              scroll={
+                current.sandboxDetails ? (direction) => permissionScroll?.scrollBy(direction, "viewport") : undefined
+              }
               body={(option) => (
-                <Show when={option === "always" && !current.sandboxDetails} fallback={presentationBody()}>
+                <Show when={option === "always" && !current.sandboxDetails} fallback={presentationBody(option)}>
                   <scrollbox
                     id="session.permission.body"
                     width="100%"
@@ -505,6 +552,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   choicesLabel?: string
   header?: JSX.Element | ((option: keyof T) => JSX.Element)
   extraHeight?: (option: keyof T) => number
+  scroll?: (direction: -1 | 1) => void
   body: JSX.Element | ((option: keyof T) => JSX.Element)
   options: T
   escapeKey?: keyof T
@@ -533,6 +581,12 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   Keymap.createLayer(() => ({
     mode: "base",
     commands: [
+      ...(props.scroll
+        ? [
+            { bind: "pageup", title: "Previous permission page", group: group(), run: () => props.scroll?.(-1) },
+            { bind: "pagedown", title: "Next permission page", group: group(), run: () => props.scroll?.(1) },
+          ]
+        : []),
       ...(props.escapeKey
         ? [
             {

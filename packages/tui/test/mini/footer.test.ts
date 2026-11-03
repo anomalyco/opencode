@@ -241,12 +241,32 @@ test("sandbox approval grows the footer for pinned details and restores its heig
     app.footer.event({ type: "stream.view", view: { type: "permission", request } })
     await app.renderOnce()
     const baseHeight = app.renderer.footerHeight
-    app.footer.event({ type: "stream.view", view: { type: "permission", request: { ...request, action: "sandbox.exec" } } })
+    app.footer.event({
+      type: "stream.view",
+      view: { type: "permission", request: { ...request, action: "sandbox.exec" } },
+    })
     await app.renderOnce()
     await app.renderOnce()
     const details = app.renderer.root.findDescendantById("mini.permission.details")
     if (!details) throw new Error("Permission details missing")
     expect(app.renderer.footerHeight).toBe(baseHeight + details.height)
+    expect(app.captureCharFrame()).toContain("Reason:")
+    expect(app.captureCharFrame()).toContain("Allow once")
+    app.footer.event({
+      type: "stream.view",
+      view: {
+        type: "permission",
+        request: {
+          ...request,
+          id: "per_long_footer",
+          action: "sandbox.exec",
+          metadata: { ...request.metadata, justification: "Review this operation carefully. ".repeat(80) },
+        },
+      },
+    })
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.renderer.footerHeight).toBeLessThanOrEqual(app.renderer.terminalHeight)
     expect(app.captureCharFrame()).toContain("Reason:")
     expect(app.captureCharFrame()).toContain("Allow once")
     app.footer.event({ type: "stream.view", view: { type: "permission", request } })

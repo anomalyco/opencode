@@ -162,7 +162,7 @@ export function readableRoots(policy: SandboxPolicy.Policy) {
   return [...new Set([...runtime, ...policy.readableRoots, ...policy.writableRoots, ...(policy.referenceRoots ?? [])])]
 }
 
-/** Reference grants are read-only and never expose OpenCode credentials or private state. */
+/** Reference grants add read access without changing existing write permissions or exposing private state. */
 export async function references(
   policy: SandboxPolicy.Policy,
   host: { data: string },

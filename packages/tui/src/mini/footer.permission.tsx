@@ -33,7 +33,7 @@ import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { PatchDiff } from "../component/patch-diff"
-import { sandboxSessionScope } from "../util/permission"
+import { permissionDetailsOverflow, sandboxSessionScope } from "../util/permission"
 
 function buttons(
   list: PermissionOption[],
@@ -158,6 +158,22 @@ export function RunPermissionBody(props: {
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
   const stage = createMemo(() => state().stage)
   const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono))
+  const detailsOverflow = () => {
+    const details = info().sandboxDetails
+    if (!details) return false
+    return permissionDetailsOverflow(
+      [
+        info().title,
+        ...(details.reason ? [`Reason: ${details.reason}`] : []),
+        ...(details.directory ? [`Directory: ${details.directory}`] : []),
+        ...(stage() === "always" ? (props.request.save ?? []).map((prefix) => `Session prefix: ${prefix}`) : []),
+        ...(stage() === "always" ? sandboxSessionScope : details.scope),
+      ],
+      width(),
+      size().height,
+      compact() ? 5 : 9,
+    )
+  }
   const ft = createMemo(() => toolFiletype(info().file))
   let scroll: ScrollBoxRenderable | undefined
   const scrollbar = createMemo(() => ({
@@ -222,7 +238,14 @@ export function RunPermissionBody(props: {
       await props.onReply({
         ...next,
         ...(props.request.action === "sandbox.exec" || props.request.action === "sandbox.workspace"
-          ? { experimental: { acknowledgeSandbox: true, ...(props.request.action === "sandbox.exec" && next.decision === "always" ? { saveSandboxPrefix: true } : {}) } }
+          ? {
+              experimental: {
+                acknowledgeSandbox: true,
+                ...(props.request.action === "sandbox.exec" && next.decision === "always"
+                  ? { saveSandboxPrefix: true }
+                  : {}),
+              },
+            }
           : {}),
       })
     } catch {
@@ -311,6 +334,58 @@ export function RunPermissionBody(props: {
     event.preventDefault()
   })
 
+  const detailsView = () => (
+    <Show when={info().sandboxDetails}>
+      {(details) => (
+        <box
+          id="mini.permission.details"
+          width="100%"
+          flexDirection="column"
+          flexShrink={0}
+          paddingLeft={compact() ? 0 : 2}
+          paddingRight={compact() ? 0 : 3}
+          onSizeChange={function () {
+            props.onDetailsRows?.(this.height)
+          }}
+        >
+          <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+            <span style={{ fg: props.theme.muted }}>{info().icon} </span>
+            {info().title}
+          </text>
+          <Show when={details().reason}>
+            <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+              <span style={{ fg: props.theme.warning }}>Reason: </span>
+              {details().reason}
+            </text>
+          </Show>
+          <Show when={details().directory}>
+            <text width="100%" fg={props.theme.link} wrapMode="word" flexShrink={0}>
+              <span style={{ fg: props.theme.warning }}>Directory: </span>
+              {details().directory}
+            </text>
+          </Show>
+          <Show when={stage() === "always"}>
+            <For each={props.request.save}>
+              {(prefix) => (
+                <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                  <span style={{ fg: props.theme.warning }}>Session prefix: </span>
+                  {prefix}
+                </text>
+              )}
+            </For>
+          </Show>
+          <For each={stage() === "always" ? sandboxSessionScope : details().scope}>
+            {(line) => (
+              <text width="100%" fg={props.theme.sandboxScope} wrapMode="word" flexShrink={0}>
+                {line}
+              </text>
+            )}
+          </For>
+        </box>
+      )}
+    </Show>
+  )
+
   return (
     <box
       width="100%"
@@ -333,6 +408,9 @@ export function RunPermissionBody(props: {
         <text height={1} fg={props.theme.text} wrapMode="none" truncate>
           <span style={{ fg: props.theme.permission }}>{props.mono ? "! " : "△ "}</span>
           {title()}
+          <Show when={info().sandboxDetails && detailsOverflow()}>
+            <span style={{ fg: props.theme.muted }}> pgup/pgdn scroll</span>
+          </Show>
         </text>
         <Show when={!compact() && stage() === "reject"}>
           <text fg={props.theme.muted}>Tell OpenCode what to do differently</text>
@@ -391,55 +469,7 @@ export function RunPermissionBody(props: {
           </box>
         }
       >
-        <Show when={info().sandboxDetails}>
-          {(details) => (
-            <box
-              id="mini.permission.details"
-              width="100%"
-              flexDirection="column"
-              flexShrink={0}
-              paddingLeft={compact() ? 0 : 2}
-              paddingRight={compact() ? 0 : 3}
-              onSizeChange={function () {
-                props.onDetailsRows?.(this.height)
-              }}
-            >
-              <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                <span style={{ fg: props.theme.muted }}>{info().icon} </span>
-                {info().title}
-              </text>
-              <Show when={details().reason}>
-                <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                  <span style={{ fg: props.theme.warning }}>Reason: </span>
-                  {details().reason}
-                </text>
-              </Show>
-              <Show when={details().directory}>
-                <text width="100%" fg={props.theme.link} wrapMode="word" flexShrink={0}>
-                  <span style={{ fg: props.theme.warning }}>Directory: </span>
-                  {details().directory}
-                </text>
-              </Show>
-              <Show when={stage() === "always"}>
-                <For each={props.request.save}>
-                  {(prefix) => (
-                    <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                      <span style={{ fg: props.theme.warning }}>Session prefix: </span>
-                      {prefix}
-                    </text>
-                  )}
-                </For>
-              </Show>
-              <For each={stage() === "always" ? sandboxSessionScope : details().scope}>
-                {(line) => (
-                  <text width="100%" fg={props.theme.sandboxScope} wrapMode="word" flexShrink={0}>
-                    {line}
-                  </text>
-                )}
-              </For>
-            </box>
-          )}
-        </Show>
+        <Show when={!detailsOverflow()}>{(_visible) => detailsView()}</Show>
         <box
           width="100%"
           flexGrow={1}
@@ -461,6 +491,7 @@ export function RunPermissionBody(props: {
               scroll = item
             }}
           >
+            <Show when={detailsOverflow()}>{(_visible) => detailsView()}</Show>
             <Switch>
               <Match when={stage() === "permission" || (stage() === "always" && info().sandboxDetails)}>
                 <box width="100%" flexDirection="column" flexShrink={0} gap={compact() ? 0 : 1}>

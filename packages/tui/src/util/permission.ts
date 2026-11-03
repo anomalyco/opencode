@@ -1,5 +1,6 @@
 import { Locale } from "./locale"
 import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
+import { stringWidth } from "./string-width"
 
 type Dict = Record<string, unknown>
 
@@ -206,6 +207,37 @@ export const sandboxSessionScope = [
   "Only the same shell and directory match. Extra literal arguments and descendants run with your account's filesystem and network access.",
   "Other sessions and subagents are not approved. The grant expires when the server restarts.",
 ]
+
+/** Conservatively reserve space for word-wrapped approval details before rendering them. */
+export function permissionDetailsOverflow(lines: readonly string[], width: number, height: number, reserved: number) {
+  const columns = Math.max(1, width - 8)
+  let rows = reserved
+  for (const line of lines) {
+    for (const part of line.split("\n")) {
+      let used = 0
+      rows++
+      for (const token of part.match(/\s+|\S+/gu) ?? []) {
+        const length = stringWidth(token.replace(/\t/g, "        "))
+        if (/^\s+$/u.test(token)) {
+          rows += Math.floor((used + length) / columns)
+          used = (used + length) % columns
+          continue
+        }
+        if (used && used + length > columns) {
+          rows++
+          used = 0
+        }
+        if (length > columns) {
+          rows += Math.floor((length - 1) / columns)
+          used = ((length - 1) % columns) + 1
+        } else {
+          used += length
+        }
+      }
+    }
+  }
+  return rows > height
+}
 
 export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel", action?: string) {
   if (option === "once") return "Allow once"

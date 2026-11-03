@@ -188,7 +188,10 @@ test.each([100, 44])(
       await app.renderOnce()
       expect(app.captureCharFrame()).toContain("server restarts")
       app.mockInput.pressEnter()
-      expect(await reply.promise).toEqual({ decision: "always", experimental: { acknowledgeSandbox: true, saveSandboxPrefix: true } })
+      expect(await reply.promise).toEqual({
+        decision: "always",
+        experimental: { acknowledgeSandbox: true, saveSandboxPrefix: true },
+      })
       // A subsequent request must not inherit the previous option selection.
       setRequest({ ...request(), id: "per_next", save: undefined })
       await app.renderOnce()
@@ -198,6 +201,91 @@ test.each([100, 44])(
     }
   },
 )
+
+test.each([
+  [44, 14],
+  [100, 18],
+])("main keeps a long approval reviewable at %sx%s", async (width, height) => {
+  await using temporary = await tmpdir()
+  const app = await testRender(
+    () => (
+      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <ClientProvider api={createApi(createFetch(undefined, createEventStream()).fetch)}>
+            <DataProvider directory={temporary.path}>
+              <LocationProvider>
+                <ThemeProvider mode="dark" source={emptyThemeSource}>
+                  <Keymap.Provider>
+                    <ToastProvider>
+                      <box width="100%" height="100%" justifyContent="flex-end">
+                        <PermissionPrompt
+                          request={{
+                            id: "per_long",
+                            sessionID: "ses_long",
+                            action: "sandbox.exec",
+                            resources: ["curl https://example.com"],
+                            save: ["curl"],
+                            metadata: {
+                              command: "curl https://example.com",
+                              cwd: "/workspace",
+                              justification: "Review the requested dependency operation and its effects. ".repeat(12),
+                            },
+                          }}
+                        />
+                      </box>
+                    </ToastProvider>
+                  </Keymap.Provider>
+                </ThemeProvider>
+              </LocationProvider>
+            </DataProvider>
+          </ClientProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width, height, kittyKeyboard: true },
+  )
+  try {
+    await app.renderOnce()
+    await app.renderOnce()
+    let scroll = app.renderer.root.findDescendantById("session.permission.body")
+    if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("Permission scrollbox missing")
+    scroll.scrollTo(0)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Allow once")
+    expect(app.captureCharFrame()).toContain("Reason:")
+    app.mockInput.pressKey("\x1b[6~")
+    await app.renderOnce()
+    expect(scroll.scrollTop).toBeGreaterThan(0)
+    scroll.scrollTo(scroll.scrollHeight)
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("$ curl")
+    expect(app.captureCharFrame()).toContain("Allow once")
+    app.mockInput.pressArrow("right")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Allow prefix for session")
+    scroll = app.renderer.root.findDescendantById("session.permission.body")
+    if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("Permission scrollbox missing")
+    scroll.scrollTo(scroll.scrollHeight)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("$ curl")
+    expect(app.captureCharFrame()).toContain("Reject")
+    expect(texts(scroll).some((item) => item.plainText.includes("server restarts"))).toBe(true)
+    app.resize(100, 50)
+    await app.renderOnce()
+    await app.renderOnce()
+    const details = app.renderer.root.findDescendantById("session.permission.details")
+    scroll = app.renderer.root.findDescendantById("session.permission.body")
+    if (!details || !(scroll instanceof ScrollBoxRenderable)) throw new Error("Permission layout missing after resize")
+    expect(details.y + details.height).toBeLessThanOrEqual(scroll.viewport.y)
+    app.resize(width, height)
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Reject")
+  } finally {
+    app.renderer.destroy()
+  }
+})
 
 function texts(item: Renderable): TextRenderable[] {
   return [...(item instanceof TextRenderable ? [item] : []), ...item.getChildren().flatMap(texts)]

@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { permissionPresentation } from "../../src/util/permission"
+import { permissionDetailsOverflow, permissionPresentation } from "../../src/util/permission"
+
+test("approval height accounts for long words and whitespace", () => {
+  expect(permissionDetailsOverflow(["short reason"], 44, 24, 11)).toBe(false)
+  expect(permissionDetailsOverflow(["x".repeat(500)], 44, 24, 11)).toBe(true)
+  expect(permissionDetailsOverflow([" ".repeat(600)], 44, 24, 11)).toBe(true)
+  expect(permissionDetailsOverflow(["\t".repeat(80)], 44, 24, 11)).toBe(true)
+})
 
 test("sandbox escalation displays the reviewed command and one-invocation scope", () => {
   expect(

@@ -72,7 +72,12 @@ test.each([100, 44])(
       app.mockInput.pressEnter()
       await app.renderOnce()
       expect(replies).toEqual([
-        { sessionID: "ses_sandbox", requestID: "per_escape", decision: "once", experimental: { acknowledgeSandbox: true } },
+        {
+          sessionID: "ses_sandbox",
+          requestID: "per_escape",
+          decision: "once",
+          experimental: { acknowledgeSandbox: true },
+        },
       ])
       setRequest({ ...request(), id: "per_second" })
       await app.renderOnce()
@@ -130,11 +135,14 @@ test.each([100, 44])("mini confirms session-prefix scope before saving at %s col
     const details = app.renderer.root.findDescendantById("mini.permission.details")
     if (!details) throw new Error("Confirmation details missing")
     const scope = descendants(details).find(
-      (item): item is TextRenderable => item instanceof TextRenderable && item.plainText.startsWith("Matching commands"),
+      (item): item is TextRenderable =>
+        item instanceof TextRenderable && item.plainText.startsWith("Matching commands"),
     )
     if (!scope) throw new Error("Confirmation scope missing")
     expect(scope.fg.equals(initialScope.fg)).toBe(true)
-    expect(descendants(details).some((item) => item instanceof TextRenderable && item.plainText.includes("server restarts"))).toBe(true)
+    expect(
+      descendants(details).some((item) => item instanceof TextRenderable && item.plainText.includes("server restarts")),
+    ).toBe(true)
     const scroll = descendants(app.renderer.root).find(
       (item): item is ScrollBoxRenderable => item instanceof ScrollBoxRenderable,
     )
@@ -152,6 +160,76 @@ test.each([100, 44])("mini confirms session-prefix scope before saving at %s col
         experimental: { acknowledgeSandbox: true, saveSandboxPrefix: true },
       },
     ])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([
+  [44, 14],
+  [100, 18],
+])("mini keeps a long approval reviewable at %sx%s", async (width, height) => {
+  const app = await testRender(
+    () => (
+      <RunPermissionBody
+        request={{
+          id: "per_long",
+          sessionID: "ses_long",
+          action: "sandbox.exec",
+          resources: ["curl https://example.com"],
+          save: ["curl"],
+          metadata: {
+            command: "curl https://example.com",
+            cwd: "/workspace",
+            justification: "Review the requested dependency operation and its effects. ".repeat(12),
+          },
+        }}
+        theme={RUN_THEME_FALLBACK.footer}
+        block={RUN_THEME_FALLBACK.block}
+        onReply={() => {}}
+      />
+    ),
+    { width, height, kittyKeyboard: true },
+  )
+  try {
+    await app.renderOnce()
+    await app.renderOnce()
+    const scroll = descendants(app.renderer.root).find(
+      (item): item is ScrollBoxRenderable => item instanceof ScrollBoxRenderable,
+    )
+    if (!scroll) throw new Error("Permission scrollbox missing")
+    scroll.scrollTo(0)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Allow once")
+    expect(app.captureCharFrame()).toContain("Reason:")
+    app.mockInput.pressKey("\x1b[6~")
+    await app.renderOnce()
+    expect(scroll.scrollTop).toBeGreaterThan(0)
+    scroll.scrollTo(scroll.scrollHeight)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("$ curl")
+    expect(app.captureCharFrame()).toContain("Allow once")
+    app.mockInput.pressArrow("right")
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Confirm")
+    scroll.scrollTo(scroll.scrollHeight)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("$ curl")
+    expect(app.captureCharFrame()).toContain("Confirm")
+    expect(
+      descendants(scroll).some((item) => item instanceof TextRenderable && item.plainText.includes("server restarts")),
+    ).toBe(true)
+    app.resize(100, 50)
+    await app.renderOnce()
+    await app.renderOnce()
+    const details = app.renderer.root.findDescendantById("mini.permission.details")
+    if (!details) throw new Error("Permission details missing after resize")
+    expect(details.y + details.height).toBeLessThanOrEqual(scroll.viewport.y)
+    app.resize(width, height)
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Confirm")
   } finally {
     app.renderer.destroy()
   }
