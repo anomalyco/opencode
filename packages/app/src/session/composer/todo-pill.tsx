@@ -43,7 +43,9 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
           <Show when={current()}>
             {(todo) => (
               <>
-                <TodoGlyph status={todo().status} />
+                <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+                  <TodoGlyph status={todo().status} />
+                </span>
                 <span dir="auto" class="min-w-0 max-w-[260px] truncate">
                   {todo().content}
                 </span>

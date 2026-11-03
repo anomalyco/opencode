@@ -1512,7 +1512,7 @@ story("composer pills show per session, open their rows, and fail only their own
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
 
-story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+story("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -1548,7 +1548,9 @@ story("a composer pill with a menu opens the plugin's content under the host's h
 
   await pill.click()
   const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
-  await expect(popover.getByText("Ship the release")).toBeVisible()
+  // The popover is the plugin's alone: the title names it but the host draws no heading.
+  await expect(popover).toHaveAttribute("aria-label", "Ship the release")
+  await expect(popover.getByText("Ship the release")).toHaveCount(0)
   await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
   await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
 
@@ -1558,4 +1560,51 @@ story("a composer pill with a menu opens the plugin's content under the host's h
   // The content renders again on the next open.
   await pill.click()
   await expect(page.getByTestId("goal-pause")).toBeVisible()
+})
+
+story("a composer pill's own icon replaces the view's and renders once while the pill updates", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountComposerPills, until, ComposerPill, createSignal } = await import(fixture)
+    const [round, setRound] = createSignal(1)
+    const renders = { value: 0 }
+    document.body.addEventListener("next-round", () => setRound(round() + 1))
+
+    const host = mountComposerPills({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(ComposerPill, {
+                id: "goal",
+                show: () => ({ label: `Round ${round()}`, icon: "github" }),
+                icon: () => {
+                  renders.value++
+                  document.body.dataset.iconRenders = String(renders.value)
+                  const glyph = document.createElement("i")
+                  glyph.dataset.testid = "goal-glyph"
+
+                  return glyph
+                },
+              }),
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+  }, fixture)
+
+  const pill = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+  await expect(pill).toHaveText("Round 1")
+  await expect(pill.getByTestId("goal-glyph")).toHaveCount(1)
+  // The named icon is not drawn beside it.
+  await expect(pill.locator("svg")).toHaveCount(0)
+  await pill.getByTestId("goal-glyph").evaluate((element) => (element.id = "kept"))
+
+  await page.evaluate(() => document.body.dispatchEvent(new Event("next-round")))
+  await expect(pill).toHaveText("Round 2")
+  // The same element, so an animation in it keeps running.
+  await expect(pill.locator("#kept")).toHaveCount(1)
+  await expect(page.locator("body")).toHaveAttribute("data-icon-renders", "1")
 })
