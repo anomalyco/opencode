@@ -1,8 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber } from "effect"
+import { Deferred, Effect, Fiber, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { ai, HttpOptions } from "../src/effect.js"
-import { LLMClient, mergeHttpOptions } from "../src/route.js"
+import { ai, HttpOptions, type LLMRequest } from "../src/effect.js"
+import { OpenAIChat } from "../src/protocols/openai-chat.js"
+import { Anthropic } from "../src/providers.js"
+import { Framing, LLMClient, mergeHttpOptions, Route } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
@@ -49,6 +51,61 @@ const stalledServer = Effect.gen(function* () {
   return { layer, stalled, resume: () => resume() }
 })
 
+// Sends `first`, then `heartbeat` once a minute on the test clock. With `last`, sends it after five heartbeats and
+// ends the body; otherwise the body never ends.
+const heartbeatServer = (input: { first: string; heartbeat: string; last?: string; headers?: HeadersInit }) =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    let sent = 0
+    const heartbeats = Stream.tick("1 minute").pipe(
+      Stream.drop(1),
+      Stream.map(() => {
+        sent++
+        return input.heartbeat
+      }),
+    )
+    const layer = dynamicResponse((request) =>
+      Stream.make(input.first).pipe(
+        Stream.concat(
+          input.last === undefined ? heartbeats : heartbeats.pipe(Stream.take(5), Stream.concat(Stream.make(input.last))),
+        ),
+        Stream.encodeText,
+        Stream.toReadableStreamEffect(),
+        Effect.tap(() => Deferred.succeed(started, undefined)),
+        Effect.map((body) => request.respond(body, { headers: input.headers ?? SSE.headers })),
+      ),
+    )
+    // Starts `request` and lets five minutes of test clock time pass, one minute at a time, so the response body's
+    // promise hops run between steps.
+    const run = (request: LLMRequest) =>
+      Effect.gen(function* () {
+        const fiber = yield* LLMClient.generate(request).pipe(
+          Effect.provide(layer),
+          Effect.result,
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Deferred.await(started)
+        yield* TestClock.withLive(Effect.sleep("1 millis"))
+        yield* Effect.forEach(
+          Array.from({ length: 5 }),
+          () => TestClock.adjust("1 minute").pipe(Effect.andThen(TestClock.withLive(Effect.sleep("1 millis")))),
+          { discard: true },
+        )
+        return fiber
+      })
+    return { run, sent: () => sent }
+  })
+
+const openAIHeartbeat = (heartbeat: string) =>
+  Effect.gen(function* () {
+    const server = yield* heartbeatServer({
+      first: sseRaw(`data: ${JSON.stringify(deltaChunk({ content: "Hi" }))}`),
+      heartbeat,
+    })
+    const fiber = yield* server.run(ai.request({ model, prompt: "Hello", http: { chunkTimeout: 120_000 } }))
+    return { fiber, sent: server.sent }
+  })
+
 describe("HTTP transport timeouts", () => {
   it.effect("fails when response headers take longer than five minutes", () =>
     Effect.gen(function* () {
@@ -84,6 +141,80 @@ describe("HTTP transport timeouts", () => {
 
       expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read", code: "Timeout" })
       expect(error.reason.http).toMatchObject({ status: 200 })
+    }),
+  )
+
+  // DeepSeek sends `: keep-alive` while a request is queued, OpenRouter `: OPENROUTER PROCESSING`, and Vertex
+  // partner models `data: : keepalive`. Framing drops all three, so none of them is provider progress.
+  for (const heartbeat of [": keep-alive\n\n", ": OPENROUTER PROCESSING\n\n", "data: : keepalive\n\n"]) {
+    it.effect(`times out when the body only sends ${JSON.stringify(heartbeat.trim())}`, () =>
+      Effect.gen(function* () {
+        const request = yield* openAIHeartbeat(heartbeat)
+        const exit = request.fiber.pollUnsafe()
+        yield* Fiber.interrupt(request.fiber)
+
+        // A heartbeat landed inside the two-minute window; the server stops once the client stops reading.
+        expect(request.sent()).toBeGreaterThan(0)
+        expect(exit).toMatchObject({
+          _tag: "Success",
+          value: { _tag: "Failure", failure: { reason: { _tag: "Transport", operation: "read", code: "Timeout" } } },
+        })
+      }),
+    )
+  }
+
+  it.effect("keeps an SSE stream open while data events arrive", () =>
+    Effect.gen(function* () {
+      const request = yield* openAIHeartbeat(`data: ${JSON.stringify(deltaChunk({ content: "" }))}\n\n`)
+      const exit = request.fiber.pollUnsafe()
+      yield* Fiber.interrupt(request.fiber)
+
+      expect(request.sent()).toBe(5)
+      expect(exit).toBeUndefined()
+    }),
+  )
+
+  it.effect("keeps an Anthropic stream open while ping events arrive", () =>
+    Effect.gen(function* () {
+      const server = yield* heartbeatServer({ first: "", heartbeat: 'event: ping\ndata: {"type":"ping"}\n\n' })
+      const fiber = yield* server.run(
+        ai.request({
+          model: Anthropic.configure({ baseURL: "https://api.anthropic.test", apiKey: "test" }).model("claude"),
+          prompt: "Hello",
+          http: { chunkTimeout: 120_000 },
+        }),
+      )
+      const exit = fiber.pollUnsafe()
+      yield* Fiber.interrupt(fiber)
+
+      expect(server.sent()).toBe(5)
+      expect(exit).toBeUndefined()
+    }),
+  )
+
+  it.effect("keeps timing bytes for a framing that emits one frame when the body ends", () =>
+    Effect.gen(function* () {
+      // The whole body is one OpenAI chunk; a space a minute keeps the bytes flowing for longer than the timeout.
+      const server = yield* heartbeatServer({
+        first: `{"id":"chatcmpl_fixture","choices":[{"delta":`,
+        heartbeat: " ",
+        last: `{"content":"Hi"},"finish_reason":"stop"}]}`,
+        headers: { "content-type": "application/json" },
+      })
+      const route = Route.make({
+        id: "openai-chat-document",
+        provider: "openai",
+        protocol: OpenAIChat.protocol,
+        endpoint: OpenAIChat.route.endpoint,
+        framing: Framing.document,
+      })
+      const fiber = yield* server.run(
+        ai.request({ model: route.model({ id: "gpt-4.1-mini" }), prompt: "Hello", http: { chunkTimeout: 120_000 } }),
+      )
+      const result = yield* Fiber.join(fiber)
+
+      expect(server.sent()).toBe(5)
+      expect(result).toMatchObject({ _tag: "Success", success: { text: "Hi" } })
     }),
   )
 

@@ -73,7 +73,10 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   timeout: Schema.optional(HttpTimeout),
   /** Time allowed for response headers to arrive. */
   headerTimeout: Schema.optional(HttpTimeout),
-  /** Time allowed between streamed response chunks once headers have arrived. */
+  /**
+   * Time allowed between streamed response chunks once headers have arrived. For SSE responses a chunk is an event:
+   * comments and other keep-alives the framing drops do not reset it.
+   */
   chunkTimeout: Schema.optional(HttpTimeout),
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
   encoding: Schema.optional(RequestEncoding),
