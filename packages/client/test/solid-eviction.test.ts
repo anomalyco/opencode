@@ -77,6 +77,114 @@ test("evicting an in-flight read leaves the next sync invalidated", async () => 
   }
 })
 
+test.each(["keep", "evict", "delete", "resync", "recreate", "evict-all"] as const)(
+  "settles a pending history page after %s",
+  async (mode) => {
+    const requested = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let refreshed = false
+    let publications = 0
+    let pages = 0
+    const setup = fixture(async (url) => {
+      if (!url.searchParams.has("cursor"))
+        return refreshed
+          ? Response.json({
+              data: [{ id: "msg_new", type: "user", text: "new", time: { created: 2 } }],
+              cursor: { next: "fresh" },
+            })
+          : undefined
+      if (++pages > 1) throw new Error("requested another obsolete history page")
+      requested.resolve()
+      await release.promise
+      return Response.json({
+        data: [{ id: "msg_old", type: "user", text: "old", time: { created: 0 } }],
+        cursor: mode === "evict-all" ? { next: "more" } : {},
+      })
+    })
+    try {
+      await setup.data.session.message.sync("ses_child")
+      const pending = setup.data.session.message.loadMore("ses_child", {
+        all: mode === "evict-all",
+        beforePublish: () => publications++,
+      })
+      await requested.promise
+      if (mode === "evict" || mode === "evict-all") setup.data.session.evict("ses_parent")
+      if (mode === "delete" || mode === "recreate")
+        setup.emit({
+          id: "evt_delete",
+          created: 2,
+          type: "session.deleted",
+          durable: { aggregateID: "ses_child", seq: 1, version: 1 },
+          data: { sessionID: "ses_child" },
+        })
+      if (mode === "recreate") {
+        setup.data.session.remember(info("ses_child", "ses_parent"))
+        await setup.data.session.message.sync("ses_child")
+      }
+      if (mode === "resync") {
+        refreshed = true
+        setup.data.session.message.invalidate("ses_child")
+        await setup.data.session.message.sync("ses_child")
+      }
+      release.resolve()
+      await pending
+      expect(setup.data.session.message.list("ses_child").map((item) => item.id)).toEqual(
+        mode === "keep"
+          ? ["msg_old", "msg_page"]
+          : mode === "resync"
+            ? ["msg_new"]
+            : mode === "recreate"
+              ? ["msg_page"]
+              : [],
+      )
+      expect(setup.data.session.message.more("ses_child")).toBe(mode === "resync" || mode === "recreate")
+      expect(publications).toBe(mode === "keep" ? 1 : 0)
+    } finally {
+      release.resolve()
+      setup.dispose()
+    }
+  },
+)
+
+test("an evicted history request cannot publish into a replacement with the same cursor", async () => {
+  const requested = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+  const release = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+  const pending: Promise<void>[] = []
+  let calls = 0
+  const setup = fixture(async (url) => {
+    if (!url.searchParams.has("cursor")) return
+    const index = calls++
+    requested[index]!.resolve()
+    await release[index]!.promise
+    return Response.json({
+      data: [{ id: "msg_old", type: "user", text: index === 0 ? "stale" : "fresh", time: { created: 0 } }],
+      cursor: {},
+    })
+  })
+  try {
+    await setup.data.session.message.sync("ses_child")
+    const first = setup.data.session.message.loadMore("ses_child")
+    pending.push(first)
+    await requested[0]!.promise
+    setup.data.session.evict("ses_parent")
+    await setup.data.session.message.sync("ses_child")
+    const second = setup.data.session.message.loadMore("ses_child")
+    pending.push(second)
+    await requested[1]!.promise
+    release[0]!.resolve()
+    await first
+    expect(setup.data.session.message.loading("ses_child")).toBe(true)
+    expect(setup.data.session.message.list("ses_child").map((item) => item.id)).toEqual(["msg_page"])
+    release[1]!.resolve()
+    await second
+    expect(setup.data.session.message.get("ses_child", "msg_old")).toMatchObject({ text: "fresh" })
+  } finally {
+    release.forEach((gate) => gate.resolve())
+    await Promise.allSettled(pending)
+    setup.dispose()
+  }
+})
+
 test.each(["echo", "reject"] as const)("eviction preserves optimistic submissions until %s", async (mode) => {
   const release = Promise.withResolvers<void>()
   const setup = fixture(async (url) => {
