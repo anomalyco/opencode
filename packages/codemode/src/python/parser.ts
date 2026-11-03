@@ -1,13 +1,16 @@
 import { fail, stringLiteral, tokenize, type Token } from "./lexer.js"
 import { pythonKeywords } from "./names.js"
+import { reMembers } from "./module-names.js"
 
 export type Expr = { site: Token } & (
   | { kind: "literal"; value: string | number | boolean | null }
   | { kind: "name"; name: string }
   | { kind: "lambda"; params: string[]; body: Body }
-  | { kind: "list" | "tuple" | "fstring"; items: Expr[] }
+  | { kind: "conditional"; yes: Expr; test: Expr; no: Expr }
+  | { kind: "dictcomp"; key: Expr; value: Expr; binding: Binding; source: Expr; guard?: Expr }
+  | { kind: "list" | "tuple" | "fstring" | "set"; items: Expr[] }
   | { kind: "dict"; pairs: [Expr, Expr][] }
-  | { kind: "comprehension"; item: Expr; binding: Binding; source: Expr; guard?: Expr }
+  | { kind: "comprehension"; item: Expr; binding: Binding; source: Expr; guard?: Expr; lazy?: boolean; set?: boolean }
   | { kind: "attribute"; target: Expr; name: string }
   | { kind: "index"; target: Expr; key: Expr }
   | { kind: "slice"; target: Expr; start?: Expr; stop?: Expr; step?: Expr }
@@ -27,7 +30,7 @@ export type Stmt = { site: Token } & (
   | { kind: "unpack"; binding: Binding; expr: Expr }
   | { kind: "return"; expr?: Expr }
   | { kind: "pass" | "break" | "continue" }
-  | { kind: "import"; name: string; gather: boolean }
+  | { kind: "import"; name: string; module: "asyncio" | "json" | "re"; member?: string }
   | { kind: "if"; branches: { test: Expr; body: Body }[]; otherwise: Body }
   | { kind: "for"; binding: Binding; source: Expr; body: Body }
   | { kind: "while"; test: Expr; body: Body }
@@ -73,6 +76,13 @@ export function parsePython(source: string): Body {
 
   function suite(loop = false): Body {
     need(":")
+    if (peek().type !== "newline") {
+      if (loop) loops++
+      const stmt = simple(peek())
+      kind("newline")
+      if (loop) loops--
+      return [stmt]
+    }
     kind("newline")
     kind("indent")
     checkDepth()
@@ -135,18 +145,17 @@ export function parsePython(source: string): Body {
     }
     if (eat("pass")) return { kind: "pass", site }
     if (eat("import") || eat("from")) {
-      if (!eat("asyncio"))
-        fail(
-          site,
-          "Only the built-in asyncio module is available; no import is needed for asyncio.gather.",
-          "UnsupportedSyntax",
-        )
-      const gather = site.text === "from"
-      if (gather) {
+      const module = name()
+      if (module !== "asyncio" && module !== "json" && module !== "re")
+        fail(site, "Only the built-in asyncio, json and re modules are available.", "UnsupportedSyntax")
+      let member: string | undefined
+      if (site.text === "from") {
         need("import")
-        if (!eat("gather")) fail(peek(), "Only gather is available from asyncio.", "UnsupportedSyntax")
+        member = name()
+        if (!(module === "asyncio" ? ["gather"] : module === "re" ? reMembers : ["loads", "dumps"]).includes(member))
+          fail(site, `Cannot import '${member}' from ${module}.`, "UnsupportedSyntax")
       }
-      return { kind: "import", site, name: eat("as") ? name() : gather ? "gather" : "asyncio", gather }
+      return { kind: "import", site, name: eat("as") ? name() : (member ?? module), module, ...(member && { member }) }
     }
     if (unpackAhead()) {
       const target = binding("=")
@@ -209,8 +218,7 @@ export function parsePython(source: string): Body {
     if (new Set(params).size !== params.length) fail(site, "Duplicate parameter name.")
     return params
   }
-  function tupleExpression(): Expr {
-    const first = expression()
+  function tupleExpression(first = expression()): Expr {
     if (!eat(",")) return first
     const items = [first]
     while (peek().type !== "newline" && !["=", ":", ")", "}"].includes(peek().text)) {
@@ -228,11 +236,21 @@ export function parsePython(source: string): Body {
     need(end)
     return items
   }
+  function clause() {
+    const target = binding("in")
+    need("in")
+    const source = expression(1, false)
+    const guard = eat("if") ? expression(1, false) : undefined
+    return { binding: target, source, ...(guard && { guard }) }
+  }
   function atom(): Expr {
     const site = peek()
     if (eat("(")) {
       if (eat(")")) return { kind: "tuple", site, items: [] }
-      const result = tupleExpression()
+      const first = expression()
+      const result: Expr = eat("for")
+        ? { kind: "comprehension", lazy: true, site, item: first, ...clause() }
+        : tupleExpression(first)
       need(")")
       return result
     }
@@ -240,28 +258,43 @@ export function parsePython(source: string): Body {
       if (eat("]")) return { kind: "list", site, items: [] }
       const item = expression()
       if (eat("for")) {
-        const target = binding("in")
-        need("in")
-        const source = expression()
-        const guard = eat("if") ? expression() : undefined
+        const parts = clause()
         need("]")
-        return { kind: "comprehension", site, item, binding: target, source, ...(guard && { guard }) }
+        return { kind: "comprehension", site, item, ...parts }
       }
       const items = [item]
       while (eat(",") && peek().text !== "]") items.push(expression())
       need("]")
       return { kind: "list", site, items }
     }
-    if (eat("{"))
-      return {
-        kind: "dict",
-        site,
-        pairs: list("}", (): [Expr, Expr] => {
-          const key = expression()
-          need(":")
-          return [key, expression()]
-        }),
+    if (eat("{")) {
+      const pairs: [Expr, Expr][] = []
+      while (peek().text !== "}") {
+        const key = expression()
+        if (!pairs.length && peek().text !== ":") {
+          if (eat("for")) {
+            const parts = clause()
+            need("}")
+            return { kind: "comprehension", set: true, site, item: key, ...parts }
+          }
+          const items = [key]
+          while (eat(",") && peek().text !== "}") items.push(expression())
+          need("}")
+          return { kind: "set", site, items }
+        }
+        need(":")
+        const value = expression()
+        if (!pairs.length && eat("for")) {
+          const parts = clause()
+          need("}")
+          return { kind: "dictcomp", site, key, value, ...parts }
+        }
+        pairs.push([key, value])
+        if (!eat(",")) break
       }
+      need("}")
+      return { kind: "dict", site, pairs }
+    }
     if (site.type === "fstart") {
       take()
       const items: Expr[] = []
@@ -279,6 +312,7 @@ export function parsePython(source: string): Body {
       return { kind: "fstring", site, items }
     }
     if (site.type === "string") return { kind: "literal", site, value: stringLiteral(take()) }
+    if (site.type === "rawstring") return { kind: "literal", site, value: take().text.slice(2, -1) }
     if (site.type === "number") {
       const value = Number(take().text)
       if (!Number.isFinite(value) || /^0\d/.test(site.text)) fail(site, "Invalid or out-of-range number.")
@@ -289,7 +323,7 @@ export function parsePython(source: string): Body {
     if (pythonKeywords.has(site.text)) fail(site, `Unsupported Python syntax '${site.text}'.`, "UnsupportedSyntax")
     return { kind: "name", site, name: name() }
   }
-  function expression(min = 1): Expr {
+  function expression(min = 1, conditional = true): Expr {
     checkDepth()
     const site = peek()
     let left: Expr
@@ -332,7 +366,9 @@ export function parsePython(source: string): Body {
           need("]")
         } else if (eat("(")) {
           const keywords = new Set<string>()
+          let count = 0
           const args = list(")", () => {
+            count++
             if (peek().type === "name" && tokens[at + 1]?.text === "=") {
               const here = peek()
               const keyword = name()
@@ -342,7 +378,13 @@ export function parsePython(source: string): Body {
               return { keyword, spread: false, expr: expression() }
             }
             if (keywords.size) fail(peek(), "Positional arguments must precede keyword arguments.")
-            return { spread: eat("*"), expr: expression() }
+            const spread = eat("*")
+            const expr = expression()
+            if (!eat("for")) return { spread, expr }
+            if (spread || count !== 1) fail(expr.site, "Parenthesize the generator expression.")
+            const gen: Expr = { kind: "comprehension", site: expr.site, lazy: true, item: expr, ...clause() }
+            if (peek().text !== ")") fail(peek(), "Parenthesize the generator expression.")
+            return { spread: false, expr: gen }
           })
           left = { kind: "call", site, target: left, args }
         } else break
@@ -361,6 +403,11 @@ export function parsePython(source: string): Body {
         if (left.kind === "compare" && left.site === site) left.rest.push({ op, right })
         else left = { kind: "compare", site, left, rest: [{ op, right }] }
       } else left = { kind: "binary", site, op, left, right }
+    }
+    if (min === 1 && conditional && eat("if")) {
+      const test = expression(1, false)
+      need("else")
+      left = { kind: "conditional", site, yes: left, test, no: expression() }
     }
     depth--
     return left

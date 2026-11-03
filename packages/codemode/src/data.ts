@@ -15,6 +15,7 @@ import {
   keys,
   Obj,
   PromiseObj,
+  PythonIterator,
   record,
   type Value,
   SetObj,
@@ -65,6 +66,8 @@ const walk = <R>(
     const value = replacer === undefined ? own : yield* replacer([key, own], holder)
     if (value instanceof Coroutine)
       throw invalidData("A coroutine cannot cross to the host; await it first.", value.site)
+    if (value instanceof PythonIterator)
+      throw invalidData("An iterator cannot cross to the host; return list(iterator) instead.")
     if (value === undefined || typeofValue(value) === "function") return undefined
     if (typeof value === "number") return Number.isFinite(value) ? value : null
     if (value === null || typeof value === "string" || typeof value === "boolean") return value

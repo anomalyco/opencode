@@ -1,9 +1,9 @@
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
+import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "../interpreter/limits.js"
 import { type AstNode, rangeError, typeError } from "../interpreter/model.js"
 import { Arr, Callable, Coroutine, PromiseObj, type Value } from "../interpreter/objects.js"
 import { type Eval, Slice } from "../interpreter/runner.js"
-import { arity, dict, integer, list, numeric, Tuple, values } from "./values.js"
+import { arity, cursor, dict, equal, integer, list, numeric, Tuple } from "./values.js"
 
 function* codePointCount<R>(ctx: Interpreter<R>, text: string): Eval<number> {
   let n = 0
@@ -68,7 +68,12 @@ export function* slice<R>(ctx: Interpreter<R>, seq: Value, start: Value, stop: V
   return result + tail
 }
 
-export function* sorted<R>(ctx: Interpreter<R>, args: Value[], kw: Map<string, Value>, site?: AstNode): Eval<Value> {
+export function* sorted<R>(
+  ctx: Interpreter<R>,
+  args: Value[],
+  kw: ReadonlyMap<string, Value>,
+  site?: AstNode,
+): Eval<Arr> {
   arity("sorted", args, 1)
   for (const k of kw.keys()) if (k !== "key" && k !== "reverse") throw typeError(`Unknown sorted keyword '${k}'.`)
   const key = kw.get("key")
@@ -81,10 +86,11 @@ export function* sorted<R>(ctx: Interpreter<R>, args: Value[], kw: Map<string, V
   if (dict(source)) checkArrayLength(source.props.size)
   if (typeof source === "string" && source.length > MAX_ARRAY_LENGTH)
     checkArrayLength(yield* codePointCount(ctx, source))
-  for (const value of values(source)) {
+  const iter = cursor(source)
+  for (let s = yield* iter.next(); !s.done; s = yield* iter.next()) {
     if (ctx.runner.tick()) yield Slice
     checkArrayLength(items.length + 1)
-    items.push(value)
+    items.push(s.value)
   }
   const keys = key == null ? items : []
   if (key != null) {
@@ -126,7 +132,13 @@ export function* sorted<R>(ctx: Interpreter<R>, args: Value[], kw: Map<string, V
   return result
 }
 
-function* less<R>(ctx: Interpreter<R>, a: Value, b: Value): Eval<boolean> {
+export function* less<R>(ctx: Interpreter<R>, a: Value, b: Value, depth = 0): Eval<boolean> {
+  if (a instanceof Arr && b instanceof Arr && a instanceof Tuple === b instanceof Tuple) {
+    if (depth > MAX_VALUE_DEPTH) throw rangeError("Comparison nested too deeply.")
+    for (let i = 0; i < Math.min(a.items.length, b.items.length); i++)
+      if (!(yield* equal(ctx, a.items[i], b.items[i]))) return yield* less(ctx, a.items[i], b.items[i], depth + 1)
+    return a.items.length < b.items.length
+  }
   if (typeof a !== "string" || typeof b !== "string") return numeric(a) < numeric(b)
   // Python compares Unicode code points, not UTF-16 code units.
   let i = 0

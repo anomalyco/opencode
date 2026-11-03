@@ -25,11 +25,12 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       Async functions, tools and declared async extensions return single-use coroutines. `await` runs one; `gather`
       schedules each distinct coroutine once and returns an awaitable result in input order. An unscheduled coroutine cannot
       cross the host boundary. No import is necessary. `import asyncio` and `from asyncio import gather` (with optional
-      `as` aliases) bind the built-in implementation. Other modules and members are rejected before execution.
+      `as` aliases) bind the built-in implementation. The only other available modules are `json` and `re`.
 - [x] `print`, `len`, `str`, `bool`, `list`, `range`, list `.append`, and dictionary `.get`/`.keys`/`.values`/`.items`.
       `range` and dictionary views produce lists. Dot access on records prefers own fields (including host extension functions)
       over same-named dictionary methods. Dictionary subscripts never read inherited members. Tools and synchronous `search` accept one input dictionary,
-      keyword arguments, or no arguments. Keyword calls use the same host validation, hooks and call budget.
+      keyword arguments, or no arguments. Search results can also be awaited without repeating or charging the search twice.
+      Keyword calls use the same host validation, hooks and call budget.
 - [x] List, tuple and Unicode code-point string slices: `seq[start:stop:step]`. Bounds and steps accept safe integers,
       including negative values, or `None`/omission for defaults. A zero step is an error.
 - [x] Immutable tuple literals (`()`, `(x,)`, `x, y`), indexing, slicing, concatenation, iteration and equality. Tuples
@@ -44,12 +45,31 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       list. Compare numbers (including booleans) or strings in Unicode code-point order. A synchronous callable key (e.g.
       `len` or a `def`) runs once per item in input order. `key` and `reverse` are keyword-only; `reverse` accepts integers/booleans.
 - [x] Explicit top-level `return`, final top-level expression, or `null` if neither supplies a result.
-- [ ] Slice assignment; subscript and attribute targets inside unpacking patterns; `tuple()`; sequence ordering; sets and generators.
+- [x] Conditional expressions (`x if test else y`), one-simple-statement suites, dictionary/set comprehensions, and lazy
+      single-loop generator expressions. `iter`, `next`, `enumerate`, `zip`, `map`, `filter` and `reversed` compose with
+      `for`, unpacking, `list`, `tuple`, `dict`, `set`, `sorted`, `sum`, `any`, `all`, `min` and `max`. `min`/`max`
+      support `key` and `default`. `range` remains materialized. Consume iterators explicitly before returning them.
+- [x] Data inspection: `repr`, `type(x).__name__`, `isinstance` (including tuples of types), `callable`, `dir`, `hasattr` and `getattr`.
+      `dir` exposes supported guest methods, own record fields or child names from the supplied tool inventory, not host
+      prototypes. Python numbers share one numeric representation; integral numbers report `int`, even when written `1.0`.
+      `int`, `float` (finite decimal), `bool`, `str` and `abs` are available; no dynamic class construction.
+- [x] Strings: `split`, `rsplit`, `splitlines`, `join`, case conversion, strip/prefix/suffix operations, prefix/suffix tests,
+      find/index (also from the right), `count`, `replace`, partition, and common character predicates. Indices are Unicode
+      code-point offsets; Unicode tables follow the host. Lists have copy/clear/extend/insert/pop/reverse/count/index/remove
+      and stable sort; dictionaries have copy/clear/update/setdefault/pop and `dict.fromkeys`. Sets support JSON scalar
+      members and union, intersection and difference. Sets cross to the host as arrays. Dictionary keys remain strings.
+- [x] `json.loads` and `json.dumps`, including `indent`, `sort_keys`, `ensure_ascii` and `separators`, on finite JSON-like
+      data. No hooks, arbitrary objects or file handles. `re` provides RE2-backed `search`, `match`, `fullmatch`, `findall`,
+      `split`, `sub` (string replacements), `escape`, and `compile`. Match records expose groups and code-point spans.
+      Raw quoted strings and the I/M/S flags work. Patterns are limited to 512 characters and have compilation and match
+      budgets. RE2 syntax/Unicode classes are not full CPython `re`: no pattern backreferences or lookaround.
+- [ ] Slice assignment; subscript and attribute targets inside unpacking patterns; `yield` functions, nested `for` clauses,
+      arbitrary hashable objects and full Python numeric type distinctions.
 - [ ] Defaults, variadic/keyword-only parameter declarations, `**kwargs`, and `*args` after a keyword. Other built-ins,
       methods and extensions are positional-only. No f-string conversions (`!r`), format specs (`:.2f`), debug
       fields (`{x=}`), multiline or nested f-strings.
 - [x] Python signatures in the catalog and discovery results; statically authorized Python schedule checks.
-- [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers and classes.
+- [ ] General package loading, typed exception handlers and classes.
 
 ## Source and execution model
 

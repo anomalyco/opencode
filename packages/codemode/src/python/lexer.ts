@@ -12,7 +12,7 @@ export function tokenize(source: string): Token[] {
   const indents = [0]
   const brackets: string[] = []
   const pattern =
-    /[ \t]+|#.*|[fF]["']|[A-Za-z_][A-Za-z_0-9]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|==|!=|<=|>=|\/\/|\*\*|\+=|-=|\*=|[()[\]{}:,.+*/%<>=-]/gy
+    /[ \t]+|#.*|[fF]["']|[rR](?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|[A-Za-z_][A-Za-z_0-9]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|==|!=|<=|>=|\/\/|\*\*|\+=|-=|\*=|[()[\]{}:,.+*/%<>=-]/gy
   let line = 1
   let offset = 0
   const token = (type: string, text: string, column: number): Token => ({
@@ -59,13 +59,15 @@ export function tokenize(source: string): Token[] {
           if (field) fail(token("invalid", text, start), "Nested f-strings are not supported.", "UnsupportedSyntax")
           return formatted(text, start)
         }
-        const type = /^[a-z_]/i.test(text)
-          ? "name"
-          : /^(?:\d|\.\d)/.test(text)
-            ? "number"
-            : /^["']/.test(text)
-              ? "string"
-              : "operator"
+        const type = /^[rR]['"]/.test(text)
+          ? "rawstring"
+          : /^[a-z_]/i.test(text)
+            ? "name"
+            : /^(?:\d|\.\d)/.test(text)
+              ? "number"
+              : /^["']/.test(text)
+                ? "string"
+                : "operator"
         const item = token(type, text, start)
         tokens.push(item)
         if (["(", "[", "{"].includes(text)) stack.push(text === "(" ? ")" : text === "[" ? "]" : "}")
@@ -113,12 +115,22 @@ export function tokenize(source: string): Token[] {
 
 export function stringLiteral(site: Token): string {
   const raw = site.type === "ftext" ? site.text.replaceAll("{{", "{").replaceAll("}}", "}") : site.text.slice(1, -1)
-  return raw.replace(/\\(u[\da-fA-F]{4}|x[\da-fA-F]{2}|.)/g, (_, escape: string) => {
-    if (escape.length > 1) return String.fromCharCode(parseInt(escape.slice(1), 16))
+  return raw.replace(/\\(U[\da-fA-F]{8}|u[\da-fA-F]{4}|x[\da-fA-F]{2}|[0-7]{1,3}|.)/g, (_, escape: string) => {
+    if (/^[0-7]/.test(escape)) return String.fromCharCode(parseInt(escape, 8))
+    if (escape.length > 1) {
+      const n = parseInt(escape.slice(1), 16)
+      if (n > 0x10ffff) fail(site, "Invalid Unicode escape.")
+      return String.fromCodePoint(n)
+    }
+    if ("uxU".includes(escape)) fail(site, "Incomplete hexadecimal escape.")
+    if (escape === "v") return "\v"
+    if (escape === "f") return "\f"
+    if (escape === "b") return "\b"
+    if (escape === "a") return "\x07"
     if (escape === "n") return "\n"
     if (escape === "t") return "\t"
     if (escape === "r") return "\r"
     if (`\\'"`.includes(escape)) return escape
-    return fail(site, `Unsupported escape \\${escape}.`, "UnsupportedSyntax")
+    return `\\${escape}`
   })
 }

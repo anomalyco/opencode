@@ -6,7 +6,7 @@ import { cases } from "../test/cpython/cases.js"
 const groups = process.argv.slice(2)
 // Only this reviewed allowlist is executed on the host, never a user-supplied file or program.
 const upstream = await Promise.all(
-  ["list_slice_3arg.py", "ifcond.py"].map(async (name) => ({
+  ["list_slice_3arg.py", "ifcond.py", "builtin_allany.py", "builtin_sum.py"].map(async (name) => ({
     group: "micropython",
     name,
     code: await Bun.file(new URL(`../test/cpython/micropython/${name}`, import.meta.url)).text(),

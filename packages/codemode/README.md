@@ -79,7 +79,8 @@ accept keyword arguments, one input dictionary, or no arguments. `search(query="
 returns catalog data synchronously; `print(...)` writes to the result's logs. In Python, calling an `async def`, a tool,
 or a declared async extension creates a coroutine. `await` runs it; `asyncio.gather(...)` schedules coroutines to run
 concurrently when the caller next suspends. `asyncio` is already in scope; importing it (or `gather` from it) is optional.
-Other imports are rejected, not ignored. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
+`json` and `re` are also prebound (and may be imported); neither provides file I/O. Other imports are rejected, not ignored.
+`await search(...)` is accepted and counts the same single call as `search(...)`. Dropping a tool coroutine never runs it or counts a tool call. The interpreter validates
 the entire program's syntax before it starts. See the [Python subset and differences](./interpreter-support.md#experimental-python-subset).
 
 OpenCode's `execute` tool, catalog, discovery results, and new scheduled code checks use Python. Keys marked `NotRequired`

@@ -11,8 +11,15 @@ import { ToolReference } from "../tool-runtime.js"
 import { bindingNames, type Binding, type Body, type Expr, parsePython } from "./parser.js"
 import { type pythonNames } from "./names.js"
 import { slice, sorted } from "./sequence.js"
+import { helpers } from "./helpers.js"
+import { KeywordFunction, PythonType } from "./native.js"
+import { jsonModule } from "./json.js"
+import { reModule } from "./re.js"
+import { PythonSet } from "./set.js"
 import {
   arity,
+  cursor,
+  iterator,
   attribute,
   binary,
   display,
@@ -25,7 +32,6 @@ import {
   subscript,
   truth,
   Tuple,
-  values,
 } from "./values.js"
 
 type Scope = { locals: Map<string, Value>; parent?: Scope }
@@ -52,38 +58,26 @@ export function compilePython(source: string) {
         return combinator(ctx, "all", list(ctx, futures), site)
       }),
     })
+    const discovered = new WeakSet<Obj>()
     const names: Record<(typeof pythonNames)[number], Value> = {
+      ...helpers(ctx),
+      json: jsonModule(ctx),
+      re: reModule(ctx),
       tools: new ToolReference([]),
-      search: fn(builtins, "search", 1, (_, args) => ctx.tool(ctx.tools.search, args)),
+      search: fn(builtins, "search", 1, function* (_, args) {
+        const result = yield* ctx.tool(ctx.tools.search, args)
+        if (result instanceof Obj) discovered.add(result)
+        return result
+      }),
       print: fn(builtins, "print", 0, function* (_, args) {
         ctx.logs.push(yield* display(ctx, args))
         return null
-      }),
-      str: fn(builtins, "str", 1, (_, args) => {
-        arity("str", args, 0, 1)
-        return display(ctx, args)
       }),
       len: fn(builtins, "len", 1, (_, args) => {
         arity("len", args, 1)
         return size(args[0])
       }),
-      bool: fn(builtins, "bool", 1, (_, args) => {
-        arity("bool", args, 0, 1)
-        return truth(args[0])
-      }),
       sorted: fn(builtins, "sorted", 1, (_, args, site) => sorted(ctx, args, new Map(), site)),
-      list: fn(builtins, "list", 1, function* (_, args): Eval<Value> {
-        arity("list", args, 0, 1)
-        const result = list(ctx)
-        if (args.length) {
-          checkArrayLength(size(args[0]))
-          for (const item of values(args[0])) {
-            if (ctx.runner.tick()) yield Slice
-            result.items.push(item)
-          }
-        }
-        return result
-      }),
       range: fn(builtins, "range", 1, function* (_, args): Eval<Value> {
         arity("range", args, 1, 3)
         const nums = args.map(integer)
@@ -121,21 +115,21 @@ export function compilePython(source: string) {
       }
       // Validate one sequence at a time, then assign left to right. A later nested failure
       // preserves earlier sibling assignments, as in Python.
-      const iter = values(value, site)[Symbol.iterator]()
+      const iter = cursor(value, site)
       const items: Value[] = []
       const { star, items: targets } = binding
       for (let i = 0; i < (star < 0 ? targets.length : star); i++) {
         if (ctx.runner.tick()) yield Slice
-        const item = iter.next()
+        const item = yield* iter.next()
         if (item.done) throw typeError("Not enough values to unpack.", site)
         items.push(item.value)
       }
       if (star === -1) {
-        if (!iter.next().done) throw typeError(`Too many values to unpack (expected ${targets.length}).`, site)
+        if (!(yield* iter.next()).done) throw typeError(`Too many values to unpack (expected ${targets.length}).`, site)
       } else {
         const rest = list(ctx)
         const trailing = targets.length - star - 1
-        for (let item = iter.next(); !item.done; item = iter.next()) {
+        for (let item = yield* iter.next(); !item.done; item = yield* iter.next()) {
           if (ctx.runner.tick()) yield Slice
           checkArrayLength(rest.items.length + 1)
           rest.items.push(item.value)
@@ -172,6 +166,8 @@ export function compilePython(source: string) {
             return lookup(scope, expr)
           case "lambda":
             return makeFunction(scope, "<lambda>", expr.params, expr.body, false)
+          case "conditional":
+            return yield* evaluate(truth(yield* evaluate(expr.test, scope)) ? expr.yes : expr.no, scope)
           case "attribute":
             return attribute(ctx, yield* evaluate(expr.target, scope), expr.name)
           case "index":
@@ -199,18 +195,47 @@ export function compilePython(source: string) {
             for (const item of expr.items) result.items.push(yield* evaluate(item, scope))
             return result
           }
+          case "set": {
+            const result = new PythonSet(builtins.Set)
+            for (const item of expr.items) result.addItem(yield* evaluate(item, scope))
+            return result
+          }
           case "dict": {
             const result = new Obj(null)
             for (const [k, v] of expr.pairs)
               define(result, stringKey(yield* evaluate(k, scope)), yield* evaluate(v, scope))
             return result
           }
-          case "comprehension": {
-            const result = list(ctx)
+          case "comprehension":
+          case "dictcomp": {
+            const source = cursor(yield* evaluate(expr.source, scope))
             const inner = { locals: new Map<string, Value>(), parent: scope }
-            for (const value of values(yield* evaluate(expr.source, scope))) {
-              yield* bind(expr.binding, value, inner, expr.site)
-              if (expr.guard && !truth(yield* evaluate(expr.guard, inner))) continue
+            const next = function* (): Eval<boolean> {
+              for (let s = yield* source.next(); !s.done; s = yield* source.next()) {
+                yield* bind(expr.binding, s.value, inner, expr.site)
+                if (!expr.guard || truth(yield* evaluate(expr.guard, inner))) return true
+              }
+              return false
+            }
+            if (expr.kind === "dictcomp") {
+              const result = new Obj(null)
+              while (yield* next())
+                define(result, stringKey(yield* evaluate(expr.key, inner)), yield* evaluate(expr.value, inner))
+              return result
+            }
+            if (expr.lazy)
+              return iterator(ctx, "generator", function* () {
+                return (yield* next())
+                  ? { done: false, value: yield* evaluate(expr.item, inner) }
+                  : { done: true, value: null }
+              })
+            if (expr.set) {
+              const result = new PythonSet(builtins.Set)
+              while (yield* next()) result.addItem(yield* evaluate(expr.item, inner))
+              return result
+            }
+            const result = list(ctx)
+            while (yield* next()) {
               checkArrayLength(result.items.length + 1)
               result.items.push(yield* evaluate(expr.item, inner))
             }
@@ -231,13 +256,28 @@ export function compilePython(source: string) {
                 args.push(value)
                 continue
               }
-              for (const item of values(value)) {
+              const iter = cursor(value)
+              for (let item = yield* iter.next(); !item.done; item = yield* iter.next()) {
                 if (ctx.runner.tick()) yield Slice
                 checkArrayLength(args.length + 1)
-                args.push(item)
+                args.push(item.value)
               }
             }
+            if (callable === names.dir && !kw.size && !args.length) {
+              const locals = list(ctx)
+              for (const [k, v] of scope.locals) {
+                if (ctx.runner.tick()) yield Slice
+                if (v !== unbound) locals.items.push(k)
+              }
+              return yield* sorted(ctx, [locals], new Map())
+            }
             if (kw.size) {
+              if (callable === names.dict) {
+                const result = (yield* ctx.call(callable, undefined, args, expr.site)) as Obj
+                for (const [k, v] of kw) define(result, k, v)
+                return result
+              }
+              if (callable instanceof KeywordFunction) return yield* callable.invoke(args, kw, expr.site)
               if (callable instanceof ToolReference || callable === names.search) {
                 if (args.length) throw typeError("Use a single input dictionary or keywords, not both.")
                 const input = new Obj(null)
@@ -263,6 +303,7 @@ export function compilePython(source: string) {
           case "unary": {
             const arg = yield* evaluate(expr.arg, scope)
             if (expr.op === "await") {
+              if (arg instanceof Obj && discovered.has(arg)) return arg
               if (arg instanceof Coroutine) return (yield new Call(arg.run())) as Value
               if (!(arg instanceof PromiseObj)) throw typeError("await expects an asynchronous tool or function call.")
               return (yield* ctx.awaitValue(arg, expr.site)) ?? null
@@ -307,7 +348,10 @@ export function compilePython(source: string) {
           case "pass":
             break
           case "import":
-            scope.locals.set(stmt.name, stmt.gather ? getOwn(asyncio, "gather") : asyncio)
+            {
+              const mod = names[stmt.module] as Obj
+              scope.locals.set(stmt.name, stmt.member ? getOwn(mod, stmt.member) : mod)
+            }
             break
           case "unpack":
             yield* bind(stmt.binding, yield* evaluate(stmt.expr, scope), scope, stmt.site)
@@ -343,8 +387,9 @@ export function compilePython(source: string) {
             break
           }
           case "for": {
-            for (const v of values(yield* evaluate(stmt.source, scope))) {
-              yield* bind(stmt.binding, v, scope, stmt.site)
+            const iter = cursor(yield* evaluate(stmt.source, scope))
+            for (let s = yield* iter.next(); !s.done; s = yield* iter.next()) {
+              yield* bind(stmt.binding, s.value, scope, stmt.site)
               const flow = yield* block(stmt.body, scope)
               if (flow?.kind === "break") break
               if (flow?.kind === "return") return flow
@@ -383,7 +428,8 @@ export function compilePython(source: string) {
       }
     }
     const result = yield* block(body, scope, true)
-    return yield* toBoundary(ctx, result?.kind === "return" ? result.value : null)
+    const value = result?.kind === "return" ? result.value : null
+    return value instanceof PythonType ? yield* display(ctx, [value]) : yield* toBoundary(ctx, value)
   }
 }
 

@@ -46,6 +46,10 @@ export function scanPythonTools(code: string) {
           case "binary":
             visit(expr.left)
             return visit(expr.right)
+          case "conditional":
+            visit(expr.yes)
+            visit(expr.test)
+            return visit(expr.no)
           case "compare":
             visit(expr.left)
             for (const item of expr.rest) visit(item.right)
@@ -57,12 +61,17 @@ export function scanPythonTools(code: string) {
             }
             return
           case "list":
+          case "set":
           case "tuple":
           case "fstring":
             return expr.items.forEach(visit)
           case "comprehension":
+          case "dictcomp":
             binding(expr.binding, expr.site)
-            visit(expr.item)
+            if (expr.kind === "dictcomp") {
+              visit(expr.key)
+              visit(expr.value)
+            } else visit(expr.item)
             visit(expr.source)
             if (expr.guard) visit(expr.guard)
             return

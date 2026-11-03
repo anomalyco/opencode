@@ -316,6 +316,17 @@ export class IteratorObj extends Opaque {
   }
 }
 
+/** A Python iterator is single-pass and must be consumed explicitly before it crosses to the host. */
+export class PythonIterator extends IteratorObj {
+  constructor(
+    proto: Obj,
+    cursor: Cursor,
+    readonly pythonName: string,
+  ) {
+    super(proto, cursor)
+  }
+}
+
 /** A built-in iterator over a host iterator, e.g. `array.values()`. */
 export const hostIterator = (builtins: Builtins, iterator: Iterator<Value, undefined>): IteratorObj =>
   new IteratorObj(builtins.Iterator, hostCursor(iterator))
