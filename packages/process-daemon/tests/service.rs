@@ -69,6 +69,7 @@ fn command(script: &str) -> CreateTerminal {
         env: std::collections::HashMap::new(),
         cols: 80,
         rows: 24,
+        mode: Default::default(),
     }
 }
 
