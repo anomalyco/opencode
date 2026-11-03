@@ -338,7 +338,6 @@
 
   [data-color-scheme="dark"] [data-component="timeline-quote"] {
     background-color: var(--v2-background-bg-layer-02);
-    border-color: var(--v2-border-border-strong);
   }
 
   :root[data-motion="reduce"] {
