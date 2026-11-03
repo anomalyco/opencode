@@ -3,11 +3,13 @@ import { Panel, Slot, Style, usePanel, type Plugin } from "@opencode/plugin/gui"
 import type Details from "./index"
 import { DetailsHeader, type DetailsMenus } from "./popover"
 import { BuiltinSlot, onIdle } from "@opencode/plugin/gui/builtin"
+import { createLocationMoves } from "./location-move"
 
 const setup: Plugin.Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
 
   const menus: DetailsMenus = new Set()
+  const moves = createLocationMoves()
 
   const DetailsPanel = lazy(() =>
     Promise.all([import("./panel"), import("./details.css?inline")]).then(([panel, css]) => {
@@ -50,7 +52,7 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
     at: "session.location.workspace",
     render: (input) => (
       <Suspense>
-        <LocationWorkspace {...input} />
+        <LocationWorkspace {...input} moves={moves} />
       </Suspense>
     ),
   })

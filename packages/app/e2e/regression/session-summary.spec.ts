@@ -150,6 +150,36 @@ test("the project menu loads changes on demand and opens review", async ({ page 
   await expect(page.locator("#review-panel")).toBeVisible()
 })
 
+test("new worktree stays disabled while its first creation is pending", async ({ page }) => {
+  const creates: unknown[] = []
+  await openSession(page, {
+    name: "PendingWorktree",
+    onWorktreeCreate: (input) => {
+      creates.push(input)
+
+      return new Promise<never>(() => {})
+    },
+  })
+  const trigger = page.locator('[data-slot="session-location-trigger"]')
+  const card = page.locator('[data-slot="session-location-card"]')
+
+  const openDestinations = async () => {
+    await trigger.click()
+    await card.getByRole("menuitem", { name: "Local repository", exact: true }).click()
+
+    return page.getByRole("menu", { name: "Local repository", exact: true })
+  }
+
+  const destinations = await openDestinations()
+  await destinations.getByRole("menuitem", { name: "New worktree", exact: true }).click()
+  await expect(card).toBeHidden()
+  await expect.poll(() => creates.length).toBe(1)
+
+  const reopened = await openDestinations()
+  await expect(reopened.getByRole("menuitem", { name: "New worktree", exact: true })).toBeDisabled()
+  expect(creates).toHaveLength(1)
+})
+
 test("a session in a worktree subfolder names its worktree and lists cached worktrees at once", async ({ page }) => {
   const root = "C:/OpenCode/SmokeWorktrees"
   await mockStressTimeline(page, {

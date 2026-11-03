@@ -3,8 +3,11 @@ import { Menu } from "@opencode/ui/menu"
 import { Show } from "solid-js"
 import type { BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { SessionWorkspaceMenu } from "./workspace-menu"
+import type { LocationMoves } from "./location-move"
 
-export default function SessionLocationWorkspace(props: BuiltinSlotMap["session.location.workspace"]) {
+export default function SessionLocationWorkspace(
+  props: BuiltinSlotMap["session.location.workspace"] & { moves: LocationMoves },
+) {
   const location = () => (
     <>
       <Icon name={props.icon} class="text-v2-icon-icon-muted" />
@@ -21,7 +24,13 @@ export default function SessionLocationWorkspace(props: BuiltinSlotMap["session.
           when={!props.session.server.data.session.get(props.session.id)?.parentID}
           fallback={<Menu.Item disabled>{location()}</Menu.Item>}
         >
-          <SessionWorkspaceMenu sub session={props.session} project={project()} directory={props.session.directory}>
+          <SessionWorkspaceMenu
+            sub
+            session={props.session}
+            project={project()}
+            directory={props.session.directory}
+            moves={props.moves}
+          >
             {location()}
           </SessionWorkspaceMenu>
         </Show>
