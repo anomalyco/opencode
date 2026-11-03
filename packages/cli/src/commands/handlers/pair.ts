@@ -3,6 +3,7 @@ import { EOL } from "os"
 import { Effect, Option, Schedule } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
+import { pairingQRLink, reachableURLs } from "@opencode/util/pairing-link"
 import { renderUnicodeCompact } from "@opencode/util/qr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -29,26 +30,13 @@ export default Runtime.handler(
     const urls = yield* pairingURLs(client, input)
     const pairing = yield* Effect.tryPromise(() => client.server.pair())
     const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
-    // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
-    const remote = urls.filter((url) => !isLoopback(new URL(url).hostname))
     process.stdout.write(
       [
         "",
         `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
         "",
         ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
-        ...(remote.length
-          ? [
-              "",
-              // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
-              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
-                border: 2,
-              })
-                .split("\n")
-                .map((line) => "  " + line)
-                .join(EOL),
-            ]
-          : []),
+        ...qrLines(pairing.code, urls),
         "",
       ].join(EOL) + EOL,
     )
@@ -68,6 +56,22 @@ export default Runtime.handler(
     )
   }),
 )
+
+// The QR code carries only addresses the scanning device can reach, as many as a scannable code holds. With none
+// that fit, the printed links still work.
+export function qrLines(code: string, urls: readonly string[]) {
+  if (reachableURLs(urls).length === 0) return []
+  const link = pairingQRLink(code, urls)
+  if (link === undefined) return ["", "  The addresses are too long for a QR code; open a link instead."]
+  return [
+    "",
+    // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
+    renderUnicodeCompact(link, { border: 2 })
+      .split("\n")
+      .map((line) => "  " + line)
+      .join(EOL),
+  ]
+}
 
 export const remoteWarning = [
   "This will expose your OpenCode server to the internet.",
@@ -151,9 +155,3 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
     }),
   )
 })
-
-function isLoopback(hostname: string) {
-  return (
-    hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]"
-  )
-}

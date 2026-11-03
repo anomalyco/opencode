@@ -1,5 +1,6 @@
 export * as RemoteTunnel from "./remote-tunnel"
 
+import { spinner } from "@clack/prompts"
 import type { OpenTunnelError } from "@opentunnel/client/effect"
 import { Cause, Effect, Schedule } from "effect"
 import { EOL } from "os"
@@ -48,14 +49,26 @@ export const run = Effect.fnUntraced(function* (input: {
 })
 
 // A device without a tunnel creates its shared one here, in the foreground, because issuing the certificate
-// takes a while; the service then only attaches its route on start. An interrupted issuance resumes next time.
+// takes a while (about a minute, on OpenTunnel's side); the service then only attaches its route on start, in about
+// a second. An interrupted issuance resumes next time.
 export const ensure = Effect.fnUntraced(function* () {
   const { OpenTunnelClient } = yield* Effect.promise(() => import("@opentunnel/client/effect"))
   return yield* Effect.gen(function* () {
     const client = yield* OpenTunnelClient
-    if ((yield* client.tunnel.get()) === undefined)
-      process.stderr.write("Setting up remote access; this can take a minute..." + EOL)
-    return (yield* client.tunnel.ensure()).hostname
+    if ((yield* client.tunnel.get()) !== undefined) return (yield* client.tunnel.ensure()).hostname
+    const message = "Setting up remote access (once per device, about a minute)"
+    if (!process.stderr.isTTY) {
+      process.stderr.write(message + "..." + EOL)
+      return (yield* client.tunnel.ensure()).hostname
+    }
+    // The elapsed time shows the wait is progressing while OpenTunnel issues the certificate.
+    const progress = spinner({ indicator: "timer", output: process.stderr })
+    progress.start(message)
+    return yield* client.tunnel.ensure().pipe(
+      Effect.map((tunnel) => tunnel.hostname),
+      Effect.tap(() => Effect.sync(() => progress.stop("Remote access is set up"))),
+      Effect.onError(() => Effect.sync(() => progress.stop("Remote access setup stopped", 1))),
+    )
   }).pipe(
     Effect.provide(OpenTunnelClient.layer()),
     Effect.timeoutOrElse({

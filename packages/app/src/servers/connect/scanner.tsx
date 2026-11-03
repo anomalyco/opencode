@@ -35,7 +35,7 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
 
           if (redeemed && "pairing" in redeemed) {
             scanner.stop()
-            // A QR code carries {"code","urls"} JSON; the form shows the link for the address that paired instead.
+            // A QR code carries every address; the form shows the link for the address that paired instead.
             const code = pairingLink(result.data)?.code
             props.onScan(code ? new URL(`/auth/connect/${code}`, redeemed.pairing.url).href : result.data)
 
