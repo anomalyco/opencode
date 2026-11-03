@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import type { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
@@ -1353,6 +1353,52 @@ describe("Session.prompt", () => {
       expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
       expect(differing).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
       expect(yield* admittedCount).toBe(0)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
+    }),
+  )
+
+  it.effect("reconciles a concurrent synthetic retry after the winning admission is promoted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const gate = { first: true }
+      const gatedBus = Bus.Service.of({
+        ...bus,
+        publish: (definition, data, options) =>
+          Effect.gen(function* () {
+            if (definition.type === SessionEvent.InboxEnqueued.type && gate.first) {
+              gate.first = false
+              yield* Deferred.succeed(entered, undefined)
+              yield* Deferred.await(release)
+            }
+            return yield* bus.publish(definition, data, options)
+          }),
+      })
+      const inbox = yield* SessionInbox.make().pipe(Effect.provideService(Bus.Service, gatedBus))
+      const request = {
+        id: messageID,
+        sessionID,
+        item: { type: "synthetic" as const, payload: { text: "Retried completion" }, delivery: "steer" as const },
+      }
+      // Pause this request after reconciliation; the same Inbox accepts and delivers its competitor.
+      const delayed = yield* inbox.admit(request).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(entered)
+      const first = yield* inbox.admit({
+        ...request,
+        item: { ...request.item, payload: { text: "Completed" } },
+      })
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(1)
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.join(delayed)).toMatchObject({ id: messageID, type: "synthetic", payload: first.payload })
+      expect(yield* admittedCount).toBe(0)
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: messageID, type: "synthetic", text: first.payload.text },
+      ])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
     }),
   )
