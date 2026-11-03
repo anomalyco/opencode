@@ -8,7 +8,7 @@ export default {
     const history = controller.cron === HISTORY_SCHEDULE
     const id = instanceId(scheduledAt, history)
     const instances = await Promise.all(
-      recentInstanceIds(scheduledAt).map(async (item) => ({
+      recentInstanceIds(scheduledAt, history).map(async (item) => ({
         id: item,
         // get() rejects for an ID that was never created.
         status: await env.StatsSyncWorkflow.get(item).then(

@@ -10,18 +10,45 @@ describe("stats sync schedule", () => {
     expect(instanceId(new Date("2026-11-03T03:05:59.999Z"), false)).toBe("stats-hourly-2026-11-03T03")
   })
 
-  test("probes this slot, the previous five hours and the previous two history days", () => {
-    expect(recentInstanceIds(new Date("2026-11-01T02:05:00.000Z"))).toEqual([
+  test("probes this hour and the previous five for an hourly run", () => {
+    expect(recentInstanceIds(new Date("2026-11-01T02:05:00.000Z"), false)).toEqual([
       "stats-hourly-2026-11-01T02",
       "stats-hourly-2026-11-01T01",
       "stats-hourly-2026-11-01T00",
       "stats-hourly-2026-10-31T23",
       "stats-hourly-2026-10-31T22",
       "stats-hourly-2026-10-31T21",
+    ])
+  })
+
+  test("probes today and the previous two days for a history run", () => {
+    expect(recentInstanceIds(new Date("2026-11-01T03:20:00.000Z"), true)).toEqual([
       "stats-history-2026-11-01",
       "stats-history-2026-10-31",
       "stats-history-2026-10-30",
     ])
+  })
+
+  test("lets hourly and history runs overlap", () => {
+    const at = new Date("2026-11-03T04:05:00.000Z")
+    const running = new Set(["stats-history-2026-11-03", "stats-hourly-2026-11-03T03"])
+    const decide = (history: boolean) =>
+      skipReason(
+        instanceId(at, history),
+        recentInstanceIds(at, history).map((id) => ({ id, status: running.has(id) ? "running" : undefined })),
+      )
+
+    expect(decide(false)).toEqual({
+      reason: "previous run active",
+      instance: "stats-hourly-2026-11-03T03",
+      status: "running",
+    })
+    running.delete("stats-hourly-2026-11-03T03")
+    expect(decide(false)).toBeUndefined()
+    expect(decide(true)).toEqual({ reason: "already created", instance: "stats-history-2026-11-03", status: "running" })
+    running.delete("stats-history-2026-11-03")
+    running.add("stats-hourly-2026-11-03T04")
+    expect(decide(true)).toBeUndefined()
   })
 
   test("starts when no recent instance is active", () => {
@@ -30,7 +57,7 @@ describe("stats sync schedule", () => {
         { id: "stats-hourly-2026-11-03T04", status: undefined },
         { id: "stats-hourly-2026-11-03T03", status: "complete" },
         { id: "stats-hourly-2026-11-03T02", status: "errored" },
-        { id: "stats-history-2026-11-03", status: "terminated" },
+        { id: "stats-hourly-2026-11-03T01", status: "terminated" },
       ]),
     ).toBeUndefined()
   })
@@ -41,9 +68,9 @@ describe("stats sync schedule", () => {
       expect(
         skipReason("stats-hourly-2026-11-03T04", [
           { id: "stats-hourly-2026-11-03T04", status: undefined },
-          { id: "stats-history-2026-11-03", status },
+          { id: "stats-hourly-2026-11-03T03", status },
         ]),
-      ).toEqual({ reason: "previous run active", instance: "stats-history-2026-11-03", status })
+      ).toEqual({ reason: "previous run active", instance: "stats-hourly-2026-11-03T03", status })
     },
   )
 

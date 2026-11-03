@@ -18,20 +18,17 @@ export function instanceId(scheduledAt: Date, history: boolean) {
   return `stats-hourly-${scheduledAt.toISOString().slice(0, 13)}`
 }
 
-// The newest IDs a run may still be using, starting with this slot's own.
-export function recentInstanceIds(scheduledAt: Date) {
-  return [
-    ...Array.from({ length: HOURLY_LOOKBACK }, (_, index) =>
-      instanceId(new Date(scheduledAt.getTime() - index * HOUR_MS), false),
-    ),
-    ...Array.from({ length: HISTORY_LOOKBACK }, (_, index) =>
-      instanceId(new Date(scheduledAt.getTime() - index * DAY_MS), true),
-    ),
-  ]
+// The newest IDs of the same kind a run may still be using, starting with this
+// slot's own. Hourly and history runs cover different periods and their writes
+// are idempotent, so one kind never waits for the other.
+export function recentInstanceIds(scheduledAt: Date, history: boolean) {
+  return Array.from({ length: history ? HISTORY_LOOKBACK : HOURLY_LOOKBACK }, (_, index) =>
+    instanceId(new Date(scheduledAt.getTime() - index * (history ? DAY_MS : HOUR_MS)), history),
+  )
 }
 
-// Runs never overlap: two runs would repeat R2 SQL spend and race on the same
-// rows. `undefined` means the instance does not exist.
+// Runs of one kind never overlap: two would repeat R2 SQL spend for the same
+// periods. `undefined` means the instance does not exist.
 export function skipReason(id: string, instances: { id: string; status: string | undefined }[]) {
   const own = instances.find((instance) => instance.id === id && instance.status !== undefined)
   if (own) return { reason: "already created", instance: own.id, status: own.status }

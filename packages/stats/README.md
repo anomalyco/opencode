@@ -26,9 +26,9 @@ The `StatsSyncCron` Worker starts runs on two schedules:
 - `5 * * * *`: an hourly run of the current ISO week and the most recent complete retention cohort, with instance ID `stats-hourly-YYYY-MM-DDTHH`.
 - `20 3 * * *`: a daily history run of the rest of the 56-day display window, with instance ID `stats-history-YYYY-MM-DD`.
 
-Times and IDs are in UTC. Before starting a run, the Cron checks this slot's ID, the five previous hourly IDs and the two previous history IDs. It skips the run if any of them is queued, running, waiting or paused, or if this slot's instance already exists, and logs the reason.
+Times and IDs are in UTC. Before starting a run, the Cron checks this slot's ID and the recent IDs of the same kind: the five previous hours for an hourly run, the two previous days for a history run. It skips the run if any of them is queued, running, waiting or paused, or if this slot's instance already exists, and logs the reason. Hourly and history runs can overlap, since they cover different periods and their writes are idempotent.
 
-To start a run by hand, find the Workflow's name with `bunx wrangler workflows list` (it is `opencode-<stage>-statssyncworkflowworkflow-<suffix>`), then trigger it with an ID from the Cron's convention so scheduled runs see it and wait:
+To start a run by hand, find the Workflow's name with `bunx wrangler workflows list` (it is `opencode-<stage>-statssyncworkflowworkflow-<suffix>`), then trigger it with an ID from the Cron's convention so scheduled runs of the same kind see it and wait:
 
 ```sh
 bunx wrangler workflows trigger <workflow-name> '{"history":true}' --id stats-history-2026-11-03
