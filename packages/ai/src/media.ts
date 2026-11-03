@@ -280,7 +280,7 @@ export const url = (
 export const ref = (provider: string | ProviderID, id: string, mediaType?: string, options?: AssetOptions) =>
   from({ type: "ref", provider: ProviderID.make(provider), id, mediaType }, options)
 
-const DATA_URL = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/s
+const DATA_URL = /^data:([^;,]+)(?:;[^;,]*)*;base64,(.*)$/s
 
 /** Parse a `data:<mime>;base64,<data>` URL, or `undefined` when the value is not a base64 data URL. */
 export const parseDataUrl = (value: string, options?: AssetOptions) => {
