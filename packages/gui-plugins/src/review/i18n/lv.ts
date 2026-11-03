@@ -6,7 +6,7 @@ export default {
   "mobile.title.zero": "Izmaiņu",
   "mobile.title.one": "Izmaiņa",
   "mobile.title.other": "Izmaiņas",
-  "empty.git": "Vēl nav neapstiprinātu izmaiņu",
+  "empty.working": "Vēl nav neapstiprinātu izmaiņu",
   "empty.branch": "Vēl nav zara izmaiņu",
   "git.title": "Izveidot Git repozitoriju",
   "git.description": "Izseko, pārskati un atsauc izmaiņas šajā projektā",

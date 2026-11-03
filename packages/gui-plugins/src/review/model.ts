@@ -30,7 +30,11 @@ import {
   reviewRootDirectory,
 } from "./kinds"
 
-export type ChangeMode = "git" | "branch" | "turn"
+// The change sources the TUI diff viewer offers: the branch with local changes, its commits, local changes, the last turn.
+export type ChangeMode = "branch" | "committed" | "working" | "turn"
+
+// Branch and Committed compare against the branch's review base.
+const comparesBase = (mode: ChangeMode) => mode === "branch" || mode === "committed"
 
 type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
 
@@ -75,6 +79,9 @@ export function createReviewModel(input: {
   // session's choice, so nothing shows them or requests their diff, and changes wait to apply over the stored state.
   const saved = createMemo(() => ctx.stores.session(view()))
   const stored = () => saved().value
+  // The change source is one choice for the app, as in the TUI.
+  const source = ctx.stores.source
+  const loaded = () => !!stored() && !!source.value
 
   const update: ReturnType<typeof ctx.stores.session>["update"] = (mutation) => saved().update(mutation)
 
@@ -104,16 +111,10 @@ export function createReviewModel(input: {
     const list: ChangeMode[] = []
     const project = view().project
 
-    if (project?.vcs) list.push("git")
+    // On the default branch, Branch shows the local changes and Committed none, as in the TUI.
+    if (project?.vcs && vcs()?.branch.default) list.push("branch", "committed")
 
-    if (
-      project?.vcs &&
-      vcs()?.branch.current &&
-      vcs()?.branch.default &&
-      vcs()?.branch.current !== vcs()?.branch.default
-    ) {
-      list.push("branch")
-    }
+    if (project?.vcs) list.push("working")
 
     // Turn snapshots are captured only for Git sessions.
     if (project?.vcs === "git" && view().id) list.push("turn")
@@ -121,17 +122,17 @@ export function createReviewModel(input: {
     return list
   })
 
-  // The session's chosen mode while it is offered. One it no longer offers, such as Branch back on the default branch,
-  // shows as the first mode offered; the stored choice stays, so it returns once its mode is offered again.
+  // The chosen source while the session offers it. One it does not offer, such as Last turn outside Git, shows as the
+  // first source offered; the stored choice stays, so it returns where its source is offered.
   const mode = createMemo<ChangeMode>(() => {
-    const chosen = stored()?.mode ?? "git"
+    const chosen = source.value?.mode ?? "branch"
 
     // Until the server and the project answer, what the session offers is unknown.
     if (!view().server.connected || !view().project) return chosen
 
     const list = options()
 
-    return list.includes(chosen) ? chosen : (list[0] ?? "git")
+    return list.includes(chosen) ? chosen : (list[0] ?? "working")
   })
 
   const vcsKey = createMemo(
@@ -154,14 +155,30 @@ export function createReviewModel(input: {
 
   const turnKey = () => [ctx.id, view().server.id, "session-turn", view().id] as const
 
+  // The base Branch and Committed compare against: the ref the branch was created from, or the default branch. Kept
+  // apart from the diff key so file changes do not resolve it again; a branch switch does.
+  const baseQuery = createQuery(() => ({
+    queryKey: [ctx.id, view().server.id, "session-vcs-base", directory(), vcs()?.branch.current ?? ""] as const,
+    enabled: loaded() && view().server.connected && wantsReview() && !!view().project?.vcs && comparesBase(mode()),
+    retry: false,
+    queryFn: () =>
+      view()
+        .server.client.vcs.base({ location: { directory: directory() } })
+        .then((result) => result.data),
+  }))
+
+  // A base the server cannot resolve leaves the diff to compare against the default branch.
+  const baseRef = () => (comparesBase(mode()) ? baseQuery.data?.ref : undefined)
+  const baseSettled = () => !comparesBase(mode()) || baseQuery.isFetched
+
   const diffQuery = createQuery(() => {
     const value = mode()
     const turn = value === "turn"
 
     return {
-      queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
-      // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
+      queryKey: turn ? turnKey() : ([...vcsKey(), value, baseRef() ?? ""] as const),
+      // Desktop storage loads asynchronously; until the chosen source is known, a request would use the default.
+      enabled: loaded() && baseSettled() && view().server.connected && wantsReview() && !!view().project?.vcs,
       refetchOnMount: "always" as const,
       // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
       refetchOnWindowFocus: !turn,
@@ -171,7 +188,8 @@ export function createReviewModel(input: {
             view()
               .server.client.vcs.diff({
                 location: { directory: directory() },
-                mode: value === "git" ? "working" : value,
+                mode: value,
+                base: baseRef(),
                 untracked: "folders",
               })
               .then((result) => result.data),
@@ -248,20 +266,25 @@ export function createReviewModel(input: {
   )
 
   const folderQueries = useQueries(() => ({
-    queries: openFolders().map((folder) => ({
-      queryKey: [...vcsKey(), mode(), "folder", folder] as const,
-      enabled: view().server.connected && mode() !== "turn",
-      queryFn: () =>
-        view()
-          .server.client.vcs.diff({
-            location: {
-              directory: reviewFolderDirectory(reviewRootDirectory(view().project?.worktree ?? directory()), folder),
-            },
-            mode: mode() === "branch" ? "branch" : "working",
-            untracked: "folders",
-          })
-          .then((result) => result.data),
-    })),
+    queries: openFolders().map((folder) => {
+      const value = mode()
+
+      return {
+        queryKey: [...vcsKey(), value, baseRef() ?? "", "folder", folder] as const,
+        enabled: view().server.connected && value !== "turn",
+        queryFn: () =>
+          view()
+            .server.client.vcs.diff({
+              location: {
+                directory: reviewFolderDirectory(reviewRootDirectory(view().project?.worktree ?? directory()), folder),
+              },
+              mode: value === "turn" ? "working" : value,
+              base: baseRef(),
+              untracked: "folders",
+            })
+            .then((result) => result.data),
+      }
+    }),
   }))
 
   const diffs = createMemo(() =>
@@ -322,7 +345,7 @@ export function createReviewModel(input: {
 
     if (project && !project.vcs) return true
 
-    if (!stored()) return false
+    if (!loaded()) return false
 
     return !diffQuery.isPending
   }
@@ -423,14 +446,15 @@ export function createReviewModel(input: {
     const request = (scope: string, context?: number) =>
       queryClient
         .fetchQuery({
-          queryKey: [ctx.id, ...vcsKey(), value, "directory", scope, context, version] as const,
+          queryKey: [ctx.id, ...vcsKey(), value, baseRef() ?? "", "directory", scope, context, version] as const,
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
             view()
               .server.client.vcs.diff({
                 location: { directory: scope },
-                mode: value === "git" ? "working" : value,
+                mode: value,
+                base: baseRef(),
                 context,
                 untracked: "folders",
               })
@@ -640,8 +664,8 @@ export function createReviewModel(input: {
     screen,
     view,
     activeFile,
-    // The mode picker waits for the stored mode.
-    canReview: () => !!view().project && !!stored(),
+    // The source picker waits for the stored source.
+    canReview: () => !!view().project && loaded(),
     comments: {
       actions: commentActions,
       add: addComment,
@@ -695,10 +719,7 @@ export function createReviewModel(input: {
     options,
     panelRendered,
     ready,
-    setMode: (value: ChangeMode) =>
-      update((draft) => {
-        draft.mode = value
-      }),
+    setMode: (value: ChangeMode) => source.set({ mode: value }),
     setScroll,
   }
 }

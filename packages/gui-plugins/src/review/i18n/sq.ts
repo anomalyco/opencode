@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} skedarë u ndryshuan",
   "mobile.title.one": "Ndryshimi",
   "mobile.title.other": "Ndryshimet",
-  "empty.git": "Ende nuk ka ndryshime të pazgjedhura",
+  "empty.working": "Ende nuk ka ndryshime të pazgjedhura",
   "empty.branch": "Ende nuk ka ndryshime në degë",
   "git.title": "Krijoni një depo Git",
   "git.description": "Gjurmoni, rishikoni dhe anuloni ndryshimet në këtë projekt",

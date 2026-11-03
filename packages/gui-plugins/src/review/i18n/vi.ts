@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} tệp đã thay đổi",
   "mobile.title.one": "Thay đổi",
   "mobile.title.other": "Thay đổi",
-  "empty.git": "Chưa có thay đổi nào chưa commit",
+  "empty.working": "Chưa có thay đổi nào chưa commit",
   "empty.branch": "Chưa có thay đổi nhánh",
   "git.title": "Tạo kho lưu trữ Git",
   "git.description": "Theo dõi, xem xét và hoàn tác các thay đổi trong dự án này",

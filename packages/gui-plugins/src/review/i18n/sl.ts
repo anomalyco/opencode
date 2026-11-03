@@ -8,7 +8,7 @@ export default {
   "mobile.title.two": "Spremembi",
   "mobile.title.few": "Spremembe",
   "mobile.title.other": "Spremembe",
-  "empty.git": "Ni še nepotrjenih sprememb",
+  "empty.working": "Ni še nepotrjenih sprememb",
   "empty.branch": "Ni še nobenih sprememb veje",
   "git.title": "Ustvarite repozitorij Git",
   "git.description": "Sledite, pregledujte in razveljavite spremembe v tem projektu",

@@ -6,7 +6,7 @@ export default {
   "mobile.title.one": "Промена",
   "mobile.title.few": "Промене",
   "mobile.title.other": "Промене",
-  "empty.git": "Још увек нема неизвршених промена",
+  "empty.working": "Још увек нема неизвршених промена",
   "empty.branch": "Још нема промена гране",
   "git.title": "Направите Git спремиште",
   "git.description": "Пратите, прегледајте и опозовите промене у овом пројекту",

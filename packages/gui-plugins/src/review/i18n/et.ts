@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} faili muudetud",
   "mobile.title.one": "Muuda",
   "mobile.title.other": "Muudatused",
-  "empty.git": "Tehmata muudatusi pole veel tehtud",
+  "empty.working": "Tehmata muudatusi pole veel tehtud",
   "empty.branch": "Filiaali muudatusi veel pole",
   "git.title": "Loo Git hoidla",
   "git.description": "Selle projekti muudatuste jälgimine, ülevaatamine ja tagasivõtmine",

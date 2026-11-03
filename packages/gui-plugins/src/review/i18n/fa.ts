@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} فایل تغییر کرد",
   "mobile.title.one": "تغییر دهید",
   "mobile.title.other": "تغییرات",
-  "empty.git": "هنوز هیچ تغییری انجام نشده است",
+  "empty.working": "هنوز هیچ تغییری انجام نشده است",
   "empty.branch": "هنوز شعبه ای تغییر نکرده است",
   "git.title": "یک مخزن Git ایجاد کنید",
   "git.description": "ردیابی، بررسی، و لغو تغییرات در این پروژه",

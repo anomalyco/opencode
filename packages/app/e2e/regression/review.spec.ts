@@ -55,11 +55,11 @@ for (const view of ["desktop", "mobile"] as const) {
 
     if (view === "desktop") await openReviewLauncher(panel)
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
-    await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: "All changes", exact: true })).toHaveCount(0)
     const init = panel.getByRole("button", { name: "Create Git repository" })
     await init.click()
     await expect.poll(() => requests).toEqual([{ directory: workspace.directory, provider: "git" }])
-    await expect(panel.getByRole("button", { name: "Git changes" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "All changes", exact: true })).toBeVisible()
     await expect(init).toHaveCount(0)
   })
 }
@@ -110,13 +110,13 @@ test("Git initialization belongs to its session and refreshes after a session sw
   expect((await response).status()).toBe(204)
   expect((await refreshed).status()).toBe(200)
   expect(requests).toEqual([{ directory: workspace.directory, provider: "git" }])
-  await expect(panel.getByRole("button", { name: "Git changes", exact: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "All changes", exact: true })).toBeVisible()
   await expect(init).toHaveCount(0)
   await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
 
   await page.locator("[data-titlebar-tab-slot]", { hasText: "Initialize Alpha" }).click()
   await expectSessionTitle(page, "Initialize Alpha")
-  await expect(panel.getByRole("button", { name: "Git changes", exact: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "All changes", exact: true })).toBeVisible()
   await expect(pending).toHaveCount(0)
 })
 
@@ -1427,10 +1427,7 @@ test("restores review state and the side-panel tab per session", async ({ page }
     name: "ReviewState",
     sessions,
     vcs: { current: "feature", default: "dev" },
-    vcsDiff: ({ mode }) =>
-      mode === "branch"
-        ? [fileDiff("src/alpha.ts"), fileDiff("src/beta.ts")]
-        : [fileDiff("src/alpha.ts"), fileDiff("src/gamma.ts")],
+    vcsDiff: [fileDiff("src/alpha.ts"), fileDiff("src/beta.ts"), fileDiff("src/gamma.ts")],
     fileList: () => [fileNode(directory, "README.md")],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
   })
@@ -1462,8 +1459,6 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await toggle.click()
   await openReviewLauncher(panel)
   await expect(review).toHaveAttribute("aria-selected", "true")
-  await page.getByRole("button", { name: "Git changes" }).click()
-  await page.getByRole("option", { name: "Branch changes" }).click()
   await page.getByRole("treeitem", { name: "beta.ts" }).click()
   await selectedFile("beta.ts")
   await page.getByRole("button", { name: "Toggle session context" }).click()
@@ -1490,13 +1485,11 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await switchSession("Beta review state")
   await selectedTab("Context")
   await review.click()
-  await expect(page.getByRole("button", { name: "Branch changes" })).toBeVisible()
   await selectedFile("beta.ts")
   await switchSession("Alpha review state")
   await selectedTab("README.md")
   await panel.getByRole("tab", { name: "README.md", exact: true }).press("Home")
   await expect(review).toHaveAttribute("aria-selected", "true")
-  await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
   await selectedFile("gamma.ts")
   await review.press("End")
   await selectedTab("README.md")
@@ -1533,14 +1526,14 @@ test("shows and restores last turn changes from the session diff", async ({ page
   const panel = page.locator("#review-panel")
   await page.getByRole("button", { name: "Toggle review" }).click()
   await openReviewLauncher(panel)
-  await page.getByRole("button", { name: "Git changes" }).click()
-  await page.getByRole("option", { name: "Last turn changes" }).click()
-  await expect(page.getByRole("button", { name: "Last turn changes" })).toBeVisible()
+  await page.getByRole("button", { name: "All changes", exact: true }).click()
+  await page.getByRole("option", { name: /^Last turn/ }).click()
+  await expect(page.getByRole("button", { name: "Last turn", exact: true })).toBeVisible()
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 
   await page.reload()
   await expectSessionTitle(page, "ReviewTurn")
-  await expect(page.getByRole("button", { name: "Last turn changes" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Last turn", exact: true })).toBeVisible()
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
@@ -1549,15 +1542,13 @@ test("keeps the review state a session stored before plugins", async ({ page }) 
   await openSession(page, {
     name: "ReviewLegacy",
     vcs: { current: "feature", default: "dev" },
-    vcsDiff: ({ mode }) =>
-      mode === "branch" ? [fileDiff("alpha.ts"), fileDiff("beta.ts")] : [fileDiff("alpha.ts"), fileDiff("gamma.ts")],
+    vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
     seed: {
       storage: {
         "opencode.global.dat:layout": {
           sessionView: {
             [`local\u0000${base64Encode(directory)}/ses_reviewlegacy`]: {
               scroll: {},
-              reviewMode: "branch",
               reviewFile: "beta.ts",
               reviewOpen: ["beta.ts"],
             },
@@ -1566,7 +1557,6 @@ test("keeps the review state a session stored before plugins", async ({ page }) 
       },
     },
   })
-  const mode = (name: string) => page.getByRole("button", { name, exact: true })
   const changes = page.getByRole("tablist", { name: "Session view", exact: true }).getByRole("tab", { name: "Changes" })
 
   const trigger = (file: string) =>
@@ -1576,7 +1566,6 @@ test("keeps the review state a session stored before plugins", async ({ page }) 
 
   await page.getByRole("button", { name: "Toggle review" }).click()
   await openReviewLauncher(page.locator("#review-panel"))
-  await expect(mode("Branch changes")).toBeVisible()
   await expect(page.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("beta.ts")
   // The narrow review lists every file and expands the ones left open.
   await page.setViewportSize({ width: 390, height: 844 })
@@ -1585,16 +1574,70 @@ test("keeps the review state a session stored before plugins", async ({ page }) 
   await expect(trigger("alpha.ts")).toHaveAttribute("aria-expanded", "false")
 
   // The copy happens once: a later change survives a reload, although the old state is still stored.
-  await mode("Branch changes").click()
-  await page.getByRole("option", { name: "Git changes" }).click()
-  await expect(trigger("gamma.ts")).toBeVisible()
+  await trigger("beta.ts").click()
+  await expect(trigger("beta.ts")).toHaveAttribute("aria-expanded", "false")
   await page.reload()
   await changes.click()
-  await expect(mode("Git changes")).toBeVisible()
-  await expect(trigger("gamma.ts")).toBeVisible()
+  await expect(trigger("alpha.ts")).toBeVisible()
+  await expect(trigger("beta.ts")).toHaveAttribute("aria-expanded", "false")
 })
 
-test("desktop review waits for the session's stored mode before it loads changes", async ({ page }) => {
+test("defaults to All changes, compares against the branch's review base, and keeps the source across sessions", async ({
+  page,
+}) => {
+  const bases: (string | undefined)[] = []
+  await openSession(page, {
+    name: "ReviewSources",
+    sessions: [
+      { id: "ses_sources_a", title: "Sources Alpha" },
+      { id: "ses_sources_b", title: "Sources Beta" },
+    ],
+    vcs: { current: "feature", default: "dev" },
+    vcsBase: { name: "release", ref: "refs/heads/release", source: "reflog" },
+    vcsDiff: ({ mode, base }) => {
+      if (mode === "branch") {
+        bases.push(base)
+
+        return [fileDiff("alpha.ts"), fileDiff("beta.ts")]
+      }
+
+      if (mode === "committed") return [fileDiff("alpha.ts")]
+
+      return [fileDiff("beta.ts")]
+    },
+    seed: {
+      panes: { ses_sources_a: { review: true }, ses_sources_b: { review: true } },
+      storage: reviewTabs("C:/OpenCode/ReviewSources", "ses_sources_a", "ses_sources_b"),
+    },
+  })
+  const panel = page.locator("#review-panel")
+  const source = (name: string) => panel.getByRole("button", { name, exact: true })
+  const files = panel.getByRole("treeitem")
+
+  await expect(source("All changes")).toBeVisible()
+  await expect(files).toHaveText(["alpha.ts", "beta.ts"])
+  expect(bases).toContain("refs/heads/release")
+
+  await source("All changes").click()
+  await expect(page.getByRole("option")).toHaveText(["All changes", "Committed", "Uncommitted", "Last turn"])
+  await page.getByRole("option", { name: /^Committed/ }).click()
+  await expect(files).toHaveText(["alpha.ts"])
+
+  await source("Committed").click()
+  await page.getByRole("option", { name: /^Uncommitted/ }).click()
+  await expect(files).toHaveText(["beta.ts"])
+
+  // The source is one choice for the app: another session and a reload keep it.
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "Sources Beta" }).click()
+  await expectSessionTitle(page, "Sources Beta")
+  await expect(source("Uncommitted")).toBeVisible()
+  await page.reload()
+  await expectSessionTitle(page, "Sources Beta")
+  await expect(source("Uncommitted")).toBeVisible()
+  await expect(files).toHaveText(["beta.ts"])
+})
+
+test("desktop review waits for the session's stored state before it loads changes", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewDesktop"
   const id = "ses_review_desktop"
   const title = "Desktop review"
@@ -1607,11 +1650,11 @@ test("desktop review waits for the session's stored mode before it loads changes
     vcs: { current: "feature", default: "dev" },
     vcsDiff: ({ mode }) => (mode === "branch" ? [fileDiff("beta.ts")] : [fileDiff("gamma.ts")]),
   })
-  const working: string[] = []
+  const branch: string[] = []
   page.on("request", (request) => {
     const url = new URL(request.url())
 
-    if (url.pathname.endsWith("/vcs/diff") && url.searchParams.get("mode") === "working") working.push(request.url())
+    if (url.pathname.endsWith("/vcs/diff") && url.searchParams.get("mode") === "branch") branch.push(request.url())
   })
 
   const desktop = (hold?: string) =>
@@ -1631,66 +1674,71 @@ test("desktop review waits for the session's stored mode before it loads changes
   await expectSessionTitle(page, title)
   await toggle.click()
   await openReviewLauncher(page.locator("#review-panel"))
-  await mode("Git changes").click()
-  await page.getByRole("option", { name: "Branch changes" }).click()
-  await expect(file).toHaveText("beta.ts")
+  await mode("All changes").click()
+  await page.getByRole("option", { name: /^Uncommitted/ }).click()
+  await expect(file).toHaveText("gamma.ts")
   await expect
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.source") && value.includes('"working"'),
         ),
       ),
     )
     .toBe(true)
 
-  // The reopened window's review mounts before its session store has loaded.
-  working.length = 0
+  // The reopened window's review mounts before its session store has loaded; the stored source is ready by then.
+  branch.length = 0
   await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()
-  await expect(mode("Git changes")).toHaveCount(0)
+  await expect(mode("All changes")).toHaveCount(0)
   await page.getByRole("button", { name: "Load held storage" }).click()
-  await expect(mode("Branch changes")).toBeVisible()
-  await expect(file).toHaveText("beta.ts")
-  expect(working).toEqual([])
+  await expect(mode("Uncommitted")).toBeVisible()
+  await expect(file).toHaveText("gamma.ts")
+  expect(branch).toEqual([])
 })
 
-test("a chosen mode the session stops offering shows as Git, and comes back when it is offered again", async ({
+test("a chosen source the session stops offering shows as the first offered, and comes back when it is offered again", async ({
   page,
 }) => {
-  // The mock server reads the branches on each request, so a reload sees the session's branch change.
-  const vcs = { current: "feature", default: "dev" }
+  // The mock server reads the branches on each request, so a reload sees the repository lose its default branch.
+  const repo = { hasDefault: true }
   await openSession(page, {
     name: "ReviewModeBack",
-    vcs,
-    vcsDiff: ({ mode }) => (mode === "branch" ? [fileDiff("beta.ts")] : [fileDiff("gamma.ts")]),
+    vcs: () => (repo.hasDefault ? { current: "feature", default: "dev" } : { current: "feature" }),
+    vcsDiff: ({ mode }) => (mode === "committed" ? [fileDiff("beta.ts")] : [fileDiff("gamma.ts")]),
   })
   const mode = (name: string) => page.getByRole("button", { name, exact: true })
   const file = page.locator('[data-slot="session-review-v2-file-name"]')
 
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
   await openReviewLauncher(page.locator("#review-panel"))
-  await mode("Git changes").click()
-  await page.getByRole("option", { name: "Branch changes" }).click()
+  await mode("All changes").click()
+  await page.getByRole("option", { name: /^Committed/ }).click()
   await expect(file).toHaveText("beta.ts")
 
-  // Back on the default branch, Branch is not offered.
-  vcs.current = "dev"
+  // Without a default branch, Branch and Committed have no base and are not offered.
+  repo.hasDefault = false
   await page.reload()
-  await expect(mode("Git changes")).toBeVisible()
+  await expect(mode("Uncommitted")).toBeVisible()
   await expect(file).toHaveText("gamma.ts")
 
-  vcs.current = "feature"
+  repo.hasDefault = true
   await page.reload()
-  await expect(mode("Branch changes")).toBeVisible()
+  await expect(mode("Committed")).toBeVisible()
   await expect(file).toHaveText("beta.ts")
 })
 
 test("names a single change source and keeps the review header rows at 48px", async ({ page }) => {
-  // Turn changes are offered only for Git, so another VCS offers one source.
-  await openSession(page, { name: "ReviewHeader", project: { vcs: "hg" }, vcsDiff: [fileDiff("src/alpha.ts")] })
+  // Turn changes are offered only for Git, and Branch and Committed only with a default branch, so this offers one.
+  await openSession(page, {
+    name: "ReviewHeader",
+    project: { vcs: "hg" },
+    vcs: { current: "default" },
+    vcsDiff: [fileDiff("src/alpha.ts")],
+  })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
   const panel = page.locator("#review-panel")
   await openReviewLauncher(panel)
@@ -1698,15 +1746,15 @@ test("names a single change source and keeps the review header rows at 48px", as
   const header = panel.locator('[data-slot="session-review-v2-sidebar-header"]')
   const toolbar = panel.locator('[data-slot="session-review-v2-toolbar"]')
 
-  await expect(header.getByText("Git changes", { exact: true })).toBeVisible()
-  await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
+  await expect(header.getByText("Uncommitted", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Uncommitted" })).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(header).toHaveCSS("height", "48px")
   await expect(toolbar).toHaveCSS("height", "48px")
 
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(toolbar.getByText("Git changes", { exact: true })).toBeVisible()
+  await expect(toolbar.getByText("Uncommitted", { exact: true })).toBeVisible()
   await expect(toolbar).toHaveCSS("height", "48px")
 
   await toggle.click()

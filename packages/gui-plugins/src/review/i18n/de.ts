@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} Dateien geändert",
   "mobile.title.one": "Änderung",
   "mobile.title.other": "Änderungen",
-  "empty.git": "Noch keine nicht committeten Änderungen",
+  "empty.working": "Noch keine nicht committeten Änderungen",
   "empty.branch": "Noch keine Branch-Änderungen",
   "git.title": "Git-Repository erstellen",
   "git.description": "Änderungen in diesem Projekt verfolgen, überprüfen und rückgängig machen",

@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} filer endret",
   "mobile.title.one": "Endring",
   "mobile.title.other": "Endringer",
-  "empty.git": "Ingen endringer som ikke er sjekket inn ennå",
+  "empty.working": "Ingen endringer som ikke er sjekket inn ennå",
   "empty.branch": "Ingen grenendringer ennå",
   "git.title": "Opprett et Git-depot",
   "git.description": "Spor, gjennomgå og angre endringer i dette prosjektet",

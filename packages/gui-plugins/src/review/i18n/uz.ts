@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} ta fayl o‘zgardi",
   "mobile.title.one": "O'zgartirish",
   "mobile.title.other": "O'zgarishlar",
-  "empty.git": "Hali tasdiqlanmagan o'zgarishlar yo'q",
+  "empty.working": "Hali tasdiqlanmagan o'zgarishlar yo'q",
   "empty.branch": "Hozircha filial o'zgarmadi",
   "git.title": "Git omborini yarating",
   "git.description": "Ushbu loyihadagi oʻzgarishlarni kuzating, koʻrib chiqing va bekor qiling",
