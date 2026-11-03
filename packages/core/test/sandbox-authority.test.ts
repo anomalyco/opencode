@@ -150,12 +150,16 @@ macos("reference changes grant read-only shell, file, and search access without 
     const data = path.join(tmp.path, "data")
     const repo = path.join(data, "repos", "owner", "repo")
     const missing = path.join(tmp.path, "not-yet-cloned")
+    const untrusted = path.join(workspace, "missing-reference")
+    const privateDir = path.join(tmp.path, "private")
     const alias = path.join(tmp.path, "reference-alias")
     yield* Effect.promise(async () => {
       await fs.mkdir(workspace)
       await fs.mkdir(external)
+      await fs.mkdir(privateDir)
       await fs.mkdir(repo, { recursive: true })
       await fs.writeFile(path.join(external, "readme"), "external-reference")
+      await fs.writeFile(path.join(privateDir, "secret"), "private-canary")
       await fs.writeFile(path.join(repo, "readme"), "cached-reference")
       await fs.writeFile(path.join(data, "auth.json"), "private-auth")
       await fs.writeFile(path.join(data, "opencode.db"), "private-database")
@@ -182,7 +186,7 @@ macos("reference changes grant read-only shell, file, and search access without 
         return Bun.spawnSync([launch.command, ...launch.args], { cwd: workspace, env: launch.env })
       })
       expect((yield* run(`cat '${external}/readme'`)).exitCode).not.toBe(0)
-      paths = [alias, repo, missing]
+      paths = [alias, repo, missing, untrusted]
       expect((yield* sandbox.status()).readableRoots).toContain(external)
       expect((yield* run(`cat '${alias}/readme'`)).stdout.toString()).toBe("external-reference")
       expect((yield* run(`cat '${repo}/readme'`)).stdout.toString()).toBe("cached-reference")
@@ -198,6 +202,8 @@ macos("reference changes grant read-only shell, file, and search access without 
         stdout: expect.stringContaining("external-reference"),
       })
       expect((yield* run(`printf no > '${external}/new'`)).exitCode).not.toBe(0)
+      expect((yield* run(`ln -s '${privateDir}' '${untrusted}'`)).exitCode).toBe(0)
+      expect((yield* run(`cat '${untrusted}/secret'`)).exitCode).not.toBe(0)
       yield* Effect.promise(async () => {
         await fs.mkdir(missing)
         await fs.writeFile(path.join(missing, "readme"), "now-available")

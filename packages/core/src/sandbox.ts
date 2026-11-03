@@ -176,7 +176,7 @@ export const configured = (input?: Options) => {
 
         // Reference registrations can change after Location startup, including asynchronous Git clones.
         // Pin each existing alias for this Location so a workspace symlink cannot redirect its grant.
-        const pinnedReferences = new Map<string, string>()
+        const pinnedReferences = new Map<string, { root: string; missing: boolean }>()
         const effectivePolicy = Effect.fn("Sandbox.effectivePolicy")(function* () {
           if (!policy || !backend) return yield* new UnavailableError({ message: "Sandbox policy is unavailable." })
           const entries = yield* references.list()
@@ -184,15 +184,33 @@ export const configured = (input?: Options) => {
             try: async () => {
               const roots = await Promise.all(
                 entries.map(async (entry) => {
+                  const pinned = pinnedReferences.get(entry.path)
+                  if (pinned?.missing) return pinned.root
                   const resolved = await fs.realpath(entry.path).catch((error: NodeJS.ErrnoException) => {
                     if (error.code === "ENOENT" || error.code === "ENOTDIR") return undefined
                     throw error
                   })
-                  if (!resolved || !(await fs.stat(resolved)).isDirectory()) return undefined
-                  const pinned = pinnedReferences.get(entry.path)
-                  if (pinned !== undefined && pinned !== resolved)
+                  if (!resolved) {
+                    let parent = path.dirname(entry.path)
+                    while (true) {
+                      const canonical = await fs.realpath(parent).catch((error: NodeJS.ErrnoException) => {
+                        if (error.code === "ENOENT" || error.code === "ENOTDIR") return undefined
+                        throw error
+                      })
+                      if (canonical) {
+                        const root = path.join(canonical, path.relative(parent, entry.path))
+                        pinnedReferences.set(entry.path, { root, missing: true })
+                        return root
+                      }
+                      const next = path.dirname(parent)
+                      if (next === parent) throw new Error(`Cannot resolve reference parent: ${entry.path}`)
+                      parent = next
+                    }
+                  }
+                  if (!(await fs.stat(resolved)).isDirectory()) return undefined
+                  if (pinned !== undefined && pinned.root !== resolved)
                     throw new Error(`Reference target changed: ${entry.path}`)
-                  pinnedReferences.set(entry.path, resolved)
+                  pinnedReferences.set(entry.path, { root: resolved, missing: false })
                   return resolved
                 }),
               )
