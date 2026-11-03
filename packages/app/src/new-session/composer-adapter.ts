@@ -1,6 +1,7 @@
 import { Predicate } from "effect"
 import { base64Encode } from "@opencode/util/encode"
 import { Session } from "@opencode/schema/session"
+import type { SessionInfo } from "@opencode/client/promise"
 import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
@@ -187,8 +188,86 @@ export function createNewSessionComposerAdapter(props: {
     },
   }
 
+  // A voice call started on this draft creates the draft's session at once, as on iOS, and the draft becomes it as a
+  // first send would make it. Once: every request in the call shares that session.
+  const createCallSession = async () => {
+    const draftID = props.draftID
+    const current = controls().model.selection.current()
+    const agent = controls().agents.current
+
+    if (!current || !agent) return
+    const variant = controls().model.selection.variant.current()
+    const currentDirectory = location().directory
+
+    const projectDirectory = data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
+
+    const mcp = props.mcp.capture()
+
+    const directory = await resolveSessionDirectory({
+      projectDirectory,
+      worktree: props.worktree(),
+      branch: props.branch(),
+      data,
+      serverSDK,
+      language,
+    })
+
+    if (!directory || !(await props.mcp.prepare(directory, mcp))) return
+
+    const created = data.session.create({
+      id: Session.ID.create(),
+      agent,
+      model: { id: current.id, providerID: current.provider.id, variant },
+      location: { directory },
+    })
+
+    await created.request
+
+    startTransition(() => {
+      tabs.updateDraft(draftID, { worktree: undefined, branch: undefined })
+      local.session.promote(directory, created.id, {
+        agent,
+        model: { providerID: current.provider.id, modelID: current.id },
+        variant: variant ?? null,
+        choices: model.remembered(),
+      })
+
+      // Whatever was typed in the draft stays in the session's composer.
+      const next = prompt.capture(
+        { dir: base64Encode(directory), id: created.id },
+        { server: server.key, scope: serverSDK.scope },
+      )
+
+      next.set(state.current(), state.cursor())
+      state.context.items().forEach((item) => next.context.add(item))
+      tabs.promoteDraft(draftID, { server: server.key, sessionId: created.id })
+    })
+
+    return serverSDK.api.session.get({ sessionID: created.id })
+  }
+
+  let calling: Promise<SessionInfo | undefined> | undefined
+
   return {
     adapter,
+    // Should creating it fail, the call's next request that needs a session tries again, as on iOS.
+    callSession: () =>
+      (calling ??= createCallSession().then(
+        (session) => {
+          if (!session) calling = undefined
+
+          return session
+        },
+        (error) => {
+          calling = undefined
+          showToast({
+            title: language.t("prompt.toast.sessionCreateFailed.title"),
+            description: errorMessage(language, error),
+          })
+
+          return undefined
+        },
+      )),
     project: createComposerProjectControls({ draftId: props.draftID, worktree: props.worktree }),
     model,
     ready: prompt.ready,

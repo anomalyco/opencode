@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import type {
+  JsonValue,
+  PermissionReplyInput,
+  SessionFormCancelInput,
+  SessionFormReplyInput,
+  SessionInfo,
+  SessionSwitchModelInput,
+} from "@opencode/client/promise"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { parseVoiceDelegation } from "@/session/timeline/voice-delegation"
 import { continuedHeader, header, headerLapse } from "./handoff"
@@ -28,6 +35,7 @@ const models = [
   { id: "gpt-4", name: "GPT-4", providerID: "openai", enabled: false, variants: [] },
 ]
 
+// SAFETY: the voice tools read only a session's id, title, parentID, model, location, and time.
 const session = (id: string, title: string, extra: Partial<SessionInfo> = {}) =>
   ({
     id,
@@ -37,32 +45,37 @@ const session = (id: string, title: string, extra: Partial<SessionInfo> = {}) =>
     ...extra,
   }) as SessionInfo
 
+/** What the tools asked the server and screen to do. */
+type Calls = {
+  open: string[]
+  background: string[]
+  prompts: { sessionID: string; text: string }[]
+  switched: SessionSwitchModelInput[]
+  replies: (SessionFormReplyInput | SessionFormCancelInput | PermissionReplyInput)[]
+}
+
 function setup(
   input: {
     open?: (session: SessionInfo, signal: AbortSignal) => Promise<void>
     tabs?: string[]
     sessions?: SessionInfo[]
+    permissions?: { id: string; sessionID: string; action: string; resources: string[] }[]
+    forms?: { id: string; sessionID: string; title: string; fields: JsonValue[] }[]
   } = {},
 ) {
   const sessions = [
-    session("ses_here", "HERE", {
-      model: { id: "claude-opus-4", providerID: "anthropic", variant: "high" },
-    } as Partial<SessionInfo>),
+    session("ses_here", "HERE", { model: { id: "claude-opus-4", providerID: "anthropic", variant: "high" } }),
     session("ses_desktop", "DESKTOP"),
     session("ses_old", "OLD", { time: { created: 1, updated: 1, archived: 2 } }),
     ...(input.sessions ?? []),
   ]
 
-  const calls = {
-    open: [] as string[],
-    background: [] as string[],
-    prompts: [] as { sessionID: string; text: string }[],
-    switched: [] as unknown[],
-  }
+  const calls: Calls = { open: [], background: [], prompts: [], switched: [], replies: [] }
 
   const empty = { data: [], cursor: {} }
 
-  const ctx = {
+  // SAFETY: the voice tools call only the sdk.api and data.session methods stubbed here.
+  const ctx: ServerCtx = {
     sdk: {
       api: {
         session: {
@@ -86,10 +99,20 @@ function setup(
               .slice(0, request.limit),
             cursor: {},
           }),
-          switchModel: async (request: unknown) => calls.switched.push(request),
+          switchModel: async (request: SessionSwitchModelInput) => calls.switched.push(request),
           background: async (request: { sessionID: string }) => calls.background.push(request.sessionID),
           inbox: { list: async () => [] },
+          form: {
+            reply: async (request: SessionFormReplyInput) => calls.replies.push(request),
+            cancel: async (request: SessionFormCancelInput) => calls.replies.push(request),
+          },
         },
+        // Pending requests are listed per directory, across sessions.
+        permission: {
+          request: { list: async () => ({ data: input.permissions ?? [] }) },
+          reply: async (request: PermissionReplyInput) => calls.replies.push(request),
+        },
+        form: { list: async () => ({ data: input.forms ?? [] }) },
         message: { list: async () => empty },
         model: { list: async () => ({ data: models }) },
       },
@@ -99,7 +122,7 @@ function setup(
         prompt: async (request: { sessionID: string; text: string }) => calls.prompts.push(request),
       },
     },
-  } as unknown as ServerCtx
+  } as never
 
   const tools = new VoiceTools(ctx, {
     open: async (next, signal) => {
@@ -112,7 +135,7 @@ function setup(
   const request = { id: "delegation", sessionID: "ses_here", transcript: ["user: go to the desktop session"] }
   let count = 0
 
-  const run = async (name: string, args: Record<string, unknown> = {}, signal = new AbortController().signal) =>
+  const run = async (name: string, args: Record<string, JsonValue> = {}, signal = new AbortController().signal) =>
     JSON.parse(await tools.run({ call_id: `call_${count++}`, name, arguments: JSON.stringify(args) }, request, signal))
 
   return { calls, request, run }
@@ -316,5 +339,33 @@ describe("send_message", () => {
     await voice.run("send_message", { text: "Afterwards, lint.", delivery: "queue" })
 
     expect(voice.calls.background).toEqual(["ses_here"])
+  })
+})
+
+describe("pending requests", () => {
+  test("a steer waits on a subagent's question, which is answered in the subagent", async () => {
+    const voice = setup({
+      sessions: [session("ses_child", "CHILD", { parentID: "ses_here" })],
+      forms: [
+        { id: "frm_pick", sessionID: "ses_child", title: "Which database?", fields: [] },
+        { id: "frm_other", sessionID: "ses_desktop", title: "Elsewhere", fields: [] },
+      ],
+      permissions: [{ id: "per_other", sessionID: "ses_desktop", action: "bash", resources: ["rm"] }],
+    })
+
+    const held = await voice.run("send_message", { text: "Use Postgres." })
+    expect(held.not_sent).toBe(true)
+    expect(held.questions.map((form: { form_id: string }) => form.form_id)).toEqual(["frm_pick"])
+    expect(held.permissions).toEqual([])
+    expect(voice.calls.prompts).toEqual([])
+
+    await voice.run("send_message", { text: "Afterwards, lint.", delivery: "queue" })
+    expect(voice.calls.prompts).toHaveLength(1)
+
+    expect((await voice.run("reply_permission", { request_id: "per_other", decision: "once" })).error).toBeDefined()
+    await voice.run("answer_question", { form_id: "frm_pick", answers: { database: "postgres" } })
+    expect(voice.calls.replies).toEqual([
+      { sessionID: "ses_child", formID: "frm_pick", answer: { database: "postgres" } },
+    ])
   })
 })

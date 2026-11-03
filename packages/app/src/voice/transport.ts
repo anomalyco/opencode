@@ -1,6 +1,6 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
-import { decodeEvent, type VoiceEvent } from "./protocol"
-import { delegatorInstructions, liveInstructions, tools } from "./spec"
+import { cutsOffSpeech, decodeEvent, errorDisposition, type VoiceEvent } from "./protocol"
+import { tools } from "./spec"
 
 export class VoiceFailure extends Error {
   constructor(readonly reason: "unavailable" | "microphone" | "dropped" | "connection") {
@@ -13,7 +13,11 @@ export type VoiceClientEvent =
   | { type: "session.input_audio.mute" | "session.input_audio.unmute" | "response.create" }
   | { type: "session.update"; session: { delegation: { type: "responses"; responses: { instructions: string } } } }
   | { type: "response.item.create"; item: { type: "function_call_output"; call_id: string; output: string } }
-  | { type: "session.commentary.append"; delegation_id: null; content: string }
+  | {
+      type: "response.item.create"
+      item: { type: "message"; role: "user"; content: { type: "input_text"; text: string }[] }
+    }
+  | { type: "session.commentary.append" | "session.instructions.append"; delegation_id: null; content: string }
 
 export class VoiceTransport {
   readonly abort = new AbortController()
@@ -30,13 +34,18 @@ export class VoiceTransport {
   private input?: AnalyserNode
   private output?: AnalyserNode
   private samples = new Float32Array(256)
+  /** A WebRTC "disconnected" gets a few seconds to come back before the call drops, as on iOS. */
+  private disconnected?: ReturnType<typeof setTimeout>
+  /** While the agent's speech is cut off, when it last went quiet. */
+  private cut?: { quietAt?: number }
 
   constructor(
     private readonly inputOptions: {
       api: OpenCodeClient
       event: (event: VoiceEvent) => void
       levels: (input: number, output: number) => void
-      dropped: () => void
+      /** The voice session ended; `fatal` when it can't come back, such as a refused key or a safety filter. */
+      dropped: (fatal?: string) => void
     },
   ) {
     // A media element pulls the remote track in Chromium. A Web Audio-only
@@ -50,14 +59,26 @@ export class VoiceTransport {
       if (event.type === "session.closed") {
         this.closed.resolve()
 
-        if (!this.ended) this.fail()
+        // A safety filter ends the call; other closes reconnect, as on iOS.
+        if (!this.ended) this.fail(event.reason === "content" ? "A safety filter ended the voice call." : undefined)
 
         return
       }
 
       if (event.type === "session.started") this.ready.resolve()
 
-      if (event.type === "error") this.fail()
+      if (event.type === "error" && event.error) {
+        const disposition = errorDisposition(event.error)
+
+        if (disposition === "expired") return this.fail()
+
+        if (disposition === "fatal") return this.fail(event.error.message ?? "The voice service refused the call.")
+
+        if (cutsOffSpeech(event.error)) this.interrupt()
+
+        return
+      }
+
       this.inputOptions.event(event)
     }
 
@@ -66,7 +87,14 @@ export class VoiceTransport {
     }
 
     this.peer.onconnectionstatechange = () => {
-      if (!this.ended && ["failed", "disconnected", "closed"].includes(this.peer.connectionState)) this.fail()
+      const state = this.peer.connectionState
+      clearTimeout(this.disconnected)
+
+      if (this.ended) return
+
+      if (state === "disconnected") this.disconnected = setTimeout(() => this.fail(), 5000)
+
+      if (state === "failed" || state === "closed") this.fail()
     }
 
     this.peer.ontrack = (event) => {
@@ -82,7 +110,8 @@ export class VoiceTransport {
     void this.ready.promise.catch(() => undefined)
   }
 
-  async join(viewing: { id: string; title?: string }, tail: string) {
+  /** Starts the voice session with the voice agent's and the delegator's instructions. */
+  async join(instructions: { live: string; delegator: string }, voice: string) {
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(35_000)])
     await this.context.resume()
     const offered = await this.inputOptions.api.experimental.voice.models({ signal })
@@ -118,13 +147,13 @@ export class VoiceTransport {
         model: "gpt-live-1",
         session: {
           model: "gpt-live-1",
-          instructions: liveInstructions,
-          audio: { output: { voice: "marin" } },
+          instructions: instructions.live,
+          audio: { output: { voice } },
           delegation: {
             type: "responses",
             responses: {
               model: "gpt-6.1-sol",
-              instructions: delegatorInstructions(viewing, tail),
+              instructions: instructions.delegator,
               tools,
               reasoning: { effort: "low" },
             },
@@ -157,12 +186,44 @@ export class VoiceTransport {
     this.stream = stream
     this.input = this.analyser(stream)
     await sender.replaceTrack(stream.getAudioTracks()[0])
-    this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 100)
+    this.timer = setInterval(() => {
+      const output = this.level(this.output)
+      this.release(output)
+      this.inputOptions.levels(this.level(this.input), output)
+    }, 50)
   }
 
   send(event: VoiceClientEvent) {
     if (this.ended || this.channel.readyState !== "open") throw new VoiceFailure("dropped")
+
+    // Something new for the agent to say lets its speech through again.
+    if (event.type === "session.commentary.append" || event.type === "session.instructions.append") this.resume()
     this.channel.send(JSON.stringify({ event_id: crypto.randomUUID(), ...event }))
+  }
+
+  /**
+   * Stops the agent's speech now, as iOS flushes playback when the user talks over it: the rest of that reply stays
+   * silent until the agent has been quiet for half a second or it's given something new to say.
+   */
+  interrupt() {
+    this.audio.muted = true
+    this.cut = {}
+  }
+
+  private resume() {
+    this.audio.muted = false
+    this.cut = undefined
+  }
+
+  private release(output: number) {
+    const cut = this.cut
+
+    if (!cut) return
+
+    if (output > 0.005) return void (cut.quietAt = undefined)
+    cut.quietAt ??= Date.now()
+
+    if (Date.now() - cut.quietAt >= 500) this.resume()
   }
 
   mute(muted: boolean) {
@@ -183,6 +244,7 @@ export class VoiceTransport {
 
   private async dispose() {
     this.ended = true
+    clearTimeout(this.disconnected)
     this.stream?.getTracks().forEach((track) => track.stop())
     this.audio.pause()
     this.audio.srcObject = null
@@ -204,9 +266,9 @@ export class VoiceTransport {
       })
   }
 
-  private fail() {
+  private fail(fatal?: string) {
     if (this.ended) return
-    this.inputOptions.dropped()
+    this.inputOptions.dropped(fatal)
     void this.close()
   }
 

@@ -1,6 +1,8 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { VoiceGates } from "./gates"
 import { ReplyWatch } from "./replies"
+import { retargetInstructions } from "./spec"
 import { TranscriptTail } from "./tail"
 import { history, speech } from "./fixtures/history"
 
@@ -19,33 +21,48 @@ test("results wait for recorded speech to end and the quiet window", () => {
   expect(gate.delay()).toBe(0)
 })
 
-test("agent chatter is capped but user speech is never interrupted", () => {
+test("results wait for two quiet seconds after the user, however long they talk", () => {
   const gate = new VoiceGates()
   setSystemTime(1000)
-  gate.assistant(true)
-  expect(gate.delay()).toBeGreaterThan(0)
-  setSystemTime(6000)
-  expect(gate.delay()).toBe(0)
-  gate.user(true)
-  setSystemTime(60_000)
-  expect(gate.delay()).toBeGreaterThan(0)
-  gate.user(false)
-  setSystemTime(61_499)
+  gate.words()
+
+  // The microphone keeps hearing them between transcribed words.
+  for (const at of [3000, 5000, 6500]) {
+    setSystemTime(at)
+    gate.voice(true)
+    gate.words()
+  }
+
+  setSystemTime(7000)
+  gate.voice(true)
+  setSystemTime(8999)
   expect(gate.delay()).toBe(1)
-  setSystemTime(61_500)
+  setSystemTime(9000)
   expect(gate.delay()).toBe(0)
 })
 
-test("a delegator answer has time to start, then protects speech for fifteen seconds", () => {
+test("room noise without transcribed words never holds results", () => {
+  const gate = new VoiceGates()
+  setSystemTime(1000)
+  gate.words()
+  setSystemTime(7000)
+  gate.voice(true)
+  expect(gate.delay()).toBe(0)
+})
+
+test("a delegator answer has time to start, and the agent's speech holds results without a cap", () => {
   const gate = new VoiceGates()
   setSystemTime(1000)
   gate.answer()
   expect(gate.delay()).toBe(1200)
   setSystemTime(2000)
   gate.assistant(true)
-  setSystemTime(15_999)
+  setSystemTime(60_000)
+  expect(gate.delay()).toBe(900)
+  gate.assistant(false)
+  setSystemTime(60_899)
   expect(gate.delay()).toBe(1)
-  setSystemTime(16_000)
+  setSystemTime(60_900)
   expect(gate.delay()).toBe(0)
 })
 
@@ -62,11 +79,20 @@ test("recorded history attributes the final reply and never replays a heard resu
   expect(watch.reconcile("ses_original", history)).toEqual([
     {
       sessionID: "ses_original",
-      promptID: "msg_recorded_18",
       title: "Original session",
-      instruction: "Second request",
-      messageID: "msg_recorded_32",
+      prompts: [
+        {
+          sessionID: "ses_original",
+          promptID: "msg_recorded_18",
+          title: "Original session",
+          instruction: "Second request",
+        },
+      ],
+      key: "msg_recorded_32",
+      outcome: "replied",
       text: "Reply 32",
+      error: undefined,
+      background: undefined,
     },
   ])
   watch.heard("ses_original", ["msg_recorded_32"])
@@ -76,10 +102,49 @@ test("recorded history attributes the final reply and never replays a heard resu
 test("an unrelated later request cannot donate its answer to a voice request", () => {
   const watch = new ReplyWatch()
   watch.sent({ sessionID: "ses_original", promptID: "msg_recorded_0", title: "Original", instruction: "First request" })
-  // Replay with the first idle boundary absent, as when steering arrives.
+  // Replay with the first idle boundary absent, as when a typed request steers in: its run's reply stays its own.
   const interrupted = history.filter((message) => message.id !== "msg_recorded_17")
-  expect(watch.reconcile("ses_original", interrupted)).toEqual([])
-  expect(watch.reconcile("ses_original", history).map((reply) => reply.messageID)).toEqual(["msg_recorded_16"])
+  expect(watch.reconcile("ses_original", interrupted).map((reply) => reply.key)).toEqual(["msg_recorded_16"])
+  expect(watch.reconcile("ses_original", history).map((reply) => reply.key)).toEqual(["msg_recorded_16"])
+})
+
+test("one run's reply answers every request steered in before it, and a failed or silent run is told too", () => {
+  const assistant = (id: string, text: string): SessionMessageAssistant => ({
+    id,
+    type: "assistant",
+    time: { created: 1, completed: 2 },
+    agent: "build",
+    model: { id: "fixture", providerID: "fixture" },
+    content: text ? [{ type: "text", text }] : [],
+    finish: "stop",
+  })
+
+  const user = (id: string) => ({ id, type: "user" as const, time: { created: 1 }, text: id })
+
+  const watch = new ReplyWatch()
+
+  ;["msg_a", "msg_b", "msg_c", "msg_d"].forEach((promptID) =>
+    watch.sent({ sessionID: "ses_s", promptID, title: "S", instruction: promptID }),
+  )
+
+  const replies = watch.reconcile("ses_s", [
+    user("msg_a"),
+    user("msg_b"),
+    assistant("msg_reply", "Both done."),
+    { id: "msg_idle_1", type: "idle", time: { created: 3 }, outcome: "succeeded" },
+    user("msg_c"),
+    assistant("msg_quiet", ""),
+    { id: "msg_idle_2", type: "idle", time: { created: 4 }, outcome: "succeeded" },
+    user("msg_d"),
+    { id: "msg_idle_3", type: "idle", time: { created: 5 }, outcome: "failed", error: { type: "x", message: "Boom" } },
+  ])
+
+  expect(replies.map((reply) => [reply.prompts.map((prompt) => prompt.promptID), reply.outcome, reply.key])).toEqual([
+    [["msg_a", "msg_b"], "replied", "msg_reply"],
+    [["msg_c"], "silent", "idle:msg_idle_2"],
+    [["msg_d"], "failed", "idle:msg_idle_3"],
+  ])
+  expect(replies[2].error).toBe("Boom")
 })
 
 test("utterance grouping reserves words and preserves revisions after a delegation", () => {
@@ -99,4 +164,115 @@ test("utterance grouping reserves words and preserves revisions after a delegati
   setSystemTime(5000)
   tail.append("assistant", speech.text)
   expect(tail.capture("answer")).toEqual([`assistant: ${speech.text.trim()}`])
+})
+
+test("a subagent a voice request started in the background is announced once it reports back", () => {
+  const assistant = (id: string, text: string, tools: SessionMessageAssistantTool[] = []): SessionMessageAssistant => ({
+    id,
+    type: "assistant",
+    time: { created: 1, completed: 2 },
+    agent: "build",
+    model: { id: "fixture", providerID: "fixture" },
+    content: [...tools, { type: "text", text }],
+    finish: "stop",
+  })
+
+  const subagent = (child: string, description: string): SessionMessageAssistantTool => ({
+    type: "tool",
+    id: `call_${child}`,
+    name: "subagent",
+    state: {
+      status: "completed",
+      input: { agent: "general", description, prompt: description },
+      content: [{ type: "text", text: "The subagent is working in the background." }],
+      metadata: { sessionID: child, status: "running" },
+    },
+    time: { created: 1 },
+  })
+
+  const completion = (id: string, child: string) => ({
+    id,
+    type: "synthetic" as const,
+    time: { created: 3 },
+    text: `<subagent sessionID="${child}" state="completed">done</subagent>`,
+    metadata: { source: "subagent", childID: child },
+  })
+
+  const idle = (id: string) => ({ id, type: "idle" as const, time: { created: 4 }, outcome: "succeeded" as const })
+
+  const messages = [
+    { id: "msg_typed", type: "user", time: { created: 1 }, text: "Typed request" },
+    assistant("msg_typed_reply", "Started one too.", [subagent("ses_typed_child", "Typed work")]),
+    idle("msg_idle_0"),
+    { id: "msg_voice", type: "user", time: { created: 1 }, text: "Voice request" },
+    assistant("msg_voice_reply", "Started a subagent on the docs.", [subagent("ses_child", "Audit the docs")]),
+    idle("msg_idle_1"),
+    completion("msg_typed_done", "ses_typed_child"),
+    assistant("msg_typed_result", "The typed work is done."),
+    idle("msg_idle_2"),
+    completion("msg_done", "ses_child"),
+    assistant("msg_result", "The docs audit found two broken links."),
+    idle("msg_idle_3"),
+  ] satisfies SessionMessageInfo[]
+
+  const watch = new ReplyWatch()
+  watch.sent({ sessionID: "ses_original", promptID: "msg_voice", title: "Original", instruction: "Voice request" })
+
+  expect(watch.reconcile("ses_original", messages)).toEqual([
+    expect.objectContaining({
+      key: "msg_voice_reply",
+      prompts: [expect.objectContaining({ instruction: "Voice request" })],
+    }),
+    expect.objectContaining({
+      key: "msg_result",
+      background: true,
+      prompts: [expect.objectContaining({ instruction: "Audit the docs" })],
+    }),
+  ])
+  watch.heard("ses_original", ["msg_voice_reply", "msg_result"])
+  expect(watch.reconcile("ses_original", messages)).toEqual([])
+})
+
+test("the delegator's tracked work shows a voice request running, then how it finished", () => {
+  const watch = new ReplyWatch()
+  watch.sent({
+    sessionID: "ses_original",
+    promptID: "msg_recorded_18",
+    title: "Original",
+    instruction: "Second request",
+  })
+  expect(watch.tracked()).toEqual([
+    '- "Original" (id ses_original, request "Second request"): working; its reply is spoken when it lands.',
+  ])
+  watch.reconcile("ses_original", history)
+  expect(watch.tracked()).toEqual(['- "Original" (id ses_original, request "Second request"): finished — Reply 32'])
+})
+
+test("a move's update to the voice agent stays under Live's append limit, keeping the newest messages", () => {
+  const recent = Array.from({ length: 12 }, (_, index) => `assistant: ${String(index).repeat(400)}`)
+
+  const update = retargetInstructions(
+    { session: { id: "ses_b", title: "B" }, project: "app", working: true, recent },
+    "user",
+  )
+
+  expect(update.length).toBeLessThanOrEqual(1700)
+  expect(update).toContain("It is working.")
+  expect(update).toContain(`assistant: ${"1".repeat(40)}`)
+  expect(update).not.toContain(`assistant: ${"5".repeat(40)}`)
+})
+
+test("a move's update waits for the reply the user is owed, then for the agent to finish speaking", () => {
+  const gate = new VoiceGates()
+  setSystemTime(1000)
+  gate.words()
+  setSystemTime(3500)
+  expect(gate.context()).toBe(5500)
+  setSystemTime(4000)
+  gate.assistant(true)
+  setSystemTime(6000)
+  expect(gate.context()).toBe(900)
+  gate.assistant(false)
+  setSystemTime(6900)
+  expect(gate.context()).toBe(0)
 })

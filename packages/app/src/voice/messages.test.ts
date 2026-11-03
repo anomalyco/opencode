@@ -1,33 +1,41 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { messageExcerpts } from "./messages"
+import { formatHandoff } from "./handoff"
+import { latestReply, readLines } from "./messages"
 
-test("voice reads cap each message at 400 characters and exclude non-conversational content", () => {
-  const messages: SessionMessageInfo[] = [
-    { id: "msg_user", type: "user", time: { created: 1 }, text: "u".repeat(401), metadata: { private: "metadata" } },
-    { id: "msg_synthetic", type: "synthetic", time: { created: 2 }, text: "s".repeat(401) },
+const assistant = (id: string, ...texts: string[]): SessionMessageInfo => ({
+  id,
+  type: "assistant",
+  time: { created: 1, completed: 2 },
+  agent: "build",
+  model: { id: "fixture", providerID: "fixture" },
+  content: [
+    { type: "reasoning", text: "private reasoning" },
+    ...texts.map((text) => ({ type: "text" as const, text })),
     {
-      id: "msg_assistant",
-      type: "assistant",
-      time: { created: 3, completed: 4 },
-      agent: "build",
-      model: { id: "fixture", providerID: "fixture" },
-      content: [
-        { type: "reasoning", text: "private reasoning" },
-        { type: "text", text: "a".repeat(200), native: { private: "provider metadata" } },
-        {
-          type: "tool",
-          id: "tool_read",
-          name: "read",
-          time: { created: 3 },
-          state: {
-            status: "completed",
-            input: { path: "/private/file" },
-            content: [{ type: "text", text: "file contents" }],
-          },
-        },
-        { type: "text", text: "b".repeat(300) },
-      ],
+      type: "tool",
+      id: `tool_${id}`,
+      name: "read",
+      time: { created: 1 },
+      state: {
+        status: "completed",
+        input: { path: "/private/file" },
+        content: [{ type: "text", text: "file contents" }],
+      },
+    },
+  ],
+})
+
+test("a read gives the newest reply whole and older messages as excerpts that name the message to read on", () => {
+  const messages: SessionMessageInfo[] = [
+    { id: "msg_old", type: "user", time: { created: 1 }, text: "u".repeat(450) },
+    assistant("msg_old_reply", "o".repeat(450)),
+    { id: "msg_idle", type: "idle", time: { created: 2 }, outcome: "succeeded" },
+    {
+      id: "msg_voice",
+      type: "user",
+      time: { created: 3 },
+      text: formatHandoff({ instruction: "Summarise the logs", transcript: ["user: summarise"], full: true }),
     },
     {
       id: "msg_shell",
@@ -35,15 +43,18 @@ test("voice reads cap each message at 400 characters and exclude non-conversatio
       shellID: "sh_test",
       command: "echo private",
       status: "exited",
-      time: { created: 5 },
+      time: { created: 4 },
     },
-    { id: "msg_idle", type: "idle", time: { created: 6 }, outcome: "succeeded" },
-    { id: "msg_short", type: "user", time: { created: 7 }, text: "A short question" },
+    assistant("msg_reply", "a".repeat(450), "b".repeat(450)),
   ]
-  expect(messageExcerpts(messages)).toEqual([
-    { id: "msg_user", role: "user", text: "u".repeat(400) },
-    { id: "msg_synthetic", role: "synthetic", text: "s".repeat(400) },
-    { id: "msg_assistant", role: "assistant", text: "a".repeat(200) + "\n" + "b".repeat(199) },
-    { id: "msg_short", role: "user", text: "A short question" },
+
+  expect(readLines(messages, 8)).toEqual([
+    `user: ${"u".repeat(400)}… [truncated: 50 more characters; call read_session with message_id "msg_old" to read all]`,
+    `assistant: ${"o".repeat(400)}… [truncated: 50 more characters; call read_session with message_id "msg_old_reply" to read all]`,
+    "user: Summarise the logs",
+    `assistant: ${"a".repeat(450)}\n\n${"b".repeat(450)}`,
   ])
+  expect(readLines(messages, 2)).toHaveLength(2)
+  expect(latestReply(messages, "msg_voice")).toBe(`${"a".repeat(450)}\n\n${"b".repeat(450)}`)
+  expect(latestReply(messages, "msg_unknown")).toBeUndefined()
 })

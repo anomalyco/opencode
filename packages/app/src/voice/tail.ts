@@ -6,6 +6,8 @@ export class TranscriptTail {
   private entries: Utterance[] = []
   private next = 0
   private reservations = new Map<string, Map<number, number>>()
+  /** How many times the user has spoken: a result landing after another turn answers an earlier request. */
+  turns = 0
 
   append(role: Utterance["role"], delta: string) {
     const previous = this.entries.at(-1)
@@ -18,6 +20,7 @@ export class TranscriptTail {
       return previous.text
     }
 
+    if (role === "user") this.turns++
     this.entries.push({ id: this.next++, role, text: delta, at: Date.now(), version: 1, sent: 0 })
     this.entries = this.entries.slice(-60)
 
