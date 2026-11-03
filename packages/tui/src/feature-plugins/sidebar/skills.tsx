@@ -1,4 +1,5 @@
 import type { SkillInfo } from "@opencode/client"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Plugin } from "@opencode/plugin/tui"
 import { Path } from "@opencode/util/global"
 import path from "path"
@@ -22,24 +23,8 @@ export function SidebarSkills(props: { context: Plugin.Context; sessionID: strin
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const available = createMemo(() => props.context.data.location.skill.list(session()?.location) ?? [])
   const loaded = createMemo(() => {
-    const ids = new Set<string>()
-    for (const message of props.context.data.session.message.list(props.sessionID)) {
-      if (message.type === "skill") {
-        ids.add(message.skill)
-        continue
-      }
-      if (message.type === "user") {
-        for (const skill of message.skills ?? []) ids.add(skill.id)
-        continue
-      }
-      if (message.type !== "assistant") continue
-      for (const item of message.content) {
-        if (item.type !== "tool" || item.name !== "skill" || item.state.status !== "completed") continue
-        const id = item.state.input.id
-        if (typeof id === "string") ids.add(id)
-      }
-    }
-    return ids
+    const messages = props.context.data.session.message.list(props.sessionID)
+    return new Set(SessionMessage.loadedSkills(messages).map((skill) => skill.id))
   })
   const list = createMemo(() => available().filter((skill) => loaded().has(skill.id)))
 
