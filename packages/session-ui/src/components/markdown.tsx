@@ -361,6 +361,9 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
     favicon.className = "markdown-link-favicon"
     favicon.setAttribute("aria-hidden", "true")
     const host = url.hostname.toLowerCase()
+    const glyph = document.createElement("span")
+    glyph.className = "markdown-link-favicon-glyph"
+    favicon.appendChild(glyph)
 
     if (host === "github.com") favicon.dataset.github = ""
     else if (
@@ -383,13 +386,19 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
   })
 }
 
+// The globe stands in only until the favicon loads; removing it keeps transparent favicons from showing it through.
+function showFavicon(image: HTMLImageElement) {
+  image.dataset.loaded = ""
+  image.parentElement?.querySelector(".markdown-link-favicon-glyph")?.remove()
+}
+
 function setupExternalLinkFavicons(root: HTMLDivElement) {
   const loaded = (event: Event) => {
     const image = event.target
 
     if (!(image instanceof HTMLImageElement) || !image.hasAttribute("data-markdown-favicon")) return
 
-    if (image.naturalWidth > 0) image.dataset.loaded = ""
+    if (image.naturalWidth > 0) showFavicon(image)
   }
 
   root.addEventListener("load", loaded, true)
@@ -901,7 +910,7 @@ export function Markdown(
     images?.update(container)
     previewImages(container)
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
-      if (image.complete && image.naturalWidth > 0) image.dataset.loaded = ""
+      if (image.complete && image.naturalWidth > 0) showFavicon(image)
     })
 
     // A button gets the labels of the run that creates it, so the others only need new ones when the language changes.
