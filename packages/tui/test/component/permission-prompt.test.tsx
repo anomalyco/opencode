@@ -74,17 +74,32 @@ test.each([100, 44])("multiline sandbox approval keeps text separated at %s colu
       const scroll = app.renderer.root.findDescendantById("session.permission.body")
       const actions = app.renderer.root.findDescendantById("session.permission.actions")
       if (!(scroll instanceof ScrollBoxRenderable) || !actions) throw new Error("Permission body or actions missing")
+      const details = app.renderer.root.findDescendantById("session.permission.details")
+      if (!details) throw new Error("Permission details missing")
+      const commandText = texts(scroll).find((item) => item.plainText.startsWith("$ cat >"))
+      if (!commandText) throw new Error("Command text missing")
+      for (const prefix of ["Reason:", "Directory:", "This command", "Approval applies"]) {
+        const detail = texts(details).find((item) => item.plainText.startsWith(prefix))
+        if (!detail) throw new Error(`Permission detail missing: ${prefix}`)
+        expect(detail.fg.equals(commandText.fg)).toBe(false)
+      }
+      expect(details.y + details.height).toBeLessThanOrEqual(scroll.viewport.y)
       expect(scroll.scrollHeight).toBeGreaterThan(scroll.viewport.height)
       expect(scroll.viewport.y + scroll.viewport.height).toBeLessThanOrEqual(actions.y)
       scroll.scrollTo(0)
       await app.renderOnce()
       expect(app.captureCharFrame()).toContain("$ cat >")
+      expect(app.captureCharFrame()).toContain("Reason:")
+      expect(app.captureCharFrame()).toContain("Directory: /workspace")
+      expect(app.captureCharFrame()).toContain("Approval applies")
       await app.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 1, "down")
       await app.renderOnce()
       expect(scroll.scrollTop).toBeGreaterThan(0)
       scroll.scrollTo(scroll.scrollHeight)
       await app.renderOnce()
       expect(app.captureCharFrame()).toContain("Approval applies")
+      expect(app.captureCharFrame()).toContain("Reason:")
+      expect(app.captureCharFrame()).toContain("Directory: /workspace")
       expect(app.captureCharFrame()).toContain("Allow once")
       expect(app.captureCharFrame()).toContain("Reject")
       separated(app.renderer.root)
@@ -161,6 +176,11 @@ test.each([100, 44])(
       const frame = app.captureCharFrame()
       expect(frame).toContain("npm install")
       expect(frame).toContain("/workspace")
+      expect(frame).toContain("Reason:")
+      const details = app.renderer.root.findDescendantById("session.permission.details")
+      if (!details) throw new Error("Session prefix details missing")
+      expect(texts(details).some((item) => item.plainText.startsWith("Matching commands"))).toBe(true)
+      expect(texts(details).some((item) => item.plainText.startsWith("Session prefix:"))).toBe(true)
       const scope = app.renderer.root.findDescendantById("session.permission.body")
       if (!(scope instanceof ScrollBoxRenderable)) throw new Error("Session scope scrollbox missing")
       expect(scope.viewport.y + scope.viewport.height).toBeLessThanOrEqual(actions.y)
@@ -186,13 +206,12 @@ function texts(item: Renderable): TextRenderable[] {
 function separated(root: Renderable) {
   const lines = texts(root).filter(
     (item) =>
-      item.plainText.startsWith("$ cat") ||
       item.plainText.startsWith("Directory:") ||
       item.plainText.startsWith("Reason:") ||
       item.plainText.startsWith("This command") ||
       item.plainText.startsWith("Approval applies"),
   )
-  expect(lines).toHaveLength(5)
+  expect(lines).toHaveLength(4)
   for (const line of lines) {
     expect({ text: line.plainText, height: line.height }).toMatchObject({ height: line.virtualLineCount })
   }

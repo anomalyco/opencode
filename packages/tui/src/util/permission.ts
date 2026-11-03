@@ -7,6 +7,7 @@ export type PermissionPresentation = {
   icon: string
   title: string
   lines: string[]
+  sandboxDetails?: { directory?: string; reason?: string; scope: string[] }
   diff?: string
   patch?: string
   file?: string
@@ -46,13 +47,15 @@ export function permissionPresentation(
     return {
       icon: "#",
       title: "Run command outside the sandbox",
-      lines: [
-        `$ ${text(metadata.command) || text(input.command) || resources[0] || ""}`,
-        ...(text(metadata.cwd) ? [`Directory: ${formatPath(text(metadata.cwd))}`] : []),
-        ...(text(metadata.justification) ? [`Reason: ${text(metadata.justification)}`] : []),
-        "This command and its descendants will run with your account's filesystem and network access.",
-        "Approval applies to this invocation only.",
-      ],
+      lines: [`$ ${text(metadata.command) || text(input.command) || resources[0] || ""}`],
+      sandboxDetails: {
+        ...(text(metadata.cwd) ? { directory: formatPath(text(metadata.cwd)) } : {}),
+        ...(text(metadata.justification) ? { reason: text(metadata.justification) } : {}),
+        scope: [
+          "This command and its descendants will run with your account's filesystem and network access.",
+          "Approval applies to this invocation only.",
+        ],
+      },
     }
   }
 
@@ -189,9 +192,7 @@ export function permissionAlwaysLines(input: {
     return [
       ...save.map((item) => `Session prefix: ${item}`),
       `Directory: ${text(metadata.cwd)}`,
-      "Matching commands may run outside the sandbox for this session.",
-      "Only the same shell and directory match. Extra literal arguments and descendants run with your account's filesystem and network access.",
-      "Other sessions and subagents are not approved. The grant expires when the server restarts.",
+      ...sandboxSessionScope,
     ]
   }
   if (save.length === 1 && save[0] === "*") {
@@ -199,6 +200,12 @@ export function permissionAlwaysLines(input: {
   }
   return ["This will always allow the following patterns for this project.", ...save.map((item) => `- ${item}`)]
 }
+
+export const sandboxSessionScope = [
+  "Matching commands may run outside the sandbox for this session.",
+  "Only the same shell and directory match. Extra literal arguments and descendants run with your account's filesystem and network access.",
+  "Other sessions and subagents are not approved. The grant expires when the server restarts.",
+]
 
 export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel", action?: string) {
   if (option === "once") return "Allow once"

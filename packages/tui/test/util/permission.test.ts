@@ -12,13 +12,15 @@ test("sandbox escalation displays the reviewed command and one-invocation scope"
   ).toEqual({
     icon: "#",
     title: "Run command outside the sandbox",
-    lines: [
-      "$ npm install",
-      "Directory: /project",
-      "Reason: Download project dependencies.",
-      "This command and its descendants will run with your account's filesystem and network access.",
-      "Approval applies to this invocation only.",
-    ],
+    lines: ["$ npm install"],
+    sandboxDetails: {
+      directory: "/project",
+      reason: "Download project dependencies.",
+      scope: [
+        "This command and its descendants will run with your account's filesystem and network access.",
+        "Approval applies to this invocation only.",
+      ],
+    },
   })
 })
 

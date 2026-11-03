@@ -227,6 +227,38 @@ test("footer usage survives unrelated patches and clears when explicitly undefin
   }
 })
 
+test("sandbox approval grows the footer for pinned details and restores its height", async () => {
+  const app = await setup({ mono: false })
+  const command = Array.from({ length: 20 }, (_, index) => `echo ${index}`).join("\n")
+  const request = {
+    id: "per_footer",
+    sessionID: "ses_footer",
+    action: "shell",
+    resources: [command],
+    metadata: { command, cwd: "/workspace", justification: "Run the requested command" },
+  }
+  try {
+    app.footer.event({ type: "stream.view", view: { type: "permission", request } })
+    await app.renderOnce()
+    const baseHeight = app.renderer.footerHeight
+    app.footer.event({ type: "stream.view", view: { type: "permission", request: { ...request, action: "sandbox.exec" } } })
+    await app.renderOnce()
+    await app.renderOnce()
+    const details = app.renderer.root.findDescendantById("mini.permission.details")
+    if (!details) throw new Error("Permission details missing")
+    expect(app.renderer.footerHeight).toBe(baseHeight + details.height)
+    expect(app.captureCharFrame()).toContain("Reason:")
+    expect(app.captureCharFrame()).toContain("Allow once")
+    app.footer.event({ type: "stream.view", view: { type: "permission", request } })
+    await app.renderOnce()
+    await app.renderOnce()
+    expect(app.renderer.footerHeight).toBe(baseHeight)
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
 test("motion demo waits for work and can be interrupted without a model call", async () => {
   const footer = createFooterApiFixture()
   const controller = new AbortController()

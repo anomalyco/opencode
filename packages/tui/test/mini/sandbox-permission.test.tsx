@@ -46,7 +46,13 @@ test.each([100, 44])(
         (item): item is ScrollBoxRenderable => item instanceof ScrollBoxRenderable,
       )
       if (!scroll) throw new Error("Permission scrollbox missing")
+      const details = app.renderer.root.findDescendantById("mini.permission.details")
+      if (!details) throw new Error("Permission details missing")
+      expect(details.y + details.height).toBeLessThanOrEqual(scroll.viewport.y)
       expect(app.captureCharFrame()).toContain("Allow once")
+      expect(app.captureCharFrame()).toContain("Reason:")
+      expect(app.captureCharFrame()).toContain("Directory:")
+      expect(app.captureCharFrame()).toContain("Approval applies")
       expect(app.captureCharFrame()).not.toContain("Always allow")
       expect(scroll.scrollHeight).toBeGreaterThan(scroll.viewport.height)
       // OpenTUI's mock KeyCodes omit PageDown; send its terminal sequence.
@@ -56,6 +62,8 @@ test.each([100, 44])(
       scroll.scrollTo(scroll.scrollHeight)
       await app.renderOnce()
       expect(app.captureCharFrame()).toContain("Approval applies")
+      expect(app.captureCharFrame()).toContain("Reason:")
+      expect(app.captureCharFrame()).toContain("Directory:")
       const actions = descendants(app.renderer.root)
         .filter((item): item is TextRenderable => item instanceof TextRenderable)
         .find((item) => item.plainText === "Allow once")
@@ -92,7 +100,7 @@ test.each([100, 44])("mini confirms session-prefix scope before saving at %s col
           action: "sandbox.exec",
           resources: ["npm install one"],
           save: ["npm install"],
-          metadata: { command: "npm install one", cwd: "/workspace" },
+          metadata: { command: "npm install one", cwd: "/workspace", justification: "Download a dependency" },
         }}
         theme={RUN_THEME_FALLBACK.footer}
         block={RUN_THEME_FALLBACK.block}
@@ -107,19 +115,33 @@ test.each([100, 44])("mini confirms session-prefix scope before saving at %s col
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Allow prefix for session")
     expect(app.captureCharFrame()).toContain("Reject")
+    const initialDetails = app.renderer.root.findDescendantById("mini.permission.details")
+    if (!initialDetails) throw new Error("Permission details missing")
+    const initialScope = descendants(initialDetails).find(
+      (item): item is TextRenderable => item instanceof TextRenderable && item.plainText.startsWith("This command"),
+    )
+    if (!initialScope) throw new Error("Initial scope missing")
     app.mockInput.pressArrow("right")
     app.mockInput.pressEnter()
     await app.renderOnce()
     expect(replies).toEqual([])
     expect(app.captureCharFrame()).toContain("npm install")
     expect(app.captureCharFrame()).toContain("/workspace")
+    const details = app.renderer.root.findDescendantById("mini.permission.details")
+    if (!details) throw new Error("Confirmation details missing")
+    const scope = descendants(details).find(
+      (item): item is TextRenderable => item instanceof TextRenderable && item.plainText.startsWith("Matching commands"),
+    )
+    if (!scope) throw new Error("Confirmation scope missing")
+    expect(scope.fg.equals(initialScope.fg)).toBe(true)
+    expect(descendants(details).some((item) => item instanceof TextRenderable && item.plainText.includes("server restarts"))).toBe(true)
     const scroll = descendants(app.renderer.root).find(
       (item): item is ScrollBoxRenderable => item instanceof ScrollBoxRenderable,
     )
     if (!scroll) throw new Error("Confirmation scrollbox missing")
     scroll.scrollTo(scroll.scrollHeight)
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("server restarts")
+    expect(app.captureCharFrame()).toContain("Confirm")
     app.mockInput.pressEnter()
     await app.renderOnce()
     expect(replies).toEqual([

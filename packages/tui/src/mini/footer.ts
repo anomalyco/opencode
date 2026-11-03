@@ -174,6 +174,7 @@ export class RunFooter implements FooterApi {
   // Fixed portion of footer height above the textarea.
   private base: number
   private rows = TEXTAREA_MIN_ROWS
+  private permissionDetailsRows = 0
   private agents: Accessor<RunAgent[]>
   private setAgents: Setter<RunAgent[]>
   private references: Accessor<RunReference[]>
@@ -354,6 +355,11 @@ export class RunFooter implements FooterApi {
               history: footer.history,
               onSubmit: footer.handlePrompt,
               onPermissionReply: footer.handlePermissionReply,
+              onPermissionDetailsRows: (rows) => {
+                if (footer.permissionDetailsRows === rows) return
+                footer.permissionDetailsRows = rows
+                footer.applyHeight()
+              },
               onFormReply: footer.handleFormReply,
               onFormCancel: footer.handleFormCancel,
               onCycle: footer.handleCycle,
@@ -746,7 +752,7 @@ export class RunFooter implements FooterApi {
     const prompt = footerPromptLayout(this.renderer.terminalHeight)
     const desired =
       type === "permission"
-        ? this.base + PERMISSION_ROWS
+        ? this.base + PERMISSION_ROWS + this.permissionDetailsRows
         : type === "form"
           ? this.base + FORM_ROWS
           : ["command", "skill", "agent", "model", "variant", "settings"].includes(route)

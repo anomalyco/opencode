@@ -104,6 +104,7 @@ type RunFooterViewProps = {
   clipboard?: Pick<ClipboardService, "read">
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
+  onPermissionDetailsRows?: (rows: number) => void
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycle: () => void
@@ -917,6 +918,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme()}
                             block={block()}
                             onReply={props.onPermissionReply}
+                            onDetailsRows={props.onPermissionDetailsRows}
                             mono={props.mono}
                           />
                         </Match>

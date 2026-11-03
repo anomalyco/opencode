@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
@@ -7,7 +7,8 @@ import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
+import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation, sandboxSessionScope } from "../../util/permission"
+import { tint } from "../../theme/color"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig, useCursorStyle } from "../../config"
 import { Keymap } from "../../context/keymap"
@@ -118,6 +119,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
+  const [detailsRows, setDetailsRows] = createSignal(0)
   const pathFormatter = usePathFormatter()
   const session = createMemo(() => data.session.get(props.request.sessionID))
 
@@ -225,7 +227,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               </scrollbox>
             )
 
-          const header = () => (
+          const header = (option: string) => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text.feedback.warning.base}>{"△"}</text>
@@ -239,6 +241,49 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                   <text fg={theme.text.base}>{current.title}</text>
                 </box>
               </Show>
+              <Show when={current.sandboxDetails}>
+                {(details) => (
+                  <box
+                    id="session.permission.details"
+                    flexDirection="column"
+                    paddingLeft={2}
+                    flexShrink={0}
+                    onSizeChange={function () {
+                      setDetailsRows(this.height)
+                    }}
+                  >
+                    <Show when={details().reason}>
+                      <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
+                        <span style={{ fg: theme.text.feedback.warning.base }}>Reason: </span>
+                        {details().reason}
+                      </text>
+                    </Show>
+                    <Show when={details().directory}>
+                      <text width="100%" fg={theme.text.feedback.info.base} wrapMode="word" flexShrink={0}>
+                        <span style={{ fg: theme.text.feedback.warning.base }}>Directory: </span>
+                        {details().directory}
+                      </text>
+                    </Show>
+                    <Show when={option === "always"}>
+                      <For each={props.request.save}>
+                        {(prefix) => (
+                          <text width="100%" fg={theme.text.base} wrapMode="word" flexShrink={0}>
+                            <span style={{ fg: theme.text.feedback.warning.base }}>Session prefix: </span>
+                            {prefix}
+                          </text>
+                        )}
+                      </For>
+                    </Show>
+                    <For each={option === "always" ? sandboxSessionScope : details().scope}>
+                      {(line) => (
+                        <text width="100%" fg={tint(theme.text.feedback.warning.base, theme.text.base, 0.55)} wrapMode="word" flexShrink={0}>
+                          {line}
+                        </text>
+                      )}
+                    </For>
+                  </box>
+                )}
+              </Show>
             </box>
           )
 
@@ -247,9 +292,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               title="Permission required"
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
-              header={header()}
+              header={header}
+              extraHeight={() => detailsRows()}
               body={(option) => (
-                <Show when={option === "always"} fallback={presentationBody()}>
+                <Show when={option === "always" && !current.sandboxDetails} fallback={presentationBody()}>
                   <scrollbox
                     id="session.permission.body"
                     width="100%"
@@ -457,7 +503,8 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   id?: string
   group?: string
   choicesLabel?: string
-  header?: JSX.Element
+  header?: JSX.Element | ((option: keyof T) => JSX.Element)
+  extraHeight?: (option: keyof T) => number
   body: JSX.Element | ((option: keyof T) => JSX.Element)
   options: T
   escapeKey?: keyof T
@@ -561,7 +608,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
-            maxHeight: 15,
+            maxHeight: Math.min(dimensions().height, 15 + (props.extraHeight?.(store.selected) ?? 0)),
             bottom: 0,
             left: 0,
             right: 0,
@@ -579,7 +626,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
           }
         >
           <box paddingLeft={1} flexShrink={0}>
-            {props.header}
+            {typeof props.header === "function" ? props.header(store.selected) : props.header}
           </box>
         </Show>
         {typeof props.body === "function" ? props.body(store.selected) : props.body}

@@ -33,6 +33,7 @@ import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { PatchDiff } from "../component/patch-diff"
+import { sandboxSessionScope } from "../util/permission"
 
 function buttons(
   list: PermissionOption[],
@@ -147,6 +148,7 @@ export function RunPermissionBody(props: {
   theme: RunFooterTheme
   block: RunBlockTheme
   onReply: (input: PermissionReply) => void | Promise<void>
+  onDetailsRows?: (rows: number) => void
   mono?: boolean
 }) {
   const dims = useTerminalDimensions()
@@ -177,7 +179,7 @@ export function RunPermissionBody(props: {
       : `${props.mono ? "left/right" : "⇆"} select  enter confirm  esc ${stage() === "always" ? "cancel" : "reject"}`
   const inlineControls = () => controlsWidth() + stringWidth(hint()) + 1 <= width() - (compact() ? 0 : 5)
   const title = createMemo(() => {
-    if (stage() === "always") {
+    if (stage() === "always" && props.request.action !== "sandbox.exec") {
       return "Always allow"
     }
 
@@ -205,6 +207,9 @@ export function RunPermissionBody(props: {
     stage()
     props.request.id
     if (scroll && !scroll.isDestroyed) scroll.scrollTo(0)
+  })
+  createEffect(() => {
+    if (stage() === "reject" || !info().sandboxDetails) props.onDetailsRows?.(0)
   })
 
   const submit = async (next: PermissionReply) => {
@@ -386,6 +391,55 @@ export function RunPermissionBody(props: {
           </box>
         }
       >
+        <Show when={info().sandboxDetails}>
+          {(details) => (
+            <box
+              id="mini.permission.details"
+              width="100%"
+              flexDirection="column"
+              flexShrink={0}
+              paddingLeft={compact() ? 0 : 2}
+              paddingRight={compact() ? 0 : 3}
+              onSizeChange={function () {
+                props.onDetailsRows?.(this.height)
+              }}
+            >
+              <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                <span style={{ fg: props.theme.muted }}>{info().icon} </span>
+                {info().title}
+              </text>
+              <Show when={details().reason}>
+                <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                  <span style={{ fg: props.theme.warning }}>Reason: </span>
+                  {details().reason}
+                </text>
+              </Show>
+              <Show when={details().directory}>
+                <text width="100%" fg={props.theme.link} wrapMode="word" flexShrink={0}>
+                  <span style={{ fg: props.theme.warning }}>Directory: </span>
+                  {details().directory}
+                </text>
+              </Show>
+              <Show when={stage() === "always"}>
+                <For each={props.request.save}>
+                  {(prefix) => (
+                    <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                      <span style={{ fg: props.theme.warning }}>Session prefix: </span>
+                      {prefix}
+                    </text>
+                  )}
+                </For>
+              </Show>
+              <For each={stage() === "always" ? sandboxSessionScope : details().scope}>
+                {(line) => (
+                  <text width="100%" fg={props.theme.sandboxScope} wrapMode="word" flexShrink={0}>
+                    {line}
+                  </text>
+                )}
+              </For>
+            </box>
+          )}
+        </Show>
         <box
           width="100%"
           flexGrow={1}
@@ -408,14 +462,16 @@ export function RunPermissionBody(props: {
             }}
           >
             <Switch>
-              <Match when={stage() === "permission"}>
+              <Match when={stage() === "permission" || (stage() === "always" && info().sandboxDetails)}>
                 <box width="100%" flexDirection="column" flexShrink={0} gap={compact() ? 0 : 1}>
-                  <box width="100%" paddingLeft={compact() ? 0 : 1} flexShrink={0}>
-                    <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                      <span style={{ fg: props.theme.muted }}>{info().icon} </span>
-                      {info().title}
-                    </text>
-                  </box>
+                  <Show when={!info().sandboxDetails}>
+                    <box width="100%" paddingLeft={compact() ? 0 : 1} flexShrink={0}>
+                      <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
+                        <span style={{ fg: props.theme.muted }}>{info().icon} </span>
+                        {info().title}
+                      </text>
+                    </box>
+                  </Show>
                   <Show
                     when={info().diff}
                     fallback={

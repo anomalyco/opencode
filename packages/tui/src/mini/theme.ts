@@ -1,7 +1,7 @@
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
 import { generateSyntax, resolveThemeDocument, themeModes, type ResolvedTheme } from "@opencode/theme/tui"
 import { allThemes, getOpenCodeTheme, isThemeSource, parseTheme, type ThemeDocumentSource } from "../theme"
-import { ansiToRgba } from "../theme/color"
+import { ansiToRgba, tint } from "../theme/color"
 import { discoverThemes } from "../theme/discovery"
 import { generateSystem, terminalMode } from "../theme/system"
 import { configDirectories } from "../util/config-directories"
@@ -36,6 +36,7 @@ export type RunFooterTheme = {
   link: ColorInput
   categorical: ColorInput[]
   warning: ColorInput
+  sandboxScope: ColorInput
   error: ColorInput
   muted: ColorInput
   text: ColorInput
@@ -154,6 +155,7 @@ function map(
         (a, b) => a.equals(b),
       ),
       warning: exact(theme.text.feedback.warning.base),
+      sandboxScope: exact(tint(theme.text.feedback.warning.base, theme.text.base, 0.55)),
       error: exact(theme.text.feedback.error.base),
       muted: exact(theme.text.muted),
       text: exact(theme.text.base),
@@ -224,6 +226,7 @@ function monoTheme(mode: "dark" | "light"): RunTheme {
       link: foreground,
       categorical: [foreground],
       warning: foreground,
+      sandboxScope: foreground,
       error: foreground,
       muted: foreground,
       text: foreground,
