@@ -1,6 +1,7 @@
 import { beforeEach, expect } from "bun:test"
 import {
   AIError,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
@@ -61,6 +62,9 @@ const cost = [
     },
   },
 ]
+const providerRejected = (input: { readonly message: string }) =>
+  new AIError({ reason: new InvalidRequestError(input) })
+
 const successfulTitle = () =>
   Stream.make(
     LLMEvent.textDelta({ id: "title", text: "Generated Title\n" }),
@@ -310,9 +314,7 @@ it.effect("uses a small model from the primary provider", () =>
 it.effect("falls back to the primary model when the small model fails", () =>
   Effect.gen(function* () {
     titleStream = () =>
-      requests.length === 1
-        ? Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
-        : successfulTitle()
+      requests.length === 1 ? Stream.fail(providerRejected({ message: "Small model unavailable" })) : successfulTitle()
     selectedSmall = lowSmall
     yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_small_fallback")
@@ -392,7 +394,7 @@ it.effect("uses the primary model at its lowest variant without a small model", 
 it.effect("falls back to the selected primary variant when the lowest variant fails", () =>
   Effect.gen(function* () {
     titleStream = () =>
-      requests.length === 1 ? Stream.make(LLMEvent.providerError({ message: "Variant rejected" })) : successfulTitle()
+      requests.length === 1 ? Stream.fail(providerRejected({ message: "Variant rejected" })) : successfulTitle()
     selectedPrimary = primaryInfo(["low", "high"])
     const result = yield* titleAttempts(
       Session.ID.make("ses_title_primary_fallback"),
@@ -594,7 +596,7 @@ it.effect("preserves the existing title when regeneration fails", () =>
     const sessionID = Session.ID.make("ses_title_regenerate_failure")
     yield* insertSession(sessionID, "Original title")
     yield* prompt(sessionID, "Fail to regenerate this title")
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+    titleStream = () => Stream.fail(providerRejected({ message: "Provider unavailable" }))
 
     const title = yield* SessionTitle.Service
     yield* title.generate(sessionID)
@@ -612,7 +614,7 @@ it.effect("retries after a failed title request", () =>
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Retry this title")
     const title = yield* SessionTitle.Service
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+    titleStream = () => Stream.fail(providerRejected({ message: "Provider unavailable" }))
 
     yield* title.generate(sessionID)
     titleStream = successfulTitle

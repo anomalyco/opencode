@@ -342,9 +342,16 @@ export const LanguageModelSchema = Schema.declare((value): value is LanguageMode
   expected: "LLM.LanguageModel",
 })
 
+// Provider cache lifetime such as "5m", "30m", "1h" or "24h", in models.dev's duration format. It is sent as given;
+// each provider accepts its own set, and omitting it keeps the provider default.
+export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["ms", "s", "m", "h", "d"])]).check(
+  Schema.isPattern(/^\d+(ms|s|m|h|d)$/),
+)
+export type CacheTTL = typeof CacheTTL.Type
+
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 }) {}
 
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
@@ -356,7 +363,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
-// object form to override individual choices.
+// object form to choose placements exactly; an object with only `ttl` keeps
+// the automatic placements and sets their lifetime. Routes without inline
+// markers send `ttl` as a request-level cache option where one exists.
 export const CachePolicyObject = Schema.Struct({
   tools: Schema.optional(Schema.Boolean),
   system: Schema.optional(Schema.Boolean),
@@ -367,7 +376,7 @@ export const CachePolicyObject = Schema.Struct({
       Schema.Struct({ tail: Schema.Natural }),
     ]),
   ),
-  ttlSeconds: Schema.optional(Schema.Number),
+  ttl: Schema.optional(CacheTTL),
 })
 export type CachePolicyObject = Schema.Schema.Type<typeof CachePolicyObject>
 

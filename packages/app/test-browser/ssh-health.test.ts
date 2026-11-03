@@ -8,12 +8,12 @@ test("SSH health is checked only with an active tunnel, and cancellation clears 
   const requests: ReturnType<typeof Promise.withResolvers<ServerHealth>>[] = []
 
   const app = createRoot((dispose) => {
-    const [state, setState] = createStore<{ state: ServerConnection.Extension["state"] }>({ state: "stopped" })
+    const [state, setState] = createStore<{ state: ServerConnection.Plugin["state"] }>({ state: "stopped" })
 
-    const connection: ServerConnection.Extension = {
-      type: "extension",
+    const connection: ServerConnection.Plugin = {
+      type: "plugin",
       key: "ssh:fixture",
-      extension: "ssh",
+      plugin: "ssh",
       connecting: false,
       authenticationRequired: false,
       managed: true,
@@ -34,7 +34,7 @@ test("SSH health is checked only with an active tunnel, and cancellation clears 
       },
     )
 
-    return { dispose, setState, health: () => health[ServerConnection.key(connection)] }
+    return { dispose, setState, health: () => health.status[ServerConnection.key(connection)] }
   })
 
   try {
@@ -70,10 +70,10 @@ test("a late failure from the old endpoint cannot overwrite the new endpoint che
   const app = createRoot((dispose) => {
     const [state, setState] = createStore({ url: "http://127.0.0.1:0" })
 
-    const connection: ServerConnection.Extension = {
-      type: "extension",
+    const connection: ServerConnection.Plugin = {
+      type: "plugin",
       key: "ssh:fixture",
-      extension: "ssh",
+      plugin: "ssh",
       state: "ready",
       connecting: false,
       authenticationRequired: false,
@@ -94,7 +94,7 @@ test("a late failure from the old endpoint cannot overwrite the new endpoint che
       },
     )
 
-    return { dispose, setState, health: () => health[ServerConnection.key(connection)] }
+    return { dispose, setState, health: () => health.status[ServerConnection.key(connection)] }
   })
 
   try {
@@ -105,6 +105,43 @@ test("a late failure from the old endpoint cannot overwrite the new endpoint che
     requests[1]?.resolve({ healthy: true })
     await Promise.resolve()
     expect(app.health()).toEqual({ healthy: true })
+  } finally {
+    app.dispose()
+  }
+})
+
+test("retry probes again before the next poll and resolves once that round answers", async () => {
+  const requests: ReturnType<typeof Promise.withResolvers<ServerHealth>>[] = []
+  const connection: ServerConnection.Http = { type: "http", http: { url: "http://127.0.0.1:12346" } }
+
+  const app = createRoot((dispose) => {
+    const health = createServerHealth(
+      () => [connection],
+      () => true,
+      () => {
+        const request = Promise.withResolvers<ServerHealth>()
+        requests.push(request)
+
+        return request.promise
+      },
+    )
+
+    return { dispose, retry: health.retry, health: () => health.status[ServerConnection.key(connection)] }
+  })
+
+  try {
+    requests[0]?.resolve({ healthy: false })
+    await Promise.resolve()
+    expect(app.health()?.healthy).toBe(false)
+
+    const state = { done: false }
+    const retried = app.retry().then(() => (state.done = true))
+    expect(requests).toHaveLength(2)
+    await Promise.resolve()
+    expect(state.done).toBe(false)
+    requests[1]?.resolve({ healthy: true })
+    await retried
+    expect(app.health()?.healthy).toBe(true)
   } finally {
     app.dispose()
   }

@@ -9,12 +9,12 @@ import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { createEffect, createMemo, type Component, For, Show } from "solid-js"
+import { createEffect, createMemo, type Component, For, type JSX, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { CONSOLE_INTEGRATION, CONSOLE_PROVIDERS } from "@/providers/connect/controller"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/controller"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
@@ -31,6 +31,7 @@ const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
+  { match: (id: string) => id === "claude-agent", key: "dialog.provider.claudeAgent.note" },
   { match: (id: string) => id.startsWith("github-copilot"), key: "dialog.provider.copilot.note" },
   { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
@@ -41,6 +42,7 @@ const PROVIDER_NOTES = [
 export const SettingsProviders: Component<{
   directory: string | undefined
   onSelectProvider?: (providerID: string) => void
+  headerAction?: JSX.Element
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
@@ -87,7 +89,7 @@ export const SettingsProviders: Component<{
           defaultLocation={props.directory === undefined}
           controller={providerConnect}
           onConnected={(providerID) => {
-            if (CONSOLE_PROVIDERS.has(providerID)) {
+            if (providerID === CONSOLE_INTEGRATION) {
               setState("disconnecting", reconcile({}))
 
               return
@@ -174,13 +176,13 @@ export const SettingsProviders: Component<{
   })
 
   // Connection state comes from the integration list like the TUI: credential
-  // connections mean an API key or OAuth grant, env connections mean detected
+  // connections mean an API key or an account login, env connections mean detected
   // environment variables, and a connectionless integration is config-provided.
   const source = (item: ProviderItem): ProviderSource | undefined => {
     const current = integration(item)
     const credential = current?.connections.find((connection) => connection.type === "credential")
 
-    if (credential) return credential.method === "oauth" ? "account" : "api"
+    if (credential) return credential.method === "key" ? "api" : "account"
 
     if (current?.connections.some((connection) => connection.type === "env")) return "env"
 
@@ -394,10 +396,11 @@ export const SettingsProviders: Component<{
     <>
       <div class="settings-tab-header">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.providers.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
       </div>
 
@@ -449,6 +452,19 @@ export const SettingsProviders: Component<{
                               </Show>
                             }
                           >
+                            <Show when={activeProviderAccount(integration(item))?.status}>
+                              {(status) => (
+                                <Button
+                                  size="normal"
+                                  variant="ghost-muted"
+                                  class="text-[var(--v2-state-fg-warning)]"
+                                  title={status().message}
+                                  onClick={() => connect(item.id)}
+                                >
+                                  {language.t("dialog.provider.needsSignIn")}
+                                </Button>
+                              )}
+                            </Show>
                             <AccountMenu provider={item} />
                           </Show>
                         </div>

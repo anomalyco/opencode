@@ -114,7 +114,7 @@ describe("ToolStream", () => {
         name: "lookup",
         input: '{"query":"partial"}',
       })
-      const finished = yield* ToolStream.finishWithInput(ADAPTER, tools, "item_1", '{"query":"final"}')
+      const finished = yield* ToolStream.finish(ADAPTER, tools, "item_1", '{"query":"final"}')
 
       expect(finished).toEqual({
         tools: {},

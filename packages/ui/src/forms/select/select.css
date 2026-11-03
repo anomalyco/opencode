@@ -16,34 +16,6 @@
   background: var(--v2-background-bg-layer-01);
   border-radius: 6px;
   box-shadow: var(--v2-elevation-floating);
-  transform-origin: top center;
-  animation: select-v2-content-in 120ms ease-out;
-}
-
-[data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
-  animation: select-v2-content-out 80ms ease-in forwards;
-}
-
-@keyframes select-v2-content-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes select-v2-content-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
 }
 
 /* Shared trigger structure for the inline control. */

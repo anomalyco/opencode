@@ -31,6 +31,9 @@ You are charged per request and can add credits to your account.
 You can also access the models directly through the following API endpoints. Free-tier chat models require OpenCode;
 use paid models or [Go](/console/go) from other clients.
 
+Each model is listed with its native API, but every text model also works through the other APIs, which Console
+translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
+
 <div class="docs-table-scroll" role="region" aria-label="Console model endpoints" tabIndex={0}>
 
 | Model                           | Model ID                        | Endpoint                                                                   | AI SDK Package              |
@@ -110,6 +113,7 @@ use paid models or [Go](/console/go) from other clients.
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
+| Pulse Alpha Free                | pulse-alpha-free                | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | GLM-5.3-Flash Free              | glm-5.3-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free        | deepseek-v4.1-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Beam Free                       | beam-free                       | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -200,6 +204,7 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Model                             | Input           | Output          | Cached Read     | Cached Write |
 | --------------------------------- | --------------- | --------------- | --------------- | ------------ |
 | Big Pickle                        | Free            | Free            | Free            | -            |
+| Pulse Alpha Free                  | Free            | Free            | Free            | -            |
 | GLM-5.3-Flash Free                | Free            | Free            | Free            | -            |
 | DeepSeek V4.1 Flash Free          | Free            | Free            | Free            | -            |
 | Beam Free                         | Free            | Free            | Free            | -            |
@@ -318,6 +323,7 @@ models to generate session titles.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Super VL Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Pulse Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model. It's not available in the European Union, Iceland, Liechtenstein, Norway, Cuba, Iran, North Korea, Russia, Ukraine, or Venezuela.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Jev 1.13 Free is available on OpenCode for a limited time.
@@ -335,6 +341,7 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model              | Deprecation date  |
 | ------------------ | ----------------- |
+| DeepSeek V4 Flash  | October 26, 2026  |
 | GPT 5.2 Codex      | July 23, 2026     |
 | GPT 5.1 Codex      | July 23, 2026     |
 | GPT 5.1 Codex Max  | July 23, 2026     |
@@ -359,6 +366,7 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 All our models are hosted in the US and EU. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
+- Pulse Alpha Free: During its free period, collected data may be retained and used to improve the model.
 - Flint 40B Free: During its free period, collected data may be used to improve the model. Data is retained for 30 days.
 - MiMo-V2.6-Flash Free: During its free period, collected data may be used to improve the model.
 - Nemotron 3 Ultra Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).

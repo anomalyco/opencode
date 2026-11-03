@@ -217,8 +217,7 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
       // Subscribe before the first config read so an update in between still triggers a reload.
-      yield* ctx.event.subscribe().pipe(
-        Stream.filter((event) => event.type === "config.updated"),
+      yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
         Stream.runForEach(() => reconfigure().pipe(Effect.andThen(refresh()), Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )

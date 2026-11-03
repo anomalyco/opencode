@@ -8,7 +8,6 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { getDirectory, getFilename } from "@opencode/util/path"
@@ -400,9 +399,10 @@ export const SessionReview = (props: SessionReviewProps) => {
         </div>
       </div>
 
-      <ScrollView
+      <div
         data-slot="session-review-scroll"
-        viewportRef={(el) => {
+        data-scrollable
+        ref={(el) => {
           scroll = el
           props.scrollRef?.(el)
           queue()
@@ -646,7 +646,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <Match when={!mounted() && !tooLarge()}>
                                   <div
                                     data-slot="session-review-diff-placeholder"
-                                    class="rounded-lg border border-border-weak-base bg-background-stronger/40"
+                                    class="rounded-lg border border-v2-border-border-muted bg-background-stronger/40"
                                     style={{ height: "160px" }}
                                   />
                                 </Match>
@@ -715,7 +715,7 @@ export const SessionReview = (props: SessionReviewProps) => {
             </div>
           </Show>
         </div>
-      </ScrollView>
+      </div>
     </div>
   )
 }

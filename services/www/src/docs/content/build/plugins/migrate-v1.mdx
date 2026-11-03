@@ -1,5 +1,6 @@
 ---
 title: "Migrate plugins from V1"
+description: "Port a V1 plugin's tools and hooks to the V2 plugin API."
 ---
 
 Plugin configuration can be normalized automatically, but plugin implementation code must be ported. V1 plugin functions
@@ -78,7 +79,7 @@ they target.
 
 ## Migrate the context
 
-The V2 context is both an OpenCode client and the plugin extension API. Most operations are grouped by domain instead of
+The V2 context is both an OpenCode client and the plugin API. Most operations are grouped by domain instead of
 living on a separate `client` property.
 
 | V1                                      | V2                                                                  |
@@ -96,7 +97,7 @@ living on a separate `client` property.
 the plugin may observe. Read the session or event data when that distinction matters.
 
 The context exposes many more domains than the table lists, including catalogs, commands, integrations, MCP servers,
-references, skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins#api).
+references, skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins/server#api).
 
 ## Register hooks in `setup`
 
@@ -143,7 +144,7 @@ only when the plugin needs to remove that particular hook or transform earlier w
 
 Use this table to find the closest V2 API for each V1 hook:
 
-| V1 extension point                     | V2 API                                                       |
+| V1 hook                                | V2 API                                                       |
 | -------------------------------------- | ------------------------------------------------------------ |
 | `event`                                | `ctx.event.subscribe()`                                      |
 | `dispose`                              | cleanup function returned by `setup`                         |
@@ -370,6 +371,6 @@ For each plugin:
 4. Test plugin options and persisted state with a clean project.
 5. For a published package, test the installed package rather than only a workspace-linked copy.
 
-See the [Plugins guide](/build/plugins) for the full Promise API, [Effect plugins](/build/plugins/effect) for the Effect
-entrypoint, [plugin RPC](/build/plugins/rpc) for custom methods and events, and [CLI plugins](/build/plugins/cli) for TUI
-extensions.
+See [Server](/build/plugins/server) for the full Promise API, [Effect plugins](/build/plugins/effect) for the Effect
+entrypoint, [plugin RPC](/build/plugins/rpc) for custom methods and events, and [TUI plugins](/build/plugins/cli) for
+the terminal UI.

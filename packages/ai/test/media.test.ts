@@ -3,7 +3,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Ref, Schema } from "effect"
 import { FileSystem } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { AIError, LLM, Media, Message, ToolCallPart } from "../src/effect.js"
+import { ai, AIError, Media, Message, ToolCallPart } from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
@@ -51,12 +51,12 @@ describe("Media", () => {
         Media.ref("openai", "file:///Users/example/clip.mp4", "video/mp4"),
         restored,
       ]) {
-        const error = yield* compileRequest(LLM.request({ model, prompt: [Message.media(asset)] })).pipe(Effect.flip)
+        const error = yield* compileRequest(ai.request({ model, prompt: [Message.media(asset)] })).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
         expect(error.message).toContain("Media.file(path)")
       }
       const error = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "read", name: "read", input: {} })]),
@@ -290,6 +290,16 @@ describe("Media", () => {
       const plain = `${dir}/notes.md`
       yield* fs.writeFile(plain, new TextEncoder().encode("# hi"))
       expect((yield* Media.file(plain)).mediaType).toBe("text/markdown")
+
+      for (const [name, mediaType] of [
+        ["photo.avif", "image/avif"],
+        ["photo.HEIC", "image/heic"],
+        ["photo.heif", "image/heif"],
+        ["clip.mov", "video/quicktime"],
+      ]) {
+        yield* fs.writeFile(`${dir}/${name}`, Uint8Array.from([1, 2, 3]))
+        expect((yield* Media.file(`${dir}/${name}`)).mediaType).toBe(mediaType)
+      }
 
       const target = `${dir}/copy.png`
       yield* Media.write(Media.base64("AQID", "image/png"), target)

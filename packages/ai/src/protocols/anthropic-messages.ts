@@ -10,8 +10,9 @@ import { Headers } from "effect/http"
 import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
+  CacheTTL,
   HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
   Usage,
@@ -80,7 +81,7 @@ export type ContextManagement = typeof ContextManagement.Type
 // =============================================================================
 const AnthropicCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(CacheTTL),
 })
 const AnthropicServiceTier = knownString<"auto" | "standard_only">()
 const AnthropicSpeed = knownString<"fast" | "standard">()
@@ -533,17 +534,10 @@ const invalid = ProviderShared.invalidRequest
 // that exceed it.
 const ANTHROPIC_BREAKPOINT_CAP = 4
 
-const EPHEMERAL_5M = { type: "ephemeral" as const }
-const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
-
 const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefined) => {
   if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
-  if (breakpoints.remaining <= 0) {
-    breakpoints.dropped += 1
-    return undefined
-  }
-  breakpoints.remaining -= 1
-  return Cache.ttlBucket(cache.ttlSeconds) === "1h" ? EPHEMERAL_1H : EPHEMERAL_5M
+  if (!Cache.take(breakpoints)) return undefined
+  return { type: "ephemeral" as const, ...(cache.ttl === undefined ? {} : { ttl: cache.ttl }) }
 }
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
@@ -631,59 +625,15 @@ const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart,
   } satisfies AnthropicServerToolResultBlock
 })
 
-const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = metadata.anthropic
-  if (ProviderShared.isRecord(anthropic)) {
-    if (typeof anthropic.file_id === "string") return anthropic.file_id
-    if (typeof anthropic.fileId === "string") return anthropic.fileId
-  }
-  if (typeof metadata.file_id === "string") return metadata.file_id
-  if (typeof metadata.fileId === "string") return metadata.fileId
-  return undefined
-}
-
-const transformationsFromMetadata = (
-  metadata: MediaPart["metadata"],
-): AnthropicImageBlock["transformations"] | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  const raw = anthropic?.transformations ?? metadata.transformations
-  if (ProviderShared.isRecord(raw)) {
-    const value = raw.oversized_image
-    if (value === "downsize" || value === "error") return { oversized_image: value }
-  }
-  if (anthropic && (anthropic.oversized_image === "downsize" || anthropic.oversized_image === "error"))
-    return { oversized_image: anthropic.oversized_image }
-  return undefined
-}
-
-const documentTitleFromPart = (part: MediaPart): string | undefined => {
-  if (part.metadata !== undefined) {
-    const anthropic = part.metadata.anthropic
-    if (ProviderShared.isRecord(anthropic) && typeof anthropic.title === "string") return anthropic.title
-    if (typeof part.metadata.title === "string") return part.metadata.title
-  }
-  if (part.filename && part.filename.length > 0) return part.filename
-  return undefined
-}
-
-const documentContextFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  if (anthropic && typeof anthropic.context === "string") return anthropic.context
-  if (typeof metadata.context === "string") return metadata.context
-  return undefined
-}
-
-const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocumentBlock["citations"] | undefined => {
-  if (!metadata) return undefined
-  const raw = ProviderShared.isRecord(metadata.anthropic)
-    ? (metadata.anthropic.citations ?? metadata.citations)
-    : metadata.citations
-  if (ProviderShared.isRecord(raw) && typeof raw.enabled === "boolean") return { enabled: raw.enabled }
-  return undefined
-}
+// Per-part Anthropic block fields, read from `providerMetadata[providerMetadataKey]` with Anthropic's wire names.
+const MediaOptions = Schema.Struct({
+  file_id: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  citations: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
+  transformations: Schema.optional(AnthropicImageTransformations),
+})
+const decodeMediaOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(MediaOptions))
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
@@ -707,110 +657,55 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
       ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
     } satisfies AnthropicVideoBlock
   }
-  const fileId = fileIdFromMetadata(part.metadata)
+  const options = yield* decodeMediaOptions(
+    part.providerMetadata?.[request.model.route.providerMetadataKey ?? request.model.provider] ?? {},
+  )
+  const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => ({
+    type: "image",
+    source,
+    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    ...(options.transformations === undefined ? {} : { transformations: options.transformations }),
+  })
+  const document = (source: AnthropicDocumentBlock["source"]): AnthropicDocumentBlock => {
+    const title = options.title ?? (part.filename ? part.filename : undefined)
+    return {
+      type: "document",
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(title === undefined ? {} : { title }),
+      ...(options.context === undefined ? {} : { context: options.context }),
+      ...(options.citations === undefined ? {} : { citations: options.citations }),
+    }
+  }
 
   // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
-  if (fileId) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "file" as const, file_id: fileId },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    return {
-      type: "document" as const,
-      source: { type: "file" as const, file_id: fileId },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+  if (options.file_id) {
+    if (mime.startsWith("image/")) return image({ type: "file", file_id: options.file_id })
+    return document({ type: "file", file_id: options.file_id })
   }
 
   const rawString = ProviderShared.mediaUrl(part.media)?.trim()
   // SDK URL sources: URLImageSource:3817 / URLPDFSource:3823 {type:"url", url}
   if (rawString && isHttpUrl(rawString)) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    if (mime === "application/pdf")
-      return {
-        type: "document" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-        ...(documentContextFromMetadata(part.metadata) === undefined
-          ? {}
-          : { context: documentContextFromMetadata(part.metadata)! }),
-        ...(citationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { citations: citationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicDocumentBlock
+    if (mime.startsWith("image/")) return image({ type: "url", url: rawString })
+    if (mime === "application/pdf") return document({ type: "url", url: rawString })
   }
 
   const media = yield* ProviderShared.requireInlineMedia("Anthropic Messages", part.media)
 
   // SDK PlainTextSource:2716 {type:"text", media_type:"text/plain", data}
-  if (mime === "text/plain") {
-    const textData = Buffer.from(media.base64, "base64").toString("utf8")
-    return {
-      type: "document" as const,
-      source: { type: "text" as const, media_type: "text/plain" as const, data: textData },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
-  }
+  if (mime === "text/plain")
+    return document({
+      type: "text",
+      media_type: "text/plain",
+      data: Buffer.from(media.base64, "base64").toString("utf8"),
+    })
 
   if (media.mime === "application/pdf")
-    return {
-      type: "document" as const,
-      source: {
-        type: "base64" as const,
-        media_type: "application/pdf" as const,
-        data: media.base64,
-      },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+    return document({ type: "base64", media_type: "application/pdf", data: media.base64 })
   if (!media.mime.startsWith("image/"))
     return yield* invalid(`Anthropic Messages does not support media type ${part.media.mediaType}`)
-  return {
-    type: "image" as const,
-    source: {
-      type: "base64" as const,
-      media_type: media.mime,
-      data: media.base64,
-    },
-    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-    ...(transformationsFromMetadata(part.metadata) === undefined
-      ? {}
-      : { transformations: transformationsFromMetadata(part.metadata)! }),
-  } satisfies AnthropicImageBlock
+  return image({ type: "base64", media_type: media.mime, data: media.base64 })
 })
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
@@ -845,6 +740,7 @@ const requireThinkingSignature = (request: LLMRequest) => {
   )
     return false
   if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  if (model.startsWith("qwen") || model.startsWith("minimax-")) return false
   return true
 }
 
@@ -973,19 +869,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
             continue
           }
           if (!signature || signature.trim().length === 0) {
-            if (part.text.trim().length === 0) continue
-            if (!requireThinkingSignature(request)) {
+            if (part.text.trim().length > 0 && !requireThinkingSignature(request)) {
               content.push({ type: "thinking", thinking: part.text, signature: "" })
-              continue
             }
-            // Without a signature this cannot be a valid thinking block per
-            // the SDK ThinkingBlockParam:3217 — demote to text so the
-            // conversation remains sendable.
-            content.push({
-              type: "text",
-              text: part.text,
-              cache_control: cacheControl(breakpoints, part.cache),
-            })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })
@@ -1093,11 +979,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           cache_control: cacheControl(breakpoints, part.cache),
         }))
   const messages = yield* lowerMessages(flattened.request, breakpoints)
-  if (breakpoints.dropped > 0) {
-    yield* Effect.logWarning(
-      `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
-    )
-  }
+  yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
   const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
@@ -1417,10 +1299,7 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions
@@ -1664,12 +1543,13 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: LLMRequest.update(input.request, {
+        request: {
+          ...input.request,
           http: new HttpOptions({
             ...input.request.http,
             headers: { ...headers, "anthropic-beta": [...betas].join(",") },
           }),
-        }),
+        },
       })
     },
   }

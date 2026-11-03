@@ -8,7 +8,7 @@ export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "Dokumentacja",
   "nav.enterprise": "Enterprise",
-  "nav.zen": "Zen",
+  "nav.zen": "OpenCode Models",
   "nav.login": "Zaloguj się",
   "nav.free": "Pobierz",
   "nav.home": "Strona główna",
@@ -29,6 +29,10 @@ export const dict = {
   "legal.brand": "Marka",
   "legal.privacy": "Prywatność",
   "legal.terms": "Warunki",
+  "legal.status.operational": "Wszystkie systemy działają",
+  "legal.status.degraded": "Obniżona wydajność",
+  "legal.status.outage": "Awaria usługi",
+  "legal.status.unknown": "Status systemu",
 
   "email.title": "Bądź pierwszym, który dowie się o nowych produktach",
   "email.subtitle": "Dołącz do listy oczekujących na wczesny dostęp.",
@@ -106,7 +110,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "Poza tym możesz używać dowolnych popularnych modeli do kodowania, tworząc konto",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Chociaż zachęcamy do korzystania z Zen, OpenCode działa również ze wszystkimi popularnymi dostawcami, takimi jak OpenAI, Anthropic, xAI itp.",
+    "Chociaż zachęcamy do korzystania z OpenCode Models, OpenCode działa również ze wszystkimi popularnymi dostawcami, takimi jak OpenAI, Anthropic, xAI itp.",
   "home.faq.a3.p4.beforeLocal": "Możesz nawet podłączyć swoje",
   "home.faq.a3.p4.localLink": "lokalne modele",
   "home.faq.q4": "Czy mogę używać moich istniejących subskrypcji AI z OpenCode?",
@@ -132,25 +136,26 @@ export const dict = {
 
   "home.zenCta.title": "Uzyskaj dostęp do niezawodnych, zoptymalizowanych modeli dla agentów kodujących",
   "home.zenCta.body":
-    "Zen daje dostęp do wyselekcjonowanego zestawu modeli AI, które OpenCode przetestował i sprawdził (benchmark) specjalnie dla agentów kodujących. Nie musisz martwić się o niespójną wydajność i jakość u różnych dostawców, używaj sprawdzonych modeli, które działają.",
-  "home.zenCta.link": "Dowiedz się więcej o Zen",
+    "OpenCode Models daje dostęp do wyselekcjonowanego zestawu modeli AI, które OpenCode przetestował i sprawdził (benchmark) specjalnie dla agentów kodujących. Nie musisz martwić się o niespójną wydajność i jakość u różnych dostawców, używaj sprawdzonych modeli, które działają.",
+  "home.zenCta.link": "Dowiedz się więcej o OpenCode Models",
 
-  "zen.title": "OpenCode Zen | Wyselekcjonowany zestaw niezawodnych, zoptymalizowanych modeli dla agentów kodujących",
+  "zen.title":
+    "OpenCode Models | Wyselekcjonowany zestaw niezawodnych, zoptymalizowanych modeli dla agentów kodujących",
   "zen.hero.title": "Niezawodne, zoptymalizowane modele dla agentów kodujących",
   "zen.hero.body":
-    "Zen daje dostęp do wyselekcjonowanego zestawu modeli AI, które OpenCode przetestował i sprawdził (benchmark) specjalnie dla agentów kodujących. Nie musisz martwić się o niespójną wydajność i jakość, używaj sprawdzonych modeli, które działają.",
+    "OpenCode Models daje dostęp do wyselekcjonowanego zestawu modeli AI, które OpenCode przetestował i sprawdził (benchmark) specjalnie dla agentów kodujących. Nie musisz martwić się o niespójną wydajność i jakość, używaj sprawdzonych modeli, które działają.",
 
-  "zen.faq.q1": "Czym jest OpenCode Zen?",
+  "zen.faq.q1": "Czym jest OpenCode Models?",
   "zen.faq.a1":
-    "Zen to wyselekcjonowany zestaw modeli AI przetestowanych i sprawdzonych pod kątem agentów kodujących, stworzony przez zespół stojący za OpenCode.",
-  "zen.faq.q2": "Co sprawia, że Zen jest bardziej precyzyjny?",
+    "OpenCode Models to wyselekcjonowany zestaw modeli AI przetestowanych i sprawdzonych pod kątem agentów kodujących, stworzony przez zespół stojący za OpenCode.",
+  "zen.faq.q2": "Co sprawia, że OpenCode Models jest bardziej precyzyjny?",
   "zen.faq.a2":
-    "Zen oferuje tylko modele, które zostały specjalnie przetestowane i sprawdzone dla agentów kodujących. Nie używasz noża do masła do krojenia steku, więc nie używaj słabych modeli do kodowania.",
-  "zen.faq.q3": "Czy Zen jest tańszy?",
+    "OpenCode Models oferuje tylko modele, które zostały specjalnie przetestowane i sprawdzone dla agentów kodujących. Nie używasz noża do masła do krojenia steku, więc nie używaj słabych modeli do kodowania.",
+  "zen.faq.q3": "Czy OpenCode Models jest tańszy?",
   "zen.faq.a3":
-    "Zen nie jest nastawiony na zysk. Zen przekazuje koszty od dostawców modeli bezpośrednio do Ciebie. Im większe użycie Zen, tym lepsze stawki OpenCode może wynegocjować i przekazać Tobie.",
-  "zen.faq.q4": "Ile kosztuje Zen?",
-  "zen.faq.a4.p1.beforePricing": "Zen",
+    "OpenCode Models nie jest nastawiony na zysk. OpenCode Models przekazuje koszty od dostawców modeli bezpośrednio do Ciebie. Im większe użycie OpenCode Models, tym lepsze stawki OpenCode może wynegocjować i przekazać Tobie.",
+  "zen.faq.q4": "Ile kosztuje OpenCode Models?",
+  "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "pobiera opłaty za żądanie",
   "zen.faq.a4.p1.afterPricing": "bez marży, więc płacisz dokładnie tyle, ile pobiera dostawca modelu.",
   "zen.faq.a4.p2.beforeAccount":
@@ -160,43 +165,44 @@ export const dict = {
     "Aby pokryć koszty, OpenCode dolicza jedynie niewielką opłatę za przetwarzanie płatności w wysokości $1.23 przy każdym doładowaniu salda o $20.",
   "zen.faq.q5": "A co z danymi i prywatnością?",
   "zen.faq.a5.beforeExceptions":
-    "Wszystkie modele Zen są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
+    "Wszystkie modele w OpenCode Models są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
   "zen.faq.a5.exceptionsLink": "następującymi wyjątkami",
   "zen.faq.q6": "Czy mogę ustawić limity wydatków?",
   "zen.faq.a6": "Tak, możesz ustawić miesięczne limity wydatków na swoim koncie.",
   "zen.faq.q7": "Czy mogę anulować?",
   "zen.faq.a7": "Tak, możesz wyłączyć rozliczenia w dowolnym momencie i wykorzystać pozostałe saldo.",
-  "zen.faq.q8": "Czy mogę używać Zen z innymi agentami kodującymi?",
+  "zen.faq.q8": "Czy mogę używać OpenCode Models z innymi agentami kodującymi?",
   "zen.faq.a8":
-    "Chociaż Zen świetnie działa z OpenCode, możesz używać Zen z dowolnym agentem. Postępuj zgodnie z instrukcjami konfiguracji w swoim preferowanym agencie.",
+    "Chociaż OpenCode Models świetnie działa z OpenCode, możesz używać OpenCode Models z dowolnym agentem. Postępuj zgodnie z instrukcjami konfiguracji w swoim preferowanym agencie.",
   "zen.faq.q9": "Czy mogę otrzymać zwrot pieniędzy?",
   "zen.faq.a9":
     "Możesz kwalifikować się do zwrotu, jeśli opłata została pobrana w ciągu ostatnich 14 dni i nie wykorzystano żadnych środków z tego zakupu. {{contact}}, aby poprosić o zwrot.",
 
-  "zen.cta.start": "Zacznij korzystać z Zen",
+  "zen.cta.start": "Zacznij korzystać z OpenCode Models",
   "zen.pricing.title": "Dodaj 20$ salda Pay as you go",
   "zen.pricing.fee": "(+$1.23 opłaty za przetwarzanie karty)",
   "zen.pricing.body": "Używaj z dowolnym agentem. Ustaw miesięczne limity wydatków. Anuluj w dowolnym momencie.",
-  "zen.problem.title": "Jaki problem rozwiązuje Zen?",
+  "zen.problem.title": "Jaki problem rozwiązuje OpenCode Models?",
   "zen.problem.body":
     "Dostępnych jest wiele modeli, ale tylko nieliczne dobrze współpracują z agentami kodującymi. Większość dostawców konfiguruje je inaczej, co daje różne wyniki.",
   "zen.problem.subtitle": "Naprawiamy to dla wszystkich, nie tylko dla użytkowników OpenCode.",
   "zen.problem.item1": "Testowanie wybranych modeli i konsultacje z ich zespołami",
   "zen.problem.item2": "Współpraca z dostawcami w celu zapewnienia ich prawidłowego dostarczania",
   "zen.problem.item3": "Benchmark wszystkich rekomendowanych przez nas kombinacji modeli i dostawców",
-  "zen.how.title": "Jak działa Zen",
-  "zen.how.body": "Chociaż sugerujemy używanie Zen z OpenCode, możesz używać Zen z dowolnym agentem.",
+  "zen.how.title": "Jak działa OpenCode Models",
+  "zen.how.body":
+    "Chociaż sugerujemy używanie OpenCode Models z OpenCode, możesz używać OpenCode Models z dowolnym agentem.",
   "zen.how.step1.title": "Zarejestruj się i doładuj saldo 20$",
   "zen.how.step1.beforeLink": "postępuj zgodnie z",
   "zen.how.step1.link": "instrukcją konfiguracji",
-  "zen.how.step2.title": "Używaj Zen z przejrzystym cennikiem",
+  "zen.how.step2.title": "Używaj OpenCode Models z przejrzystym cennikiem",
   "zen.how.step2.link": "płać za żądanie",
   "zen.how.step2.afterLink": "bez marży",
   "zen.how.step3.title": "Automatyczne doładowanie",
   "zen.how.step3.body": "włącz opcjonalne automatyczne doładowanie i wybierz próg salda oraz kwotę doładowania",
   "zen.privacy.title": "Twoja prywatność jest dla nas ważna",
   "zen.privacy.beforeExceptions":
-    "Wszystkie modele Zen są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli, z",
+    "Wszystkie modele w OpenCode Models są hostowane w USA i UE. Dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli, z",
   "zen.privacy.exceptionsLink": "następującymi wyjątkami",
 
   "go.promo.kimiK31Pro": "Kimi K3.1 Pro jest już dostępny w Go.",
@@ -209,15 +215,26 @@ export const dict = {
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
 
   "go.cta.text": "Zasubskrybuj Go",
+  "go.plans.audience": "Plany Go dla",
+  "go.plans.individuals": "Dla osób indywidualnych",
+  "go.plans.teams": "Dla zespołów",
   "go.plans.month": "miesięcznie",
+  "go.plans.memberMonth": "za członka\nmiesięcznie",
   "go.plans.plus.cta": "Subskrybuj Go Plus",
   "go.plans.plus.description": "Go Plus kosztuje $40/miesiąc i oferuje wyższe limity.",
+  "go.plans.teams.cta": "Subskrybuj Go Teams",
+  "go.plans.teams.description": "Go Teams kosztuje $20/członka/miesiąc i daje limity każdemu członkowi.",
   "go.plans.go.feature1": "Wyselekcjonowane, przystępne modele",
   "go.plans.go.feature2": "Przetestowane do kodowania agentowego",
   "go.plans.go.feature3": "Hojne limity i niezawodny dostęp",
   "go.plans.plus.feature1": "Wszystko, co obejmuje Go",
   "go.plans.plus.feature2": "Wyższe limity na dłuższe sesje kodowania w skupieniu",
   "go.plans.plus.feature3": "Do większych, wymagających projektów",
+  "go.plans.teams.feature1": "Każdy członek otrzymuje własne limity Go",
+  "go.plans.teams.feature2": "Hojne miesięczne limity dla każdego modelu",
+  "go.plans.teams.feature3": "Jeden rachunek dla całego obszaru roboczego",
+  "go.plans.teams.feature4": "Dodatkowe użycie z budżetami na członka",
+  "go.plans.teams.feature5": "Kontrola prywatności i regionów modeli",
   "go.plans.limits": "Limity",
   "go.plans.description": "Szacowana liczba żądań na 5 godzin i miesięczne limity dla modeli",
   "go.plans.legend": "Plany",
@@ -256,9 +273,9 @@ export const dict = {
     "Go to niskokosztowa subskrypcja, która daje niezawodny dostęp do zdolnych modeli open source dla agentów kodujących.",
   "go.faq.q2": "Jakie modele zawiera Go?",
   "go.faq.a2": "Go obejmuje poniższe modele z wysokimi limitami i niezawodnym dostępem.",
-  "go.faq.q3": "Czy Go to to samo co Zen?",
+  "go.faq.q3": "Czy Go to to samo co OpenCode Models?",
   "go.faq.a3":
-    "Nie. Zen działa w modelu płatności za użycie, natomiast Go kosztuje $10/miesiąc, oferując hojne limity i niezawodny dostęp do starannie dobranego zestawu modeli.",
+    "Nie. OpenCode Models działa w modelu płatności za użycie, natomiast Go kosztuje $10/miesiąc, oferując hojne limity i niezawodny dostęp do starannie dobranego zestawu modeli.",
   "go.faq.q4": "Ile kosztuje Go?",
   "go.faq.a4.p1.beforePricing": "Go kosztuje",
   "go.faq.a4.p1.pricingLink": "$10/miesiąc",
@@ -280,8 +297,7 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
-  "go.faq.a5.deepseekRetention":
-    "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 października 2026 r.",
+  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 30 listopada 2026 r.",
   "go.faq.a5.museRetention":
     "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 

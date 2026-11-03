@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode/gui-extensions/sdk"
+import type { FileContent } from "@opencode/plugin/gui"
 
 const MAX_FILE_CONTENT_ENTRIES = 40
 

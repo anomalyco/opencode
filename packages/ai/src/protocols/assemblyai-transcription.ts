@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
+import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -34,7 +34,7 @@ export type AssemblyAITranscriptionOptions = {
   readonly speech_models?: ReadonlyArray<OpenString<"universal-3-5-pro" | "universal-2">>
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<AssemblyAITranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<AssemblyAITranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -133,7 +133,7 @@ const decodeStart = Effect.fn("AssemblyAITranscription.decodeStart")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
   const output = yield* decodeTranscript(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { token: { transcriptID: output.value.id }, snapshot: { id: output.value.id, status } }
 })
 
@@ -142,7 +142,7 @@ const decodeStatus = Effect.fn("AssemblyAITranscription.decodeStatus")(function*
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeTranscript(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.transcriptID, status }
 })
 
@@ -154,7 +154,7 @@ const decodeResult = Effect.fn("AssemblyAITranscription.decodeResult")(function*
 ) {
   const output = yield* decodeTranscript(response)
   const transcript = output.value
-  const status = yield* MediaProtocol.status(STATUS, transcript.status, output)
+  const status = MediaProtocol.status(STATUS, transcript.status)
   const error = transcript.error ?? undefined
   if (status === "failed")
     return yield* output.ended("failed", `${route.name} transcription failed${error === undefined ? "" : `: ${error}`}`)

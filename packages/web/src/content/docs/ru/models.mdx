@@ -58,7 +58,7 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 }
 ```
 
-Здесь полный идентификатор `provider_id/model_id`. Например, если вы используете [OpenCode Zen](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-6.1-sol` для GPT-6.1 Sol.
+Здесь полный идентификатор `provider_id/model_id`. Например, если вы используете [OpenCode Models](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-6.1-sol` для GPT-6.1 Sol.
 
 Если вы настроили [пользовательский поставщик](/docs/providers#custom), `provider_id` — это ключ из части `provider` вашей конфигурации, а `model_id` — это ключ из `provider.models`.
 

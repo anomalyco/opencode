@@ -1,96 +1,103 @@
-import { expect, story } from "../../storybook/playwright/story"
+import type { Page } from "@playwright/test"
+import { expect, story } from "../../stories/playwright/story"
 
-for (const theme of ["light", "dark"]) {
-  for (const direction of ["ltr", "rtl"]) {
-    story(`shimmers once over the visible wordmark (${theme}, ${direction})`, async ({ mount, page }, testInfo) => {
-      await page.emulateMedia({ reducedMotion: "no-preference" })
-      const component = await mount("app-new-session-wordmark--reveal", { globals: { theme, direction } })
-      const logo = component.locator('[data-component="new-session-wordmark"]')
-      const reveal = logo.locator('[data-slot="wordmark-reveal"]')
-      const shimmer = logo.locator(".wordmark-shimmer")
-      const base = logo.locator("svg").first()
-      await expect(base).toHaveCSS("opacity", "0.16")
-      await expect(shimmer).toHaveCSS("animation-iteration-count", "1")
-      await expect(logo.locator("g[mask]")).toHaveCount(0)
-      await expect(shimmer).toHaveCSS("color", "rgb(255, 255, 255)")
-      await expect(shimmer).toHaveCSS("mix-blend-mode", "screen")
-      await expect(base.locator("path").nth(1)).toHaveAttribute("fill", "var(--icon-base)")
-      await expect(base.locator("path").nth(9)).toHaveCSS(
-        "fill",
-        await base.locator("path").nth(1).evaluate((element) => getComputedStyle(element).fill),
-      )
-      await expect(base.locator('path[fill="var(--icon-weak-base)"]')).toHaveCount(8)
+// A cell of the "c" in the wordmark (column 40, row 2 of the 78×14 pin grid).
+const PIN = { x: 40.5 / 78, y: 2.5 / 14 }
 
-      await logo.evaluate((element) => {
-        element.getAnimations({ subtree: true }).forEach((animation) => {
-          animation.pause()
-          animation.currentTime = 0
-        })
-      })
-      await expect(reveal).toHaveCSS("opacity", "1")
-      await expect(reveal).toHaveCSS("animation-name", "none")
-      await expect(shimmer).toHaveCSS("mask-position", "100% 0px")
+// An empty cell above the "o", clear of every pin, side and shadow at rest.
+const EMPTY = { x: 5.5 / 78, y: 0.5 / 14 }
 
-      await logo.evaluate((element) => {
-        element.getAnimations({ subtree: true }).forEach((animation) => (animation.currentTime = 400))
-      })
-      await expect(shimmer).toHaveCSS("mask-position", "50% 0px")
-      await expect(shimmer).toHaveCSS("opacity", theme === "dark" ? "0.0672" : "0.45")
-      const swept = await logo.screenshot({ path: testInfo.outputPath("wordmark-shimmer.png") })
+story("draws the wordmark as pins and stops animating once settled", async ({ mount, page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await mount("app-new-session-wordmark--pin-board")
 
-      await logo.evaluate((element) => {
-        element.getAnimations({ subtree: true }).forEach((animation) => animation.finish())
-      })
-      await expect(reveal).toHaveCSS("opacity", "1")
-      await expect(shimmer).toHaveCSS("opacity", "0")
-      await expect(shimmer).toHaveCSS("mask-position", "0% 0px")
-      const settled = await logo.screenshot({ path: testInfo.outputPath("wordmark-settled.png") })
+  const empty = await pinPixel(page, EMPTY)
+  await expect.poll(() => pinPixel(page)).not.toEqual(empty)
+  await expect.poll(() => requestedFrames(page)).toBe(0)
+})
 
-      const brightness = await page.evaluate(
-        async (screenshots) => {
-          const pixels = await Promise.all(
-            screenshots.map(async (screenshot) => {
-              const image = new Image()
-              image.src = `data:image/png;base64,${screenshot}`
-              await image.decode()
-              const canvas = new OffscreenCanvas(image.width, image.height)
-              const context = canvas.getContext("2d")
+story("knocks pins out from the panel but never from the composer", async ({ mount, page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await mount("app-new-session-wordmark--pin-board")
+  await expect.poll(() => requestedFrames(page)).toBe(0)
+  const before = await pinPixel(page)
 
-              if (!context) throw new Error("Cannot read screenshot pixels")
-              context.drawImage(image, 0, 0)
+  await page.locator('[data-component="composer"]').click()
+  await nextFrames(page, 2)
+  expect(await pinPixel(page)).toEqual(before)
 
-              return context.getImageData(0, 0, image.width, image.height).data
-            }),
-          )
+  const box = (await page.locator('[data-slot="wordmark-box"]').boundingBox())!
+  await page.mouse.click(box.x + box.width * PIN.x, box.y + box.height * PIN.y)
+  await expect.poll(() => pinPixel(page)).not.toEqual(before)
+})
 
-          return {
-            min: pixels[0].reduce(
-              (min, value, index) => (index % 4 === 3 ? min : Math.min(min, value - pixels[1][index])),
-              0,
-            ),
-            max: pixels[0].reduce(
-              (max, value, index) => (index % 4 === 3 ? max : Math.max(max, value - pixels[1][index])),
-              0,
-            ),
-          }
-        },
-        [swept.toString("base64"), settled.toString("base64")],
-      )
+story("shows a static pin board with reduced motion", async ({ mount, page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await mount("app-new-session-wordmark--pin-board")
+  const empty = await pinPixel(page, EMPTY)
+  await expect.poll(() => pinPixel(page)).not.toEqual(empty)
+  await expect.poll(() => requestedFrames(page)).toBe(0)
+  const before = await pinPixel(page)
 
-      expect(brightness.min).toBeGreaterThanOrEqual(0)
-      expect(brightness.max).toBeGreaterThanOrEqual(5)
-    })
-  }
+  const box = (await page.locator('[data-slot="wordmark-box"]').boundingBox())!
+  await page.mouse.click(box.x + box.width * PIN.x, box.y + box.height * PIN.y)
+  await nextFrames(page, 2)
+  expect(await pinPixel(page)).toEqual(before)
+  expect(await requestedFrames(page)).toBe(0)
+})
 
-  story(`shows a static wordmark with reduced motion (${theme})`, async ({ mount, page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" })
-    await page.setViewportSize({ width: 360, height: 640 })
-    const component = await mount("app-new-session-wordmark--reveal", { globals: { theme } })
-    const logo = component.locator('[data-component="new-session-wordmark"]')
-    await expect(logo.locator("svg").first()).toHaveCSS("opacity", "0.16")
-    await expect(logo.locator('[data-slot="wordmark-reveal"]')).toHaveCSS("opacity", "1")
-    await expect(logo.locator(".wordmark-shimmer")).toHaveCSS("opacity", "0")
-    expect(await logo.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0)
-    expect(await logo.evaluate((element) => element.getBoundingClientRect().right <= innerWidth)).toBe(true)
+// Reads the on-screen pixel at a grid cell. The board may be drawn with WebGL, whose canvas cannot be read
+// back once presented, so the pixel comes from a screenshot decoded in the page.
+async function pinPixel(page: Page, cell = PIN) {
+  const box = (await page.locator('[data-slot="wordmark-box"]').boundingBox())!
+
+  const shot = await page.screenshot({
+    clip: { x: box.x + box.width * cell.x, y: box.y + box.height * cell.y, width: 1, height: 1 },
   })
+
+  return page.evaluate(async (png) => {
+    const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob())
+    const canvas = new OffscreenCanvas(1, 1)
+    const context = canvas.getContext("2d")!
+    context.drawImage(image, 0, 0)
+    const d = context.getImageData(0, 0, 1, 1).data
+
+    return { red: d[0], green: d[1], blue: d[2] }
+  }, shot.toString("base64"))
+}
+
+// Counts animation frames the page requests while we watch the next 20 frames.
+function requestedFrames(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const original = window.requestAnimationFrame
+        const watch = original.bind(window)
+        const state = { requested: 0, left: 20 }
+        window.requestAnimationFrame = (callback) => {
+          state.requested++
+
+          return watch(callback)
+        }
+
+        const tick = () => {
+          if (--state.left > 0) return watch(tick)
+          window.requestAnimationFrame = original
+          resolve(state.requested)
+        }
+
+        watch(tick)
+      }),
+  )
+}
+
+function nextFrames(page: Page, count: number) {
+  return page.evaluate(
+    (count) =>
+      new Promise<void>((resolve) => {
+        const tick = (left: number) => (left ? requestAnimationFrame(() => tick(left - 1)) : resolve())
+        tick(count)
+      }),
+    count,
+  )
 }

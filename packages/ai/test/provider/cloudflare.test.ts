@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent } from "../../src/effect.js"
+import { ai, LLMEvent } from "../../src/effect.js"
 import { CloudflareAIGateway } from "../../src/providers/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAI } from "../../src/providers/cloudflare-workers-ai.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -28,14 +28,14 @@ describe("Cloudflare", () => {
         apiKey: "test-token",
       })
       const responses = yield* compileRequest(
-        LLM.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
       )
       const messages = yield* compileRequest(
-        LLM.request({ model: gateway.model("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
       )
-      const chat = yield* compileRequest(LLM.request({ model: gateway.model("xai/grok-4.6"), prompt: "Say hello." }))
+      const chat = yield* compileRequest(ai.request({ model: gateway.model("xai/grok-4.6"), prompt: "Say hello." }))
       const workers = yield* compileRequest(
-        LLM.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
       )
 
       expect(responses.route).toBe("cloudflare-ai-gateway-responses")
@@ -62,46 +62,50 @@ describe("Cloudflare", () => {
 
   it.effect("posts to the Cloudflare REST API with gateway options", () =>
     Effect.gen(function* () {
-      const response = yield* LLM.generate(
-        LLM.request({
-          model: CloudflareAIGateway.configure({
-            accountId: "test-account",
-            gatewayId: "test-gateway",
-            apiKey: "test-token",
-            cacheKey: "cache-key",
-            cacheTtl: 300,
-            collectLog: false,
-            metadata: { invoked_by: "test" },
-            skipCache: true,
-          }).model("xai/grok-4.6"),
-          prompt: "Say hello.",
-        }),
-      ).pipe(
-        Effect.provide(
-          dynamicResponse((input) =>
-            Effect.gen(function* () {
-              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-              expect(web.url).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions")
-              expect(web.headers.get("authorization")).toBe("Bearer test-token")
-              expect(web.headers.get("cf-aig-gateway-id")).toBe("test-gateway")
-              expect(web.headers.get("cf-aig-cache-key")).toBe("cache-key")
-              expect(web.headers.get("cf-aig-cache-ttl")).toBe("300")
-              expect(web.headers.get("cf-aig-collect-log")).toBe("false")
-              expect(web.headers.get("cf-aig-metadata")).toBe('{"invoked_by":"test"}')
-              expect(web.headers.get("cf-aig-skip-cache")).toBe("true")
-              expect(decodeJson(input.text)).toMatchObject({
-                model: "xai/grok-4.6",
-                stream: true,
-                messages: [{ role: "user", content: "Say hello." }],
-              })
-              return input.respond(
-                sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
-                { headers: { "content-type": "text/event-stream" } },
-              )
-            }),
+      const response = yield* ai
+        .generate(
+          ai.request({
+            model: CloudflareAIGateway.configure({
+              accountId: "test-account",
+              gatewayId: "test-gateway",
+              apiKey: "test-token",
+              cacheKey: "cache-key",
+              cacheTtl: 300,
+              collectLog: false,
+              metadata: { invoked_by: "test" },
+              skipCache: true,
+            }).model("xai/grok-4.6"),
+            prompt: "Say hello.",
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.url).toBe(
+                  "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions",
+                )
+                expect(web.headers.get("authorization")).toBe("Bearer test-token")
+                expect(web.headers.get("cf-aig-gateway-id")).toBe("test-gateway")
+                expect(web.headers.get("cf-aig-cache-key")).toBe("cache-key")
+                expect(web.headers.get("cf-aig-cache-ttl")).toBe("300")
+                expect(web.headers.get("cf-aig-collect-log")).toBe("false")
+                expect(web.headers.get("cf-aig-metadata")).toBe('{"invoked_by":"test"}')
+                expect(web.headers.get("cf-aig-skip-cache")).toBe("true")
+                expect(decodeJson(input.text)).toMatchObject({
+                  model: "xai/grok-4.6",
+                  stream: true,
+                  messages: [{ role: "user", content: "Say hello." }],
+                })
+                return input.respond(
+                  sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              }),
+            ),
           ),
-        ),
-      )
+        )
 
       expect(response.text).toBe("Hello")
     }),
@@ -117,14 +121,12 @@ describe("Cloudflare", () => {
           return input.respond("", { status: 500 })
         }),
       )
-      yield* LLM.generate(LLM.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" })).pipe(
-        Effect.provide(capture),
-        Effect.ignore,
-      )
-      yield* LLM.generate(LLM.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" })).pipe(
-        Effect.provide(capture),
-        Effect.ignore,
-      )
+      yield* ai
+        .generate(ai.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" }))
+        .pipe(Effect.provide(capture), Effect.ignore)
+      yield* ai
+        .generate(ai.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" }))
+        .pipe(Effect.provide(capture), Effect.ignore)
 
       expect(requests.map((request) => request.url)).toEqual([
         "https://gateway.ai.cloudflare.com/v1/test-account/default/anthropic/v1/messages",
@@ -143,7 +145,7 @@ describe("Cloudflare", () => {
   it.effect("sends the default gateway ID to the REST API", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" }).model(
             "workers-ai/@cf/meta/llama-3.3-70b-instruct",
           ),
@@ -176,24 +178,26 @@ describe("Cloudflare", () => {
           index: 0,
         },
       ]
-      const response = yield* LLM.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
-        Effect.provide(
-          dynamicResponse((input) =>
-            Effect.succeed(
-              input.respond(
-                sseEvents(
-                  deltaChunk({ reasoning: "Think", reasoning_details: [details[0]] }),
-                  deltaChunk({ reasoning: "ing", reasoning_details: [details[1]] }),
-                  deltaChunk({ reasoning_details: [details[2]] }),
-                  deltaChunk({ content: "Hello" }),
-                  deltaChunk({}, "stop"),
+      const response = yield* ai
+        .generate(ai.request({ model, prompt: "Say hello." }))
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(
+                input.respond(
+                  sseEvents(
+                    deltaChunk({ reasoning: "Think", reasoning_details: [details[0]] }),
+                    deltaChunk({ reasoning: "ing", reasoning_details: [details[1]] }),
+                    deltaChunk({ reasoning_details: [details[2]] }),
+                    deltaChunk({ content: "Hello" }),
+                    deltaChunk({}, "stop"),
+                  ),
+                  { headers: { "content-type": "text/event-stream" } },
                 ),
-                { headers: { "content-type": "text/event-stream" } },
               ),
             ),
           ),
-        ),
-      )
+        )
 
       expect(response.reasoning).toBe("Thinking")
       expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
@@ -201,7 +205,7 @@ describe("Cloudflare", () => {
         "cloudflare-ai-gateway": { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
-      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: merged },
       ])
@@ -211,7 +215,7 @@ describe("Cloudflare", () => {
   it.effect("allows a fully configured baseURL override", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1",
             apiKey: "test-token",
@@ -239,7 +243,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
-      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-workers-ai")
       expect(prepared.body).toMatchObject({
@@ -252,34 +256,38 @@ describe("Cloudflare", () => {
 
   it.effect("posts direct Workers AI requests to the account endpoint with bearer auth", () =>
     Effect.gen(function* () {
-      const response = yield* LLM.generate(
-        LLM.request({
-          model: CloudflareWorkersAI.configure({
-            accountId: "test-account",
-            apiKey: "test-token",
-          }).model("@cf/meta/llama-3.1-8b-instruct"),
-          prompt: "Say hello.",
-        }),
-      ).pipe(
-        Effect.provide(
-          dynamicResponse((input) =>
-            Effect.gen(function* () {
-              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-              expect(web.url).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions")
-              expect(web.headers.get("authorization")).toBe("Bearer test-token")
-              expect(decodeJson(input.text)).toMatchObject({
-                model: "@cf/meta/llama-3.1-8b-instruct",
-                stream: true,
-                messages: [{ role: "user", content: "Say hello." }],
-              })
-              return input.respond(
-                sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
-                { headers: { "content-type": "text/event-stream" } },
-              )
-            }),
+      const response = yield* ai
+        .generate(
+          ai.request({
+            model: CloudflareWorkersAI.configure({
+              accountId: "test-account",
+              apiKey: "test-token",
+            }).model("@cf/meta/llama-3.1-8b-instruct"),
+            prompt: "Say hello.",
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.url).toBe(
+                  "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions",
+                )
+                expect(web.headers.get("authorization")).toBe("Bearer test-token")
+                expect(decodeJson(input.text)).toMatchObject({
+                  model: "@cf/meta/llama-3.1-8b-instruct",
+                  stream: true,
+                  messages: [{ role: "user", content: "Say hello." }],
+                })
+                return input.respond(
+                  sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              }),
+            ),
           ),
-        ),
-      )
+        )
 
       expect(response.text).toBe("Hello")
     }),
@@ -288,32 +296,34 @@ describe("Cloudflare", () => {
   it.effect("supports direct Workers AI token aliases through auth config", () =>
     Effect.gen(function* () {
       yield* Effect.forEach(["CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"], (name) =>
-        LLM.generate(
-          LLM.request({
-            model: CloudflareWorkersAI.configure({
-              accountId: "test-account",
-            }).model("@cf/meta/llama-3.1-8b-instruct"),
-            prompt: "Say hello.",
-          }),
-        ).pipe(
-          withEnv({
-            CLOUDFLARE_API_KEY: undefined,
-            CLOUDFLARE_WORKERS_AI_TOKEN: name === "CLOUDFLARE_WORKERS_AI_TOKEN" ? "test-token" : undefined,
-            CLOUDFLARE_API_TOKEN: name === "CLOUDFLARE_API_TOKEN" ? "test-token" : undefined,
-          }),
-          Effect.provide(
-            dynamicResponse((input) =>
-              Effect.gen(function* () {
-                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-                expect(web.headers.get("authorization")).toBe("Bearer test-token")
-                return input.respond(
-                  sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
-                  { headers: { "content-type": "text/event-stream" } },
-                )
-              }),
+        ai
+          .generate(
+            ai.request({
+              model: CloudflareWorkersAI.configure({
+                accountId: "test-account",
+              }).model("@cf/meta/llama-3.1-8b-instruct"),
+              prompt: "Say hello.",
+            }),
+          )
+          .pipe(
+            withEnv({
+              CLOUDFLARE_API_KEY: undefined,
+              CLOUDFLARE_WORKERS_AI_TOKEN: name === "CLOUDFLARE_WORKERS_AI_TOKEN" ? "test-token" : undefined,
+              CLOUDFLARE_API_TOKEN: name === "CLOUDFLARE_API_TOKEN" ? "test-token" : undefined,
+            }),
+            Effect.provide(
+              dynamicResponse((input) =>
+                Effect.gen(function* () {
+                  const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                  expect(web.headers.get("authorization")).toBe("Bearer test-token")
+                  return input.respond(
+                    sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), deltaChunk({}, "stop")),
+                    { headers: { "content-type": "text/event-stream" } },
+                  )
+                }),
+              ),
             ),
           ),
-        ),
       )
     }),
   )

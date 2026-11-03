@@ -1,5 +1,4 @@
 import { parseDiffFromFile, parsePatchFiles, processFile, type FileDiffMetadata } from "@pierre/diffs"
-import { parsePatch } from "diff"
 import { checksum } from "@opencode/util/encode"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileDiff } from "../file-presentation"
@@ -28,7 +27,7 @@ export type ViewDiff = {
 
 const diffCacheLimit = 16
 
-const patchFileDiffCache = new Map<string, FileDiffMetadata>()
+const fileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
   // Untyped persisted payloads may carry `patch: null`; those render from their contents.
@@ -55,27 +54,35 @@ export function text(diff: ViewDiff, side: "deletions" | "additions") {
 
 function fileDiffFromPatch(file: string, patch: string) {
   const key = `${file}\0${patch}`
-  const hit = patchFileDiffCache.get(key)
+
+  return cachedFileDiff(`patch\0${key}`, () => {
+    const complete = completePatch(patch)
+
+    const value = complete
+      ? fileDiffFromCompletePatch(file, complete)
+      : (partialFileDiff(file, patch) ?? emptyFileDiff(file))
+
+    // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
+    value.cacheKey = highlightKey(key)
+
+    return value
+  })
+}
+
+function cachedFileDiff(key: string, parse: () => FileDiffMetadata) {
+  const hit = fileDiffCache.get(key)
 
   if (hit) {
-    patchFileDiffCache.delete(key)
-    patchFileDiffCache.set(key, hit)
+    fileDiffCache.delete(key)
+    fileDiffCache.set(key, hit)
 
     return hit
   }
 
-  const complete = completePatch(patch)
-  const input = complete ? undefined : patchInput(file, patch)
+  const value = parse()
+  fileDiffCache.set(key, value)
 
-  const value = complete
-    ? fileDiffFromCompletePatch(file, complete)
-    : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
-
-  // The patch text fixes both the content and the producer's alignment, so equal keys always mean equal hunks.
-  value.cacheKey = highlightKey(key)
-  patchFileDiffCache.set(key, value)
-
-  while (patchFileDiffCache.size > diffCacheLimit) patchFileDiffCache.delete(patchFileDiffCache.keys().next().value!)
+  while (fileDiffCache.size > diffCacheLimit) fileDiffCache.delete(fileDiffCache.keys().next().value!)
 
   return value
 }
@@ -89,64 +96,84 @@ export function completePatchContents(patch: string) {
 }
 
 function completePatch(patch: string) {
-  try {
-    const parsed = parsePatch(patch)[0]
+  const parsed = splitPatch(patch)
 
-    if (!parsed || (!parsed.index && !parsed.oldFileName && !parsed.newFileName)) return
+  if (!parsed) return
 
-    // Snapshot and VCS producers request full context. Tool patches use jsdiff's shorter default context.
-    if (!patch.startsWith("diff --git ") && !/^--- [^\n]*\t\r?\n\+\+\+ [^\n]*\t(?:\r?\n|$)/m.test(patch)) return
+  // Snapshot and VCS producers request full context. Tool patches use jsdiff's shorter default context.
+  if (!parsed.header.startsWith("diff --git ") && !/^--- [^\n]*\t\r?\n\+\+\+ [^\n]*\t(?:\r?\n|$)/m.test(parsed.header))
+    return
 
-    // Full patches collapse into one leading hunk. Separated hunks omit ranges and must stay partial.
-    if (parsed.hunks.length !== 1) return
+  // Full patches collapse into one leading hunk. Separated hunks omit ranges and must stay partial.
+  if (parsed.hunks.length !== 1) return
 
-    const hunk = parsed.hunks[0]
+  const hunk = parsed.hunks[0]!
 
-    if (!hunk || hunk.oldStart > 1 || hunk.newStart > 1) return
+  // An empty side's start names the line before the hunk, so `-1,0` begins after line 1.
+  if (hunk.deletionStart + (hunk.deletionCount ? 0 : 1) > 1 || hunk.additionStart + (hunk.additionCount ? 0 : 1) > 1)
+    return
 
-    const before: Array<{ text: string; newline: boolean }> = []
-    const after: Array<{ text: string; newline: boolean }> = []
-    let previous: "-" | "+" | " " | undefined
+  const lines: string[] = []
+  const before: Array<{ text: string; newline: boolean }> = []
+  const after: Array<{ text: string; newline: boolean }> = []
+  let previous: "-" | "+" | " " | undefined
 
-    for (const line of hunk.lines) {
-      if (line.startsWith("\\")) {
-        if (previous === "-" || previous === " ") {
-          const value = before.at(-1)
+  for (const line of parsed.body.split("\n").slice(1)) {
+    if (before.length >= hunk.deletionCount && after.length >= hunk.additionCount && !line.startsWith("\\")) break
+    lines.push(line)
 
-          if (value) value.newline = false
-        }
+    if (line.startsWith("\\")) {
+      if (previous === "-" || previous === " ") {
+        const value = before.at(-1)
 
-        if (previous === "+" || previous === " ") {
-          const value = after.at(-1)
-
-          if (value) value.newline = false
-        }
-
-        continue
+        if (value) value.newline = false
       }
 
-      if (line.startsWith("-")) {
-        before.push({ text: line.slice(1), newline: true })
-        previous = "-"
-        continue
+      if (previous === "+" || previous === " ") {
+        const value = after.at(-1)
+
+        if (value) value.newline = false
       }
 
-      if (line.startsWith("+")) {
-        after.push({ text: line.slice(1), newline: true })
-        previous = "+"
-        continue
-      }
-
-      if (!line.startsWith(" ")) return
-      before.push({ text: line.slice(1), newline: true })
-      after.push({ text: line.slice(1), newline: true })
-      previous = " "
+      continue
     }
 
-    const text = (lines: Array<{ text: string; newline: boolean }>) =>
-      lines.map((line) => line.text + (line.newline ? "\n" : "")).join("")
+    if (line.startsWith("-")) {
+      before.push({ text: line.slice(1), newline: true })
+      previous = "-"
+      continue
+    }
 
-    return { before: text(before), after: text(after), lines: hunk.lines }
+    if (line.startsWith("+")) {
+      after.push({ text: line.slice(1), newline: true })
+      previous = "+"
+      continue
+    }
+
+    before.push({ text: line.slice(1), newline: true })
+    after.push({ text: line.slice(1), newline: true })
+    previous = " "
+  }
+
+  const text = (lines: Array<{ text: string; newline: boolean }>) =>
+    lines.map((line) => line.text + (line.newline ? "\n" : "")).join("")
+
+  return { before: text(before), after: text(after), lines }
+}
+
+// Splits a one-file patch at its first hunk. Pierre's strict parser checks the hunks behind a fixed header, so a
+// malformed hunk rejects the patch while unusual file headers stay readable.
+function splitPatch(patch: string) {
+  const start = patch.search(/^@@ /m)
+  const header = start === -1 ? patch : patch.slice(0, start)
+  const body = start === -1 ? "" : patch.slice(start)
+
+  try {
+    const hunks = body
+      ? (processFile(`--- a\n+++ a\n${body}`, { isGitDiff: false, throwOnError: true })?.hunks ?? [])
+      : []
+
+    return { header, body, hunks }
   } catch {
     return
   }
@@ -237,28 +264,30 @@ function splitHunk(lines: string[]) {
     .join("\n")
 }
 
-function patchInput(file: string, patch: string) {
-  try {
-    const parsed = parsePatch(patch)[0]
+function partialFileDiff(file: string, patch: string) {
+  const parsed = splitPatch(patch)
 
-    if (!parsed) return
+  if (!parsed) return
 
-    if (parsed.index || parsed.oldFileName || parsed.newFileName) return patch
+  if (/^(?:Index:|diff(?: -r \w+)+|---|\+\+\+)\s/m.test(parsed.header)) return parsePatchFiles(patch)[0]?.files[0]
 
-    if (!parsed.hunks.length) return
+  if (!parsed.hunks.length) return
 
-    return `Index: ${file}\n===================================================================\n--- ${file}\t\n+++ ${file}\t\n${patch}`
-  } catch {
-    return
-  }
+  return parsePatchFiles(
+    `Index: ${file}\n===================================================================\n--- ${file}\t\n+++ ${file}\t\n${patch}`,
+  )[0]?.files[0]
 }
 
 function fileDiffFromContent(file: string, before: string, after: string) {
   if (!before && !after) return emptyFileDiff(file)
-  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
-  value.cacheKey = highlightKey(`${file}\0${before}\0${after}`)
+  const key = `${file}\0${before}\0${after}`
 
-  return value
+  return cachedFileDiff(`content\0${key}`, () => {
+    const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+    value.cacheKey = highlightKey(key)
+
+    return value
+  })
 }
 
 // Pierre reuses and dedups worker highlighting only for diffs that carry a cacheKey, and it treats diffs with equal

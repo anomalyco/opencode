@@ -4,6 +4,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { toConfig } from "./settings.js"
 
 export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
@@ -18,7 +19,7 @@ export type Config = RouteDefaultsInput &
 
 export type Settings = ProviderPackage.Settings &
   OpenResponsesProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL: string
     readonly provider?: string
   }
@@ -46,15 +47,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, provider, ...providerOptions },
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    provider,
-    providerOptions,
-  }).model(modelID)
+  { provider, ...settings },
+) => configure({ ...toConfig(settings), provider }).model(modelID)

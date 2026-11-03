@@ -1,22 +1,85 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { seed, sessionHref } from "../utils/app"
+import { sessionHref } from "../utils/app"
 import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
   assistantMessage,
+  historyMessages,
   messageUpdated,
+  partUpdated,
   sessionID,
   setupTimeline,
   status,
   textPart,
   userMessage,
+  validateTimelineMessages,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
+import { openSession } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block" })
 
 test.describe("timeline history", () => {
+  test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
+    const id = "ses_history_restore"
+    const other = "ses_history_other"
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    const messages = [
+      userMessage([textPart("prt_restore_0", "Original prompt")], { id: "msg_restore_0", created: 1 }),
+      assistantMessage([textPart("prt_restore_1", text)], { id: "msg_restore_1", created: 2 }),
+      userMessage([textPart("prt_restore_2", "Middle prompt")], { id: "msg_restore_2", created: 3 }),
+      assistantMessage([textPart("prt_restore_3", text)], { id: "msg_restore_3", created: 4 }),
+      userMessage([textPart("prt_restore_4", "Another prompt")], { id: "msg_restore_4", created: 5 }),
+      assistantMessage([textPart("prt_restore_5", text)], { id: "msg_restore_5", created: 6 }),
+      userMessage([textPart("prt_restore_6", "Latest prompt")], { id: "msg_restore_6", created: 7 }),
+      assistantMessage([textPart("prt_restore_7", text)], { id: "msg_restore_7", created: 8 }),
+    ]
+
+    const requests: (string | undefined)[] = []
+    await page.clock.install()
+    await openSession(page, {
+      name: "HistoryRestore",
+      sessions: [{ id }, { id: other, directory: "C:/OpenCode/HistoryOther" }],
+      pageMessages: (session, _limit, before) => {
+        if (session === other)
+          return { items: [userMessage([textPart("prt_other", "Other session")], { id: "msg_other" })] }
+        requests.push(before)
+
+        if (before === "oldest") return { items: messages.slice(0, 1) }
+
+        if (before === "older") return { items: messages.slice(1, -2), cursor: "oldest" }
+
+        return { items: messages.slice(-2), cursor: "older" }
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // One upward gesture, without wheel momentum carrying across the page prepend.
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    await expect.poll(() => requests).toEqual([undefined, "older"])
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(200)
+
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(other)}"]`).click()
+    await expect(page.getByText("Other session", { exact: true })).toBeVisible()
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(id)}"]`).click()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // Exhaust the delayed leading-turn enrichment without a real-time sleep.
+    await page.clock.runFor(1_000)
+    expect(requests).toEqual([undefined, "older"])
+
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    await expect(page.getByText("Original prompt", { exact: true })).toBeInViewport()
+    expect(requests).toEqual([undefined, "older", "oldest"])
+  })
+
   test("keeps visible rows fixed while an older page prepends", async ({ page }) => {
     const older = Promise.withResolvers<void>()
     const requests: { before?: string; phase: "start" | "end" }[] = []
@@ -149,6 +212,7 @@ test.describe("timeline history", () => {
       const roots: { sessionID: string; messageID: string }[] = []
       const sequence: string[] = []
       const messages = rootHistory()
+      // SAFETY: rootHistory ends each generated turn with an assistant message.
       const last = messages.at(-1) as SessionMessageAssistant
       await page.addInitScript(installVisibilityProbe)
 
@@ -199,8 +263,9 @@ test.describe("timeline history", () => {
       const completed = {
         ...last,
         time: { ...last.time, completed: last.time.created + 15_000 },
-        ...(scenario.error ? { error: scenario.error } : {}),
       }
+
+      if (scenario.error) completed.error = scenario.error
 
       const message = messageUpdated(completed)
       const idle = status("idle")
@@ -244,16 +309,16 @@ test.describe("timeline history", () => {
     })
   }
 
-  for (const shape of ["assistant-only", "mixed"] as const) {
-    test(`renders the ${shape} tail before parent hydration and preserves it afterward`, async ({ page }) => {
-      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${shape}` }
+  for (const composition of ["assistant-only", "mixed"] as const) {
+    test(`renders the ${composition} tail before parent hydration and preserves it afterward`, async ({ page }) => {
+      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${composition}` }
 
       // Compact's initial 40 and the next 20 begin with an assistant; page three supplies its parent.
       const messages = Array.from({ length: 61 }, (_, index): SessionMessageInfo => {
         const id = `msg_hydration_${index}`
         const time = { created: 1700000000000 + index * 1_000 }
 
-        if (index === 0 || (shape === "mixed" && index === 59))
+        if (index === 0 || (composition === "mixed" && index === 59))
           return { id, type: "user", time, text: `Prompt ${index}` }
 
         return {
@@ -324,7 +389,7 @@ test.describe("timeline history", () => {
         await expectReadyTail()
         await expect(orphan).toHaveAttribute("data-message-id", "msg_hydration_21")
 
-        if (shape === "mixed")
+        if (composition === "mixed")
           await expect(
             page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_hydration_59"]'),
           ).toBeInViewport()
@@ -351,6 +416,92 @@ test.describe("timeline history", () => {
       }
     })
   }
+
+  test("pages the timeline from the composer, resuming follow at the end and loading history at the top", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(30),
+      userMessage(),
+      assistantMessage([textPart("prt_page_keys_text", "Paging from the composer")], { completed: false }),
+    ])
+
+    const older: string[] = []
+
+    const timeline = await setupTimeline(page, {
+      reducedMotion: true,
+      message: (_, id) => messages.find((message) => message.id === id),
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") older.push(request.before)
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const editor = page.locator('[data-component="composer-editor"]')
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+
+    const fromEnd = () =>
+      scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+    const caret = () =>
+      editor.evaluate((element) => {
+        const selection = window.getSelection()!
+        const range = document.createRange()
+        range.setStart(element, 0)
+        range.setEnd(selection.anchorNode!, selection.anchorOffset)
+
+        return range.toString().length
+      })
+
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await editor.click()
+
+    // An open popup keeps the page keys: the timeline stays put and the query stays open.
+    await page.keyboard.type("/")
+    await expect(suggestions).toBeVisible()
+    const resting = await top()
+    await editor.press("PageUp")
+    expect(await top()).toBe(resting)
+    await expect(suggestions).toBeVisible()
+    await expect(editor).toHaveText("/")
+    await editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    await editor.press("Backspace")
+
+    await page.keyboard.type("keep this draft")
+
+    const pageHeight = await page
+      .locator('[data-slot="session-timeline-visible"]')
+      .evaluate((element) => element.clientHeight)
+
+    await editor.press("PageUp")
+    await expect.poll(top).toBeLessThan(resting - pageHeight * 0.6)
+    expect(resting - (await top())).toBeLessThan(pageHeight)
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("keep this draft")
+    expect(await caret()).toBe("keep this draft".length)
+
+    // Paging back to the end follows new content again, as a wheel scroll there does.
+    for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await timeline.send(partUpdated(textPart("prt_page_keys_tail", "Arrived after paging down.\n\n".repeat(20))))
+    await timeline.waitForPart("prt_page_keys_tail")
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+    // Paging to the top loads the older page, as scrolling there does.
+    for (let index = 0; index < 30 && (await top()) > 1; index++) await editor.press("PageUp")
+    await expect.poll(() => older[0]).toBe(messages[messages.length - 40]!.id)
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("keep this draft")
+  })
 })
 
 declare global {
@@ -362,10 +513,6 @@ declare global {
 async function openStressTarget(page: Page, input: Parameters<typeof mockStressTimeline>[1] = {}) {
   await mockStressTimeline(page, input)
   await installTimelineSettings(page)
-  await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
-    lastProject: { local: fixture.directory },
-  })
   await page.goto(sessionHref(fixture.targetID))
   await expectSessionTitle(page, fixture.expected.targetTitle)
   await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
@@ -494,6 +641,7 @@ function installVisibilityProbe() {
       .flatMap((part) => (part.dataset.timelinePartId ? [part.dataset.timelinePartId] : []))
   }
 
+  // SAFETY: arm populates parts with visible part IDs; settle supplies the optional final state.
   const state = {
     armed: false,
     hidden: false,

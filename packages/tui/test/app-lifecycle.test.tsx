@@ -2549,6 +2549,80 @@ test("free usage limit claims suppression atomically across two TUI instances an
   expect(frame).not.toContain("Connect OpenCode Go")
 })
 
+test("Go usage limit restores the prompt and explains the limit with its reset time instead of an error", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_go_limit",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Go limit",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const error = {
+    type: "provider.go-limit",
+    message: "OpenCode Go 5 hour usage limit reached.",
+    status: 429,
+    response: {
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+        metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+      }),
+    },
+    retryAfterMs: 3_600_000,
+  }
+  await using setup = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_go_assistant",
+              type: "assistant",
+              agent: "build",
+              model: { id: "glm-5-go", providerID: "opencode-go" },
+              content: [],
+              time: { created: 2 },
+            },
+            { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  setup.events.emit({
+    id: "evt_go_limit_1",
+    created: 3,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_go_assistant", error },
+  })
+  await setup.waitForFrame(
+    (frame) =>
+      frame.includes("OpenCode Go 5 hour usage limit reached") &&
+      frame.includes("Resets ") &&
+      frame.split("Refactor the parser").length === 3,
+  )
+  const frame = setup.captureCharFrame()
+  expect(frame).toContain("Switch to a free model with")
+  expect(frame).toContain("https://opencode.ai/console/wrk_go_limit/go")
+  expect(frame).not.toContain("Error:")
+  expect(frame).not.toContain("Free limit reached")
+})
+
 test("free usage limit modal manages live animation FPS and adapts to 44x24 and 60x12 terminals", async () => {
   const session = {
     id: "ses_free_limit_anim",
@@ -2772,118 +2846,3 @@ test.each([44, 100])(
   15_000,
 )
 
-test("restarting after an update tells the user to start OpenCode again", async () => {
-  await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24 })
-  await setup.renderer.setupTerminal()
-  const started = Promise.withResolvers<void>()
-  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
-  setup.renderer.setTerminalTitle = (title) => {
-    if (title === "OpenCode") started.resolve()
-    setTitle(title)
-  }
-  const events = createEventStream()
-  const calls = createFetch(undefined, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const originalWrite = process.stdout.write.bind(process.stdout)
-  let stdout = ""
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    stdout += String(chunk)
-    return true
-  }) as typeof process.stdout.write
-
-  try {
-    const { run } = await import("../src/app")
-    const task = Effect.runPromise(
-      run({
-        app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() } },
-        config: { get: async () => ({}), update: async () => ({}) },
-        packages: { prepare: async () => ({ directory: "" }) },
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        updater: {
-          remote: false,
-          subscribe: () => () => {},
-          check: async () => ({ type: "installed", version: "2.0.0" }),
-          apply: async () => {},
-        },
-        args: {},
-        log: () => {},
-      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
-    )
-
-    await started.promise
-    await setup.waitForFrame((frame) => frame.includes("commands"))
-    await setup.mockInput.typeText("/update")
-    await setup.waitForFrame((frame) => frame.includes("Update OpenCode"))
-    setup.mockInput.pressEnter()
-    await setup.waitForFrame((frame) => frame.includes("Update successful") && frame.includes("Restart"))
-    setup.mockInput.pressEnter()
-    await task
-
-    expect(Bun.stripANSI(stdout)).toContain("  Run opencode to use 2.0.0\n")
-  } finally {
-    process.stdout.write = originalWrite
-    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-    await server.stop()
-  }
-})
-
-test("quitting after a background update tells the user to start OpenCode again", async () => {
-  await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24 })
-  await setup.renderer.setupTerminal()
-  const started = Promise.withResolvers<void>()
-  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
-  setup.renderer.setTerminalTitle = (title) => {
-    if (title === "OpenCode") started.resolve()
-    setTitle(title)
-  }
-  const events = createEventStream()
-  const calls = createFetch(undefined, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
-  const originalWrite = process.stdout.write.bind(process.stdout)
-  let stdout = ""
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    stdout += String(chunk)
-    return true
-  }) as typeof process.stdout.write
-
-  try {
-    const { run } = await import("../src/app")
-    const task = Effect.runPromise(
-      run({
-        app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() } },
-        config: { get: async () => ({}), update: async () => ({}) },
-        packages: { prepare: async () => ({ directory: "" }) },
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        updater: {
-          remote: false,
-          subscribe: (notify) => {
-            notify({ type: "installed", version: "2.0.0" })
-            return () => {}
-          },
-          check: async () => undefined,
-          apply: async () => {},
-        },
-        args: {},
-        log: () => {},
-      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
-    )
-
-    await started.promise
-    await setup.waitForFrame((frame) => frame.includes("commands"))
-    await setup.waitForFrame((frame) => frame.includes("restart to use v2.0.0"))
-    await setup.mockInput.typeText("/exit")
-    await setup.waitForFrame((frame) => frame.includes("Exit the app"))
-    setup.mockInput.pressEnter()
-    await task
-
-    expect(Bun.stripANSI(stdout)).toContain("  Run opencode to use 2.0.0\n")
-  } finally {
-    process.stdout.write = originalWrite
-    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-    await server.stop()
-  }
-})

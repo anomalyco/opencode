@@ -60,7 +60,7 @@ const ToolCall = Schema.Struct({
 const Assistant = Schema.StructWithRest(
   Schema.Struct({
     ...OpenAIChat.OpenAIChatMessage.cases.assistant.schema.fields,
-    tool_calls: optionalArray(ToolCall),
+    tool_calls: optionalArray(Schema.Union([ToolCall, OpenAIChat.OpenAIChatAssistantCustomToolCall])),
     thought_signature: Schema.optional(Schema.String),
   }),
   [JsonObject],
@@ -203,7 +203,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value]),
     ),
-    prompt_cache_retention: options.promptCacheRetention,
+    prompt_cache_retention: options.promptCacheRetention ?? body.prompt_cache_retention,
     parallel_tool_calls: options.parallelToolCalls,
     min_p: options.minP,
     top_k: request.generation?.topK,

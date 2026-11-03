@@ -340,10 +340,6 @@ export const protocol = Protocol.make({
     initial: (): State => ({ lifecycle: Lifecycle.initial(), tools: ToolStream.empty(), finished: false }),
     step,
     terminal: (event) => event.type === "message-end",
-    onHalt: (state) =>
-      state.finished
-        ? Effect.succeed([])
-        : Effect.fail(ProviderShared.eventError(ADAPTER, "Cohere stream ended without message-end")),
   },
 })
 export const route = Route.make({

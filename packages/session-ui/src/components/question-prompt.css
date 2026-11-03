@@ -1,5 +1,6 @@
-[data-component="dock-prompt"][data-kind="question"] {
-  --v2-question-answer-bg-selected: light-dark(#f5f8ff, #7698fd26);
+[data-component="dock-prompt"][data-kind="question"]:not([data-variant="experimental"]) {
+  --v2-question-answer-bg-selected: color-mix(in srgb, var(--v2-border-border-focus) 15%, transparent);
+  --question-feedback-duration: 120ms;
 
   position: relative;
   display: flex;
@@ -8,14 +9,18 @@
   min-block-size: 0;
   max-block-size: var(--question-prompt-max-height, 100dvh);
   font-family: var(--v2-font-family-sans);
+  isolation: isolate;
 
   [data-slot="question-body"] {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 16px;
     flex: 1;
     min-block-size: 0;
-    padding: 8px;
+    overflow: clip;
+    padding: 8px 12px 12px;
     background-color: var(--v2-background-bg-base);
     border-radius: 10px;
     box-shadow: var(--v2-elevation-raised);
@@ -26,8 +31,8 @@
     flex-direction: column;
     gap: 4px;
     flex-shrink: 0;
+    min-block-size: 0;
     min-inline-size: 0;
-    padding-inline: 4px;
   }
 
   [data-slot="question-header-top"] {
@@ -43,7 +48,7 @@
     min-inline-size: 0;
     font-size: 13px;
     font-weight: 440;
-    line-height: var(--line-height-base);
+    line-height: var(--line-height-compact);
     color: var(--v2-text-text-muted);
     overflow-wrap: anywhere;
   }
@@ -67,14 +72,22 @@
   [data-slot="question-details"] {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+    min-block-size: 0;
     min-inline-size: 0;
+    max-block-size: max(48px, calc((var(--question-prompt-max-height, 100dvh) - 120px) * 0.45));
+    overflow-y: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   [data-slot="question-text"] {
     font-size: 13px;
     font-weight: 530;
-    line-height: var(--line-height-base);
+    line-height: var(--line-height-compact);
     color: var(--v2-text-text-base);
     overflow-wrap: anywhere;
     -webkit-user-select: text;
@@ -110,20 +123,12 @@
     cursor: pointer;
     touch-action: manipulation;
 
-    &::after {
-      content: "";
-      inline-size: 14px;
-      block-size: 2px;
-      flex-shrink: 0;
-      background-color: var(--v2-background-bg-layer-04);
+    &[data-answered="true"]:not([data-active="true"]) [data-slot="question-progress-bar"]::before {
+      opacity: 1;
     }
 
-    &[data-answered="true"]::after {
-      background-color: var(--v2-background-bg-accent);
-    }
-
-    &[data-active="true"]::after {
-      background-color: var(--v2-icon-icon-muted);
+    &[data-active="true"] [data-slot="question-progress-bar"]::after {
+      opacity: 1;
     }
 
     &:focus-visible {
@@ -137,6 +142,31 @@
     }
   }
 
+  [data-slot="question-progress-bar"] {
+    position: relative;
+    inline-size: 14px;
+    block-size: 2px;
+    flex-shrink: 0;
+    background-color: var(--v2-background-bg-layer-04);
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+    }
+
+    &::before {
+      background-color: var(--v2-background-bg-accent);
+      transition: opacity var(--question-feedback-duration) ease;
+    }
+
+    &::after {
+      background-color: var(--v2-icon-icon-muted);
+    }
+  }
+
   [data-slot="question-content"] {
     display: flex;
     flex-direction: column;
@@ -146,6 +176,7 @@
   }
 
   [data-slot="question-options"] {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -163,6 +194,8 @@
   }
 
   [data-slot="question-option"] {
+    position: relative;
+    isolation: isolate;
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -178,16 +211,31 @@
     text-align: start;
     cursor: pointer;
     touch-action: manipulation;
-    transition: background-color 150ms ease;
+    transition: background-color var(--question-feedback-duration) ease;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      background-color: var(--v2-question-answer-bg-selected);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--question-feedback-duration) ease;
+    }
 
     &[data-picked="true"] {
-      background-image: linear-gradient(var(--v2-question-answer-bg-selected), var(--v2-question-answer-bg-selected));
-      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
+      box-shadow: none;
+
+      &::before {
+        opacity: 1;
+      }
     }
 
     &:focus-visible {
-      outline: 2px solid var(--v2-border-border-focus);
-      outline-offset: -2px;
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
     }
 
     &:disabled,
@@ -198,6 +246,8 @@
   }
 
   [data-slot="question-option-check"] {
+    -webkit-user-select: none;
+    user-select: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -226,6 +276,7 @@
       flex: 0 0 16px;
       opacity: 0;
       color: var(--v2-icon-icon-contrast);
+      transition: opacity var(--question-feedback-duration) ease;
     }
 
     &[data-type="radio"] {
@@ -240,6 +291,7 @@
       background-color: var(--v2-grey-300);
       box-shadow: var(--v2-elevation-elements);
       opacity: 0;
+      transition: opacity var(--question-feedback-duration) ease;
     }
 
     &[data-picked="true"] {
@@ -258,18 +310,32 @@
   }
 
   [data-slot="question-option-main"] {
+    -webkit-user-select: text;
+    user-select: text;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     min-inline-size: 0;
     flex: 1;
+  }
+
+  [data-slot="question-option-shortcut"] {
+    -webkit-user-select: none;
+    user-select: none;
+    --keybind-font-size: 10px;
+    --keybind-font-weight: var(--font-weight-regular);
+    --keybind-transition-duration: var(--question-feedback-duration);
+    align-self: center;
+    block-size: 20px;
+    pointer-events: none;
   }
 
   [data-slot="option-label"] {
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
-    font-weight: 530;
+    font-weight: 440;
     line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
     overflow-wrap: anywhere;
   }
@@ -277,9 +343,10 @@
   [data-slot="option-description"] {
     min-inline-size: 0;
     font-family: var(--v2-font-family-sans);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-base);
+    line-height: var(--line-height-tight);
+    letter-spacing: 0.05px;
     color: var(--v2-text-text-muted);
     overflow-wrap: anywhere;
     white-space: normal;
@@ -292,10 +359,6 @@
     max-block-size: 40px;
     padding-block: 0;
     padding-inline: 10px;
-
-    &:not([data-editing="true"]) [data-slot="text-input-v2-input"] {
-      font-weight: 530;
-    }
 
     &[data-editing="true"] .question-custom-field[data-component="text-input-v2"] {
       background:
@@ -389,13 +452,15 @@
   }
 
   [data-slot="question-footer"] {
+    position: relative;
+    z-index: 0;
     display: flex;
     box-sizing: border-box;
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
     padding-block: 16px 8px;
-    padding-inline: 12px;
+    padding-inline: 8px;
     margin-block-start: -9px;
     border: 0.5px solid var(--v2-border-border-base);
     border-start-start-radius: 0;
@@ -415,9 +480,21 @@
     gap: 8px;
   }
 
-  [data-slot="question-submit-shortcut"] {
-    flex-shrink: 0;
-    opacity: 0.6;
+  /* Keep both labels in layout so the button doesn't change width. */
+  [data-slot="question-advance-labels"] {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  [data-slot="question-advance-label"] {
+    grid-area: 1 / 1;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--question-feedback-duration) ease-out;
+
+    &[data-active="true"] {
+      opacity: 1;
+    }
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -430,7 +507,18 @@
     }
   }
 
+  [data-component="session-question-dock"][data-keyboard="true"] &,
+  :root[data-motion="reduce"] & {
+    --question-feedback-duration: 0s;
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion="full"]) & {
+      --question-feedback-duration: 0s;
+    }
+  }
+
+  :root[data-motion="reduce"] & {
     [data-slot="question-option"],
     .question-custom-field[data-component="text-input-v2"] {
       transition: none;

@@ -114,32 +114,161 @@ for (const direction of ["ltr", "rtl"] as const) {
       }
 
       await model.click()
-      await models.getByRole("button", { name: "Connect provider", exact: true }).click()
+      await models.getByRole("button", { name: "Connect an integration", exact: true }).click()
       await expect(models).toBeHidden()
-      const providers = page.getByRole("dialog", { name: "Connect provider", exact: true })
-      await expect(providers.getByRole("searchbox", { name: "Search providers", exact: true })).toBeVisible()
+      const providers = page.getByRole("dialog", { name: "Integrations", exact: true })
+      await expect(providers.getByRole("searchbox", { name: "Search providers", exact: true })).toBeFocused()
       await expect(page.getByRole("dialog")).toHaveCount(1)
     })
   }
 
-  test(`desktop model and variant pickers retain menus in ${direction}`, async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 })
-    await openPickerSession(page, direction, true)
-    const composer = page.locator('[data-component="composer"]')
-    const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+  test(`desktop model button opens the model dialog in ${direction}`, async ({ page }) => {
+    const { composer, model, variant, dialog } = await openDesktopPicker(page, direction)
     await variant.click()
     await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
     await expect(variant).toHaveText("high")
-    await expect(page.locator('[data-slot="mobile-drawer-content"]')).toHaveCount(0)
-    const model = composer.locator('[data-action="composer-model"]')
-    await expect(model).toHaveAttribute("data-control-type", "popover")
+    await expect(model).toHaveAttribute("data-control-type", "dialog")
     await model.click()
-    await expect(page.getByPlaceholder("Search models", { exact: true })).toBeFocused()
-    await page.getByRole("menuitemradio", { name: /Mobile Model B/ }).click()
+    await expect(dialog.getByRole("combobox", { name: "Search models", exact: true })).toBeFocused()
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    await dialog.locator('[data-option-key="opencode:mobile-b"]').click()
+    await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model B")
     await expect(page.locator('[data-slot="mobile-drawer-content"]')).toHaveCount(0)
+    await expect(composer.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
+  })
+
+  test(`model dialog flyout applies a model and variant in ${direction}`, async ({ page }) => {
+    const { model, variant, dialog } = await openDesktopPicker(page, direction)
+    const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+    await model.click()
+    await dialog.locator('[data-option-key="opencode:mobile-a"]').hover()
+    await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    )
+    await dialog.locator('[data-option-key="opencode:mobile-b"]').hover()
+    await expect(flyout.getByText("OpenCode · 1M context", { exact: true })).toBeVisible()
+    await expect(flyout.getByText("Text, Image, PDF, Tools", { exact: true })).toBeVisible()
+    await flyout.getByRole("menuitemradio", { name: "max", exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await expect(model).toHaveText("Mobile Model B")
+    await expect(variant).toHaveText("max")
+  })
+
+  test(`model dialog arrow keys stage a variant in ${direction}`, async ({ page }) => {
+    const { composer, model, variant, dialog } = await openDesktopPicker(page, direction)
+    const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+    const rowA = dialog.locator('[data-option-key="opencode:mobile-a"]')
+    const next = direction === "rtl" ? "ArrowLeft" : "ArrowRight"
+    await model.click()
+    await expect(search).toBeFocused()
+    await search.press(next)
+    await expect(rowA).toContainText("high")
+    await search.press("Escape")
+    await expect(dialog).toBeHidden()
+    await expect(variant).toHaveText("balanced")
+
+    await model.click()
+    await search.fill("Mobile Model A")
+    await search.press(next)
+    await expect(search).toHaveValue("Mobile Model A")
+    await expect(rowA).toContainText("balanced")
+    await search.press("ArrowDown")
+    await search.press("ArrowUp")
+    await search.press(next)
+    await expect(rowA).toContainText("high")
+    await search.press("Enter")
+    await expect(dialog).toBeHidden()
+    await expect(model).toHaveText("Mobile Model A")
+    await expect(variant).toHaveText("high")
+    await expect(composer.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
+  })
+
+  test(`model shortcut opens the model dialog in ${direction}`, async ({ page }) => {
+    const { composer, model, variant, dialog } = await openDesktopPicker(page, direction)
+    const prompt = composer.getByRole("textbox", { name: "Prompt", exact: true })
+    await prompt.fill("keep me")
+    await prompt.press("ControlOrMeta+Quote")
+    const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+    await expect(search).toBeFocused()
+    await search.press(direction === "rtl" ? "ArrowLeft" : "ArrowRight")
+    await expect(dialog.locator('[data-option-key="opencode:mobile-a"]')).toContainText("high")
+    await search.press("Enter")
+    await expect(dialog).toBeHidden()
+    await expect(model).toHaveText("Mobile Model A")
+    await expect(variant).toHaveText("high")
+    await expect(prompt).toBeFocused()
+    await expect(prompt).toHaveText("keep me")
   })
 }
+
+test("desktop model button shows only the choose-model hint, not the model details", async ({ page }) => {
+  const { model } = await openDesktopPicker(page, "ltr")
+  await model.hover()
+  const tooltip = page.getByRole("tooltip")
+  await expect(tooltip).toContainText("Choose model")
+  await expect(tooltip.getByText("1,000,000", { exact: true })).toHaveCount(0)
+  await expect(tooltip.getByText("Input & Output", { exact: true })).toHaveCount(0)
+})
+
+test("model dialog shows a summary and only the default variant for models without variants", async ({ page }) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr")
+  const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+  await model.click()
+  await dialog.locator('[data-option-key="opencode:mobile-c"]').hover()
+  await expect(flyout.getByText("OpenCode · 262K context", { exact: true })).toBeVisible()
+  await expect(flyout.getByRole("menuitemradio")).toHaveText(["Default"])
+})
+
+test("model dialog toggles a favorite from the keyboard and leads with favorite and recent models", async ({
+  page,
+}) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr")
+  const sections = dialog.locator('[data-slot="search-list-header"]')
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+  await model.click()
+  await expect(sections).toHaveText(["OpenCode"])
+  await search.press("ArrowDown")
+  await search.press("ArrowDown")
+  await search.press("ControlOrMeta+f")
+  await expect(sections).toHaveText(["Favorites", "OpenCode"])
+  // A favorite leaves its provider group, so the model is listed once.
+  await expect(dialog.locator('[data-option-key="opencode:mobile-c"]')).toHaveCount(1)
+  await dialog.locator('[data-option-key="opencode:mobile-b"]').click()
+  await expect(model).toHaveText("Mobile Model B")
+
+  await model.click()
+  await expect(sections).toHaveText(["Favorites", "Recent", "OpenCode"])
+  await expect(dialog.locator('[data-option-key="opencode:mobile-b"]')).toHaveAttribute("aria-current", "true")
+  await search.fill("Mobile")
+  await expect(sections).toHaveText(["OpenCode"])
+  await search.press("Escape")
+  await expect(dialog).toBeHidden()
+  // The dialog opens on its first row with the search focused, not on the selected model further down.
+  await model.click()
+  await expect(search).toBeFocused()
+  await expect(dialog.locator('[data-option-key="opencode:mobile-c"]')).toHaveAttribute("data-active", "")
+  await expect(dialog.locator('[data-option-key="opencode:mobile-b"]')).not.toHaveAttribute("data-active")
+  await search.press("ControlOrMeta+f")
+  await expect(sections).toHaveText(["Recent", "OpenCode"])
+  await expect(dialog.locator('[data-option-key="opencode:mobile-c"]')).toHaveAttribute("data-active", "")
+})
+
+test("model dialog opens Manage models from its search row with Enter", async ({ page }) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr")
+  await model.click()
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+  const manage = dialog.getByRole("button", { name: "Manage models", exact: true })
+  await expect(search).toBeFocused()
+  await search.press("Tab")
+  await expect(dialog.getByRole("button", { name: "Connect an integration", exact: true })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(manage).toBeFocused()
+  await manage.press("Enter")
+  await expect(page.getByRole("dialog", { name: "Manage models", exact: true })).toBeVisible()
+  await expect(model).toHaveText("Mobile Model A")
+})
 
 test.describe("touch composer pickers", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
@@ -175,6 +304,19 @@ test.describe("touch composer pickers", () => {
   })
 })
 
+async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await openPickerSession(page, direction, true)
+  const composer = page.locator('[data-component="composer"]')
+
+  return {
+    composer,
+    model: composer.locator('[data-action="composer-model"]'),
+    variant: composer.getByRole("button", { name: "Choose model variant", exact: true }),
+    dialog: page.getByRole("dialog", { name: "Select model", exact: true }),
+  }
+}
+
 async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boolean) {
   await mockOpenCodeServer(page, {
     ...fixture,
@@ -188,14 +330,19 @@ async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boo
           id: "opencode",
           name: "OpenCode",
           models: Object.fromEntries(
-            ["a", "b"].map((id) => [
+            ["a", "b", "c"].map((id) => [
               `mobile-${id}`,
               {
                 id: `mobile-${id}`,
                 name: `Mobile Model ${id.toUpperCase()}`,
                 cost: { input: paid ? 1 : 0, output: paid ? 1 : 0 },
-                limit: { context: 200_000 },
-                variants: { balanced: {}, high: {} },
+                limit: { context: id === "c" ? 262_144 : 1_000_000 },
+                capabilities: {
+                  tools: id !== "c",
+                  input: id === "c" ? ["text"] : ["text", "image", "pdf"],
+                  output: ["text"],
+                },
+                variants: id === "c" ? {} : { balanced: {}, high: {}, max: {} },
               },
             ]),
           ),
@@ -212,7 +359,7 @@ async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boo
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
-        user: ["a", "b"].map((id) => ({ providerID: "opencode", modelID: `mobile-${id}`, visibility: "show" })),
+        user: ["a", "b", "c"].map((id) => ({ providerID: "opencode", modelID: `mobile-${id}`, visibility: "show" })),
         recent: [],
         variant: {},
       }),
