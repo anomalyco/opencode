@@ -27,7 +27,8 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
   cwd: Schema.String.pipe(optional).annotate({
-    description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
+    description:
+      "Working directory for the MCP server process. Relative paths resolve from the workspace directory, and a leading `~` expands to the home directory of the machine running opencode.",
   }),
   environment: Schema.Record(Schema.String, Schema.String).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),

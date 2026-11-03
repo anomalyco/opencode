@@ -113,7 +113,7 @@ Use configuration for other process options such as a working directory:
 | --- | --- | --- |
 | `type` | Yes | Must be `"local"`. |
 | `command` | Yes | Executable followed by its arguments. |
-| `cwd` | No | Process directory. Relative paths resolve from the workspace, which is also the default. |
+| `cwd` | No | Process directory. Relative paths resolve from the workspace, which is also the default. A leading `~` expands to the home directory of the machine running opencode. |
 | `environment` | No | String variables added to OpenCode's inherited process environment. |
 | `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
