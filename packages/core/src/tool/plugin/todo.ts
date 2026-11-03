@@ -1,6 +1,6 @@
 export * as TodoTool from "./todo.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
@@ -64,9 +64,7 @@ export const Plugin = {
                 action: name,
                 resources: ["*"],
                 save: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               .pipe(
                 Effect.mapError((error) => new ToolFailure({ message: "Unable to update todos", error })),

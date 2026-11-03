@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm"
 import { Cause, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { isSqlError } from "effect/sql/SqlError"
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
-import { Project } from "@opencode/schema/project"
+import type { Project } from "@opencode/schema/project"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { PermissionTable } from "./sql.js"
@@ -16,24 +16,21 @@ export type ID = typeof ID.Type
 export const Info = PermissionSaved.Info
 export type Info = typeof Info.Type
 
-export const ListInput = Schema.Struct({
-  projectID: Project.ID.pipe(Schema.optional),
-}).annotate({ identifier: "PermissionSaved.ListInput" })
-export type ListInput = typeof ListInput.Type
+export interface ListInput {
+  readonly projectID?: Project.ID
+}
 
-export const AddInput = Schema.Struct({
-  projectID: Project.ID,
-  action: Schema.String,
-  resources: Schema.Array(Schema.String),
-}).annotate({ identifier: "PermissionSaved.AddInput" })
-export type AddInput = typeof AddInput.Type
+export interface AddInput {
+  readonly projectID: Project.ID
+  readonly action: string
+  readonly resources: readonly string[]
+}
 
-export const UpdateInput = Schema.Struct({
-  id: ID,
-  action: Schema.String.pipe(Schema.optional),
-  resource: Schema.String.pipe(Schema.optional),
-}).annotate({ identifier: "PermissionSaved.UpdateInput" })
-export type UpdateInput = typeof UpdateInput.Type
+export interface UpdateInput {
+  readonly id: ID
+  readonly action?: string
+  readonly resource?: string
+}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("PermissionSaved.NotFoundError", {
   id: ID,

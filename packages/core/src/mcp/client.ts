@@ -4,12 +4,14 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   SdkHttpError,
   StreamableHTTPClientTransport,
   UnauthorizedError,
   UnsupportedProtocolVersionError,
+  type CallToolRequestOptions,
   type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
@@ -22,19 +24,22 @@ import {
   type ReadResourceResult,
   type Resource,
   type ResourceTemplateType,
-  type Tool,
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
+import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
+const ATTACHED_EXECUTION_TIMEOUT = 10 * 60 * 1_000 // 10 minutes
 const TERMINATE_TIMEOUT = 1_000
+// SEP-2243 HeaderMismatch; the SDK does not export the constant.
+const HEADER_MISMATCH = -32020
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 // HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
@@ -57,8 +62,25 @@ const isTransient = (error: unknown) =>
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
 
-export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
+export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
+
+/** A listed tool, keeping the server's fields except `icons`, each only when it has the right type. */
+export interface Tool {
+  readonly name: string
+  readonly title?: string
+  readonly description?: string
+  readonly inputSchema: {
+    readonly type: "object"
+    readonly properties?: Record<string, unknown>
+    readonly required?: string[]
+    readonly [key: string]: unknown
+  }
+  readonly outputSchema?: Record<string, unknown>
+  readonly annotations?: Record<string, unknown>
+  readonly execution?: Record<string, unknown>
+  readonly _meta?: Record<string, unknown>
+}
 
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
@@ -114,6 +136,8 @@ export interface ElicitationHandler {
 export interface Connection {
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
+  /** Display title from `serverInfo.title`, when the server provides one. */
+  readonly title: string | undefined
   readonly instructions: string | undefined
   readonly tools: () => Effect.Effect<Tool[], Error>
   readonly prompts: () => Effect.Effect<Prompt[], Error>
@@ -137,6 +161,12 @@ export interface Connection {
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
+/** An MCP server reached over a transport someone else already opened, such as a client socket. */
+export interface Attached {
+  readonly type: "attached"
+  readonly transport: Transport
+}
+
 /**
  * Connects an MCP server; closing the calling scope tears down the transport and any spawned process.
  * A stdio server is spawned through the location's `Environment`, so it runs wherever the location's
@@ -144,7 +174,7 @@ export interface Connection {
  */
 export const connect = Effect.fnUntraced(function* (
   server: string,
-  config: typeof ConfigMCP.Server.Type,
+  config: typeof ConfigMCP.Server.Type | Attached,
   directory: string,
   // Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth.
   authProvider?: OAuthClientProvider,
@@ -153,6 +183,10 @@ export const connect = Effect.fnUntraced(function* (
 ) {
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
+  const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
+    config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
+  // Attached clients run ordinary SDK servers over the initialize handshake.
+  const protocol = config.type === "attached" ? "legacy" : config.protocol
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -182,7 +216,11 @@ export const connect = Effect.fnUntraced(function* (
     )
 
   const initialize = Effect.fnUntraced(function* (transport: Transport) {
-    const runFork = Effect.runForkWith(yield* Effect.context())
+    // SDK callbacks run outside any fiber. They must run with this context so events they publish keep
+    // the server's Location; clients drop unlocated `form.created` events and elicitations then hang.
+    const context = yield* Effect.context()
+    const runFork = Effect.runForkWith(context)
+    const runPromise = Effect.runPromiseWith(context)
     const client = new Client(clientInfo, {
       capabilities: {
         ...(elicitation ? { elicitation: { form: {}, url: {} } } : {}),
@@ -190,7 +228,7 @@ export const connect = Effect.fnUntraced(function* (
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         roots: {},
       },
-      versionNegotiation: negotiation(config.protocol),
+      versionNegotiation: negotiation(protocol),
       listChanged: {
         tools: listChanged("tools"),
         prompts: listChanged("prompts"),
@@ -206,16 +244,15 @@ export const connect = Effect.fnUntraced(function* (
     client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
     if (elicitation) {
       client.setRequestHandler("elicitation/create", (request, ctx) =>
-        Effect.runPromise(elicitation.create({ server, params: request.params, signal: ctx.mcpReq.signal })),
+        runPromise(elicitation.create({ server, params: request.params, signal: ctx.mcpReq.signal })),
       )
       client.setNotificationHandler("notifications/elicitation/complete", (notification) =>
-        Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
+        runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
     }
 
     yield* Effect.tryPromise({
-      try: (signal) =>
-        client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
+      try: (signal) => client.connect(transport, { timeout: timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
       catch: (error) => error,
     }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
     return client
@@ -229,6 +266,8 @@ export const connect = Effect.fnUntraced(function* (
     reported: false,
   }
   const failure = (error: unknown) => {
+    // A tool call that relists first can fail with the list's already mapped expiry.
+    if (error instanceof SessionExpiredError) return error
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
       error.status === 404 ||
@@ -244,6 +283,7 @@ export const connect = Effect.fnUntraced(function* (
   }
 
   const exit = yield* Effect.gen(function* () {
+    if (config.type === "attached") return yield* initialize(config.transport)
     if (config.type === "local") {
       const [command, ...args] = config.command
       const transport = yield* McpStdio.make({
@@ -258,15 +298,12 @@ export const connect = Effect.fnUntraced(function* (
       })
       return yield* initialize(transport)
     }
-    if (!URL.canParse(config.url))
-      return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory })
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
-    const addedCodemode =
-      config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
+    const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
     if (addedCodemode) url.searchParams.set("codemode", "false")
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
@@ -278,7 +315,7 @@ export const connect = Effect.fnUntraced(function* (
     })
 
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
-    const deadline = (yield* Clock.currentTimeMillis) + (config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
+    const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
     return yield* retrying(
       "MCP connect",
       open(url).pipe(
@@ -315,14 +352,15 @@ export const connect = Effect.fnUntraced(function* (
         yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
       }),
     )
-    const catalog = { timeout: config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
-    const execution = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
+    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
+    const listed = new Map<string, Tool>()
+    const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
       )
     // Listing is read-only, so a transient failure is safe to retry.
-    const list = <A>(what: string, run: () => Promise<A>) =>
+    const list = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       retrying(what, Effect.tryPromise({ try: run, catch: (error) => error })).pipe(
         Effect.mapError(failure),
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
@@ -333,31 +371,88 @@ export const connect = Effect.fnUntraced(function* (
     const advertised = (capability: "tools" | "prompts" | "resources") =>
       Boolean(client.getServerCapabilities()?.[capability])
 
-    return {
+    // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
+    const connection: Connection = {
       modern: client.getProtocolEra() === "modern",
+      title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
+      // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
+      // re-parses it and compiles an output validator for every listed tool. Each call passes its own
+      // checked definition instead, so only that tool's outputSchema is compiled and modern Mcp-Param-*
+      // header mirroring still sees the schema. Tools are relisted on connect, list_changed and a stale
+      // header declaration; the SDK cache never relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
-          ? list("list MCP tools", () => client.listTools(undefined, catalog)).pipe(Effect.map((r) => r.tools))
+          ? list("list MCP tools", (signal) =>
+              client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
+            ).pipe(
+              // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
+              // whole list; each is checked here and copied, dropping fields of the wrong type.
+              Effect.flatMap((result) => {
+                const skipped: Array<{ tool: unknown; reason: string }> = []
+                const tools = result.tools.flatMap((tool: unknown): Tool[] => {
+                  const skip = (reason: string) => {
+                    skipped.push({ tool: isRecord(tool) ? tool.name : undefined, reason })
+                    return []
+                  }
+                  if (!isRecord(tool)) return skip("not an object")
+                  if (typeof tool.name !== "string" || tool.name === "") return skip("name is not a non-empty string")
+                  if (!isRecord(tool.inputSchema)) return skip("inputSchema is not an object")
+                  if (tool.inputSchema.type !== undefined && tool.inputSchema.type !== "object")
+                    return skip('inputSchema type is not "object"')
+                  const { properties, required, ...inputSchema } = tool.inputSchema
+                  return [
+                    {
+                      name: tool.name,
+                      title: typeof tool.title === "string" ? tool.title : undefined,
+                      description: typeof tool.description === "string" ? tool.description : undefined,
+                      // Providers that check tool parameters against the JSON Schema metaschema reject the
+                      // whole request over a malformed top level. Nested property schemas are left as sent.
+                      inputSchema: {
+                        ...inputSchema,
+                        type: "object",
+                        ...(isRecord(properties) ? { properties } : {}),
+                        ...(Array.isArray(required) && required.every((key): key is string => typeof key === "string")
+                          ? { required }
+                          : {}),
+                      },
+                      outputSchema: isRecord(tool.outputSchema) ? tool.outputSchema : undefined,
+                      annotations: isRecord(tool.annotations) ? tool.annotations : undefined,
+                      execution: isRecord(tool.execution) ? tool.execution : undefined,
+                      _meta: isRecord(tool._meta) ? tool._meta : undefined,
+                    },
+                  ]
+                })
+                listed.clear()
+                for (const tool of tools) listed.set(tool.name, tool)
+                return Effect.forEach(
+                  skipped,
+                  (entry) => Effect.logWarning("skipping invalid MCP tool", { server, ...entry }),
+                  { discard: true },
+                ).pipe(Effect.as(tools))
+              }),
+            )
           : Effect.succeed([]),
       prompts: () =>
         advertised("prompts")
-          ? list("list MCP prompts", () => client.listPrompts(undefined, catalog)).pipe(Effect.map((r) => r.prompts))
+          ? list("list MCP prompts", (signal) => client.listPrompts(undefined, { ...catalog, signal })).pipe(
+              Effect.map((r) => r.prompts),
+            )
           : Effect.succeed([]),
       resources: () =>
         advertised("resources")
-          ? list("list MCP resources", () => client.listResources(undefined, catalog)).pipe(
+          ? list("list MCP resources", (signal) => client.listResources(undefined, { ...catalog, signal })).pipe(
               Effect.map((r) => r.resources),
             )
           : Effect.succeed([]),
       resourceTemplates: () =>
         advertised("resources")
-          ? list("list MCP resource templates", () => client.listResourceTemplates(undefined, catalog)).pipe(
-              Effect.map((r) => r.resourceTemplates),
-            )
+          ? list("list MCP resource templates", (signal) =>
+              client.listResourceTemplates(undefined, { ...catalog, signal }),
+            ).pipe(Effect.map((r) => r.resourceTemplates))
           : Effect.succeed([]),
       readResource: (input) => {
-        if (!client.getServerCapabilities()?.resources) return Effect.succeed(undefined)
+        if (!advertised("resources")) return Effect.succeed(undefined)
         return request("read MCP resource", (signal) =>
           client.readResource({ uri: input.uri }, { signal, timeout: execution }),
         )
@@ -366,18 +461,44 @@ export const connect = Effect.fnUntraced(function* (
         request("get MCP prompt", (signal) =>
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
-      callTool: (input) =>
-        request("call MCP tool", (signal) =>
-          client.callTool(
-            {
-              name: input.name,
-              arguments: input.args ?? {},
-              ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-            },
-            // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-            { signal, timeout: execution, onprogress: () => {} },
+      callTool: (input) => {
+        const call = Effect.tryPromise({
+          try: (signal) =>
+            client.callTool(
+              {
+                name: input.name,
+                arguments: input.args ?? {},
+                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+              },
+              {
+                signal,
+                timeout: execution,
+                // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
+                // The SDK timeout does not reset on progress; execution is the hard wall.
+                onprogress: () => {},
+                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
+                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
+                // a string `$schema`); ours keep the server's values.
+                toolDefinition: (listed.get(input.name) ?? {
+                  name: input.name,
+                  inputSchema: { type: "object" },
+                }) as CallToolRequestOptions["toolDefinition"],
+              },
+            ),
+          catch: (error) => error,
+        })
+        // A modern server rejects headers mirrored from a stale definition before running the tool,
+        // so relist and retry once with the fresh definition.
+        return call.pipe(
+          Effect.catchIf(
+            (error) => connection.modern && error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+            () => connection.tools().pipe(Effect.andThen(call)),
           ),
-        ).pipe(Effect.map(toCallToolResult)),
+          Effect.mapError(failure),
+          Effect.tapError((error) => Effect.logWarning("failed to call MCP tool", { server, error: error.message })),
+          Effect.map(toCallToolResult),
+        )
+      },
       onClose: (callback) => {
         client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },
@@ -393,7 +514,8 @@ export const connect = Effect.fnUntraced(function* (
       onResourcesChanged: (callback) => {
         changed.resources = callback
       },
-    } satisfies Connection
+    }
+    return connection
   }
 
   const error = Cause.squash(exit.cause)
@@ -435,8 +557,8 @@ function toCallToolResult(result: SdkCallToolResult): CallToolResult {
       if (part.type === "resource_link") return [{ type: "text", text: part.uri }]
       if (part.type === "resource") {
         const resource = part.resource
-        if ("text" in resource && typeof resource.text === "string") return [{ type: "text", text: resource.text }]
-        if ("blob" in resource && typeof resource.blob === "string" && typeof resource.mimeType === "string")
+        if ("text" in resource) return [{ type: "text", text: resource.text }]
+        if ("blob" in resource && resource.mimeType !== undefined)
           return [{ type: "media", data: resource.blob, mimeType: resource.mimeType, uri: resource.uri }]
         return [{ type: "text", text: resource.uri }]
       }

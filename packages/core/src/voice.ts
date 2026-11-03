@@ -1,6 +1,6 @@
 export * as Voice from "./voice.js"
 
-import { type AIError } from "@opencode/ai"
+import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
   type RealtimeSession,
@@ -11,6 +11,7 @@ import {
 import { RequestExecutor } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
+import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 
@@ -57,19 +58,31 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
 
     // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
-    const findConnection = (provider: string) =>
+    const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
       integrations
         .get(Integration.ID.make(provider))
-        .pipe(Effect.map((info) => info?.connections.find((item) => item.type === "env" || item.method === "key")))
+        .pipe(
+          Effect.map((info) => info?.connections.find((item) => item.type === "env" || methods.includes(item.method))),
+        )
+
+    // Where an engine's sessions start: its provider with the server's key or, for GPT-Live without an OpenAI key,
+    // OpenCode's hosted GPT-Live with the server's OpenCode Console connection, whose sign-in works as well as a key.
+    const source = Effect.fnUntraced(function* (engine: (typeof Realtime.engines)[number]) {
+      const connection = yield* findConnection(engine.provider)
+      if (connection) return { provider: engine.provider, connection }
+      if (engine.id !== "openai-live") return undefined
+      const hosted = yield* findConnection(openCodeLive.provider, ["key", "oauth"])
+      return hosted && { provider: openCodeLive.provider, connection: hosted }
+    })
 
     const models = Effect.fn("Voice.models")(function* () {
       const list = yield* Effect.forEach(Realtime.engines, (engine) =>
-        findConnection(engine.provider).pipe(
-          Effect.map((connection) => ({
+        source(engine).pipe(
+          Effect.map((found) => ({
             model: engine.model,
-            provider: engine.provider,
+            provider: found?.provider ?? engine.provider,
             transports: engine.transports,
-            available: Boolean(connection),
+            available: found !== undefined,
           })),
         ),
       )
@@ -81,27 +94,31 @@ export const layer = Layer.effect(
       const engine = Realtime.engine(input.model)
       if (!engine) return yield* new InvalidRequestError({ message: `Unsupported voice model: ${input.model}` })
 
-      const connection = yield* findConnection(engine.provider)
-      const credential = connection
+      const found = yield* source(engine)
+      const credential = found
         ? yield* integrations.connection
-            .resolve(connection)
-            .pipe(
-              Effect.mapError((error) => new UnavailableError({ service: engine.provider, message: error.message })),
-            )
+            .resolve(found.connection)
+            .pipe(Effect.mapError((error) => new UnavailableError({ service: found.provider, message: error.message })))
         : undefined
-      if (credential?.type !== "key")
+      const access = found && credential && sessionAccess(found.provider, credential)
+      if (found === undefined || access === undefined)
         return yield* new UnavailableError({
           service: engine.provider,
-          message: missingKeyMessage[engine.provider],
+          message: engine.id === "openai-live" ? missingLiveKeyMessage : missingKeyMessage[engine.provider],
         })
 
-      return yield* Realtime.connect({ ...input, apiKey: Redacted.make(credential.key) }).pipe(
+      return yield* Realtime.connect({
+        model: input.model,
+        session: input.session,
+        transport: input.transport,
+        ...access,
+      }).pipe(
         Effect.provideService(RequestExecutor.Service, executor),
         Effect.mapError(
           (error: AIError): Error =>
             error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
               ? new InvalidRequestError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: engine.provider }),
+              : new UnavailableError({ message: error.message, service: found.provider }),
         ),
       )
     })
@@ -115,6 +132,28 @@ export const node = makeLocationNode({
   layer,
   deps: [Integration.node, requestExecutor],
 })
+
+/** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
+const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/inference/openai/v1" } as const
+
+/**
+ * What a credential starts a session with: a provider's API key on its own API, or an OpenCode Console API key or
+ * account sign-in on OpenCode's hosted GPT-Live, for the workspace the sign-in chose.
+ */
+const sessionAccess = (provider: string, credential: Credential.Value) => {
+  if (provider !== openCodeLive.provider)
+    return credential.type === "key" ? { apiKey: Redacted.make(credential.key) } : undefined
+  if (credential.type === "external") return undefined
+  const orgID = credential.metadata?.orgID
+  return {
+    apiKey: Redacted.make(credential.type === "oauth" ? credential.access : credential.key),
+    baseURL: openCodeLive.baseURL,
+    ...(typeof orgID === "string" ? { headers: { "x-opencode-org-id": orgID } } : {}),
+  }
+}
+
+const missingLiveKeyMessage =
+  "GPT-Live needs an OpenAI API key (a stored key or OPENAI_API_KEY) or an OpenCode Console connection on the server. ChatGPT sign-in can't start voice sessions."
 
 const missingKeyMessage = {
   openai:

@@ -6,8 +6,6 @@ import { createStore } from "solid-js/store"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"
 
-export type { LocationContext } from "@/runtime/server/client"
-
 export type WorkspaceLocation = LocationContext & {
   readonly ref: LocationRef
   readonly current: LocationGetOutput | undefined
@@ -76,3 +74,6 @@ const context = createSimpleContext({
 export const useWorkspaceLocation: () => Accessor<WorkspaceLocation> = context.use
 
 export const LocationProvider = context.provider
+
+/** Provides a resolved Location without syncing it, e.g. the one a detached view keeps while another is selected. */
+export const WorkspaceLocationContext = context.context

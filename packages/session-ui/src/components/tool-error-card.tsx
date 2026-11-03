@@ -120,7 +120,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   const copyButton = () => (
     <Tooltip
-      appearance="standard"
+      appearance="compact"
       value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
       placement="top"
       gutter={4}
@@ -140,7 +140,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   )
 
   return (
-    <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
+    <Card {...rest} data-kind="tool-error-card" data-tool={split.tool} data-open={open() ? "true" : "false"} variant="error">
       <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger>
           <div data-component="tool-trigger">

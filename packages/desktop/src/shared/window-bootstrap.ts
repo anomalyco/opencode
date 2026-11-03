@@ -3,7 +3,7 @@
 export type WindowBootstrap = {
   id: string
   firstLaunchPending?: boolean
-  /** The app runs packaged (`app.isPackaged`), as extensions' `Build.packaged` reports in both processes. */
+  /** The app runs packaged (`app.isPackaged`), as plugins' `App.packaged` reports in both processes. */
   packaged?: boolean
 }
 

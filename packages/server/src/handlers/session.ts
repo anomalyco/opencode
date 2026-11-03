@@ -1,3 +1,4 @@
+import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
@@ -5,8 +6,12 @@ import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
+import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import { SessionMediaMessageResponse } from "@opencode/protocol/groups/message"
+import { SessionMediaInboxResponse } from "@opencode/protocol/groups/session"
 import { Api } from "../api"
+import { wantsMediaRefs } from "../media-uri"
 import {
   ConflictError,
   CommandExecutionError,
@@ -33,6 +38,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
+    const instructions = yield* InstructionEntry.Service
+    const instances = yield* Instance.Service
+    const requireSession = (sessionID: Session.ID) =>
+      session.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
       const form = yield* Form.Service
       const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
@@ -225,15 +234,17 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.update",
         Effect.fn(function* (ctx) {
-          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const info = yield* requireSession(ctx.params.sessionID)
           if (ctx.payload.title !== undefined) {
             if (ctx.payload.title) {
               yield* session
                 .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
                 .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
             } else {
-              const title = yield* SessionTitle.Service
-              yield* title.generate(ctx.params.sessionID)
+              yield* SessionTitle.Service.use((title) => title.generate(ctx.params.sessionID)).pipe(
+                instances.provide(info),
+                locationErrors,
+              )
             }
           }
           if (ctx.payload.metadata !== undefined)
@@ -512,6 +523,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.inbox.list",
         Effect.fn(function* (ctx) {
+          if (wantsMediaRefs(ctx.request))
+            return yield* HttpServerResponse.schemaJson(SessionMediaInboxResponse)({
+              data: yield* session
+                .inboxWithRefs(ctx.params.sessionID)
+                .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
+            }).pipe(Effect.orDie)
           return {
             data: yield* session
               .inbox(ctx.params.sessionID)
@@ -543,14 +560,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.instructions.entry.list",
         Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
+          yield* requireSession(ctx.params.sessionID)
           return { data: yield* instructions.list(ctx.params.sessionID) }
         }),
       )
       .handle(
         "session.instructions.entry.put",
         Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
+          yield* requireSession(ctx.params.sessionID)
           yield* instructions.put({ sessionID: ctx.params.sessionID, key: ctx.params.key, value: ctx.payload.value })
           return HttpApiSchema.NoContent.make()
         }),
@@ -558,7 +575,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.instructions.entry.remove",
         Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
+          yield* requireSession(ctx.params.sessionID)
           yield* instructions.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
           return HttpApiSchema.NoContent.make()
         }),
@@ -590,6 +607,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.interrupt",
         Effect.fn(function* (ctx) {
+          yield* requireSession(ctx.params.sessionID)
           return { interrupted: yield* session.interrupt(ctx.params.sessionID, { resume: ctx.query.resume }) }
         }),
       )
@@ -604,8 +622,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.message",
         Effect.fn(function* (ctx) {
           yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          const message = yield* session.message(ctx.params)
-          if (message) return { data: message }
+          if (wantsMediaRefs(ctx.request)) {
+            const message = yield* session.messageWithRefs(ctx.params)
+            if (message)
+              return yield* HttpServerResponse.schemaJson(SessionMediaMessageResponse)({ data: message }).pipe(
+                Effect.orDie,
+              )
+          } else {
+            const message = yield* session.message(ctx.params)
+            if (message) return { data: message }
+          }
           return yield* new MessageNotFoundError({
             sessionID: ctx.params.sessionID,
             messageID: ctx.params.messageID,

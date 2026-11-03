@@ -1,12 +1,14 @@
 import type { Config, Redacted } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
+import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../protocols/index.js"
 import { Auth } from "../route/auth.js"
-import type { AtLeastOne, ProviderAuthOption } from "../route/auth-options.js"
+import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { CloudflareShared } from "./cloudflare-shared.js"
 
 export const id = ProviderID.make("cloudflare-ai-gateway")
 export const authEnvVars = ["CLOUDFLARE_API_TOKEN", "CF_AIG_TOKEN"] as const
@@ -25,7 +27,7 @@ type GatewayOptions = {
   readonly collectLog?: boolean
 }
 
-export type LanguageModelOptions = GatewayURL &
+export type Config = GatewayURL &
   GatewayOptions &
   Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -37,27 +39,19 @@ export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &
   GatewayURL &
   GatewayOptions & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly gatewayApiKey?: string
   }
 
-export const baseURL = (input: GatewayURL) => {
-  if (input.baseURL) return input.baseURL
-  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(requireAccountId(input))}/ai/v1`
-}
+export const baseURL = (input: GatewayURL) => CloudflareShared.baseURL(input, id, "CloudflareAIGateway")
+
+/** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
+export const runBaseURL = (input: GatewayURL) => CloudflareShared.runBaseURL(input, id, "CloudflareAIGateway")
 
 // Cloudflare's REST API rejects parts of the Anthropic Messages and OpenAI Responses request shapes, such as
 // system prompt blocks and `minimal` reasoning effort, so these models use the provider-native gateway endpoints.
 const passthroughURL = (input: GatewayURL & GatewayOptions, provider: "anthropic/v1" | "openai") =>
-  `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(requireAccountId(input))}/${encodeURIComponent(gatewayId(input))}/${provider}`
-
-const requireAccountId = (input: GatewayURL) => {
-  if (input.accountId) return input.accountId
-  throw new ProviderConfigurationError({
-    provider: id,
-    message: "CloudflareAIGateway.configure requires accountId unless baseURL is supplied",
-  })
-}
+  `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(CloudflareShared.requireAccountId(input, id, "CloudflareAIGateway"))}/${encodeURIComponent(gatewayId(input))}/${provider}`
 
 const gatewayId = (input: GatewayOptions) => input.gatewayId?.trim() || "default"
 
@@ -81,12 +75,14 @@ export const route = OpenAIChat.route.with({
 
 export const routes = [responsesRoute, messagesRoute, route]
 
-const credential = (input: LanguageModelOptions) =>
-  Auth.optional(input.gatewayApiKey ?? ("apiKey" in input ? input.apiKey : undefined), "apiKey")
-    .orElse(Auth.config(authEnvVars[0]))
-    .orElse(Auth.config(authEnvVars[1]))
+const credential = (input: Config, apply: (credential: Auth.Credential) => Auth.Definition) =>
+  AuthOptions.apiKey(
+    { apiKey: input.gatewayApiKey ?? ("apiKey" in input ? input.apiKey : undefined) },
+    authEnvVars,
+    apply,
+  )
 
-const headers = (input: LanguageModelOptions) => ({
+const headers = (input: Config) => ({
   ...(input.metadata === undefined ? {} : { "cf-aig-metadata": encodeJson(input.metadata) }),
   ...(input.cacheTtl === undefined ? {} : { "cf-aig-cache-ttl": String(input.cacheTtl) }),
   ...(input.cacheKey === undefined ? {} : { "cf-aig-cache-key": input.cacheKey }),
@@ -95,11 +91,11 @@ const headers = (input: LanguageModelOptions) => ({
   ...input.headers,
 })
 
-export const configure = (input: LanguageModelOptions) => {
+export const configure = (input: Config) => {
   const custom = "auth" in input && input.auth ? input.auth : undefined
   const rest = {
     endpoint: { baseURL: baseURL(input) },
-    auth: custom ?? credential(input).bearer(),
+    auth: custom ?? credential(input, (credential) => credential.bearer()),
     headers: { "cf-aig-gateway-id": gatewayId(input), ...headers(input) },
     http: input.http,
     providerOptions: input.providerOptions,
@@ -111,53 +107,81 @@ export const configure = (input: LanguageModelOptions) => {
       ? {
           ...rest,
           endpoint: { baseURL: passthroughURL(input, provider) },
-          auth: custom ?? Auth.bearerHeader("cf-aig-authorization", credential(input)),
+          auth: custom ?? credential(input, Auth.bearerHeader("cf-aig-authorization")),
           headers: headers(input),
         }
       : rest
-  const responses = responsesRoute.with(passthrough("openai"))
-  const messages = messagesRoute.with(passthrough("anthropic/v1"))
-  const chat = route.with(rest)
+  const responsesConfigured = responsesRoute.with(passthrough("openai"))
+  const messagesConfigured = messagesRoute.with(passthrough("anthropic/v1"))
+  const chatConfigured = route.with(rest)
+  const responses = (value: string | ModelID) =>
+    responsesConfigured.model<OpenAIProviderOptionsInput>({
+      id: native ? value.replace(/^openai\//, "") : value,
+    })
+  const messages = (value: string | ModelID) =>
+    messagesConfigured.model<OpenAIProviderOptionsInput>({
+      id: native ? value.replace(/^anthropic\//, "").replaceAll(".", "-") : value,
+    })
+  const chat = (value: string | ModelID) =>
+    chatConfigured.model<OpenAIProviderOptionsInput>({ id: value.replace(/^workers-ai\//, "") })
+  // The Run API base is derived per call so a chat-only configuration without an account still constructs.
+  const decision = (value: string | ModelID, providerOptions?: ProviderOptions) =>
+    CloudflareRunDecisions.route
+      .with({
+        provider: id,
+        endpoint: { baseURL: runBaseURL(input) },
+        auth: rest.auth,
+        headers: rest.headers,
+        http: input.http,
+      })
+      .model({ id: value, providerOptions })
   return {
     id,
-    model: (input: string | ModelID) => {
-      const value = String(input)
-      if (value.startsWith("openai/"))
-        return responses.model<OpenAIProviderOptionsInput>({ id: native ? value.slice("openai/".length) : value })
-      if (value.startsWith("anthropic/"))
-        return messages.model<OpenAIProviderOptionsInput>({
-          id: native ? value.slice("anthropic/".length).replaceAll(".", "-") : value,
-        })
-      if (value.startsWith("workers-ai/"))
-        return chat.model<OpenAIProviderOptionsInput>({ id: value.slice("workers-ai/".length) })
-      return chat.model<OpenAIProviderOptionsInput>({ id: value })
+    model: (value: string | ModelID) => {
+      if (value.startsWith("openai/")) return responses(value)
+      if (value.startsWith("anthropic/")) return messages(value)
+      return chat(value)
     },
+    chat,
+    responses,
+    messages,
+    decision,
     configure,
   }
 }
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  {
-    accountId,
-    apiKey,
-    baseURL: configuredBaseURL,
-    body,
-    cacheKey,
-    cacheTtl,
-    collectLog,
-    gatewayApiKey,
-    gatewayId,
-    headers,
-    metadata,
-    skipCache,
-    ...providerOptions
-  },
-) => {
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const chat: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const responses: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).responses(modelID)
+export const messages: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).messages(modelID)
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
+
+function config({
+  accountId,
+  apiKey,
+  baseURL: configuredBaseURL,
+  body,
+  cacheKey,
+  cacheTtl,
+  collectLog,
+  gatewayApiKey,
+  gatewayId,
+  headers,
+  metadata,
+  skipCache,
+  ...providerOptions
+}: Settings) {
   const connection = configuredBaseURL === undefined ? { accountId: accountId ?? "" } : { baseURL: configuredBaseURL }
-  return configure({
+  return {
     ...connection,
     apiKey,
     cacheKey,
@@ -170,7 +194,7 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     metadata,
     providerOptions,
     skipCache,
-  }).model(modelID)
+  }
 }
 
 export * as CloudflareAIGateway from "./cloudflare-ai-gateway.js"

@@ -3,7 +3,7 @@ title: Ferramentas Personalizadas
 description: Crie ferramentas que o LLM pode chamar no opencode.
 ---
 
-Ferramentas personalizadas são funções que você cria e que o LLM pode chamar durante as conversas. Elas funcionam junto com as [ferramentas integradas](/docs/tools) do opencode, como `read`, `write` e `shell`.
+Ferramentas personalizadas são funções que você cria e que o LLM pode chamar durante as conversas. Elas funcionam junto com as [ferramentas integradas](/docs/tools) do opencode, como `read`, `write` e `bash`.
 
 ---
 
@@ -83,13 +83,13 @@ Isso cria duas ferramentas: `math_add` e `math_multiply`.
 
 Ferramentas personalizadas são chaveadas pelo nome da ferramenta. Se uma ferramenta personalizada usar o mesmo nome que uma ferramenta integrada, a ferramenta personalizada tem precedência.
 
-Por exemplo, este arquivo substitui a ferramenta `shell` integrada:
+Por exemplo, este arquivo substitui a ferramenta `bash` integrada:
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

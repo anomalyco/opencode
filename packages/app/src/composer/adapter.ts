@@ -6,6 +6,7 @@ import type { ServerSDK } from "@/runtime/server/client"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import type { ComposerStateTarget } from "./submission-state"
 import type { createComposerSubmission } from "./submission-state"
+import type { ComposerModelLabel } from "./model-label"
 
 export type ComposerControls = {
   agents: {
@@ -17,8 +18,12 @@ export type ComposerControls = {
   }
   model: {
     selection: ModelSelection
+    providerName?: string
+    label?: ComposerModelLabel
     paid: boolean
     loading: boolean
+    /** While loading, the expected model's names from a catalog already loaded for another Location. */
+    preview?: { provider?: string; model: string; label?: ComposerModelLabel; variant: string; variants: string[] }
   }
 }
 
@@ -91,6 +96,8 @@ export type ComposerSession = {
     | undefined
   >
   admitted: (messageID: string) => boolean
+  // Moves the run's blocking work to the background once a steer is admitted; undefined for another session.
+  background?: () => { move: () => Promise<void> } | undefined
 }
 
 type ComposerAdapterBase = {

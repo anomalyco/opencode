@@ -21,6 +21,7 @@ export interface VcsDiffInput extends VcsScope {
   readonly base?: string
   readonly context: number
   readonly maxOutputBytes: number
+  readonly untracked?: Vcs.Untracked
 }
 
 export interface VcsDefinition {

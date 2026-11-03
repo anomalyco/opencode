@@ -6,6 +6,7 @@ import type {
   PathAttachmentPart,
   Prompt,
   SkillPart,
+  SessionPart,
 } from "./state"
 
 export type ComposerFilePart = FileAttachmentPart
@@ -13,6 +14,8 @@ export type ComposerFilePart = FileAttachmentPart
 export type ComposerAgentPart = AgentPart
 
 export type ComposerSkillPart = SkillPart
+
+export type ComposerSessionPart = SessionPart
 
 export type ComposerAttachment = ImageAttachmentPart | PathAttachmentPart
 
@@ -30,7 +33,9 @@ export type ComposerHistoryEntry = {
 export type ComposerHistory = {
   entries: (mode: "normal" | "shell") => ComposerHistoryEntry[]
   add: (prompt: ComposerPrompt, mode: "normal" | "shell") => void
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- the editor carries host-owned history metadata without interpreting it
   capture?: () => unknown
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- restore receives the same opaque value supplied by this host's capture or entries
   restore?: (metadata: unknown) => void
 }
 
@@ -42,7 +47,7 @@ export type ComposerOption = {
 
 export type ComposerSuggestion = {
   id: string
-  kind: "agent" | "command" | "file" | "reference" | "resource" | "skill"
+  kind: "agent" | "command" | "file" | "reference" | "resource" | "skill" | "session" | "history"
   label: string
   title?: string
   trigger?: string
@@ -50,5 +55,6 @@ export type ComposerSuggestion = {
   path?: string
   keybind?: string[]
   recent?: boolean
-  mention?: ComposerFilePart | ComposerAgentPart | ComposerSkillPart
+  history?: ComposerHistoryEntry
+  mention?: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart
 }

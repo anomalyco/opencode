@@ -3,7 +3,7 @@ title: الأدوات المخصصة
 description: أنشئ أدوات يمكن لـ LLM استدعاؤها في opencode.
 ---
 
-الأدوات المخصصة هي دوال تنشئها يمكن لـ LLM استدعاؤها أثناء المحادثات. تعمل جنبا إلى جنب مع [الأدوات المدمجة](/docs/tools) في opencode مثل `read` و`write` و`shell`.
+الأدوات المخصصة هي دوال تنشئها يمكن لـ LLM استدعاؤها أثناء المحادثات. تعمل جنبا إلى جنب مع [الأدوات المدمجة](/docs/tools) في opencode مثل `read` و`write` و`bash`.
 
 ---
 
@@ -83,13 +83,13 @@ export const multiply = tool({
 
 تُصنّف الأدوات المخصصة حسب اسم الأداة. إذا استخدمت أداة مخصصة نفس اسم أداة مدمجة، فإن الأداة المخصصة تأخذ الأولوية.
 
-على سبيل المثال، يستبدل هذا الملف أداة `shell` المدمجة:
+على سبيل المثال، يستبدل هذا الملف أداة `bash` المدمجة:
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },
