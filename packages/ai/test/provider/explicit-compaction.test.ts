@@ -71,8 +71,8 @@ testEffect(
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
+      headers: { "x-override": "request" },
       http: {
-        headers: { "x-override": "request" },
         query: { trace: "request" },
         body: {
           model: "overlaid",

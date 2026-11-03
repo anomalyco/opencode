@@ -4,7 +4,6 @@ import {
   ai,
   GenerationOptions,
   type GenerationOptionsFields,
-  HttpOptions,
   LanguageModel,
   type LLM,
   type LLMRequest,
@@ -291,18 +290,16 @@ export const layer = Layer.effect(
       const affinity = SessionAffinity.get(session)
       const base = ai.request({
         model: model.model,
-        http: {
-          headers: {
-            "x-opencode-session-id": session.id,
-            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
-            "x-session-affinity": affinity,
-            "X-Session-Id": affinity,
-            ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
-            "User-Agent": App.useragent(app),
-            "x-opencode-project": session.projectID,
-            "x-opencode-session": affinity,
-            "x-opencode-client": app.name,
-          },
+        headers: {
+          "x-opencode-session-id": session.id,
+          ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
+          "x-session-affinity": affinity,
+          "X-Session-Id": affinity,
+          ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
+          "User-Agent": App.useragent(app),
+          "x-opencode-project": session.projectID,
+          "x-opencode-session": affinity,
+          "x-opencode-client": app.name,
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
@@ -319,7 +316,7 @@ export const layer = Layer.effect(
       const modelHook = yield* hooks.trigger("session", "model.request", {
         ...scope,
         baseURL,
-        headers: { ...base.http?.headers },
+        headers: { ...base.headers },
       })
       const route =
         modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
@@ -328,10 +325,7 @@ export const layer = Layer.effect(
       const request = {
         ...base,
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
-        http: new HttpOptions({
-          ...base.http,
-          headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
-        }),
+        headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
       }
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||

@@ -388,13 +388,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     },
     defaults: {
       headers: info.headers,
-      http:
-        projected.body === undefined && info.headers === undefined
-          ? undefined
-          : {
-              body: projected.body === undefined ? undefined : { ...projected.body },
-              headers: info.headers,
-            },
+      http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
     },
     body: {
@@ -498,7 +492,7 @@ function callOptions(
     seed: request.generation?.seed,
     tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
-    headers: request.http?.headers,
+    headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }

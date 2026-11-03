@@ -4,7 +4,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   AIError,
-  HttpOptions,
   LanguageModel,
   LLMEvent,
   LLMResponse,
@@ -527,11 +526,8 @@ describe("OpenAI Chat route", () => {
       model: model.route
         .with({ auth: Auth.bearer("fresh-key"), headers: { authorization: "Bearer stale" } })
         .model({ id: model.id }),
-      http: HttpOptions.make({
-        body: { metadata: { source: "test" } },
-        headers: { authorization: "Bearer request", "x-custom": "yes" },
-        query: { debug: "1" },
-      }),
+      headers: { authorization: "Bearer request", "x-custom": "yes" },
+      http: { body: { metadata: { source: "test" } }, query: { debug: "1" } },
     }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
