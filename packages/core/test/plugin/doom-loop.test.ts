@@ -643,6 +643,30 @@ describe("doom loop plugin", () => {
     }),
   )
 
+  it.effect("returns a host-wrapped CorrectedError as feedback without a sticky stop", () =>
+    Effect.gen(function* () {
+      const h = yield* run()
+      const input = { command: "probe" }
+      const out = (i: number) => `probe ${i}\nstatic line one\nstatic line two`
+      for (let i = 1; i <= 13; i++) {
+        yield* emit(h, "shell", input, `ce_${i}`, text(out(i)))
+      }
+      // The host wraps CorrectedError into Tool.Error with the correction in `.error`: it must
+      // return as feedback, not as a sticky stop (no KV circuit, no interrupt).
+      h.setOutcome(() =>
+        Effect.fail(
+          new Tool.Error({
+            message: "Use staging instead",
+            error: new Permission.CorrectedError({ feedback: "Use staging instead" }),
+          }),
+        ),
+      )
+      const exit = yield* Effect.exit(h.before(beforeEvent("shell", input, "ce_14")))
+      expect(Exit.isSuccess(exit)).toBe(false)
+      expect(h.interrupts()).toBe(0)
+    }),
+  )
+
   it.effect("re-arms the circuit breaker only on real user messages, not synthetic ones", () =>
     Effect.gen(function* () {
       const h = yield* run()
@@ -856,8 +880,8 @@ describe("doom loop plugin", () => {
       ]
       const h = yield* run({ history })
       // Had the fold counted them, C would already sit past the block tier and this call — with
-      // entirely different arguments — would be challenged before executing.
-      const exit = yield* Effect.exit(h.before(beforeEvent("edit", { filePath: "b.ts" }, "sk_probe")))
+      // the same arguments — would be challenged before executing.
+      const exit = yield* Effect.exit(h.before(beforeEvent("edit", input, "sk_probe")))
       expect(Exit.isSuccess(exit)).toBe(true)
       expect(h.asserted).toEqual([])
       // Real failures count from zero: the first three stay silent, the fourth warns.

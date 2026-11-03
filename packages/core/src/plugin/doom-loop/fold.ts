@@ -54,6 +54,7 @@ export function fold(state: DoomLoopDetector.SessionState, messages: ReadonlyArr
         const errorText = message.endsWith(suffix) ? message.slice(0, -suffix.length) : message
         DoomLoopDetector.recordFailed(state, {
           tool: part.name,
+          sigHash: DoomLoopDetector.signature(part.name, part.state.input),
           errorText,
           validation: errorText.startsWith(DoomLoopDetector.VALIDATION_PREFIX),
         })

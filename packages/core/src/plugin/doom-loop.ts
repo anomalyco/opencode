@@ -3,7 +3,8 @@ export * as DoomLoopPlugin from "./doom-loop.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import type { SessionEvent } from "@opencode/schema/session-event"
-import { Effect, Exit, Scope, Stream } from "effect"
+import { Effect, Exit, Option, Scope, Stream } from "effect"
+import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { DoomLoopDetector } from "./doom-loop/detector.js"
 import { DoomLoopFold } from "./doom-loop/fold.js"
@@ -132,12 +133,21 @@ export function makePlugin(options?: { maxTrackedSessions?: number }) {
             current.state.bStreak = 0
             return
           }
-          yield* ctx.storage.set(circuitKey(event.sessionID), true).pipe(Effect.ignore)
-          current.state.circuitBroken = true
-          yield* ctx.session.interrupt({ sessionID: event.sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
-          const reason = Exit.isFailure(outcome) ? outcome.cause.toString() : ""
+          const error = Option.getOrUndefined(Exit.findErrorOption(outcome))
+          // A rule-based denial makes the stop sticky; a CorrectedError carries model feedback and
+          // returns as a plain Tool.Error so the model can act on it (no sticky stop, no interrupt).
+          // Only a CorrectedError returns as plain feedback for the model (no sticky stop).
+          // The host wraps it as Tool.Error with the CorrectedError in `.error`, so check both.
+          const corrected =
+            error instanceof Permission.CorrectedError ||
+            (error instanceof Tool.Error && error.error instanceof Permission.CorrectedError)
+          if (!corrected) {
+            yield* ctx.storage.set(circuitKey(event.sessionID), true).pipe(Effect.ignore)
+            current.state.circuitBroken = true
+            yield* ctx.session.interrupt({ sessionID: event.sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+          }
           return yield* new Tool.Error({
-            message: `${verdict.message}\n\n${reason}`,
+            message: `${verdict.message}\n\n${error?.message ?? "rejected"}`,
             metadata: DoomLoopDetector.blockedMetadata,
           })
         }
@@ -183,6 +193,7 @@ export function makePlugin(options?: { maxTrackedSessions?: number }) {
           // direction (detect more; C still only ever asks, never hard-blocks silently).
           const warning = DoomLoopDetector.recordFailed(current.state, {
             tool: event.tool,
+            sigHash,
             errorText: event.error.message,
             validation: event.error.message.startsWith(DoomLoopDetector.VALIDATION_PREFIX),
           })

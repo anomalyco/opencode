@@ -24,6 +24,7 @@ function emit(
   if (out?.error !== undefined) {
     warning = DoomLoopDetector.recordFailed(state, {
       tool,
+      sigHash,
       errorText: out.error,
       validation: out.error.startsWith("Invalid arguments for tool"),
     })
@@ -85,7 +86,7 @@ describe("doom loop detector", () => {
       expect(state.bStreak).toBe(0)
       expect(state.lines.order).toEqual([])
       // C saw six different failure identities: the streak never climbs past 1.
-      expect(state.failures.get("shell")?.streak).toBe(1)
+      expect([...state.failures.values()].every((entry) => entry.streak === 1)).toBe(true)
     })
 
     it("asks rather than hard-refuses for user-requested polling (corpus §2.1)", () => {
@@ -402,14 +403,14 @@ describe("doom loop detector", () => {
       }
       expect(state.lines.order).toHaveLength(2001)
       state.signatures.set("sig-a", { lastOutputHash: "h", streak: 5 })
-      state.failures.set("edit", { lastFailureHash: "h", streak: 4 })
+      state.failures.set("sig-c", { lastFailureHash: "h", streak: 4 })
       DoomLoopDetector.tighten(state)
       expect(state.lines.order).toHaveLength(1000)
       expect(state.lines.set.has("tight0a")).toBe(false)
       expect(state.lines.set.has("tight666c")).toBe(true)
       // The execution-end sweep must not delete A/C counters.
       expect(state.signatures.get("sig-a")).toEqual({ lastOutputHash: "h", streak: 5 })
-      expect(state.failures.get("edit")).toEqual({ lastFailureHash: "h", streak: 4 })
+      expect(state.failures.get("sig-c")).toEqual({ lastFailureHash: "h", streak: 4 })
     })
   })
 
@@ -419,10 +420,11 @@ describe("doom loop detector", () => {
       let warnAt = 0
       let blockedAt = 0
       let blockedSignal = ""
+      const sig = DoomLoopDetector.signature("edit", { filePath: "a.ts", oldString: "x" })
       for (let i = 1; i <= 8; i++) {
         const before = DoomLoopDetector.beforeCall(state, {
           tool: "edit",
-          sigHash: DoomLoopDetector.signature("edit", { i }),
+          sigHash: sig,
           messageID: `c_${i}`,
         })
         if (before.kind === "assert" && blockedAt === 0) {
@@ -431,6 +433,7 @@ describe("doom loop detector", () => {
         }
         const warning = DoomLoopDetector.recordFailed(state, {
           tool: "edit",
+          sigHash: sig,
           errorText: "String not found in document",
           validation: false,
         })
@@ -444,14 +447,16 @@ describe("doom loop detector", () => {
 
     it("treats volatile-token differences as equivalent failures", () => {
       const state = DoomLoopDetector.state()
+      const sig = DoomLoopDetector.signature("shell", { command: "probe" })
       for (let i = 1; i <= 5; i++) {
         DoomLoopDetector.recordFailed(state, {
           tool: "shell",
+          sigHash: sig,
           errorText: `Request failed after ${i}.${i}s: timeout`,
           validation: false,
         })
       }
-      expect(state.failures.get("shell")?.streak).toBe(5)
+      expect(state.failures.get(sig)?.streak).toBe(5)
     })
 
     it("survives interleaved successes of other tools and clears on same-tool success", () => {
@@ -459,7 +464,7 @@ describe("doom loop detector", () => {
       const sig = DoomLoopDetector.signature("edit", { filePath: "a.ts", oldString: "x" })
       for (let i = 0; i < 3; i++) {
         DoomLoopDetector.beforeCall(state, { tool: "edit", sigHash: sig, messageID: `rc_${i}` })
-        DoomLoopDetector.recordFailed(state, { tool: "edit", errorText: "String not found", validation: false })
+        DoomLoopDetector.recordFailed(state, { tool: "edit", sigHash: sig, errorText: "String not found", validation: false })
         DoomLoopDetector.recordCompleted(state, {
           tool: "read",
           sigHash: DoomLoopDetector.signature("read", { f: `f${i}` }),
@@ -467,9 +472,9 @@ describe("doom loop detector", () => {
         })
       }
       // retry-then-read: successful reads of other files must not launder the failing edit.
-      expect(state.failures.get("edit")?.streak).toBe(3)
+      expect(state.failures.get(sig)?.streak).toBe(3)
       DoomLoopDetector.recordCompleted(state, { tool: "edit", sigHash: sig, text: "ok" })
-      expect(state.failures.has("edit")).toBe(false)
+      expect(state.failures.has(sig)).toBe(false)
     })
 
     it("never counts argument-validation failures", () => {
@@ -477,6 +482,7 @@ describe("doom loop detector", () => {
       for (let i = 0; i < 8; i++) {
         DoomLoopDetector.recordFailed(state, {
           tool: "edit",
+          sigHash: DoomLoopDetector.signature("edit", { filePath: "a.ts", oldString: "x" }),
           errorText: 'Invalid arguments for tool "edit":\nmissing oldString',
           validation: true,
         })
@@ -495,7 +501,7 @@ describe("doom loop detector", () => {
         DoomLoopDetector.recordCompleted(state, { tool: "shell", sigHash: sig, text: out })
       }
       for (let i = 0; i < 4; i++) {
-        DoomLoopDetector.recordFailed(state, { tool: "edit", errorText: "String not found", validation: false })
+        DoomLoopDetector.recordFailed(state, { tool: "edit", sigHash: sig, errorText: "String not found", validation: false })
       }
       const hashBefore = state.signatures.get(sig)?.lastOutputHash
       DoomLoopDetector.compacted(state)
@@ -504,7 +510,7 @@ describe("doom loop detector", () => {
       expect(state.lines.order).toEqual([])
       expect(state.bStreak).toBe(0)
       // C intentionally survives compaction: failure equivalence does not depend on context.
-      expect(state.failures.get("edit")?.streak).toBe(4)
+      expect(state.failures.get(sig)?.streak).toBe(4)
       // The kept hash makes the first post-compaction repeat a soft boundary (streak 1, not 2).
       DoomLoopDetector.beforeCall(state, { tool: "shell", sigHash: sig, messageID: "co_5" })
       DoomLoopDetector.recordCompleted(state, { tool: "shell", sigHash: sig, text: out })
@@ -518,12 +524,12 @@ describe("doom loop detector", () => {
         DoomLoopDetector.beforeCall(state, { tool: "grep", sigHash: sig, messageID: `u_${i}` })
         DoomLoopDetector.recordCompleted(state, { tool: "grep", sigHash: sig, text: "a:1\nb:2\nc:3" })
       }
-      DoomLoopDetector.recordFailed(state, { tool: "edit", errorText: "boom", validation: false })
+      DoomLoopDetector.recordFailed(state, { tool: "edit", sigHash: sig, errorText: "boom", validation: false })
       DoomLoopDetector.userMessage(state)
       // Per-turn scoping: a new user message opens a fresh observation window for A and C too,
       // so a periodic legitimate re-check cannot accumulate into a block over days.
       expect(state.signatures.has(sig)).toBe(false)
-      expect(state.failures.has("edit")).toBe(false)
+      expect(state.failures.has(sig)).toBe(false)
       expect(state.bStreak).toBe(0)
     })
 
@@ -534,12 +540,12 @@ describe("doom loop detector", () => {
         DoomLoopDetector.beforeCall(state, { tool: "shell", sigHash: sig, messageID: `f_${i}` })
         DoomLoopDetector.recordCompleted(state, { tool: "shell", sigHash: sig, text: "l1\nl2\nl3" })
       }
-      DoomLoopDetector.recordFailed(state, { tool: "edit", errorText: "boom", validation: false })
+      DoomLoopDetector.recordFailed(state, { tool: "edit", sigHash: sig, errorText: "boom", validation: false })
       expect(state.bStreak).toBe(2)
       DoomLoopDetector.filesChanged(state)
       expect(state.bStreak).toBe(0)
       expect(state.signatures.get(sig)?.streak).toBe(3)
-      expect(state.failures.get("edit")?.streak).toBe(1)
+      expect(state.failures.get(sig)?.streak).toBe(1)
     })
   })
 

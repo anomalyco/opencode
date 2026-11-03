@@ -236,7 +236,7 @@ export function beforeCall(current: SessionState, call: Call): Verdict {
   if (current.bStreak >= B_BLOCK && entry !== undefined && entry.streak >= A_WARN) {
     return { kind: "assert", signal: "b", message: copy.blockB }
   }
-  const failure = current.failures.get(call.tool)
+  const failure = current.failures.get(call.sigHash)
   if (failure !== undefined && failure.streak >= C_BLOCK) {
     return { kind: "assert", signal: "c", message: copy.blockC(call.tool, failure.streak) }
   }
@@ -266,8 +266,8 @@ function lruSet<V>(map: Map<string, V>, key: string, value: V) {
 // signal C only, so a run of failed calls cannot masquerade as a run of identical empty outputs.
 // Returns warning text to append to the model-visible output, if any.
 export function recordCompleted(current: SessionState, call: Completed): string | undefined {
-  // Only a success of the same tool proves the retry loop is over.
-  current.failures.delete(call.tool)
+  // Only a success of the same signature proves the retry loop is over.
+  current.failures.delete(call.sigHash)
 
   const outputHash = fnv64(call.text)
   const previous = current.signatures.get(call.sigHash)
@@ -317,24 +317,26 @@ function addLine(current: SessionState, line: string) {
 
 export interface Failed {
   readonly tool: string
+  readonly sigHash: string
   readonly errorText: string
   // Argument-validation rejections that never executed do not count (OpenClaw argument-validation
   // semantics); the model must be free to fix its arguments.
   readonly validation: boolean
 }
 
-// Failure equivalence: same tool, same normalized error text counts; a different error means the
-// model is making progress and resets the streak. Interleaved successes of other tools (reads)
-// deliberately do not reset it.
+// Failure equivalence is keyed by signature (tool + canonical input), not by tool name alone:
+// different commands of one tool failing with the same normalized error would otherwise block an
+// unrelated call of that tool. A different error means progress and resets the streak. Interleaved
+// successes of other tools deliberately do not reset it.
 export function recordFailed(current: SessionState, call: Failed): string | undefined {
   if (call.validation) return undefined
   const failureHash = fnv64(normalizeVolatile(call.errorText))
-  const previous = current.failures.get(call.tool)
+  const previous = current.failures.get(call.sigHash)
   const entry: FailureEntry =
     previous !== undefined && previous.lastFailureHash === failureHash
       ? { lastFailureHash: failureHash, streak: previous.streak + 1 }
       : { lastFailureHash: failureHash, streak: 1 }
-  current.failures.set(call.tool, entry)
+  lruSet(current.failures, call.sigHash, entry)
   if (entry.streak === C_WARN) return copy.warnC(call.tool, entry.streak)
   return undefined
 }
