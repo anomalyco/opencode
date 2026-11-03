@@ -57,7 +57,7 @@ test("session scope keeps independent history and cursors per session", async ()
   }
 })
 
-test("a submit resets every cursor, including the home composer", async () => {
+test("a submit resets only the submitting session cursor", async () => {
   await using tmp = await tmpdir()
   const setup = await renderHistory(tmp.path)
   try {
@@ -65,16 +65,22 @@ test("a submit resets every cursor, including the home composer", async () => {
     setup.history.append(undefined, prompt("home-one"), "session")
     setup.history.append(undefined, prompt("home-two"), "session")
     setup.history.append("session-a", prompt("a-one"), "session")
+    setup.history.append("session-a", prompt("a-two"), "session")
 
     expect(setup.history.move(undefined, -1, "", "session")?.text).toBe("home-two")
+    expect(setup.history.move("session-a", -1, "", "session")?.text).toBe("a-two")
     setup.history.append("session-b", prompt("b-one"), "session")
-    expect(setup.history.move(undefined, -1, "", "session")?.text).toBe("home-two")
+    expect(setup.history.move(undefined, -1, "", "session")?.text).toBe("home-one")
+    expect(setup.history.move("session-a", -1, "a-two", "session")?.text).toBe("a-one")
+
+    setup.history.append(undefined, prompt("home-three"), "session")
+    expect(setup.history.move(undefined, -1, "", "session")?.text).toBe("home-three")
   } finally {
     setup.app.renderer.destroy()
   }
 })
 
-test("session scope trims other sessions before the active one and persists flat entries", async () => {
+test("session scope keeps each session's own retention and persists flat entries", async () => {
   await using tmp = await tmpdir()
   const setup = await renderHistory(tmp.path)
   try {
@@ -98,6 +104,62 @@ test("session scope trims other sessions before the active one and persists flat
   }
 })
 
+test("a busy session does not evict another session's history", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append("session-b", prompt("b-one"), "session")
+    for (let index = 0; index <= MAX_HISTORY_ENTRIES; index += 1) {
+      setup.history.append("session-a", prompt(`a-${index}`), "session")
+    }
+
+    expect(setup.history.move("session-b", -1, "", "session")?.text).toBe("b-one")
+    expect(setup.history.move("session-a", -1, "", "session")?.text).toBe(`a-${MAX_HISTORY_ENTRIES}`)
+    expect(setup.history.move("session-a", -1, `a-${MAX_HISTORY_ENTRIES}`, "session")?.text).toBe(
+      `a-${MAX_HISTORY_ENTRIES - 1}`,
+    )
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("session scope trims a single session without looping", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    for (let index = 0; index <= MAX_HISTORY_ENTRIES; index += 1) {
+      setup.history.append("session-a", prompt(`a-${index}`), "session")
+    }
+
+    expect(setup.history.move("session-a", -1, "", "session")?.text).toBe(`a-${MAX_HISTORY_ENTRIES}`)
+    expect(setup.history.move("session-a", -1, `a-${MAX_HISTORY_ENTRIES}`, "session")?.text).toBe(
+      `a-${MAX_HISTORY_ENTRIES - 1}`,
+    )
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("interleaved sessions keep independent cursor positions", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append("session-a", prompt("a-one"), "session")
+    setup.history.append("session-a", prompt("a-two"), "session")
+    setup.history.append("session-b", prompt("b-one"), "session")
+    setup.history.append("session-b", prompt("b-two"), "session")
+
+    expect(setup.history.move("session-a", -1, "", "session")?.text).toBe("a-two")
+    expect(setup.history.move("session-b", -1, "", "session")?.text).toBe("b-two")
+    expect(setup.history.move("session-a", -1, "a-two", "session")?.text).toBe("a-one")
+    expect(setup.history.move("session-b", -1, "b-two", "session")?.text).toBe("b-one")
+    expect(setup.history.move("session-a", 1, "a-one", "session")?.text).toBe("a-two")
+    expect(setup.history.move("session-b", 1, "b-one", "session")?.text).toBe("b-two")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
 test("entries appended under one scope are recalled under the other", async () => {
   await using tmp = await tmpdir()
   const setup = await renderHistory(tmp.path)
@@ -111,7 +173,7 @@ test("entries appended under one scope are recalled under the other", async () =
   }
 })
 
-test("session scope ignores legacy unscoped entries that global scope recalls", async () => {
+test("legacy unscoped entries belong to the home composer, not a named session", async () => {
   await using tmp = await tmpdir()
   const legacy = JSON.stringify(prompt("legacy")) + "\n"
   const setup = await renderHistory(tmp.path, legacy)
@@ -119,7 +181,27 @@ test("session scope ignores legacy unscoped entries that global scope recalls", 
     expect((await waitForHistory(setup.history))?.text).toBe("legacy")
 
     expect(setup.history.move("session-a", -1, "", "session")).toBeUndefined()
-    expect(setup.history.move("session-a", 1, "legacy", "global")?.text).toBe("")
+    expect(setup.history.move(undefined, -1, "", "session")?.text).toBe("legacy")
+    expect(setup.history.has(undefined, "session")).toBe(true)
+    expect(setup.history.has("session-a", "session")).toBe(false)
+    expect(setup.history.move(undefined, -1, "", "global")?.text).toBe("legacy")
+    expect(setup.history.move(undefined, 1, "legacy", "global")?.text).toBe("")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
+test("switching scope resets the destination cursor", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append("session-a", prompt("a-one"), "global")
+    setup.history.append("session-a", prompt("a-two"), "global")
+    expect(setup.history.move("session-a", -1, "", "global")?.text).toBe("a-two")
+    expect(setup.history.move("session-a", -1, "a-two", "global")?.text).toBe("a-one")
+
+    expect(setup.history.move("session-b", -1, "", "session")).toBeUndefined()
+    expect(setup.history.move("session-a", -1, "", "global")?.text).toBe("a-two")
   } finally {
     setup.app.renderer.destroy()
   }

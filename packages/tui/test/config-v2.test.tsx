@@ -125,6 +125,7 @@ test("shows the prompt history scope in settings", () => {
     category: "Input",
     default: "global",
     values: ["global", "session"],
+    labels: ["all sessions", "current session"],
   })
 })
 

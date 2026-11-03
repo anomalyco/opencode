@@ -293,6 +293,7 @@ export const settings: Setting[] = [
     description: "Whether prompt recall is shared by every session or scoped to the current session",
     default: "global",
     values: ["global", "session"],
+    labels: ["all sessions", "current session"],
     keywords: ["prompt history", "recall", "history"],
   },
   {
