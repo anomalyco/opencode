@@ -100,6 +100,8 @@ type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compact
 
 type Streamed = {
   readonly text: string
+  /** The reply ended by calling tools, so its text is not a finished summary even when it opens like one. */
+  readonly toolCalls?: boolean
 }
 
 /** A summary run off the critical path: it covers only `messages`, streams no deltas, and bills into `usage`. */
@@ -466,7 +468,8 @@ export const layer = Layer.effect(
       const previous = previousCompaction(messages)
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
-      const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
+      const filled = (reply: Streamed) =>
+        !reply.toolCalls && reply.text.split("\n").some((line) => headings.includes(line.trim()))
       const prepared = yield* prepare(context, messages, budget)
       // Size the unchanged request with the number that decided to compact: the last response's count plus an
       // estimate of what came after it. Characters overstate a conversation whose old reasoning the provider drops.
@@ -475,7 +478,7 @@ export const layer = Layer.effect(
       const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
-      // template gets one reminder before it counts as a failure.
+      // template, or stops to call a tool, gets one reminder before it counts as a failure.
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
@@ -484,7 +487,7 @@ export const layer = Layer.effect(
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )
           const reply = yield* stream(context, prompted, prepared.options, background)
-          if (filled(reply.text)) return reply
+          if (filled(reply)) return reply
 
           const nudged = fitOutput(
             { ...prompted, messages: [...prompted.messages, Message.user(NUDGE)] },
@@ -492,13 +495,15 @@ export const layer = Layer.effect(
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
           )
           const retry = yield* stream(context, nudged, prepared.options, background)
-          if (filled(retry.text)) return retry
+          if (filled(retry)) return retry
           return yield* Effect.fail<Failure>({
             error: {
               type: "compaction.failed",
-              message: retry.text.trim()
-                ? "Compaction summary did not match the required template"
-                : "Compaction produced no summary",
+              message: !retry.text.trim()
+                ? "Compaction produced no summary"
+                : retry.toolCalls
+                  ? "Compaction summary was cut off by a tool call"
+                  : "Compaction summary did not match the required template",
             },
           })
         })
@@ -816,6 +821,8 @@ export const layer = Layer.effect(
                 })
               case "content-filter":
                 return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
+              case "tool-calls":
+                return Effect.succeed({ ...streamed, toolCalls: true })
               default:
                 return Effect.succeed(streamed)
             }

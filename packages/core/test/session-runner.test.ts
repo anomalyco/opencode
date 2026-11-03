@@ -2898,6 +2898,33 @@ describe("SessionRunnerLLM", () => {
     }
   }
 
+  for (const summary of [true, false]) {
+    scenario(`compaction ${summary ? "recovers from" : "rejects"} a summary cut off by a tool call`, function* (s) {
+      yield* s.llm.push(TestLLM.text("Earlier answer", "summary-history"))
+      yield* s.runPrompt("Earlier question")
+      s.requests.length = 0
+      const cut = TestLLM.toolCalls(
+        LLMEvent.textDelta({ id: "summary-cut", text: "## Objective\n- Fix the compac" }),
+        LLMEvent.toolCall({ id: "call-summary", name: "echo", input: { text: "must not execute" } }),
+      )
+      yield* s.llm.push(cut, summary ? TestLLM.text("## Objective\n- Fix compaction", "summary-recovered") : cut)
+      const compact = yield* s.session.compact({ sessionID })
+      yield* s.resume
+
+      expect(s.requests).toHaveLength(2)
+      expect(userTexts(s.requests[1]).at(-1)).toContain("did not fill in the required summary template")
+      expect(s.executions).toEqual([])
+      expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject(
+        summary
+          ? { status: "completed", summary: "## Objective\n- Fix compaction" }
+          : {
+              status: "failed",
+              error: { type: "compaction.failed", message: "Compaction summary was cut off by a tool call" },
+            },
+      )
+    })
+  }
+
   scenario("waits for plugin activation before each step and tool call", function* (s) {
     const waits: Array<[number, number]> = []
     s.activationHook = Effect.sync(() => {
