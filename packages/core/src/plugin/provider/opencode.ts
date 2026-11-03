@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
+import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -16,6 +16,7 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { AbsolutePath } from "../../schema.js"
+import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
@@ -64,12 +65,6 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type LibrarySkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
-// Downloaded skills by sign-in and workspace, then slug. Shared by every project in this process, so a skill downloads again
-// only when its version changes.
-const downloaded = new Map<
-  string,
-  Map<string, { readonly slug: string; readonly version: string; readonly skill: LibrarySkill }>
->()
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -170,7 +165,13 @@ function oauth(http: HttpClient.HttpClient) {
 }
 
 export const OpencodePlugin = define<
-  HttpClient.HttpClient | Bus.Service | Config.Service | InstructionDiscovery.Service | Skill.Service | Scope.Scope
+  | HttpClient.HttpClient
+  | Bus.Service
+  | Config.Service
+  | InstructionDiscovery.Service
+  | SharedCache.Service
+  | Skill.Service
+  | Scope.Scope
 >({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
@@ -182,6 +183,7 @@ export const OpencodePlugin = define<
     const config = yield* Config.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
+    const cache = yield* SharedCache.Service
     const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
@@ -201,11 +203,9 @@ export const OpencodePlugin = define<
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
-    // When the last Console config load started, so rejected inference can reuse a recent status.
-    let checked = Number.NEGATIVE_INFINITY
 
-    const load = Effect.fn("OpencodePlugin.load")(function* () {
-      checked = yield* Clock.currentTimeMillis
+    // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
+    const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
@@ -219,13 +219,29 @@ export const OpencodePlugin = define<
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
             return Effect.succeed({ remote: undefined, connection, organization: undefined })
-          return fetchConfig(http, credential).pipe(
-            Effect.map((remote) => ({
-              remote,
-              connection,
-              organization: organizationName(credential),
-            })),
-          )
+          return cache
+            .get({
+              key: `opencode-console:${workspaceKey(connection, credential)}`,
+              interval: maxAge,
+              // A sign-in error is Console's answer for this sign-in, so it is shared like a config rather than
+              // replaced by the last config, as a network failure is.
+              load: fetchConfig(http, credential).pipe(
+                Effect.map((remote) => ({ remote })),
+                Effect.catch((cause) =>
+                  connectionStatus(cause) ? Effect.succeed({ failed: cause }) : Effect.fail(cause),
+                ),
+              ),
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
+              ),
+              Effect.map((remote) => ({
+                remote,
+                connection,
+                organization: organizationName(credential),
+              })),
+            )
         }),
         Effect.tap(() => status(undefined)),
         Effect.catch((cause) =>
@@ -305,27 +321,33 @@ export const OpencodePlugin = define<
         const credential = yield* ctx.integration.connection.resolve(connection)
         if (!credential || credential.type === "external") return []
         const server = yield* normalizeServer(ConsoleAccess.server(credential))
-        // API keys carry no account or org, so the sign-in itself identifies the workspace.
-        const workspace = JSON.stringify([server, IntegrationConnection.key(connection), credential.metadata?.orgID])
-        const cached = downloaded.get(workspace)
+        const workspace = workspaceKey(connection, credential)
         const loaded = yield* Effect.forEach(
           listed,
           (item) => {
-            const previous = cached?.get(item.slug)
-            if (previous?.version === item.version) return Effect.succeed(previous)
-            return downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
-              Effect.map((skill) => ({ slug: item.slug, version: item.version, skill })),
-              // A failed download keeps the last copy that loaded, and retries on the next config change.
+            const input = {
+              key: `opencode-console-skill:${workspace}:${item.slug}`,
+              interval: Duration.infinity,
+              load: downloadSkill(http, server, item.slug, ConsoleAccess.headers(credential)).pipe(
+                Effect.map((skill) => ({ version: item.version, skill })),
+              ),
+            }
+            // Every project shares one download per skill. Any other version, or a failure, downloads again; a failed
+            // download keeps the last copy that loaded.
+            return cache.get(input).pipe(
+              Effect.filterOrFail((cached) => cached.version === item.version),
+              Effect.catch(() => cache.get({ ...input, force: true })),
+              Effect.map((cached) => cached.skill),
               Effect.catch((cause) =>
-                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(Effect.as(previous)),
+                Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(
+                  Effect.as(undefined),
+                ),
               ),
             )
           },
           { concurrency: 8 },
         )
-        const kept = loaded.filter((item) => item !== undefined)
-        downloaded.set(workspace, new Map(kept.map((item) => [item.slug, item])))
-        return kept.map((item) => item.skill)
+        return loaded.filter((item) => item !== undefined)
       },
       Effect.catch((cause) => Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as(undefined))),
     )
@@ -438,13 +460,10 @@ export const OpencodePlugin = define<
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
-    // With `maxAge`, a load that started within it is reused; checking inside the permit lets concurrent callers
-    // share the load that was in flight when they arrived.
-    const check = (maxAge = Duration.zero): Effect.Effect<void> =>
+    const check = (maxAge?: Duration.Input): Effect.Effect<void> =>
       loading.withPermit(
         Effect.gen(function* () {
-          if ((yield* Clock.currentTimeMillis) - checked < Duration.toMillis(maxAge)) return
-          const next = yield* load()
+          const next = yield* load(maxAge)
           if (!Equal.equals(snapshot, next)) yield* apply(next)
         }),
       )
@@ -550,6 +569,18 @@ function connectionStatus(cause: unknown): IntegrationConnection.Status | undefi
   )
     return { status: "needs_auth", message: signedOutMessage }
   return undefined
+}
+
+// API keys carry no account or org, so the sign-in itself identifies the workspace.
+function workspaceKey(
+  connection: NonNullable<Parameters<typeof IntegrationConnection.key>[0]>,
+  credential: Credential.Key | Credential.OAuth,
+) {
+  return JSON.stringify([
+    ConsoleAccess.server(credential),
+    IntegrationConnection.key(connection),
+    credential.metadata?.orgID,
+  ])
 }
 
 function organizationName(credential: Credential.Value) {

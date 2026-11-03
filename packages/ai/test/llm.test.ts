@@ -8,10 +8,12 @@ import {
   GenerationOptions,
   Message,
   LanguageModel,
+  SystemMessage,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolResultPart,
+  UserMessage,
 } from "../src/schema/index.js"
 import { fixedResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -77,7 +79,7 @@ describe("llm constructors", () => {
 
     expect(Object.getPrototypeOf(request)).toBe(Object.prototype)
     expect(request.model).toBeInstanceOf(LanguageModel)
-    expect(request.messages[0]).toBeInstanceOf(Message)
+    expect(request.messages[0]).toBeInstanceOf(UserMessage)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
     expect(request.generation).toBeUndefined()
@@ -126,16 +128,14 @@ describe("llm constructors", () => {
       prompt: "Say hello.",
       generation: { temperature: 0 },
       providerOptions: { store: true, metadata: { request: true } },
-      http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
+      headers: { "x-shared": "request" },
+      http: { body: { metadata: { request: true } }, query: { request: "1" } },
     })
 
     expect(request.generation).toEqual({ temperature: 0 })
     expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
-    expect(request.http).toEqual({
-      body: { metadata: { request: true } },
-      headers: { "x-shared": "request" },
-      query: { request: "1" },
-    })
+    expect(request.headers).toEqual({ "x-shared": "request" })
+    expect(request.http).toEqual({ body: { metadata: { request: true } }, query: { request: "1" } })
   })
 
   test("updates canonical models from the model datatype", () => {
@@ -229,7 +229,7 @@ describe("llm constructors", () => {
       messages: [Message.user("Review this."), update],
     })
 
-    expect(update).toBeInstanceOf(Message)
+    expect(update).toBeInstanceOf(SystemMessage)
     expect(update).toEqual({
       role: "system",
       content: [{ type: "text", text: "Use parameterized SQL.", cache: { type: "ephemeral" } }],

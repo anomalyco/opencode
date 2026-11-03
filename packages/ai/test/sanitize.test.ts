@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import { ai, type LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { OpenAIChat } from "../src/protocols.js"
 import { Auth } from "../src/route.js"
@@ -35,7 +36,7 @@ describe("sanitizeSurrogates", () => {
       }),
     )
 
-    expect(sanitized.messages.every((message) => message instanceof Message)).toBe(true)
+    expect(sanitized.messages.every((message) => Schema.is(Message)(message))).toBe(true)
     expect(sanitized.tools[0]).toBe(tool)
     expect(sanitized.system).toEqual([{ type: "text", text: "system \uFFFD" }])
     expect(sanitized.messages).toEqual([

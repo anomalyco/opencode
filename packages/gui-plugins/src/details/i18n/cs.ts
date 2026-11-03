@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nejsou nakonfigurovány žádné zásuvné moduly",
   skills: "Dovednosti",
   "skills.empty": "Nejsou nakonfigurovány žádné dovednosti",
-  lsp: "LSP",
-  "lsp.empty": "Nejsou nakonfigurovány žádné servery LSP",
   failed: "Nezdařilo se",
   retry: "Zkusit znovu",
   connecting: "Připojování…",
