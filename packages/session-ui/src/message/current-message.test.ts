@@ -43,6 +43,7 @@ describe("current content default open", () => {
       },
       time: { created: 1, completed: 2 },
     })
+
     expect(currentContentDefaultOpen(errored("shell"), true, true)).toBe(false)
     expect(currentContentDefaultOpen(errored("execute"), true, true)).toBe(false)
     expect(currentContentDefaultOpen(errored("edit"), true, true)).toBe(false)

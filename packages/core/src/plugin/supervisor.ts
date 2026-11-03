@@ -2,7 +2,6 @@ export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode/schema/config"
 import { Cause, Effect, Layer, Queue, Stream } from "effect"
-import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
@@ -29,10 +28,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   const enabled = new Set(definitions.map((plugin) => plugin.id))
   const packages = new Map<string, Plugin.Generation>()
   const pending = new Set<string>()
-  const failures = new Map<
-    string,
-    Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
-  >()
+  const failures = new Map<string, Plugin.Failure>()
   const plugins = () => [...definitions, ...packages.values()]
 
   for (const operation of operations) {
@@ -64,13 +60,20 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         )
       }),
     )
+    if ("blocked" in plugin) {
+      const previous = packages.get(operation.target)
+      if (previous) enabled.delete(previous.id)
+      packages.delete(operation.target)
+      failures.delete(operation.target)
+      continue
+    }
     if ("pending" in plugin) {
       pending.add(operation.target)
       continue
     }
     if ("error" in plugin) {
       failures.set(operation.target, {
-        source: pluginSource(operation.target),
+        source: PluginModule.source(operation.target),
         state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })
@@ -106,7 +109,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
         state: { status: "failed" as const, error: `Duplicate plugin ID: ${plugin.id}` },
-        features: { server: true as const, ...plugin.features },
+        features: plugin.features ?? { server: true as const },
       })),
     ],
     pending: [...pending],
@@ -140,16 +143,8 @@ export const layer = Layer.effectDiscard(
       // Combine internal plugins with host-contributed plugins in boot order.
       // Instance-bound plugins come last: later activation can override earlier
       // container writes, so the instance's explicit choices win over globals.
-      const pre = [
-        ...internal.pre.map((plugin) => ({ ...plugin, revision: "internal", source: { type: "builtin" as const } })),
-        ...sdk.all(),
-        ...instance.all(),
-      ]
-      const post = internal.post.map((plugin) => ({
-        ...plugin,
-        revision: "internal",
-        source: { type: "builtin" as const },
-      }))
+      const pre = [...internal.pre, ...sdk.all(), ...instance.all()]
+      const post = internal.post
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(modules, pre, post, operations, false, running)
@@ -249,10 +244,5 @@ const nodeDeps = [
   Watcher.node,
   PluginInternal.requirements,
 ] as const
-
-function pluginSource(target: string): Plugin.Source {
-  if (path.isAbsolute(target)) return { type: "local", path: target }
-  return { type: "package", target }
-}
 
 export const node = makeLocationNode({ name: "plugin-supervisor", layer, deps: nodeDeps })

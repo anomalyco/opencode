@@ -16,13 +16,18 @@ export function useConfiguredModel() {
     ),
   )
   const documents = () => data.location.config.list({ directory: location().directory })
+
   const model = createMemo(() => {
     const entry = documents()?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
     const model = entry?.type === "document" ? entry.info.model : undefined
+
     if (!model) return
+
     if (typeof model !== "string") return { providerID: model.providerID, modelID: model.model, variant: model.variant }
     const [providerID, ...parts] = model.split("/")
+
     return { providerID, modelID: parts.join("/"), variant: undefined }
   })
+
   return Object.assign(model, { ready: () => documents() !== undefined })
 }

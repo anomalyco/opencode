@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect"
-import { AIError, LLMEvent, type ProviderMetadata, type ToolCall } from "../../schema/index.js"
+import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
 import { parse } from "./partial-json.js"
 
@@ -60,28 +60,25 @@ const inputStart = (tool: PendingTool) =>
     providerMetadata: tool.providerMetadata,
   })
 
-const inputDelta = (tool: PendingTool, text: string) =>
-  LLMEvent.toolInputDelta({
-    id: tool.id,
-    name: tool.name,
-    namespace: tool.namespace,
-    text,
-    input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
-  })
+const inputDelta = (tool: PendingTool, text: string): LLMEvent => {
+  const raw = tool.input
+  let parsed: unknown
+  return {
+    ...LLMEvent.toolInputDelta({
+      id: tool.id,
+      name: tool.name,
+      namespace: tool.namespace,
+      text,
+    }),
+    get input() {
+      return (parsed ??= Option.getOrElse(parsePartialInput(raw), () => ({})))
+    },
+  }
+}
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input
   return parseToolInput(route, tool.name, raw).pipe(
-    Effect.catch((error) =>
-      tool.providerExecuted
-        ? Effect.fail(error)
-        : Effect.succeed(
-            Option.getOrElse(
-              Option.map(parsePartialInput(raw), (input) => input ?? {}),
-              () => ({}),
-            ),
-          ),
-    ),
     Effect.map(
       (input): ToolCall =>
         LLMEvent.toolCall({
@@ -93,10 +90,15 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
           providerMetadata: tool.providerMetadata,
         }),
     ),
+    Effect.catch((error) =>
+      tool.providerExecuted
+        ? Effect.fail(error)
+        : Effect.succeed(LLMEvent.toolInputError({ id: tool.id, name: tool.name, namespace: tool.namespace, raw })),
+    ),
   )
 }
 
-const finishEvents = (tool: PendingTool, event: ToolCall): ReadonlyArray<LLMEvent> => [
+const finishEvents = (tool: PendingTool, event: ToolCall | ToolInputError): ReadonlyArray<LLMEvent> => [
   LLMEvent.toolInputEnd({
     id: tool.id,
     name: tool.name,
@@ -147,7 +149,12 @@ export const appendOrStart = <K extends StreamKey>(
   route: string,
   tools: State<K>,
   key: K,
-  delta: { readonly id?: string; readonly name?: string; readonly text: string },
+  delta: {
+    readonly id?: string
+    readonly name?: string
+    readonly text: string
+    readonly providerMetadata?: ProviderMetadata
+  },
   missingToolMessage: string,
 ): AppendOutcome<K> | AIError => {
   const current = tools[key]
@@ -161,7 +168,7 @@ export const appendOrStart = <K extends StreamKey>(
     namespace: current?.namespace,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
-    providerMetadata: current?.providerMetadata,
+    providerMetadata: current?.providerMetadata ?? delta.providerMetadata,
   }
   if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }
@@ -194,26 +201,15 @@ export const appendExisting = <K extends StreamKey>(
 
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it
- * from state, and recover incomplete local arguments when needed.
+ * from state, and reject malformed local arguments without repairing them.
  * Missing keys are a no-op because some providers emit stop events for
  * non-tool content blocks.
- */
-export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
-  Effect.gen(function* () {
-    const tool = tools[key]
-    if (!tool) return { tools }
-    return {
-      tools: withoutTool(tools, key),
-      events: finishEvents(tool, yield* toolCall(route, tool)),
-    }
-  })
-
-/**
- * Finalize one pending tool call with an authoritative final input string.
+ *
+ * Pass `input` when the provider sends an authoritative final input string.
  * OpenAI Responses can send accumulated deltas and then repeat the completed
  * arguments on `response.output_item.done`; the final value wins.
  */
-export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
+export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K, input?: string) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }

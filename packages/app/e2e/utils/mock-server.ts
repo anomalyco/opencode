@@ -1,21 +1,82 @@
 import type { Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
-import { Duration, Effect, Layer } from "effect"
-import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { MockApi, MockBadRequest, MockNotFound } from "./mock-api"
+import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import { Permission } from "@opencode/schema/permission"
+import { Model } from "@opencode/schema/model"
+import { Worktree } from "@opencode/schema/worktree"
+import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import { SERVER } from "./app"
+import {
+  MockApi,
+  MockBadRequest,
+  MockInternal,
+  MockNotFound,
+  MockPtyFeatureUnsupported,
+  MockPtyNotFound,
+  MockServiceUnavailable,
+  MockShellNotFound,
+  MockUnauthorized,
+  MockUnsupported,
+} from "./mock-api"
+import { createPersistentPty, type MockPersistentPtyConfig, type MockServerEvent } from "./persistent-pty"
+import { installSseTransport } from "./sse-transport"
+
+type Resolvable<T> = T | (() => T)
+
+// A hook's replacement response.
+export type MockAnswer = { status: number; body: unknown }
+
+// The legacy `/provider` catalog: `all` lists providers with `id`, `name` and `models` keyed by model ID.
+export type MockProviderCatalog = {
+  all?: readonly unknown[]
+  connected?: readonly string[]
+  default?: { providerID?: string; modelID?: string }
+}
+
+// A session in any shape a scenario seeds, current or legacy (`directory`, `path`); `currentSession` reads it.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- scenarios seed arbitrary session fields
+export type MockSession = { id: string } & Record<string, unknown>
+
+export type MockMcpStatus = { status: string; error?: string }
+
+export type MockFileContent =
+  | string
+  | { type?: string; content: string; encoding?: string; mimeType?: string }
+  | undefined
 
 export interface MockServerConfig {
   server?: string
-  provider: unknown | (() => unknown)
-  integrationMethods?: Record<string, unknown[]>
+  // The machine name `/api/info` reports; omitted like a server that predates it.
+  hostname?: string
+  provider: Resolvable<MockProviderCatalog>
+  integrations?: Resolvable<unknown[]>
+  // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
+  onCredentialActivate?: (credentialID: string) => void
+  // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
+  onCredentialUpdate?: (credentialID: string, body: { label?: string }) => void
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
+  // Background shell commands (`GET /api/shell`).
+  shellCommands?: Resolvable<unknown[]>
+  // All output a shell command has captured so far in `directory`, or undefined for an unknown command (404
+  // ShellNotFoundError). The mock pages it like the server: from the request's byte `cursor`, at most `limit` bytes
+  // (default 65,536).
+  shellOutput?: (input: { id: string; directory: string }) => string | undefined
+  // Records `POST /api/experimental/fs/write` (attachment uploads), which answers the requested path.
+  // Without it, writes answer 501 MockUnsupported.
+  onFileWrite?: (input: { path: string; directory: string; body: string }) => void
   configEntries?: unknown[]
-  websearchProviders?: unknown[]
   directory: string
   project: unknown
-  sessions: ({ id: string } & Record<string, unknown>)[]
+  // Replaces the `/api/project` inventory, which defaults to `[project]`. A location inside a listed project
+  // resolves to that project; any other location resolves to `project`.
+  projects?: Resolvable<unknown[]>
+  // Runs on GET /api/location for a named directory before it answers, as the server registers the project of a
+  // directory it resolves.
+  onLocationGet?: (directory: string) => void
+  sessions: MockSession[]
   pageMessages: (
     sessionId: string,
     limit: number,
@@ -24,88 +85,167 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  vcsDiff?: unknown[]
-  vcsBranches?: string[]
+  vcs?: { current: string; default: string } | ((directory: string) => { current: string; default: string })
+  branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
+  // Initializes the mock project's VCS; without a handler this mutation answers 501.
+  onVcsInit?: (input: { directory: string; provider?: string }) => void
+  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
   onRevertStage?: (input: { sessionID: string; messageID: string }) => void
+  onSession?: (sessionID: string) => void
   events?: () => OpenCodeEvent[]
   eventRetry?: number
+  // Idle event streams send a comment every 15 s like the real server. Set false only to test the client's stall watchdog.
+  keepalive?: boolean
   permissions?: unknown[] | (() => unknown[])
+  // Requests only listed by `/api/session/:id/permission`, keyed by session ID.
+  sessionPermissions?: Record<string, unknown[]>
+  // Returning true fails the next `/api/permission/request` listing with a 500.
+  permissionListFailures?: () => boolean
+  // Without it, permission replies answer 501 MockUnsupported.
+  onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
-  fileList?: (path: string) => unknown | Promise<unknown>
-  fileContent?: (path: string) => unknown | Promise<unknown>
-  findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
-  sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  // MCP servers. A list serves every workspace; a function receives the requested directory.
+  mcp?: unknown[] | ((directory: string) => unknown[])
+  // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
+  // another status (for example `{ status: "failed", error }`). Unknown servers answer 404.
+  onMcpAction?: (input: { server: string; action: "connect" | "disconnect"; directory: string }) => void | MockMcpStatus
+  // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
+  // Without it, OAuth connects answer 501 MockUnsupported.
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  // Answers status polls for an OAuth attempt; without it every attempt stays pending.
+  onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  plugins?: Resolvable<unknown[]>
+  skills?: Resolvable<unknown[]>
+  // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
+  worktrees?: Resolvable<unknown[]>
+  // Without them, creating or removing a worktree answers 501 MockUnsupported. `onWorktreeCreate` may hold the request
+  // and return the answer; by default it creates `<directory>/<name>`. A created directory joins the project's sandboxes.
+  onWorktreeCreate?: (input: Schema.Json) => void | MockAnswer | Promise<void | MockAnswer>
+  onWorktreeRemove?: (input: Worktree.RemoveInput) => void | Promise<void>
+  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
+  onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer
+  // Title of created sessions (default: the request's title, else "New session").
+  createdSessionTitle?: string
+  // Slash commands served by `/api/command`.
+  commands?: Resolvable<unknown[]>
+  // Records POST /api/session/:id/command (204). Without it, commands answer 501 MockUnsupported.
+  onCommand?: (input: { sessionID: string; body: unknown }) => void
+  fileList?: (path: string) => unknown[] | Promise<unknown[]>
+  fileContent?: (path: string) => MockFileContent | Promise<MockFileContent>
+  // Paths become directory entries.
+  findFiles?: (input: { query: string; dirs?: string; limit?: number; directory: string }) => unknown[]
+  sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
-  onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
+  onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
+  onBackground?: (input: { sessionID: string }) => void
+  // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
+  // Without it, the server has a working daemon and no terminals; `capability: false` makes the routes answer 503.
+  persistentPty?: MockPersistentPtyConfig
+  // Answers 500 InvalidDirectory when a request names a directory this server does not own.
+  strictDirectory?: boolean
+  // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
+  password?: Resolvable<string>
+  // Serves GET /auth/connect/:code: `code` redeems once for `token` (send it as the password); others answer 401.
+  pairing?: { code: string; token: string }
 }
 
+// The page relays events as opaque values; benchmarks also push their own payloads.
+type MockStream = { push: (payloads: readonly unknown[]) => void }
+
+type MockStreamState = {
+  controller?: ReadableStreamDefaultController<Uint8Array>
+  buffer: string[]
+  connections: number
+}
+
+// The `installSseTransport` command that delivers events.
+type MockSendCommand = { type: "send"; deliveries: { payload: unknown }[]; burst: boolean }
+
 type MockStreamWindow = Window & {
+  // Set to any value by benchmarks that bring their own event stream.
   __testSseTransport?: unknown
-  __mockServerStream?: { push: (payloads: unknown[]) => void }
+  // `installSseTransport` registrations.
+  __testSseTransports?: Record<string, { command: (input: MockSendCommand) => void }>
+  // Per-origin mock event streams; in-page benchmark probes push through them directly.
+  __mockServerStreams?: Record<string, MockStream>
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const server =
-    config.server ??
-    `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  const server = config.server ?? SERVER
+
+  mockedOrigins(page).add(server)
 
   await page.addInitScript(
-    ({ server, retry }) => {
+    ({ server, retry, keepalive: idle }) => {
+      // SAFETY: only this script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
       const host = window as MockStreamWindow
-      if (host.__testSseTransport || host.__mockServerStream) return
+
+      if (host.__testSseTransport || host.__testSseTransports?.[server] || host.__mockServerStreams?.[server]) return
       const originalFetch = window.fetch.bind(window)
       const encoder = new TextEncoder()
-      const state: {
-        controller?: ReadableStreamDefaultController<Uint8Array>
-        buffer: string[]
-        connections: number
-      } = { buffer: [], connections: 0 }
-      const frame = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`
-      host.__mockServerStream = {
-        push(payloads: unknown[]) {
-          const frames = payloads.map(frame)
+      const state: MockStreamState = { buffer: [], connections: 0 }
+      const frame = (data: string) => `data: ${data}\n\n`
+
+      const stream: MockStream = {
+        push(payloads) {
+          const frames = payloads.map((payload) => frame(JSON.stringify(payload)))
           const controller = state.controller
+
           if (!controller) {
             state.buffer.push(...frames)
+
             return
           }
+
           frames.forEach((item) => controller.enqueue(encoder.encode(item)))
         },
       }
+
+      host.__mockServerStreams = { ...host.__mockServerStreams, [server]: stream }
+
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
+
         if (url.origin !== server || url.pathname !== "/api/event") return originalFetch(request)
         state.connections += 1
         const id = state.connections
         let ended = false
         let own: ReadableStreamDefaultController<Uint8Array> | undefined
         let keepalive: ReturnType<typeof setInterval> | undefined
-        const stream = new ReadableStream<Uint8Array>({
+
+        const body = new ReadableStream<Uint8Array>({
           start(controller) {
             own = controller
             state.controller = controller
+
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
             controller.enqueue(
-              encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+              encoder.encode(
+                frame(JSON.stringify({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+              ),
             )
             state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
+
             // Match the real server's idle stream so long scenarios do not
             // trigger the client's 45-second stall watchdog and reload history.
-            keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
+            if (idle) keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
             request.signal.addEventListener(
               "abort",
               () => {
                 if (ended) return
                 ended = true
                 clearInterval(keepalive)
+
                 if (state.controller === controller) state.controller = undefined
                 controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
               },
@@ -116,53 +256,118 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
             if (ended) return
             ended = true
             clearInterval(keepalive)
+
             if (state.controller === own) state.controller = undefined
           },
         })
+
         return Promise.resolve(
-          new Response(stream, {
+          new Response(body, {
             status: 200,
             headers: { "cache-control": "no-cache", "content-type": "text/event-stream" },
           }),
         )
       }
+
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: config.eventRetry },
+    { server, retry: config.eventRetry, keepalive: config.keepalive !== false },
   )
 
+  // Delivers events on this server's mock stream; buffered until the app connects.
+  // An origin served by an SSE transport receives the events as one burst on its active connection.
+  const push = (payloads: readonly MockServerEvent[]) =>
+    page.evaluate<void, { server: string; payloads: readonly unknown[] }>(
+      ({ server, payloads }) => {
+        // SAFETY: only the init script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
+        const host = window as MockStreamWindow
+        const stream = host.__mockServerStreams?.[server]
+
+        if (stream) return stream.push(payloads)
+        const transport = host.__testSseTransports?.[server]
+
+        if (!transport) throw new Error(`No mock event stream for ${server}`)
+        transport.command({ type: "send", deliveries: payloads.map((payload) => ({ payload })), burst: true })
+      },
+      { server, payloads },
+    )
+
+  // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
+  const emit = (events: MockServerEvent[]) =>
+    void push(events).catch((cause: unknown) => {
+      if (page.isClosed() || retryableDelivery(cause)) return
+      throw cause
+    })
+
   if (config.events) {
-    const pump = { busy: false }
+    // Batches stay queued until the page accepts them; failures other than a missing document fail the test.
+    const pending: OpenCodeEvent[] = []
+    const pump = { busy: false, pending }
+
     const timer = setInterval(() => {
       if (pump.busy) return
-      const batch = config.events?.() ?? []
-      if (batch.length === 0) return
+      pump.pending.push(...(config.events?.() ?? []))
+
+      if (pump.pending.length === 0) return
       pump.busy = true
-      void page
-        .evaluate((payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads), batch as unknown[])
-        .catch(() => {})
+      const batch = pump.pending.slice()
+      void push(batch)
+        .then(
+          () => {
+            pump.pending.splice(0, batch.length)
+          },
+          (cause: unknown) => {
+            if (page.isClosed()) return clearInterval(timer)
+
+            if (retryableDelivery(cause)) return
+            clearInterval(timer)
+            throw cause
+          },
+        )
         .finally(() => {
           pump.busy = false
         })
     }, 50)
+
     page.on("close", () => clearInterval(timer))
   }
-  const transport = createMockServerHandler(config)
+
+  const transport = createMockServerHandler(config, emit)
   page.on("close", () => void transport.dispose())
 
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
-    const appPort = new URL(
-      process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
-    ).port
-    if (url.origin !== server && url.port !== appPort) return route.fallback()
+
+    if (!answers(page, server, url)) return route.fallback()
+
     // Production serves the UI and API from one origin; leave app assets to Vite.
     if (!url.pathname.startsWith("/api/")) return route.fallback()
+
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
 
+    const password = config.password === undefined ? undefined : resolve(config.password)
+
+    if (
+      password !== undefined &&
+      (await route.request().headerValue("authorization")) !== `Basic ${btoa(`opencode:${password}`)}`
+    ) {
+      return route.fulfill({
+        status: 401,
+        headers: corsHeaders,
+        json: Schema.encodeSync(MockUnauthorized)(new MockUnauthorized({ message: "Authentication required" })),
+      })
+    }
+
+    const directory = url.searchParams.get("directory") ?? url.searchParams.get("location[directory]")
+
+    if (config.strictDirectory && directory && !ownedDirectories(config).has(directory)) {
+      return route.fulfill({ status: 500, headers: corsHeaders, json: { name: "InvalidDirectory" } })
+    }
+
     const body = route.request().postDataBuffer()
+
     const response = await transport.handler(
       new Request(url, {
         method: route.request().method(),
@@ -170,23 +375,142 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         body: body ? Uint8Array.from(body) : undefined,
       }),
     )
-    if (response.status === 404 && url.origin !== server) return route.fallback()
+
+    const payload = Buffer.from(await response.arrayBuffer())
+
+    // A handler's 404 carries a tagged error; a route the mock does not define must not reach the app server, whose
+    // SPA fallback would answer HTML 200. Answer 501 and fail the test from the route handler.
+    if (response.status === 404 && !payload.toString().includes('"_tag"')) {
+      const request = `${route.request().method()} ${url.pathname}`
+      await route.fulfill({
+        status: 501,
+        headers: corsHeaders,
+        json: { name: "MockUnsupported", message: `The mock server has no route for ${request}` },
+      })
+      throw new Error(`Unmocked API request: ${request} (add it to e2e/utils/mock-server.ts)`)
+    }
+
     return route.fulfill({
       status: response.status,
       headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      body: Buffer.from(await response.arrayBuffer()),
+      body: payload,
+    })
+  })
+
+  if (config.pairing) {
+    const pairing = { ...config.pairing, redeemed: false }
+
+    await page.route(`${server}/auth/connect/*`, (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders })
+      const code = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-1) ?? "")
+
+      if (code !== pairing.code || pairing.redeemed) {
+        return route.fulfill({
+          status: 401,
+          headers: corsHeaders,
+          json: Schema.encodeSync(MockUnauthorized)(
+            new MockUnauthorized({ message: "Pairing link expired or already used" }),
+          ),
+        })
+      }
+
+      pairing.redeemed = true
+
+      return route.fulfill({ headers: corsHeaders, json: { token: pairing.token } })
+    })
+  }
+
+  const host = new URL(server).host
+  await page.routeWebSocket(
+    (url) => url.host === host && /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/.test(url.pathname),
+    (ws) => transport.persistentPty.connect(ws),
+  )
+
+  return { server, persistentPty: transport.persistentPty, push }
+}
+
+// Answers every Location-scoped request for `directory` as the server does once that folder is deleted.
+export function mockMissingLocation(page: Page, directory: string) {
+  return page.route(
+    (url) => url.pathname.startsWith("/api/") && url.searchParams.get("location[directory]") === directory,
+    (route) =>
+      route.fulfill({
+        status: 404,
+        // SAFETY: the server's wire body for a missing Location, which the client decodes into its own error.
+        // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+        json: { _tag: "LocationNotFoundError", location: { directory }, message: `Location not found: ${directory}` },
+        headers: { "access-control-allow-origin": "*" },
+      }),
+  )
+}
+
+// Answers the first model list as a cold Location does when its plugins outlast the server's wait.
+export function mockPluginsActivating(page: Page) {
+  const pending = { model: true }
+
+  return page.route(/\/api\/model(\?|$)/, (route) => {
+    if (!pending.model) return route.fallback()
+    pending.model = false
+
+    return route.fulfill({
+      status: 503,
+      // SAFETY: the server's wire body for a plugin wait timeout, which the client decodes into its own error.
+      json: {
+        // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+        _tag: "ServiceUnavailableError",
+        message: "Location plugins did not finish activating",
+        service: "plugin",
+      },
+      headers: { "access-control-allow-origin": "*" },
     })
   })
 }
 
-export function createMockServerHandler(config: MockServerConfig) {
-  return HttpRouter.toWebHandler(
+// Mocks several servers on one page. Each origin gets its own handler and its own SSE transport for events.
+export async function mockServers(page: Page, servers: Record<string, Omit<MockServerConfig, "server" | "events">>) {
+  return Object.fromEntries(
+    await Promise.all(
+      Object.entries(servers).map(async ([origin, config]) => {
+        const transport = await installSseTransport(page, {
+          server: origin,
+          retry: config.eventRetry,
+          keepalive: config.keepalive,
+        })
+
+        const mock = await mockOpenCodeServer(page, { ...config, server: origin })
+
+        return [origin, { transport, persistentPty: mock.persistentPty }] as const
+      }),
+    ),
+  )
+}
+
+// `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
+export function createMockServerHandler(
+  config: MockServerConfig,
+  emit: (events: MockServerEvent[]) => void = () => {},
+) {
+  const persistentPty = createPersistentPty({ config: config.persistentPty, directory: config.directory }, emit)
+
+  const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(
+        mockHandlers(config, {
+          cursors: new Map<string, string>(),
+          nextCursor: 0,
+          sessionCreates: 0,
+          persistentPty,
+          emit,
+          mcp: new Map<string, MockMcpStatus>(),
+          attempts: new Map<string, number>(),
+        }),
+      ),
       Layer.provide(HttpServer.layerServices),
     ),
     { disableLogger: true },
   )
+
+  return { ...web, persistentPty }
 }
 
 const corsHeaders = {
@@ -196,27 +520,220 @@ const corsHeaders = {
   "access-control-expose-headers": "x-next-cursor",
 }
 
-function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, string>; nextCursor: number }) {
+const APP_ORIGIN = new URL(
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
+).origin
+
+const registeredOrigins = new WeakMap<Page, Set<string>>()
+
+function mockedOrigins(page: Page) {
+  const found = registeredOrigins.get(page)
+
+  if (found) return found
+  const created = new Set<string>()
+  registeredOrigins.set(page, created)
+
+  return created
+}
+
+// A server answers its own origin. Production builds call the API on the app origin, which the default server also
+// answers unless a server was configured for the app origin explicitly.
+function answers(page: Page, server: string, url: URL) {
+  if (url.origin === server) return true
+
+  return server === SERVER && url.origin === APP_ORIGIN && !mockedOrigins(page).has(APP_ORIGIN)
+}
+
+// The document is not loaded yet or is being replaced; the pump retries on its next tick.
+function retryableDelivery(cause: unknown) {
+  const message = cause instanceof Error ? cause.message : String(cause)
+
+  return [
+    "No mock event stream",
+    "Execution context was destroyed",
+    "Target page, context or browser has been closed",
+  ].some((text) => message.includes(text))
+}
+
+// Every directory this server's configuration names: its own, project and inventory worktrees, and session locations.
+function ownedDirectories(config: MockServerConfig) {
+  const projects = [config.project, ...(config.projects ? resolve(config.projects) : [])].flatMap((item) =>
+    Option.toArray(decodeProject(item)),
+  )
+
+  return new Set(
+    [
+      config.directory,
+      ...projects.flatMap((item) => [item.worktree, item.canonical, ...(item.sandboxes ?? [])]),
+      ...(config.worktrees ? resolve(config.worktrees) : []).filter(Predicate.isObject).map((item) => item.directory),
+      ...config.sessions.map((session) =>
+        Predicate.isObject(session.location) ? session.location.directory : session.directory,
+      ),
+    ].filter(Predicate.isString),
+  )
+}
+
+function addSandbox(config: MockServerConfig, directory: string) {
+  // SAFETY: a scenario that creates worktrees seeds its project as an object whose `sandboxes` lists directories.
+  const project = config.project as { sandboxes?: string[] }
+
+  if (project.sandboxes?.includes(directory)) return
+  project.sandboxes = [...(project.sandboxes ?? []), directory]
+}
+
+// The requested `location[directory]`; absent or empty (a server-level read) means the server directory.
+function requestDirectory(config: MockServerConfig, request: { url: string }) {
+  return new URL(request.url, "http://localhost").searchParams.get("location[directory]") || config.directory
+}
+
+function resolve<T>(value: Resolvable<T>) {
+  // SAFETY: no resolvable scenario value is itself a function, so a function is the value's resolver.
+  return Predicate.isFunction(value) ? (value as () => T)() : value
+}
+
+function mockHandlers(
+  config: MockServerConfig,
+  state: {
+    cursors: Map<string, string>
+    nextCursor: number
+    sessionCreates: number
+    persistentPty: ReturnType<typeof createPersistentPty>
+    emit: (events: MockServerEvent[]) => void
+    // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
+    mcp: Map<string, MockMcpStatus>
+    attempts: Map<string, number>
+  },
+) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
   const configEntries = config.configEntries ?? []
+
+  // Without a persistent PTY config the mock is a server with a working daemon and no terminals, since the desktop
+  // lists a session's terminals whenever its side panel renders.
+  const persistentPtyEnabled = Effect.suspend(() =>
+    state.persistentPty.capability !== false
+      ? Effect.void
+      : Effect.fail(new MockServiceUnavailable({ message: "opencode-pty is not available", service: "opencode-pty" })),
+  )
+
+  const findPersistentPty = (id: string) =>
+    persistentPtyEnabled.pipe(
+      Effect.andThen(() =>
+        Effect.suspend(() => {
+          const found = state.persistentPty.find(id)
+
+          return found
+            ? Effect.succeed(found)
+            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY session not found: ${id}` }))
+        }),
+      ),
+    )
+
+  const mcpServers = (directory: string) =>
+    (Predicate.isFunction(config.mcp) ? config.mcp(directory) : (config.mcp ?? [])).map((server) => {
+      if (!Predicate.isObject(server)) return server
+      const status = state.mcp.get(`${directory}\n${String(server.name)}`)
+
+      return status ? { ...server, status } : server
+    })
+
+  const mcpAction = (server: string, action: "connect" | "disconnect", request: { url: string }) =>
+    Effect.suspend(() => {
+      const directory = requestDirectory(config, request)
+
+      if (!mcpServers(directory).some((item) => Predicate.isObject(item) && item.name === server))
+        return Effect.fail(new MockNotFound({ message: `MCP server ${server} not found` }))
+
+      const status = config.onMcpAction?.({ server, action, directory }) ?? {
+        status: action === "connect" ? "connected" : "disabled",
+      }
+
+      state.mcp.set(`${directory}\n${server}`, status)
+
+      return noContent
+    })
+
+  const unsupported = (operation: string, handler: string) =>
+    Effect.fail(
+      new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
+    )
+
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
         const events = config.events?.()
         const retry = config.eventRetry === undefined ? "" : `retry: ${config.eventRetry}\n\n`
+
         const body = [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events ?? [])]
           .map((event) => `data: ${JSON.stringify(event)}\n\n`)
           .join("")
+
         return Effect.succeed(HttpServerResponse.text(retry + body, { contentType: "text/event-stream" }))
       })
       .handleRaw("fsRead", (ctx) =>
         Effect.gen(function* () {
           const path = decodeURIComponent(new URL(ctx.request.url, "http://localhost").pathname.slice(13))
           const value = yield* Effect.promise(() => Promise.resolve(config.fileContent?.(path)))
-          const content =
-            value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
-          return HttpServerResponse.uint8Array(new TextEncoder().encode(content))
+
+          if (Predicate.isString(value)) return HttpServerResponse.uint8Array(new TextEncoder().encode(value))
+
+          // Like the server, stream base64 content as the bytes it encodes.
+          return HttpServerResponse.uint8Array(
+            value?.encoding === "base64"
+              ? Buffer.from(value.content, "base64")
+              : new TextEncoder().encode(value?.content ?? ""),
+          )
+        }),
+      )
+      // Raw, so a hook's answer can replace the status and body.
+      .handleRaw("worktreeCreate", (ctx) =>
+        Effect.gen(function* () {
+          const create = config.onWorktreeCreate
+
+          if (!create) return yield* unsupported("create worktrees", "onWorktreeCreate")
+
+          const input = yield* Effect.orDie(
+            ctx.request.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json))),
+          )
+
+          const payload = Option.getOrUndefined(decodeWorktreeRequest(input))
+
+          const answer = (yield* Effect.promise(async () => create(input))) || {
+            status: 200,
+            body: { directory: `${payload?.directory ?? config.directory}/${payload?.name ?? "copy"}` },
+          }
+
+          const created = answer.status === 200 ? decodeWorktreeAnswer(answer.body) : Option.none()
+
+          if (Option.isSome(created)) addSandbox(config, created.value.directory)
+
+          return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+        }),
+      )
+      .handleRaw("sessionCreate", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const payload = Option.getOrElse(decodeJsonObject(input), () => ({}))
+          const fields = Option.getOrUndefined(decodeSessionCreate(payload))
+          state.sessionCreates += 1
+          const answer = config.onSessionCreate?.(payload, state.sessionCreates)
+
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+
+          const created = currentSession(
+            {
+              ...payload,
+              id: fields?.id ?? "ses_mock_created",
+              projectID: projectSeed(config)?.id,
+              title: config.createdSessionTitle ?? fields?.title ?? "New session",
+              parentID: fields?.parentID,
+            },
+            config.directory,
+          )
+
+          config.sessions.push(created)
+
+          return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
       .handleAll({
@@ -224,25 +741,19 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           Effect.succeed({
             version: "2.0.0",
             pid: 1,
+            hostname: config.hostname,
             urls: config.server ? [config.server] : [],
             paths: { tmp: "/tmp/opencode" },
+            capabilities:
+              state.persistentPty.capability === undefined
+                ? undefined
+                : { persistentPty: state.persistentPty.capability },
           }),
         config: () => Effect.succeed(configEntries),
-        reference: () =>
+        reference: () => Effect.succeed({ location: location(config), data: [] }),
+        agent: (ctx) =>
           Effect.succeed({
-            location: {
-              directory: config.directory,
-              project: {
-                id: (config.project as { id?: string }).id,
-                directory: config.directory,
-                canonical: config.directory,
-              },
-            },
-            data: [],
-          }),
-        agent: () =>
-          Effect.succeed({
-            location: location(config),
+            location: location(config, requestDirectory(config, ctx.request)),
             data: [
               {
                 id: "build",
@@ -254,83 +765,209 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               },
             ],
           }),
-        provider: () => Effect.succeed({ location: location(config), data: currentProviders(providerConfig(config)) }),
-        model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
+        provider: () =>
+          Effect.succeed({ location: location(config), data: currentProviders(resolve(config.provider)) }),
+        model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),
         modelDefault: () =>
-          Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+          Effect.succeed({ location: location(config), data: currentDefaultModel(resolve(config.provider)) }),
+        integrationList: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.integrations ?? []) })),
         integrationGet: (ctx) =>
-          Effect.succeed({
+          Effect.sync(() => ({
             location: location(config),
-            data: {
+            data: resolve(config.integrations ?? [])
+              .filter(Predicate.isObject)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
-              methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],
+              methods: [{ type: "key", label: "API key" }],
               connections: [],
             },
-          }),
+          })),
         integrationConnect: (ctx) =>
           Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
             Effect.andThen(noContent),
           ),
-        credentialRemove: () => noContent,
-        command: () => Effect.succeed({ location: location(config), data: [] }),
-        skill: () => Effect.succeed({ location: location(config), data: [] }),
-        plugin: () => Effect.succeed({ location: location(config), data: [] }),
-        mcp: () => Effect.succeed({ location: location(config), data: [] }),
-        mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),
-        projectList: () => {
-          const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
-          return Effect.succeed([{ ...project, canonical: project.canonical ?? project.worktree ?? config.directory }])
+        integrationOAuthConnect: (ctx) => {
+          const start = config.onIntegrationOAuth
+
+          if (!start) return unsupported("start OAuth connections", "onIntegrationOAuth")
+
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const created = Date.now()
+            const attemptID = `con_mock_${state.attempts.size + 1}`
+            state.attempts.set(attemptID, created)
+            const started = start({ integrationID: ctx.params.integrationID, directory, body: ctx.payload })
+
+            return {
+              location: location(config, directory),
+              data: {
+                attemptID,
+                url: started.url,
+                instructions: "",
+                mode: "auto",
+                time: { created, expires: created + 600_000 },
+              },
+            }
+          })
         },
-        projectUpdate: (ctx) => {
-          const project = config.project as { canonical?: string }
-          return Effect.succeed({
-            ...project,
+        integrationOAuthStatus: (ctx) =>
+          Effect.suspend(() => {
+            const created = state.attempts.get(ctx.params.attemptID)
+
+            if (created === undefined) return Effect.fail(new MockNotFound({ message: "OAuth attempt not found" }))
+
+            return Effect.succeed({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: {
+                status: config.onIntegrationOAuthStatus?.(ctx.params.attemptID) ?? "pending",
+                time: { created, expires: created + 600_000 },
+              },
+            })
+          }),
+        credentialActivate: (ctx) =>
+          Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
+        credentialUpdate: (ctx) =>
+          Effect.sync(() => config.onCredentialUpdate?.(ctx.params.credentialID, ctx.payload)).pipe(
+            Effect.andThen(noContent),
+          ),
+        credentialRemove: () => noContent,
+        command: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.commands ?? []),
+          })),
+        skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
+        plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
+        mcp: (ctx) =>
+          Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+
+            return { location: location(config, directory), data: mcpServers(directory) }
+          }),
+        mcpConnect: (ctx) => mcpAction(ctx.params.server, "connect", ctx.request),
+        mcpDisconnect: (ctx) => mcpAction(ctx.params.server, "disconnect", ctx.request),
+        mcpResource: (ctx) =>
+          Effect.succeed({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: { resources: [], templates: [] },
+          }),
+        projectList: () =>
+          Effect.sync(() => {
+            if (config.projects) return resolve(config.projects)
+            const seed = projectSeed(config)
+
+            return [{ ...projectFields(config), canonical: seed?.canonical ?? seed?.worktree ?? config.directory }]
+          }),
+        projectUpdate: (ctx) =>
+          Effect.succeed({
+            ...projectFields(config),
             ...ctx.payload,
             id: ctx.params.projectID,
-            canonical: project.canonical ?? config.directory,
-          })
-        },
+            canonical: projectSeed(config)?.canonical ?? config.directory,
+          }),
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
-        websearchProviders: () => Effect.succeed({ location: location(config), data: config.websearchProviders ?? [] }),
+        websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
+        // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
+        usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         worktreeList: () =>
-          Effect.succeed([
-            { directory: config.directory },
-            ...((config.project as { sandboxes?: string[] }).sandboxes ?? []).map((directory) => ({
-              directory,
-              strategy: "git",
-            })),
-          ]),
-        worktreeCreate: (ctx) => {
-          const input = ctx.payload
-          return Effect.succeed({
-            directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
-              typeof input.name === "string" ? input.name : "copy"
-            }`,
-          })
+          Effect.sync(() => {
+            if (config.worktrees) return resolve(config.worktrees)
+
+            return [
+              { directory: config.directory },
+              ...(projectSeed(config)?.sandboxes ?? []).map((directory) => ({
+                directory,
+                strategy: "git",
+              })),
+            ]
+          }),
+        worktreeRemove: (ctx) => {
+          const remove = config.onWorktreeRemove
+
+          if (!remove) return unsupported("remove worktrees", "onWorktreeRemove")
+
+          return Effect.promise(async () => remove(ctx.payload)).pipe(Effect.andThen(noContent))
         },
-        worktreeRemove: () => noContent,
+        // Discovery against a static inventory changes nothing, and the app refreshes whenever worktree settings open.
         worktreeRefresh: () => noContent,
-        location: () => Effect.succeed(location(config)),
+        location: (ctx) =>
+          Effect.sync(() => {
+            const requested = new URL(ctx.request.url, "http://localhost").searchParams.get("location[directory]")
+
+            if (requested) config.onLocationGet?.(requested)
+
+            return location(config, requested || config.directory)
+          }),
         permissionRequests: () =>
+          Effect.suspend(() =>
+            config.permissionListFailures?.()
+              ? Effect.fail(new MockInternal({ message: "Permission list failed" }))
+              : Effect.succeed({
+                  location: location(config),
+                  data: currentPermissions(resolve(config.permissions ?? [])),
+                }),
+          ),
+        formRequests: () => Effect.succeed({ location: location(config), data: resolve(config.forms ?? []) }),
+        vcs: (ctx) =>
           Effect.succeed({
-            location: location(config),
-            data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])).map(
-              currentPermission,
-            ),
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: {
+              branch: Predicate.isFunction(config.vcs)
+                ? config.vcs(requestDirectory(config, ctx.request))
+                : (config.vcs ?? { current: "main", default: "main" }),
+            },
           }),
-        formRequests: () =>
-          Effect.succeed({
-            location: location(config),
-            data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
-          }),
-        vcs: () =>
-          Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
+        vcsInit: (ctx) => {
+          if (!config.onVcsInit) return unsupported("initialize VCS", "onVcsInit")
+
+          return Effect.sync(() => {
+            const url = new URL(ctx.request.url, "http://localhost")
+            const provider = url.searchParams.get("provider") ?? undefined
+            config.onVcsInit?.({ directory: requestDirectory(config, ctx.request), provider })
+            // SAFETY: a scenario that initializes VCS seeds its project as an object with an ID.
+            const project = config.project as { id: string; vcs?: string }
+            project.vcs = provider ?? "git"
+            state.emit([
+              {
+                id: "evt_vcs_initialized",
+                type: "worktree.updated",
+                created: Date.now(),
+                data: { projectID: project.id },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent))
+        },
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
-        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
-        vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
+        vcsBranches: (ctx) => {
+          const query = new URL(ctx.request.url, "http://localhost").searchParams
+          const search = query.get("search") ?? ""
+          const limit = Number(query.get("limit") ?? 50)
+
+          return Effect.promise(() =>
+            Promise.resolve(
+              config.branches?.({
+                directory: requestDirectory(config, ctx.request),
+                search,
+                limit,
+              }) ?? ["main"],
+            ),
+          ).pipe(
+            Effect.map((items) => ({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: items.filter((branch) => branch.toLowerCase().includes(search.toLowerCase())).slice(0, limit),
+            })),
+          )
+        },
+        vcsDiff: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config),
+            data: Predicate.isFunction(config.vcsDiff)
+              ? config.vcsDiff({ mode: ctx.query.mode })
+              : (config.vcsDiff ?? []),
+          })),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
             Effect.map((data) => ({ location: location(config), data })),
@@ -338,18 +975,23 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         fsFind: (ctx) =>
           Effect.promise(() =>
             Promise.resolve(
-              config.findFiles?.({ query: ctx.query.query ?? "", dirs: ctx.query.type, limit: ctx.query.limit }),
+              config.findFiles?.({
+                query: ctx.query.query ?? "",
+                dirs: ctx.query.type,
+                limit: ctx.query.limit,
+                directory: requestDirectory(config, ctx.request),
+              }),
             ),
           ).pipe(
             Effect.map((entries) => ({
-              location: location(config),
+              location: location(config, requestDirectory(config, ctx.request)),
               data: Array.isArray(entries)
                 ? entries.map((entry) =>
-                    typeof entry === "string"
+                    Predicate.isString(entry)
                       ? {
                           name: entry.split(/[\\/]/).at(-1) ?? entry,
                           path: entry,
-                          absolute: `${config.directory}/${entry}`,
+                          absolute: `${requestDirectory(config, ctx.request)}/${entry}`,
                           type: "directory",
                           ignored: false,
                         }
@@ -358,22 +1000,117 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
                 : entries,
             })),
           ),
-        shell: () => Effect.succeed({ location: location(config), data: [] }),
-        ptyConnectToken: () =>
-          Effect.succeed({ location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+        fsWatch: () => Effect.void,
+        fsUnwatch: () => Effect.void,
+        fsWrite: (ctx) => {
+          const write = config.onFileWrite
+
+          if (!write) return unsupported("write files", "onFileWrite")
+
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const path = new URL(ctx.request.url, "http://localhost").searchParams.get("path") ?? ""
+            write({ path, directory, body: new TextDecoder().decode(ctx.payload) })
+
+            return { location: location(config, directory), data: { path } }
+          })
+        },
+        shell: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.shellCommands ?? []),
+          })),
+        shellOutput: (ctx) =>
+          Effect.suspend(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const output = config.shellOutput?.({ id: ctx.params.id, directory })
+
+            if (output === undefined)
+              return Effect.fail(
+                new MockShellNotFound({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+              )
+            const bytes = new TextEncoder().encode(output)
+            const query = new URL(ctx.request.url, "http://localhost").searchParams
+            const cursor = Math.min(Number(query.get("cursor") ?? 0), bytes.length)
+            // The server answers at most one page (`Shell.output` defaults `limit` to 65,536 bytes).
+            const end = Math.min(bytes.length, cursor + Number(query.get("limit") ?? 65_536))
+
+            return Effect.succeed({
+              location: location(config, directory),
+              data: {
+                output: new TextDecoder().decode(bytes.subarray(cursor, end)),
+                cursor: end,
+                size: bytes.length,
+                truncated: false,
+              },
+            })
+          }),
+        // Like the server, which also answers 204 for a shell that already ended.
+        shellRemove: () => noContent,
+        persistentPtyList: (ctx) =>
+          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+        persistentPtyCreate: (ctx) =>
+          persistentPtyEnabled.pipe(
+            Effect.map(() => {
+              const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+              const directory = session ? currentSession(session, config.directory).location.directory : undefined
+
+              return {
+                data: state.persistentPty.create(ctx.params.sessionID, {
+                  ...ctx.payload,
+                  cwd: ctx.payload.cwd ?? directory,
+                }),
+              }
+            }),
+          ),
+        persistentPtyGet: (ctx) => findPersistentPty(ctx.params.ptyID).pipe(Effect.map((data) => ({ data }))),
+        persistentPtyUpdate: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.flatMap((found) =>
+              ctx.payload.title !== undefined && !state.persistentPty.renameSupported
+                ? Effect.fail(
+                    new MockPtyFeatureUnsupported({
+                      feature: "rename",
+                      message: "Terminal renaming will be available after OpenCode's terminal service restarts",
+                    }),
+                  )
+                : Effect.sync(() => ({ data: state.persistentPty.update(found.id, ctx.payload) })),
+            ),
+          ),
+        persistentPtyRemove: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => {
+              state.persistentPty.remove(found.id)
+
+              return HttpApiSchema.NoContent.make()
+            }),
+          ),
+        persistentPtySnapshot: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({ data: state.persistentPty.snapshot(found.id) })),
+          ),
+        persistentPtyConnectToken: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({
+              data: {
+                ticket: state.persistentPty.issue(found.id, Object.fromEntries(Object.entries(ctx.request.headers))),
+                expires_in: 60,
+              },
+            })),
+          ),
         sessionList: (ctx) => {
           const sessions = config.sessions
-            .filter((session) => {
-              const location = session.location as { directory?: string } | undefined
-              return (
+            .filter(
+              (session) =>
                 !ctx.query.directory ||
-                location?.directory === ctx.query.directory ||
-                session.directory === ctx.query.directory
-              )
-            })
+                (Predicate.isObject(session.location) && session.location.directory === ctx.query.directory) ||
+                session.directory === ctx.query.directory,
+            )
             .filter((session) => {
               if (ctx.query.parentID === undefined) return true
+
               if (ctx.query.parentID === "null") return session.parentID === undefined
+
               return session.parentID === ctx.query.parentID
             })
             .filter((session) =>
@@ -383,77 +1120,107 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
                     .toLowerCase()
                     .includes(ctx.query.search.toLowerCase()),
             )
+
           const ordered = ctx.query.order === "asc" ? sessions : sessions.toReversed()
           const offset = Number(ctx.query.cursor ?? 0)
           const limit = ctx.query.limit ?? 50
           const data = ordered.slice(offset, offset + limit)
+
           return Effect.succeed({
             data: data.map((session) => currentSession(session, config.directory)),
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
         },
-        sessionCreate: (ctx) => {
-          const payload = record(ctx.payload) ? ctx.payload : {}
-          const created = currentSession(
-            {
-              id: "ses_mock_created",
-              projectID: (config.project as { id?: string }).id,
-              title: typeof payload.title === "string" ? payload.title : "New session",
-              parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
-            },
-            config.directory,
-          )
-          return Effect.sync(() => config.sessions.push(created)).pipe(Effect.as({ data: created }))
-        },
+        // The goal plugin's pill reads each routed session's goal; no scenario sets one.
+        rpcCall: (ctx) =>
+          ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get"
+            ? Effect.succeed({ output: null })
+            : Effect.fail(
+                new MockUnsupported({
+                  message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
+                }),
+              ),
         sessionActive: () => {
-          const statuses = (
-            typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {})
-          ) as Record<string, { type?: string }>
+          const status = resolve(config.sessionStatus ?? {})
+
           return Effect.succeed({
             data: Object.fromEntries(
-              Object.entries(statuses).flatMap(([id, status]) =>
-                status.type === "idle" ? [] : [[id, { type: "running" }]],
-              ),
+              [
+                ...Object.entries(status).flatMap(([id, value]) => (value.type === "idle" ? [] : [id])),
+                ...Object.entries(config.sessionPermissions ?? {}).flatMap(([id, list]) =>
+                  currentPermissions(list).length > 0 && status[id]?.type !== "idle" ? [id] : [],
+                ),
+                ...resolve(config.forms ?? []).flatMap((form) =>
+                  Predicate.isObject(form) &&
+                  Predicate.isString(form.sessionID) &&
+                  status[form.sessionID]?.type !== "idle"
+                    ? [form.sessionID]
+                    : [],
+                ),
+              ].map((id) => [id, { type: "running" as const }]),
             ),
           })
         },
-        sessionGet: (ctx) => {
-          const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
-          return session
-            ? Effect.succeed({ data: currentSession(session, config.directory) })
-            : Effect.fail(new MockNotFound({ message: "Session not found" }))
-        },
+        sessionGet: (ctx) =>
+          Effect.suspend(() => {
+            config.onSession?.(ctx.params.sessionID)
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+
+            return session
+              ? Effect.succeed({ data: currentSession(session, config.directory) })
+              : Effect.fail(new MockNotFound({ message: "Session not found" }))
+          }),
         sessionRemove: () => noContent,
         sessionShell: () => noContent,
-        sessionForm: (ctx) => {
-          const forms = typeof config.forms === "function" ? config.forms() : (config.forms ?? [])
-          return Effect.succeed({
-            data: forms.filter((form) => (form as { sessionID?: string }).sessionID === ctx.params.sessionID),
-          })
-        },
+        sessionView: () => noContent,
+        sessionForm: (ctx) =>
+          Effect.succeed({
+            data: resolve(config.forms ?? []).filter(
+              (form) => Predicate.isObject(form) && form.sessionID === ctx.params.sessionID,
+            ),
+          }),
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
-        sessionBackground: () => noContent,
-        sessionInbox: () =>
-          Effect.sync(() => ({ data: typeof config.inbox === "function" ? config.inbox() : (config.inbox ?? []) })),
+        sessionBackground: (ctx) =>
+          Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),
+        sessionInbox: (ctx) =>
+          Effect.sync(() => ({
+            data: resolve(config.inbox ?? []).filter(
+              (item) => Predicate.isObject(item) && item.sessionID === ctx.params.sessionID,
+            ),
+          })),
         sessionPrompt: (ctx) =>
           Effect.sync(() => {
-            const body = record(ctx.payload) ? ctx.payload : {}
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
             config.onPrompt?.({ sessionID: ctx.params.sessionID, body })
+            const prompt = Option.getOrUndefined(decodePromptRequest(body))
+
             return {
               data: {
-                id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
+                id: prompt?.id ?? `inb_mock_${Date.now()}`,
                 sessionID: ctx.params.sessionID,
                 time: { created: Date.now() },
                 type: "user",
-                payload: {
-                  text: typeof body.text === "string" ? body.text : "",
-                  ...(body.files === undefined ? {} : { files: body.files }),
-                  ...(body.agents === undefined ? {} : { agents: body.agents }),
-                  ...(body.skills === undefined ? {} : { skills: body.skills }),
-                  ...(body.metadata === undefined ? {} : { metadata: body.metadata }),
-                },
-                delivery: body.delivery === "queue" ? "queue" : "steer",
+                // Keys the request omits stay omitted.
+                payload: { text: "", ...Option.getOrUndefined(decodePromptPayload(body)) },
+                delivery: prompt?.delivery ?? "steer",
+              },
+            }
+          }),
+        // Like the server, a compaction is admitted as a steered inbox item under the proposed ID.
+        sessionCompact: (ctx) =>
+          Effect.sync(() => {
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), (): Schema.JsonObject => ({}))
+            config.onCompact?.({ sessionID: ctx.params.sessionID, body })
+
+            return {
+              data: {
+                id: Predicate.isString(body.id) ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                time: { created: Date.now() },
+                type: "compaction",
+                payload: {},
+                delivery: "steer",
               },
             }
           }),
@@ -477,24 +1244,72 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,
-        sessionPermission: (ctx) => {
-          const permissions =
-            typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
-          return Effect.succeed({
-            data: permissions
-              .map(currentPermission)
-              .filter((permission) => permission.sessionID === ctx.params.sessionID),
-          })
+        // Only the session's own list; location requests (`permissions`) come from `/api/permission/request`.
+        sessionPermission: (ctx) =>
+          Effect.sync(() => ({
+            data: currentPermissions(config.sessionPermissions?.[ctx.params.sessionID] ?? []).filter(
+              (permission) => permission.sessionID === ctx.params.sessionID,
+            ),
+          })),
+        // Like the server, a reply publishes `permission.replied`, and later reads no longer list the request.
+        sessionPermissionReply: (ctx) => {
+          const reply = config.onPermissionReply
+
+          if (!reply) return unsupported("record permission replies", "onPermissionReply")
+
+          return Effect.sync(() => {
+            const sessionID = ctx.params.sessionID
+            const permissionID = ctx.params.permissionID
+            reply({ sessionID, permissionID, body: ctx.payload })
+
+            const pending = [config.sessionPermissions?.[sessionID] ?? [], resolve(config.permissions ?? [])]
+
+            pending.forEach((list) => {
+              const index = list.findIndex((item) => Predicate.isObject(item) && item.id === permissionID)
+
+              if (index >= 0) list.splice(index, 1)
+            })
+            state.emit([
+              {
+                id: `evt_permission_replied_${permissionID}`,
+                created: Date.now(),
+                type: "permission.replied",
+                location: { directory: requestDirectory(config, ctx.request) },
+                data: {
+                  sessionID,
+                  requestID: permissionID,
+                  reply: Option.getOrUndefined(decodePermissionReply(ctx.payload))?.decision ?? "once",
+                },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent))
         },
-        sessionPermissionReply: () => noContent,
-        sessionRename: () => noContent,
-        sessionInterrupt: () => noContent,
+        sessionRename: (ctx) =>
+          Effect.sync(() => {
+            const title = Option.getOrUndefined(decodeSessionRename(ctx.payload))?.title
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+
+            if (session && title !== undefined) session.title = title
+          }).pipe(Effect.andThen(noContent)),
+        sessionCommand: (ctx) => {
+          const recordCommand = config.onCommand
+
+          if (!recordCommand) return unsupported("run session commands", "onCommand")
+
+          return Effect.sync(() => recordCommand({ sessionID: ctx.params.sessionID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          )
+        },
+        // Like the server for an idle session: nothing was running to interrupt.
+        sessionInterrupt: () => Effect.succeed({ interrupted: false }),
+        // The mock runs no agent loop, so every session is already idle.
+        sessionWait: () => noContent,
         sessionRevertStage: (ctx) => {
-          const payload = record(ctx.payload) ? ctx.payload : {}
-          const messageID = payload.messageID
-          if (typeof messageID !== "string") {
-            return Effect.fail(new MockBadRequest({ message: "Invalid revert request" }))
-          }
+          const request = decodeRevertStage(ctx.payload)
+
+          if (Option.isNone(request)) return Effect.fail(new MockBadRequest({ message: "Invalid revert request" }))
+          const messageID = request.value.messageID
+
           return Effect.sync(() => config.onRevertStage?.({ sessionID: ctx.params.sessionID, messageID })).pipe(
             Effect.as({ data: { messageID } }),
           )
@@ -505,28 +1320,37 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           Effect.gen(function* () {
             config.onMessage?.({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })
             yield* delay
+
             const message =
               config.message?.(ctx.params.sessionID, ctx.params.messageID) ??
               config
                 .pageMessages(ctx.params.sessionID, Number.MAX_SAFE_INTEGER)
                 .items.find((item) => item.id === ctx.params.messageID)
+
             if (!message) return yield* new MockNotFound({ message: "Message not found" })
+
             return { data: message }
           }),
         messageList: (ctx) => {
           const token = ctx.query.cursor
           const before = token ? state.cursors.get(token) : undefined
+
           if (token && !before) return Effect.fail(new MockBadRequest({ message: "Invalid cursor" }))
+
           return Effect.gen(function* () {
             config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "start" })
+
             if (config.beforeMessagesResponse) {
               yield* Effect.promise(() => config.beforeMessagesResponse!({ sessionID: ctx.params.sessionID, before }))
             }
+
             yield* delay
             const pageData = config.pageMessages(ctx.params.sessionID, ctx.query.limit ?? 50, before)
             config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "end" })
             const cursor = pageData.cursor ? `cursor_${++state.nextCursor}` : undefined
+
             if (cursor) state.cursors.set(cursor, pageData.cursor!)
+
             return {
               data: ctx.query.order === "asc" ? pageData.items : pageData.items.toReversed(),
               cursor: { next: cursor },
@@ -537,156 +1361,218 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
   )
 }
 
-function location(config: MockServerConfig) {
+// The requested workspace (directory) inside its listed project, else inside the configured project.
+function location(config: MockServerConfig, directory = config.directory) {
+  const listed = (config.projects ? resolve(config.projects) : [])
+    .flatMap((item) => Option.toArray(decodeProject(item)))
+    .find((item) =>
+      [item.canonical ?? item.worktree, ...(item.sandboxes ?? [])].some(
+        (root) => root !== undefined && (directory === root || directory.startsWith(`${root}/`)),
+      ),
+    )
+
+  const root = listed ? (listed.canonical ?? listed.worktree) : undefined
+
+  if (listed && root) return { directory, project: { id: listed.id, directory: root, canonical: root } }
+
   return {
-    directory: config.directory,
-    project: { id: (config.project as { id?: string }).id, directory: config.directory, canonical: config.directory },
+    directory,
+    project: { id: projectSeed(config)?.id, directory: config.directory, canonical: config.directory },
   }
 }
 
-function providerConfig(config: MockServerConfig) {
-  return typeof config.provider === "function" ? config.provider() : config.provider
+// The project fields the mock reads.
+function projectSeed(config: MockServerConfig) {
+  return Option.getOrUndefined(decodeProject(config.project))
 }
 
-function currentProviders(value: unknown) {
-  if (!record(value) || !Array.isArray(value.all)) return Array.isArray(value) ? value : []
-  const connected = new Set(
-    Array.isArray(value.connected) ? value.connected.filter((id) => typeof id === "string") : [],
-  )
-  return value.all.filter(record).flatMap((provider) =>
-    typeof provider.id === "string" && typeof provider.name === "string"
-      ? [
-          {
-            id: provider.id,
-            name: provider.name,
-            package: provider.id,
-            activation: connected.has(provider.id) ? "enabled" : "auto",
-          },
-        ]
-      : [],
+// Every field of the configured project, for answers that echo it.
+function projectFields(config: MockServerConfig) {
+  return Predicate.isObject(config.project) ? config.project : undefined
+}
+
+function currentProviders(catalog: MockProviderCatalog) {
+  const connected = new Set(catalog.connected ?? [])
+
+  return (catalog.all ?? [])
+    .flatMap((item) => Option.toArray(decodeProvider(item)))
+    .map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      canonical: provider.canonical,
+      integrationID: provider.integrationID,
+      package: provider.id,
+      activation: connected.has(provider.id) ? "enabled" : "auto",
+    }))
+}
+
+function currentModels(catalog: MockProviderCatalog) {
+  return (catalog.all ?? [])
+    .flatMap((item) => Option.toArray(decodeModelProvider(item)))
+    .flatMap((provider) =>
+      Object.values(provider.models)
+        .flatMap((item) => Option.toArray(decodeModel(item)))
+        .map((model) => ({
+          id: model.id,
+          modelID: model.api?.id ?? model.id,
+          providerID: provider.id,
+          name: model.name,
+          capabilities: model.capabilities ?? { tools: true, input: ["text"], output: ["text"] },
+          variants: Object.entries(model.variants ?? {}).map(([id, settings]) =>
+            Predicate.isObject(settings) ? { id, settings } : { id },
+          ),
+          time: model.time ?? { released: Date.now() },
+          cost: [{ input: model.cost?.input ?? 0, output: model.cost?.output ?? 0, cache: { read: 0, write: 0 } }],
+          status: "active",
+          enabled: true,
+          limit: { context: model.limit?.context ?? 200_000, output: model.limit?.output ?? 32_000 },
+        })),
+    )
+}
+
+function currentDefaultModel(catalog: MockProviderCatalog) {
+  const selected = catalog.default
+
+  if (!selected) return null
+
+  return (
+    currentModels(catalog).find((model) => model.providerID === selected.providerID && model.id === selected.modelID) ??
+    null
   )
 }
 
-function currentModels(value: unknown) {
-  if (!record(value) || !Array.isArray(value.all)) return []
-  return value.all.filter(record).flatMap((provider) => {
-    if (typeof provider.id !== "string" || !record(provider.models)) return []
-    return Object.values(provider.models)
-      .filter(record)
-      .flatMap((model) => {
-        if (typeof model.id !== "string" || typeof model.name !== "string") return []
-        const limit = record(model.limit) ? model.limit : {}
-        const cost = record(model.cost) ? model.cost : {}
-        return [
-          {
-            id: model.id,
-            modelID: record(model.api) && typeof model.api.id === "string" ? model.api.id : model.id,
-            providerID: provider.id,
-            name: model.name,
-            capabilities: { tools: true, input: ["text"], output: ["text"] },
-            variants: record(model.variants)
-              ? Object.entries(model.variants).map(([id, settings]) => ({
-                  id,
-                  ...(jsonRecord(settings) ? { settings: jsonRecord(settings) } : {}),
-                }))
-              : [],
-            time: { released: Date.now() },
-            cost: [
-              {
-                input: typeof cost.input === "number" ? cost.input : 0,
-                output: typeof cost.output === "number" ? cost.output : 0,
-                cache: { read: 0, write: 0 },
-              },
-            ],
-            status: "active",
-            enabled: true,
-            limit: {
-              context: typeof limit.context === "number" ? limit.context : 200_000,
-              output: typeof limit.output === "number" ? limit.output : 32_000,
-            },
-          },
-        ]
-      })
+// Legacy requests (`permission`, `patterns`, `always`, `tool`) become current ones; current ones (`action`) pass as is.
+function currentPermissions(values: readonly unknown[]) {
+  return values.flatMap((permission) => {
+    if (!Predicate.isObject(permission)) return []
+
+    if (permission.action) return [permission]
+    const tool = Predicate.isObject(permission.tool) ? permission.tool : undefined
+
+    return [
+      {
+        id: permission.id,
+        sessionID: permission.sessionID,
+        action: permission.permission,
+        resources: permission.patterns ?? [],
+        save: permission.always,
+        metadata: permission.metadata,
+        source:
+          tool?.messageID && (tool.id || tool.callID)
+            ? { type: "tool", messageID: tool.messageID, id: tool.id ?? tool.callID }
+            : undefined,
+      },
+    ]
   })
 }
 
-function currentDefaultModel(value: unknown) {
-  if (!record(value) || !record(value.default)) return null
-  const selected = value.default
-  const models = currentModels(value)
-  return models.find((model) => model.providerID === selected.providerID && model.id === selected.modelID) ?? null
-}
+export function currentSession(session: MockSession, fallbackDirectory?: string) {
+  const seed = decodeSession(session)
 
-function currentPermission(value: unknown) {
-  const permission = value as Record<string, unknown>
-  if (permission.action) return permission
-  const tool = permission.tool as { messageID?: string; callID?: string; id?: string } | undefined
-  return {
-    id: permission.id,
-    sessionID: permission.sessionID,
-    action: permission.permission,
-    resources: permission.patterns ?? [],
-    save: permission.always,
-    metadata: permission.metadata,
-    source:
-      tool?.messageID && (tool.id || tool.callID)
-        ? { type: "tool", messageID: tool.messageID, id: tool.id ?? tool.callID }
-        : undefined,
-  }
-}
-
-export function currentSession(session: { id: string } & Record<string, unknown>, fallbackDirectory?: string) {
-  const time = session.time && typeof session.time === "object" ? session.time : {}
-  const location = session.location && typeof session.location === "object" ? session.location : {}
   return {
     id: session.id,
     parentID: session.parentID,
     projectID: session.projectID ?? "project",
     agent: session.agent ?? "build",
-    model: session.model ?? { id: "mock-model", providerID: "mock-provider" },
+    model: session.model,
     cost: session.cost ?? 0,
     tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    ...(typeof session.outcome === "string" ? { outcome: session.outcome } : {}),
-    time: {
-      created: "created" in time && typeof time.created === "number" ? time.created : 0,
-      updated: "updated" in time && typeof time.updated === "number" ? time.updated : 0,
-      ...("idle" in time && typeof time.idle === "number" ? { idle: time.idle } : {}),
-      ...("viewed" in time && typeof time.viewed === "number" ? { viewed: time.viewed } : {}),
-      ...(session.time && typeof session.time === "object" && "archived" in session.time
-        ? { archived: session.time.archived }
-        : {}),
-    },
+    ...decodeSessionOutcome(session),
+    time: { created: seed.time?.created ?? 0, updated: seed.time?.updated ?? 0, ...seed.time },
     title: session.title ?? session.id,
-    location: {
-      directory:
-        "directory" in location && typeof location.directory === "string"
-          ? location.directory
-          : typeof session.directory === "string"
-            ? session.directory
-            : fallbackDirectory,
-    },
+    location: { directory: seed.location?.directory ?? seed.directory ?? fallbackDirectory },
     subpath: session.subpath ?? session.path,
     revert: session.revert,
   }
 }
 
-function jsonRecord(value: unknown): Record<string, JsonValue> | undefined {
-  if (!record(value)) return
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, item]) => {
-      const next = jsonValue(item)
-      return next === undefined ? [] : [[key, next]]
-    }),
-  )
+// An optional field that decodes as absent when its value is invalid, so one bad field does not discard the rest.
+function lenient<S extends Schema.Top>(schema: S) {
+  return Schema.optionalKey(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)))
 }
 
-function jsonValue(value: unknown): JsonValue | undefined {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (Array.isArray(value)) return value.map((item) => jsonValue(item) ?? null)
-  return jsonRecord(value)
-}
+const decodeJsonObject = Schema.decodeUnknownOption(Schema.JsonObject)
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-}
+const decodeProject = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: lenient(Schema.String),
+    worktree: lenient(Schema.String),
+    canonical: lenient(Schema.String),
+    sandboxes: lenient(Schema.Array(Schema.String)),
+  }),
+)
+
+const decodeWorktreeRequest = Schema.decodeUnknownOption(
+  Schema.Struct({ directory: lenient(Schema.String), name: lenient(Schema.String) }),
+)
+
+const decodeWorktreeAnswer = Schema.decodeUnknownOption(Schema.Struct({ directory: Schema.String }))
+
+const decodeSessionCreate = Schema.decodeUnknownOption(
+  Schema.Struct({ id: lenient(Schema.String), title: lenient(Schema.String), parentID: lenient(Schema.String) }),
+)
+
+const decodeSessionRename = Schema.decodeUnknownOption(Schema.Struct({ title: Schema.String }))
+
+const decodeRevertStage = Schema.decodeUnknownOption(Schema.Struct({ messageID: Schema.String }))
+
+const decodePermissionReply = Schema.decodeUnknownOption(Schema.Struct({ decision: Permission.Reply }))
+
+const decodePromptRequest = Schema.decodeUnknownOption(
+  Schema.Struct({ id: lenient(Schema.String), delivery: lenient(Schema.Literal("queue")) }),
+)
+
+const decodePromptPayload = Schema.decodeUnknownOption(
+  Schema.Struct({
+    text: lenient(Schema.String),
+    files: Schema.optionalKey(Schema.Json),
+    agents: Schema.optionalKey(Schema.Json),
+    skills: Schema.optionalKey(Schema.Json),
+    metadata: Schema.optionalKey(Schema.Json),
+  }),
+)
+
+const decodeProvider = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    canonical: lenient(Schema.String),
+    integrationID: lenient(Schema.String),
+  }),
+)
+
+const decodeModelProvider = Schema.decodeUnknownOption(
+  Schema.Struct({ id: Schema.String, models: Schema.Record(Schema.String, Schema.Unknown) }),
+)
+
+const decodeModel = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    api: lenient(Schema.Struct({ id: Schema.String })),
+    limit: lenient(Schema.Struct({ context: lenient(Schema.Number), output: lenient(Schema.Number) })),
+    cost: lenient(Schema.Struct({ input: lenient(Schema.Number), output: lenient(Schema.Number) })),
+    capabilities: lenient(Model.Capabilities),
+    variants: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+    time: lenient(Schema.Struct({ released: Schema.Number })),
+  }),
+)
+
+// Every field is lenient, so any session object decodes.
+const decodeSession = Schema.decodeUnknownSync(
+  Schema.Struct({
+    time: lenient(
+      Schema.Struct({
+        created: lenient(Schema.Number),
+        updated: lenient(Schema.Number),
+        idle: lenient(Schema.Number),
+        viewed: lenient(Schema.Number),
+        archived: Schema.optionalKey(Schema.Unknown),
+      }),
+    ),
+    location: lenient(Schema.Struct({ directory: lenient(Schema.String) })),
+    directory: lenient(Schema.String),
+  }),
+)
+
+const decodeSessionOutcome = Schema.decodeUnknownSync(Schema.Struct({ outcome: lenient(Schema.String) }))

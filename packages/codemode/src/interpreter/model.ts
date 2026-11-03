@@ -1,16 +1,10 @@
 import type { Node } from "acorn"
-import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
 import type { ErrorObj, Value } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
-
-/** The program call a built-in is running under: where to locate failures born inside it, and how deep the stack is there. */
-export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly depth: number }>("codemode/CallSite", {
-  defaultValue: () => ({ depth: 0 }),
-})
 
 export type Binding = {
   mutable: boolean
@@ -72,7 +66,7 @@ export const uriError = failure("URIError")
 
 // Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
 export const supportedSyntaxMessage =
-  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, this, getters/setters, tagged templates, BigInt, and custom Symbols. Use plain functions and data objects instead."
+  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead."
 
 export const unsupportedSyntax = (kind: string, node: AstNode): PendingThrow =>
   new PendingThrow(
@@ -89,8 +83,5 @@ export const sourceLocation = (node: AstNode): { readonly line: number; readonly
   column: (node.loc?.start.column ?? 0) + 1,
 })
 
-export const formatLocation = (node?: AstNode): string => {
-  if (!node?.loc) return ""
-  const location = sourceLocation(node)
-  return ` (line ${location.line}, col ${location.column})`
-}
+export const formatLocation = (location?: { readonly line: number; readonly column: number }): string =>
+  location ? ` (line ${location.line}, col ${location.column})` : ""

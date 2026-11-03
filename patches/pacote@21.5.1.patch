@@ -1,0 +1,58 @@
+diff --git a/node_modules/pacote/.bun-tag-eb0e1d32c8fdffa0 b/.bun-tag-eb0e1d32c8fdffa0
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/lib/git.js b/lib/git.js
+index 8faf125c6e5e572e980cfc8aaf4e6c9a21d740cf..b1ae3c8cdfa9cbdbd7573be7fa74197d158e6bcb 100644
+--- a/lib/git.js
++++ b/lib/git.js
+@@ -247,15 +247,20 @@ class GitFetcher extends Fetcher {
+       // if we're resolved, and have a tarball url, shell out to RemoteFetcher
+       if (tarballOk) {
+         const nameat = this.spec.name ? `${this.spec.name}@` : ''
+-        return new RemoteFetcher(h.tarball({ noCommittish: false }), {
++        // the hosted committish also carries ::path:, which is not a valid
++        // archive ref; download the commit and select the subdirectory below
++        return new RemoteFetcher(h.tarball({ committish: this.resolvedSha }), {
+           ...this.opts,
+           allowGitIgnore: true,
+           pkgid: `git:${nameat}${this.resolved}`,
+           resolved: this.resolved,
+           integrity: null, // it'll always be different, if we have one
+         }).extract(tmp).then(() => handler(`${tmp}${this.spec.gitSubdir || ''}`), er => {
+-          // fall back to ssh download if tarball fails
+-          if (er.constructor.name.match(/^Http/)) {
++          // fall back to clone if the tarball download fails due to an
++          // HTTP error or if the response is not a valid tarball (e.g.
++          // a hosted provider returning an HTML sign-in page with 200)
++          if ((typeof er.statusCode === 'number' && er.statusCode >= 400) ||
++              /^TAR_/.test(er.code)) {
+             return this.#clone(handler, false)
+           } else {
+             throw er
+diff --git a/lib/util/add-git-sha.js b/lib/util/add-git-sha.js
+index 8518bff9e202a61cd4451d184b74015b43f24ad0..f46620d77c8ee336c20c1c93916307ec3be6e183 100644
+--- a/lib/util/add-git-sha.js
++++ b/lib/util/add-git-sha.js
+@@ -1,17 +1,20 @@
+ // add a sha to a git remote url spec
+ const addGitSha = (spec, sha) => {
++  // the sha replaces any committish or semver range, but the subdirectory
++  // still selects the package within the resolved commit
++  const subdir = spec.gitSubdir ? `::path:${spec.gitSubdir.slice(1)}` : ''
+   if (spec.hosted) {
+     const h = spec.hosted
+     const opt = { noCommittish: true }
+     const base = h.https && h.auth ? h.https(opt) : h.shortcut(opt)
+ 
+-    return `${base}#${sha}`
++    return `${base}#${sha}${subdir}`
+   } else {
+     // don't use new URL for this, because it doesn't handle scp urls
+     // strip the committish with indexOf/slice to avoid a regexp redos
+     const hashIndex = spec.rawSpec.indexOf('#')
+     const base = hashIndex === -1 ? spec.rawSpec : spec.rawSpec.slice(0, hashIndex)
+-    return `${base}#${sha}`
++    return `${base}#${sha}${subdir}`
+   }
+ }
+ 

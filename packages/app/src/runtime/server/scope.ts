@@ -1,14 +1,18 @@
 import type { ServerConnection } from "@/runtime/server/registry"
 
 export type ServerScope = string & { readonly __brand: "ServerScope" }
+
 export type SessionRouteKey = string & { readonly __brand: "SessionRouteKey" }
+
 export type SessionStateKey = string & { readonly __brand: "SessionStateKey" }
+
 export type ScopedKey = string & { readonly __brand: "ScopedKey" }
 
 const separator = "\u0000"
 
 function fragment(label: string, value: string) {
   if (value.includes(separator)) throw new Error(`${label} cannot contain null bytes`)
+
   return value
 }
 
@@ -41,12 +45,16 @@ export const SessionStateKey = {
   },
   route(key: string) {
     const split = key.lastIndexOf(separator)
+
     if (split === -1) throw new Error("Session state key must include server scope")
+
     return fragment("Session route", key.slice(split + 1)) as SessionRouteKey
   },
   scope(key: string) {
     const split = key.indexOf(separator)
+
     if (split === -1) throw new Error("Session state key must include server scope")
+
     return fragment("Stored server scope", key.slice(0, split)) as ServerScope
   },
 }

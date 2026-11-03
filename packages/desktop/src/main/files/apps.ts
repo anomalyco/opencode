@@ -6,12 +6,15 @@ const execFilePromise = util.promisify(execFile)
 
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
   if (process.platform === "win32") return true
+
   if (process.platform === "linux") return true
+
   return yield* checkMacosApp(appName)
 })
 
 export const resolveAppPath = Effect.fn("DesktopFiles.resolveAppPath")(function* (appName: string) {
   if (process.platform !== "win32") return appName
+
   return yield* resolveWindowsAppPath(appName)
 })
 
@@ -20,6 +23,7 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
   const locations = [`/Applications/${appName}.app`, `/System/Applications/${appName}.app`]
 
   const home = process.env.HOME
+
   if (home) locations.push(`${home}/Applications/${appName}.app`)
 
   for (const location of locations) {
@@ -35,9 +39,11 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
 const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(function* (appName: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName])).pipe(
+
+  const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName], { windowsHide: true })).pipe(
     Effect.orElseSucceed(() => undefined),
   )
+
   if (!result) return null
 
   const paths = result.stdout
@@ -49,24 +55,30 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
   const hasExt = (value: string, ext: string) => path.extname(value).toLowerCase() === `.${ext}`
 
   const exe = paths.find((path) => hasExt(path, "exe"))
+
   if (exe) return exe
 
   const resolveCmd = Effect.fnUntraced(function* (file: string) {
     const content = yield* fs.readFileString(file)
+
     for (const token of content.split('"').map((value: string) => value.trim())) {
       const lower = token.toLowerCase()
+
       if (!lower.includes(".exe")) continue
 
       const index = lower.indexOf("%~dp0")
+
       if (index >= 0) {
         const base = path.dirname(file)
         const suffix = token.slice(index + 5)
+
         const resolved = suffix
           .replace(/\//g, "\\")
           .split("\\")
           .filter((part: string) => part && part !== ".")
           .reduce((current: string, part: string) => {
             if (part === "..") return path.dirname(current)
+
             return path.join(current, part)
           }, base)
 
@@ -82,19 +94,24 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
   for (const file of paths) {
     if (hasExt(file, "cmd") || hasExt(file, "bat")) {
       const resolved = yield* resolveCmd(file)
+
       if (resolved) return resolved
     }
 
     if (!path.extname(file)) {
       const cmd = `${file}.cmd`
+
       if (yield* exists(fs, cmd)) {
         const resolved = yield* resolveCmd(cmd)
+
         if (resolved) return resolved
       }
 
       const bat = `${file}.bat`
+
       if (yield* exists(fs, bat)) {
         const resolved = yield* resolveCmd(bat)
+
         if (resolved) return resolved
       }
     }
@@ -109,17 +126,22 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
   if (key) {
     for (const file of paths) {
       const dirs = [path.dirname(file), path.dirname(path.dirname(file)), path.dirname(path.dirname(path.dirname(file)))]
+
       for (const dir of dirs) {
         const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
+
         for (const entry of entries) {
           const candidate = path.join(dir, entry)
+
           if (!hasExt(candidate, "exe")) continue
           const stem = entry.replace(/\.exe$/i, "")
+
           const name = stem
             .split("")
             .filter((value: string) => /[a-z0-9]/i.test(value))
             .map((value: string) => value.toLowerCase())
             .join("")
+
           if (name.includes(key) || key.includes(name)) return candidate
         }
       }

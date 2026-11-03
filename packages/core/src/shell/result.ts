@@ -7,7 +7,7 @@ export type Result = {
   capture: { output: string; truncated: boolean } | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; timeout?: boolean }
+type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -22,12 +22,14 @@ export function output(result: Result): Output {
     output: result.capture?.output ?? unavailable.output,
     truncated: result.capture?.truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
+    ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
   }
 }
 
-export function notice(output: Pick<Output, "exit" | "timeout">) {
+export function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
   if (output.timeout) return "Timed out before completion"
+  if (output.signal !== undefined) return `Killed by ${output.signal}`
   if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
 }
 
@@ -35,6 +37,7 @@ export function metadata(output: Output) {
   return {
     truncated: output.truncated,
     ...(output.exit !== undefined ? { exit: output.exit } : {}),
+    ...(output.signal !== undefined ? { signal: output.signal } : {}),
     ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
   }
 }

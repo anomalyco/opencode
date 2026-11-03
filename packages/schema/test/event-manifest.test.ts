@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import {
   Agent,
   Config,
@@ -16,7 +15,6 @@ import {
 } from "../src/index.js"
 import { EventManifest } from "../src/event-manifest.js"
 import { FileSystemV1 } from "../src/filesystem-v1.js"
-import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
@@ -43,9 +41,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
-    expect(EventManifest.Server.has("question.asked")).toBe(false)
-    expect(EventManifest.Server.has("question.replied")).toBe(false)
-    expect(EventManifest.Server.has("question.rejected")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
@@ -66,13 +61,15 @@ describe("public event manifest", () => {
     expect(FileSystemV1.Event.Definitions).toEqual([FileSystemV1.Event.Edited])
     expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated])
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
-    expect(PersistentPty.Event.Definitions).toEqual([PersistentPty.Event.Added, PersistentPty.Event.Removed])
+    expect(PersistentPty.Event.Definitions).toEqual([
+      PersistentPty.Event.Added,
+      PersistentPty.Event.Removed,
+      PersistentPty.Event.Updated,
+    ])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
-    expect(EventManifest.Latest.has("ide.installed")).toBe(false)
-    expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)
   })
@@ -115,8 +112,11 @@ describe("public event manifest", () => {
         "session.model.selected.1",
         "session.moved.1",
         "session.renamed.1",
+        "session.metadata.updated.1",
         "session.permissions.1",
         "session.viewed.1",
+        "session.archived.1",
+        "session.unarchived.1",
         "session.message.content.updated.1",
         "session.usage.recorded.1",
         "session.forked.2",
@@ -190,7 +190,7 @@ describe("public event manifest", () => {
       assistantMessageID,
       ordinal: 0,
       text: "thought",
-      state: { signature: "sig" },
+      native: { signature: "sig" },
     })
     const tool = SessionEvent.Tool.Called.data.make({
       sessionID,
@@ -198,7 +198,7 @@ describe("public event manifest", () => {
       id: "call_test",
       input: {},
       executed: true,
-      state: { itemId: "item_test" },
+      native: { itemId: "item_test" },
     })
 
     expect(text).not.toHaveProperty("textID")

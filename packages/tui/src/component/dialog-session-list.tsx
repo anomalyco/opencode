@@ -1,10 +1,9 @@
-import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
 import { Project } from "@opencode/schema/project"
-import { TextAttributes } from "@opentui/core"
-import type { RGBA } from "@opentui/core"
-import { useDialog } from "../ui/dialog"
+import { TextAttributes, type RGBA } from "@opentui/core"
+import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
@@ -20,7 +19,7 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
-import { useConfig } from "../config"
+import { useConfig, useNewDesigns } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
@@ -34,6 +33,7 @@ export function DialogSessionList() {
   const local = useLocal()
   const sessionTabs = useSessionTabs()
   const config = useConfig().data
+  const newDesigns = useNewDesigns()
   const toast = useToast()
   const activeLocation = useLocation()
   const [filter, setFilter] = createSignal("")
@@ -73,6 +73,7 @@ export function DialogSessionList() {
           limit: 50,
           order: "desc",
           parentID: null,
+          archived: false,
         })
         return { query, allProjects, sessions: response.data, error: undefined }
       } catch (error) {
@@ -91,8 +92,9 @@ export function DialogSessionList() {
       .list()
       .filter(
         (session) =>
-          allProjects() ||
-          (session.projectID === current?.project.id && session.location.directory === current.directory),
+          session.time.archived === undefined &&
+          (allProjects() ||
+            (session.projectID === current?.project.id && session.location.directory === current.directory)),
       )
     if (!query) return sessions
     return sessions.filter(
@@ -161,6 +163,7 @@ export function DialogSessionList() {
           : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
+      const attention = sessionTabs.status(session.id).attention
       return {
         title: deleting
           ? `Press ${shortcuts.get("session.delete")} again to confirm`
@@ -170,13 +173,14 @@ export function DialogSessionList() {
         footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter:
-          data.session.status(session.id) === "running" ||
-          data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? (color: RGBA) => <Spinner color={color} />
-            : slot === undefined
-              ? undefined
-              : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
+        gutter: sessionStatusGutter(
+          theme,
+          attention,
+          !attention &&
+            (data.session.status(session.id) === "running" ||
+              data.session.family(session.id).some((id) => data.session.status(id) === "running")),
+          slot === undefined ? undefined : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
+        ),
       }
     }
 
@@ -205,6 +209,10 @@ export function DialogSessionList() {
           </Show>
         </box>
       }
+      searchInTitle
+      titlePlaceholder={
+        !allProjects() && currentProjectName() ? `Search sessions in ${currentProjectName()}` : "Search sessions"
+      }
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -225,14 +233,14 @@ export function DialogSessionList() {
         },
       ]}
       emptyView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={searchState().error ? theme.text.feedback.error.base : theme.text.muted}>
             {searchState().message}
           </text>
         </box>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={searchState().error ? theme.text.feedback.error.base : theme.text.muted}>
             {searchState().message}
           </text>
@@ -285,7 +293,7 @@ export function DialogSessionList() {
         },
       ]}
       footerHints={[
-        ...quickSwitchFooterHints(),
+        ...(newDesigns() ? [] : quickSwitchFooterHints()),
         { title: allProjects() ? "current directory" : "all projects", label: "ctrl+a", side: "right" },
       ]}
     />
@@ -296,4 +304,24 @@ function quickSwitchRange(first: string, last: string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
   return `${first} through ${last}`
+}
+
+export function sessionStatusGutter(
+  theme: ReturnType<ReturnType<typeof useTheme>["surface"]>,
+  attention: "permission" | "question" | false,
+  running: boolean,
+  fallback?: () => JSX.Element,
+) {
+  if (attention) {
+    return (color: RGBA) => (
+      <text
+        fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
+        attributes={TextAttributes.BOLD}
+      >
+        {attention === "permission" ? "!" : "?"}
+      </text>
+    )
+  }
+  if (running) return (color: RGBA) => <Spinner color={color} />
+  return fallback
 }

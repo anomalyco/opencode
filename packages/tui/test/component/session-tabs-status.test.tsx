@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { MouseButton } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
 import { batch, createSignal } from "solid-js"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
@@ -11,6 +12,7 @@ import {
   type SessionTabsStatus,
 } from "../../src/component/session-tabs"
 import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
+import { SESSION_SIDEBAR_WIDTH } from "../../src/ui/layout"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
@@ -35,6 +37,11 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [newTab, setNewTab] = createSignal(false)
     const settings: Info = { tabs: { mode: "on" } }
     const copied: string[] = []
+    const reopened: string[] = []
+    const [closed, setClosed] = createSignal([
+      { sessionID: "closed-new", title: "Most recently closed" },
+      { sessionID: "closed-old", title: "Earlier session" },
+    ])
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
@@ -57,6 +64,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       },
       close() {},
       move() {},
+      add() {},
+      recentlyClosed: closed,
+      reopen(sessionID?: string) {
+        if (sessionID) reopened.push(sessionID)
+        setClosed((tabs) => tabs.filter((tab) => tab.sessionID !== sessionID))
+      },
       detail: () => "project",
       status: (sessionID: string) => (sessionID === "first" ? status() : EMPTY_SESSION_TAB_STATUS),
     } satisfies SessionTabsController
@@ -205,19 +218,128 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       const column = rows[row]!.indexOf("First")
       await app.mockMouse.click(column, row, MouseButton.RIGHT)
       await app.waitForFrame((frame) => frame.includes("Rename"))
-      expect(app.captureCharFrame().split("\n")[row + 1]!.indexOf("Rename")).toBe(column + 1)
+      expect(app.captureCharFrame().split("\n")[row + 2]!.indexOf("Rename")).toBe(column + 1)
       expect(app.captureCharFrame()).toContain("Copy session ID")
       expect(app.captureCharFrame()).toContain("Close")
       expect(app.captureCharFrame()).not.toContain("Keep open")
       expect(active()).toBe("second")
-      await app.mockMouse.click(column + 1, row + 2)
+      await app.mockMouse.click(column + 1, row + 3)
       expect(copied).toEqual(["first"])
       await app.waitForFrame((frame) => !frame.includes("Rename"))
 
       setNewTab(true)
       await app.waitForFrame((frame) => frame.includes("+ New session"))
+      for (const width of [60, 35]) {
+        app.renderer.resize(width, 10)
+        await app.renderOnce()
+        const rows = app.captureCharFrame().split("\n")
+        const row = rows.findIndex((line) => line.includes("+ New session"))
+        await app.mockMouse.click(rows[row]!.indexOf("+ New session") + 2, row, MouseButton.RIGHT)
+        await app.waitForFrame((frame) => frame.includes("Recently closed tabs"))
+        expect(app.captureCharFrame()).not.toContain("New tab")
+        const menu = app.captureCharFrame().split("\n")
+        expect(menu.some((line) => line.trim() === "New session")).toBe(false)
+        const earlier = menu.findIndex((line) => line.includes("Earlier session"))
+        expect(earlier).toBeGreaterThan(menu.findIndex((line) => line.includes("Most recently closed")))
+        await app.mockMouse.click(menu[earlier]!.indexOf("Earlier session"), earlier)
+        expect(reopened.at(-1)).toBe("closed-old")
+        await app.waitForFrame((frame) => !frame.includes("Recently closed tabs"))
+        setClosed([
+          { sessionID: "closed-new", title: "Most recently closed" },
+          { sessionID: "closed-old", title: "Earlier session" },
+        ])
+      }
+      app.renderer.resize(60, 20)
+      setClosed(
+        Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })),
+      )
+      await app.renderOnce()
+      const historyRows = app.captureCharFrame().split("\n")
+      const newRow = historyRows.findIndex((line) => line.includes("+ New session"))
+      await app.mockMouse.click(historyRows[newRow]!.indexOf("+ New session") + 2, newRow, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes("History 10"))
+      expect(app.captureCharFrame()).not.toContain("History 11")
     } finally {
       app.renderer.destroy()
     }
   })
 }
+
+test.each([SESSION_SIDEBAR_WIDTH, 18])(
+  "vertical running tab pulse spans the full %i-column tab width",
+  async (railWidth) => {
+    const clock = new ManualClock()
+    const [busy, setBusy] = createSignal(false)
+    const controller = {
+      tabs: () => [
+        { sessionID: "first", title: "First session" },
+        { sessionID: "second", title: "Second session" },
+      ],
+      current: () => "second",
+      select() {},
+      close() {},
+      move() {},
+      add() {},
+      detail: () => "opencode",
+      status: (sessionID: string) =>
+        sessionID === "second" ? { ...EMPTY_SESSION_TAB_STATUS, busy: busy() } : EMPTY_SESSION_TAB_STATUS,
+    } satisfies SessionTabsController
+
+    const app = await testRender(
+      () => (
+        <TestTuiContexts>
+          <ConfigProvider config={createTuiResolvedConfig({ tabs: { mode: "on", layout: "vertical" } })}>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs controller={controller} orientation="vertical" animations width={railWidth} />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </ConfigProvider>
+        </TestTuiContexts>
+      ),
+      { width: 80, height: 10, clock },
+    )
+
+    try {
+      app.renderer.pause()
+      await app.renderOnce()
+
+      const cellRow = (row: number) =>
+        app.captureSpans().lines[row]!.spans.flatMap((span) =>
+          Array.from(span.text, (char) => ({
+            char,
+            fg: span.fg.buffer.join(),
+            bg: span.bg.buffer.join(),
+          })),
+        )
+
+      const idleAbove = cellRow(3)
+      const idleTitle = cellRow(4)
+      const idleDetail = cellRow(5)
+      const idleBelow = cellRow(6)
+
+      setBusy(true)
+      await app.renderOnce()
+      clock.setTime(1850)
+      await app.renderOnce()
+
+      const runningAbove = cellRow(3)
+      const runningTitle = cellRow(4)
+      const runningDetail = cellRow(5)
+      const runningBelow = cellRow(6)
+      const rightEdge = railWidth - 1
+
+      expect(runningAbove.slice(0, railWidth).map((cell) => cell.char)).toEqual(Array(railWidth).fill("▄"))
+      expect(runningBelow.slice(0, railWidth).map((cell) => cell.char)).toEqual(Array(railWidth).fill("▀"))
+      expect(runningAbove[rightEdge]!.fg).not.toBe(idleAbove[rightEdge]!.bg)
+      expect(runningBelow[rightEdge]!.fg).not.toBe(idleBelow[rightEdge]!.bg)
+      expect(runningTitle[rightEdge]!.bg).not.toBe(idleTitle[rightEdge]!.bg)
+      expect(runningDetail[rightEdge]!.bg).not.toBe(idleDetail[rightEdge]!.bg)
+      expect(runningTitle[railWidth]!.bg).toBe(idleTitle[railWidth]!.bg)
+      expect(runningBelow[railWidth]!.char).toBe(" ")
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)

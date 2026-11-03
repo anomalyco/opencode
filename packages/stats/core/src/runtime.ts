@@ -4,10 +4,14 @@ import { layer as databaseLayer } from "./database"
 import { GeoStatRepo } from "./domain/geo"
 import { ModelStatRepo } from "./domain/model"
 import { ProviderStatRepo } from "./domain/provider"
+import { RetentionStatRepo } from "./domain/retention"
 
-const repoLayer = Layer.mergeAll(ModelStatRepo.layer, ProviderStatRepo.layer, GeoStatRepo.layer).pipe(
-  Layer.provide(databaseLayer),
-)
+const repoLayer = Layer.mergeAll(
+  ModelStatRepo.layer,
+  ProviderStatRepo.layer,
+  GeoStatRepo.layer,
+  RetentionStatRepo.layer,
+).pipe(Layer.provide(databaseLayer))
 
 export const layer = Layer.mergeAll(AppConfig.layer, databaseLayer, repoLayer)
 export const runtime = ManagedRuntime.make(layer)

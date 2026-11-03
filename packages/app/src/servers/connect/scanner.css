@@ -38,4 +38,10 @@
     display: grid;
     place-items: center;
   }
+
+  /* Keep the status readable over the live preview while a scanned code is redeemed. */
+  .server-connect-video [role="status"][data-busy] {
+    background: color-mix(in srgb, var(--v2-background-bg-deep) 72%, transparent);
+    color: var(--v2-text-text-base);
+  }
 }

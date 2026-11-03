@@ -1,16 +1,21 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import {
+  HttpTransport,
+  type Transport,
+  type TransportExecution,
+  type TransportPrepareInput,
+} from "../route/transport/index.js"
+import {
   AIError,
+  InvalidProviderOutputError,
   LLMEvent,
   Usage,
   type FinishReason,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
@@ -22,24 +27,16 @@ import {
 import { classifyProviderFailure } from "../provider-error.js"
 import { Media } from "../media.js"
 import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
-// Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
+const CONTINUATION = "CONTINUATION"
+// Google documents this sentinel for replaying function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
+// Gemini 2.5 rejects a budget under the model's minimum: 512 on Flash-Lite, the highest, and 128 on Pro.
+const MIN_THINKING_BUDGET = 512
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-
-// Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
-// retaining complete model responses, but OpenCode reconstructs durable history and may encounter an unsigned call
-// from an older or external session. Model IDs are open-ended, so unknown Gemini aliases inherit current behavior.
-const requiresThoughtSignatureFallback = (modelID: string) => {
-  if (!/(^|\/)gemini-/i.test(modelID)) return false
-  if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
-  if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
-  return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
-}
 
 // Gemini 3 accepts media nested inside function responses; matched Gemini 2.5 variants reject it,
 // so their tool-result attachments lower as a separate user turn instead.
@@ -79,7 +76,6 @@ const GeminiInlineDataPart = Schema.Struct({
 })
 type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
-/** Gemini Files API reference; the only remote input Gemini accepts. */
 const GeminiFileDataPart = Schema.Struct({
   fileData: Schema.Struct({
     mimeType: Schema.String,
@@ -132,7 +128,7 @@ const GeminiSystemInstruction = Schema.Struct({
 const GeminiFunctionDeclaration = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.optional(JsonObject),
+  parametersJsonSchema: JsonObject,
 })
 
 const GeminiTool = Schema.Struct({
@@ -212,6 +208,7 @@ const GeminiBodyFields = {
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
+  continuationToken: Schema.optional(Schema.String),
 }
 const GeminiBody = Schema.Struct(GeminiBodyFields)
 export type GeminiBody = Schema.Schema.Type<typeof GeminiBody>
@@ -222,6 +219,7 @@ const GeminiUsage = Schema.Struct({
   promptTokenCount: optionalNull(Schema.Number),
   candidatesTokenCount: optionalNull(Schema.Number),
   totalTokenCount: optionalNull(Schema.Number),
+  ...ProviderShared.ReportedBilling.fields,
 })
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
@@ -240,8 +238,17 @@ const GeminiPromptFeedback = Schema.StructWithRest(
 )
 type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
 
+const GeminiError = Schema.StructWithRest(
+  Schema.Struct({
+    code: lenient(Schema.Number),
+    message: lenient(Schema.String),
+    status: lenient(Schema.String),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+
 const GeminiEvent = Schema.Struct({
-  error: Schema.optional(Schema.Unknown),
+  error: Schema.optional(GeminiError),
   candidates: optionalNull(Schema.Array(GeminiCandidate)),
   promptFeedback: optionalNull(GeminiPromptFeedback),
   usageMetadata: optionalNull(GeminiUsage),
@@ -254,7 +261,9 @@ interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly promptFeedback?: GeminiPromptFeedback
-  readonly usage?: Usage
+  readonly usage?: GeminiUsage
+  /** Usage of the earlier requests of a response Gemini continued across requests. */
+  readonly continuedUsage?: ReadonlyArray<GeminiUsage>
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
   readonly textSignature?: string
@@ -266,35 +275,13 @@ interface ParserState {
 }
 
 // =============================================================================
-// Tool Schema Conversion
-// =============================================================================
-// Tool-schema conversion has two distinct concerns:
-//
-// 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
-//    enums (must be strings), `required` entries that don't match a property,
-//    untyped arrays (`items` must be present), and `properties`/`required`
-//    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
-//
-// 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty root parameter schemas while preserving nested empty objects,
-//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
-//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
-//    only an allowlisted set of keys (description, required, format, type,
-//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
-//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
-//    silently dropped.
-//
-// Sanitize runs first, then project. The implementation lives in
-// `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
-// provider protocols.
-
-// =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema) => ({
+// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
+const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parameters: GeminiToolSchema.convert(inputSchema),
+  parametersJsonSchema: tool.inputSchema,
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -305,23 +292,19 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-// Gemini does not fetch public URLs; inline payloads and Gemini Files references are the accepted inputs.
-const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (part: TextPart | MediaPart) {
+const lowerContentPart = Effect.fnUntraced(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const source = part.media.source
-  if (source.type === "ref" && source.provider === "google")
-    return { fileData: { mimeType: part.media.mediaType, fileUri: source.id } }
-  const media = yield* ProviderShared.requireInlineMedia("Gemini", part.media)
-  return { inlineData: { mimeType: media.mime, data: media.base64 } }
+  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
 })
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
+const signatureMetadata = (key: string, signature: string | undefined) =>
+  signature ? providerMetadata(key, { thoughtSignature: signature }) : undefined
+
 const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
   const value = metadata?.[key]
-  return ProviderShared.isRecord(value) && typeof value.thoughtSignature === "string"
-    ? value.thoughtSignature
-    : undefined
+  return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
@@ -329,12 +312,12 @@ const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string
   thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
 })
 
-const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
-  const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const metadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
-  let pendingMedia: GeminiInlineDataPart[] | undefined
+  let pendingMedia: Array<GeminiInlineDataPart | typeof GeminiFileDataPart.Type> | undefined
   const flushMedia = () => {
     if (!pendingMedia) return
     contents.push({ role: "user", parts: [{ text: "Attached media from tool result:" }, ...pendingMedia] })
@@ -400,11 +383,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           const signature = lowered.thoughtSignature
           parts.push({
             ...lowered,
-            thoughtSignature:
-              signature ??
-              (requiresThoughtSignatureFallback(request.model.id) && !hasSignedToolCall
-                ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
-                : undefined),
+            thoughtSignature: signature ?? (!hasSignedToolCall ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
           })
           if (signature !== undefined) hasSignedToolCall = true
           continue
@@ -436,10 +415,11 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = yield* ProviderShared.requireInlineMedia("Gemini", ProviderShared.toolFileMedia(item).media)
-        media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
+        const value = yield* GeminiGenerateContent.mediaPart("Gemini", GeminiGenerateContent.toolMedia(item))
+        // Nested fileData can be accepted without the model seeing the video, even on newer Gemini models.
+        if (legacyToolMedia || "fileData" in value) (pendingMedia ??= []).push(value)
+        else media.push(value)
       }
-      if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
       parts.push({
         functionResponse: {
           ...(omitCallIds ? {} : { id: part.id }),
@@ -448,7 +428,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
             name: part.name,
             content: text.join("\n"),
           },
-          parts: legacyToolMedia || media.length === 0 ? undefined : media,
+          parts: media.length === 0 ? undefined : media,
         },
       })
     }
@@ -469,7 +449,6 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
   const hasTools = flattened.tools.length > 0
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -479,10 +458,22 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: generation?.presencePenalty,
     seed: generation?.seed,
     stopSequences: generation?.stop,
+    // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
         ? undefined
-        : { ...options.thinkingConfig, includeThoughts: options.thinkingConfig.includeThoughts ?? true },
+        : {
+            ...options.thinkingConfig,
+            includeThoughts: options.thinkingConfig.includeThoughts ?? true,
+            thinkingBudget:
+              options.thinkingConfig.thinkingBudget === undefined
+                ? undefined
+                : ProviderShared.fitThinkingBudget(
+                    options.thinkingConfig.thinkingBudget,
+                    generation?.maxTokens,
+                    MIN_THINKING_BUDGET,
+                  ),
+          },
   }
 
   return {
@@ -491,13 +482,11 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
-      request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
+      request.system.length === 0 ? undefined : { parts: request.system.map((part) => ({ text: part.text })) },
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map((tool) =>
-              lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
-            ),
+            functionDeclarations: flattened.tools.map(lowerTool),
           },
         ]
       : undefined,
@@ -515,7 +504,11 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
-const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
+const mapUsage = (
+  usage: GeminiUsage | undefined,
+  metadataKey: string,
+  metadata: Record<string, unknown> = usage ?? {},
+) => {
   if (!usage) return undefined
   // Explicit provider nulls decode as `null`; normalize to `undefined` so the
   // token arithmetic below treats them like absent counts.
@@ -536,27 +529,48 @@ const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
-    providerMetadata: providerMetadata(metadataKey, usage),
+    cost: usage.cost,
+    providerMetadata: providerMetadata(metadataKey, metadata),
   })
 }
+
+// Each continued request re-bills the output so far as input. Reporting the first request's input with all output keeps
+// input plus output equal to the response's final context size, under-reporting billed input; the summed billed counts
+// remain in provider metadata.
+const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
+  const sum = (field: keyof GeminiUsage) =>
+    ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
+  return mapUsage(
+    {
+      promptTokenCount: requests[0].promptTokenCount,
+      cachedContentTokenCount: requests[0].cachedContentTokenCount,
+      candidatesTokenCount: sum("candidatesTokenCount"),
+      thoughtsTokenCount: sum("thoughtsTokenCount"),
+      // Every continued request is billed on its own.
+      cost: sum("cost"),
+    },
+    metadataKey,
+    {
+      promptTokenCount: sum("promptTokenCount"),
+      cachedContentTokenCount: sum("cachedContentTokenCount"),
+      candidatesTokenCount: sum("candidatesTokenCount"),
+      thoughtsTokenCount: sum("thoughtsTokenCount"),
+      totalTokenCount: sum("totalTokenCount"),
+      requests: requests.length,
+    },
+  )
+}
+
+const terminalFinishReason = (finishReason: string | null | undefined) =>
+  finishReason && finishReason !== "FINISH_REASON_UNSPECIFIED" ? finishReason : undefined
+
+const RECOVERABLE_FINISH_REASONS = new Set(["MALFORMED_RESPONSE", "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"])
 
 const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean): FinishReason => {
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
   if (finishReason === "MAX_TOKENS") return "length"
-  if (
-    finishReason === "IMAGE_SAFETY" ||
-    finishReason === "RECITATION" ||
-    finishReason === "SAFETY" ||
-    finishReason === "BLOCKLIST" ||
-    finishReason === "PROHIBITED_CONTENT" ||
-    finishReason === "SPII" ||
-    finishReason === "MODEL_ARMOR" ||
-    finishReason === "IMAGE_PROHIBITED_CONTENT" ||
-    finishReason === "IMAGE_RECITATION" ||
-    finishReason === "LANGUAGE"
-  )
-    return "content-filter"
+  if (GeminiGenerateContent.contentFiltered(finishReason)) return "content-filter"
   if (
     finishReason === "MALFORMED_FUNCTION_CALL" ||
     finishReason === "UNEXPECTED_TOOL_CALL" ||
@@ -575,7 +589,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const promptBlockReason =
     state.finishReason === undefined ? (state.promptFeedback?.blockReason ?? undefined) : undefined
   const finishReason = state.finishReason ?? promptBlockReason
-  if (finishReason === undefined && state.usage === undefined) return []
+  if (finishReason === undefined && state.usage === undefined && state.continuedUsage === undefined) return []
 
   const events: LLMEvent[] = []
   let lifecycle = state.lifecycle
@@ -584,18 +598,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       lifecycle,
       events,
       state.reasoningId,
-      state.reasoningSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
+      signatureMetadata(state.providerMetadataKey, state.reasoningSignature),
     )
   if (state.textId !== undefined)
     lifecycle = Lifecycle.textEnd(
       lifecycle,
       events,
       state.textId,
-      state.textSignature === undefined
-        ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+      signatureMetadata(state.providerMetadataKey, state.textSignature),
     )
   Lifecycle.finish(lifecycle, events, {
     reason: {
@@ -603,7 +613,10 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
         promptBlockReason === undefined ? mapFinishReason(finishReason, state.hasToolCalls) : "content-filter",
       raw: finishReason,
     },
-    usage: state.usage,
+    usage:
+      state.continuedUsage === undefined
+        ? mapUsage(state.usage, state.providerMetadataKey)
+        : mapContinuedUsage([...state.continuedUsage, state.usage ?? {}], state.providerMetadataKey),
     providerMetadata:
       state.promptFeedback === undefined
         ? undefined
@@ -612,49 +625,51 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   return events
 }
 
-const step = (state: ParserState, event: GeminiEvent) => {
-  if (ProviderShared.isRecord(event.error)) {
+const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
+  // Usage is cumulative within one request, so the next request of the same response counts from zero.
+  if (event instanceof NextRequest)
+    return Effect.succeed([
+      {
+        ...state,
+        finishReason: undefined,
+        promptFeedback: undefined,
+        usage: undefined,
+        continuedUsage: [...(state.continuedUsage ?? []), state.usage ?? {}],
+      },
+      [],
+    ] as const)
+  if (event.error) {
     const body = ProviderShared.encodeJson(event)
     return Effect.fail(
       new AIError({
         reason: classifyProviderFailure({
-          message:
-            typeof event.error.message === "string" && event.error.message.length > 0
-              ? event.error.message
-              : typeof event.error.status === "string" && event.error.status.length > 0
-                ? event.error.status
-                : "Gemini provider error",
-          status: typeof event.error.code === "number" ? event.error.code : undefined,
+          message: event.error.message || event.error.status || "Gemini provider error",
+          status: event.error.code,
           rawBody: body,
         }),
       }),
     )
   }
-  if ("error" in event)
-    return Effect.fail(
-      ProviderShared.eventError(state.route, `Invalid ${state.route} stream event`, ProviderShared.encodeJson(event)),
-    )
+  const candidate = event.candidates?.[0]
+  const finishReason = terminalFinishReason(candidate?.finishReason)
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,
-    usage: event.usageMetadata
-      ? (mapUsage(event.usageMetadata, state.providerMetadataKey) ?? state.usage)
-      : state.usage,
+    usage: event.usageMetadata ?? state.usage,
+    finishReason: finishReason ?? state.finishReason,
   }
-  const candidate = event.candidates?.[0]
-  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
+  if (finishReason && mapFinishReason(finishReason, state.hasToolCalls) === "error")
     return Effect.fail(
-      ProviderShared.eventError(
-        state.route,
-        `Gemini stopped with ${candidate.finishReason}`,
-        ProviderShared.encodeJson(event),
-      ),
+      new AIError({
+        reason: new InvalidProviderOutputError({
+          route: state.route,
+          message: `Gemini stopped with ${finishReason}`,
+          body: ProviderShared.encodeJson(event),
+          classification: RECOVERABLE_FINISH_REASONS.has(finishReason) ? "incomplete-stream" : undefined,
+        }),
+      }),
     )
-  if (!candidate?.content)
-    return Effect.succeed([
-      { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },
-      [],
-    ] as const)
+  if (!candidate?.content) return Effect.succeed([nextState, []] as const)
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
@@ -667,6 +682,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let nextTextId = nextState.nextTextId
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
+  const signed = (signature: string | undefined) => signatureMetadata(state.providerMetadataKey, signature)
+  const endReasoning = () => {
+    if (reasoningId === undefined) return
+    lifecycle = Lifecycle.reasoningEnd(lifecycle, events, reasoningId, signed(reasoningSignature))
+    reasoningId = undefined
+    reasoningSignature = undefined
+  }
+  const endText = () => {
+    if (textId === undefined) return
+    lifecycle = Lifecycle.textEnd(lifecycle, events, textId, signed(textSignature))
+    textId = undefined
+    textSignature = undefined
+  }
 
   for (const input of candidate.content.parts ?? []) {
     if (
@@ -694,63 +722,27 @@ const step = (state: ParserState, event: GeminiEvent) => {
       events.push(
         LLMEvent.media({
           media: Media.base64(part.inlineData.data, part.inlineData.mimeType),
-          providerMetadata: signature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       continue
     }
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
-        if (textId !== undefined) {
-          lifecycle = Lifecycle.textEnd(
-            lifecycle,
-            events,
-            textId,
-            textSignature
-              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
-              : undefined,
-          )
-          textId = undefined
-          textSignature = undefined
-        }
+        endText()
         if (reasoningId === undefined) {
           reasoningId = `reasoning-${nextReasoningId}`
           nextReasoningId += 1
         }
-        lifecycle = Lifecycle.reasoningDelta(
-          lifecycle,
-          events,
-          reasoningId,
-          part.text,
-          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
-        )
+        lifecycle = Lifecycle.reasoningDelta(lifecycle, events, reasoningId, part.text, signed(signature))
         continue
       }
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
+      endReasoning()
       if (textId === undefined) {
         textId = `text-${nextTextId}`
         nextTextId += 1
       }
-      lifecycle = Lifecycle.textDelta(
-        lifecycle,
-        events,
-        textId,
-        part.text,
-        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-      )
+      lifecycle = Lifecycle.textDelta(lifecycle, events, textId, part.text, signed(textSignature))
       textSignature = undefined
       continue
     }
@@ -765,37 +757,15 @@ const step = (state: ParserState, event: GeminiEvent) => {
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      if (reasoningId !== undefined) {
-        lifecycle = Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          reasoningId,
-          reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-            : undefined,
-        )
-        reasoningId = undefined
-        reasoningSignature = undefined
-      }
-      if (textId !== undefined) {
-        lifecycle = Lifecycle.textEnd(
-          lifecycle,
-          events,
-          textId,
-          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
-        )
-        textId = undefined
-        textSignature = undefined
-      }
+      endReasoning()
+      endText()
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
           id,
           name: part.functionCall.name,
           input,
-          providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
-            : undefined,
+          providerMetadata: signed(signature),
         }),
       )
       hasToolCalls = true
@@ -814,10 +784,101 @@ const step = (state: ParserState, event: GeminiEvent) => {
       nextReasoningId,
       nextTextId,
       seenCallIds,
-      finishReason: candidate.finishReason ?? nextState.finishReason,
     },
     events,
   ] as const)
+}
+
+// =============================================================================
+// Transport
+// =============================================================================
+const GeminiCheckpoint = Schema.Struct({
+  candidates: optionalNull(
+    Schema.Array(
+      Schema.Struct({
+        finishReason: optionalNull(Schema.String),
+        continuationToken: optionalNull(Schema.String),
+      }),
+    ),
+  ),
+})
+const decodeCheckpoint = Schema.decodeUnknownOption(GeminiCheckpoint)
+/** Marks where the transport starts another request for the same response; provider JSON can never match it. */
+class NextRequest {}
+
+export interface Prepared {
+  readonly http: HttpTransport.HttpPrepared<string>
+  readonly input: TransportPrepareInput<GeminiBody>
+}
+
+const sse = HttpTransport.sseJson.with<GeminiBody>()
+
+/**
+ * SSE transport that continues responses Gemini splits across requests. Chunks carry `continuationToken` checkpoints,
+ * and a request that reaches its output cap finishes with `CONTINUATION`. The transport resends the original body with
+ * the latest token, which also resumes a request that ended or dropped before finishing.
+ */
+export const transport: Transport<GeminiBody, Prepared, unknown> = {
+  id: sse.id,
+  prepare: (input) => sse.prepare(input).pipe(Effect.map((http) => ({ http, input }))),
+  execute: (prepared, request, runtime) =>
+    Effect.gen(function* () {
+      const route = request.model.route.id
+      const label = `${request.model.provider}/${route}`
+      // Frames are parsed once here, so errors recover each frame's raw text for their body.
+      const raw = new WeakMap<object, string>()
+      const respond = (execution: TransportExecution<string>): Stream.Stream<unknown, AIError> =>
+        Stream.suspend(() => {
+          let token: string | undefined
+          let finishReason: string | undefined
+          let dropped: AIError | undefined
+          return execution.frames.pipe(
+            Stream.mapEffect((frame) =>
+              ProviderShared.parseJson(route, frame, `Invalid ${label} stream event`).pipe(
+                Effect.map((event) => {
+                  if (typeof event === "object" && event !== null) raw.set(event, frame)
+                  const candidate = Option.getOrUndefined(decodeCheckpoint(event))?.candidates?.[0]
+                  const candidateFinishReason = terminalFinishReason(candidate?.finishReason)
+                  token = candidate?.continuationToken ?? (candidateFinishReason ? undefined : token)
+                  finishReason = candidateFinishReason ?? finishReason
+                  return event
+                }),
+              ),
+            ),
+            Stream.catchIf(
+              // A connection failure may resume; a timeout keeps its meaning and ends the response.
+              (error) => error.reason._tag === "Transport" && error.reason.code !== "Timeout",
+              (error) => {
+                dropped = error
+                return Stream.empty
+              },
+            ),
+            Stream.concat(
+              Stream.suspend(() => {
+                if (token !== undefined && (finishReason === undefined || finishReason === CONTINUATION))
+                  return Stream.concat(Stream.succeed(new NextRequest()), next(token))
+                if (dropped) return Stream.fail(dropped)
+                if (finishReason === CONTINUATION)
+                  return Stream.fail(ProviderShared.eventError(label, "Gemini continued the response without a token"))
+                return Stream.empty
+              }),
+            ),
+          )
+        })
+      const next = (continuationToken: string) =>
+        Stream.unwrap(
+          sse.prepare({ ...prepared.input, body: { ...prepared.input.body, continuationToken } }).pipe(
+            Effect.flatMap((continued) => sse.execute(continued, request, runtime)),
+            Effect.map(respond),
+          ),
+        )
+      const first = yield* sse.execute(prepared.http, request, runtime)
+      return {
+        frames: respond(first),
+        http: first.http,
+        body: (frame) => (typeof frame === "object" && frame !== null ? raw.get(frame) : undefined),
+      }
+    }),
 }
 
 // =============================================================================
@@ -833,11 +894,13 @@ export const protocol = Protocol.make({
     schema: GeminiBody,
     from: fromRequest,
   },
+  // Gemini's schema rules are this API's default, including for tuned endpoints whose IDs do not name Gemini.
+  sanitizer: "gemini",
   stream: {
-    event: Protocol.jsonEvent(GeminiEvent),
-    initial: (request) => ({
+    event: Schema.Union([Schema.instanceOf(NextRequest), GeminiEvent]),
+    initial: (request): ParserState => ({
       route: `${request.model.provider}/${request.model.route.id}`,
-      providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
       nextReasoningId: 0,
@@ -858,7 +921,7 @@ export const route = Route.make({
     baseURL: DEFAULT_BASE_URL,
   }),
   auth: Auth.none,
-  framing: Framing.sse,
+  transport,
 })
 
 export * as Gemini from "./gemini.js"

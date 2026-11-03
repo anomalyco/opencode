@@ -4,8 +4,10 @@ import { createComposerAttachments } from "@/composer/attachments/attachments"
 
 test("clears drag state on platform cancellation", async () => {
   let cancel = () => {}
+
   let subscribed = false
   let dragging: "image" | "@mention" | null = "image"
+
   const dispose = render(() => {
     createComposerAttachments({
       capture: () => ({ current: () => [], cursor: () => 0, set: () => {} }),
@@ -21,11 +23,14 @@ test("clears drag state on platform cancellation", async () => {
       onDragCancel: (callback) => {
         cancel = callback
         subscribed = true
+
         return () => (subscribed = false)
       },
     })
+
     return null
   }, document.createElement("div"))
+
   await Promise.resolve()
 
   cancel()

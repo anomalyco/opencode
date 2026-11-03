@@ -19,6 +19,11 @@ export const ProjectTable = sqliteTable("project", {
   icon_color: text(),
   ...Timestamps,
   time_initialized: integer(),
+  time_active: integer()
+    .notNull()
+    .default(0)
+    .$defaultFn(() => Date.now()),
+  time_archived: integer(),
   sandboxes: absoluteArrayColumn().notNull(),
   commands: text({ mode: "json" }).$type<{ start?: string }>(),
 })

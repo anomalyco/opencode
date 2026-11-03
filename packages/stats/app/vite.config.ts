@@ -5,7 +5,7 @@ import { defineConfig, type PluginOption } from "vite"
 export default defineConfig({
   base: "/data/",
   plugins: [
-    solidStart() as PluginOption,
+    solidStart({ middleware: "./src/middleware.ts" }) as PluginOption,
     nitro({
       compatibilityDate: "2024-09-19",
       preset: "cloudflare-module",

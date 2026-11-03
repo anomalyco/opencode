@@ -1,24 +1,27 @@
-import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { For, Show, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
+import { Predicate } from "effect"
 import {
   DEFAULT_PALETTE_KEYBIND,
   formatKeybind,
   keyFromKeyboardEvent,
   parseKeybind,
   useCommand,
+  type CommandSection,
 } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePluginHost } from "@/runtime/plugin/host"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
+import { SettingsSearchEmpty } from "@/settings/search-empty"
+import { SettingsSearchField } from "@/settings/search-field"
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
 const PALETTE_ID = "command.palette"
 
 type KeybindGroup = "General" | "Session" | "Navigation" | "Model and agent" | "Terminal" | "Prompt"
@@ -29,8 +32,11 @@ type KeybindMeta = {
 }
 
 type KeybindMap = Record<string, string | undefined>
+
 type CommandContext = ReturnType<typeof useCommand>
+
 type LanguageContext = ReturnType<typeof useLanguage>
+
 type SettingsContext = ReturnType<typeof useSettings>
 
 const GROUPS: KeybindGroup[] = ["General", "Session", "Navigation", "Model and agent", "Terminal", "Prompt"]
@@ -52,12 +58,26 @@ const groupKey: Record<KeybindGroup, GroupKey> = {
   Prompt: "settings.shortcuts.group.prompt",
 }
 
-function groupFor(id: string): KeybindGroup {
+const sectionGroup: Record<CommandSection, KeybindGroup> = {
+  general: "General",
+  session: "Session",
+  navigation: "Navigation",
+  model: "Model and agent",
+  terminal: "Terminal",
+  prompt: "Prompt",
+}
+
+function groupFor(id: string, section?: CommandSection): KeybindGroup {
+  if (section) return sectionGroup[section]
+
   if (id === PALETTE_ID) return "General"
-  if (id.startsWith("terminal.")) return "Terminal"
+
   if (id.startsWith("model.") || id.startsWith("agent.") || id.startsWith("mcp.")) return "Model and agent"
+
   if (id.startsWith("file.") || id.startsWith("fileTree.")) return "Navigation"
+
   if (id.startsWith("prompt.")) return "Prompt"
+
   if (
     id.startsWith("session.") ||
     id.startsWith("message.") ||
@@ -80,14 +100,19 @@ function recordKeybind(event: KeyboardEvent) {
   const parts: string[] = []
 
   const mod = IS_MAC ? event.metaKey : event.ctrlKey
+
   if (mod) parts.push("mod")
 
   if (IS_MAC && event.ctrlKey) parts.push("ctrl")
+
   if (!IS_MAC && event.metaKey) parts.push("meta")
+
   if (event.altKey) parts.push("alt")
+
   if (event.shiftKey) parts.push("shift")
 
   const key = keyFromKeyboardEvent(event)
+
   if (!key) return
   parts.push(key)
 
@@ -100,11 +125,17 @@ function signatures(config: string | undefined) {
 
   for (const kb of parseKeybind(config)) {
     const parts: string[] = []
+
     if (kb.ctrl) parts.push("ctrl")
+
     if (kb.alt) parts.push("alt")
+
     if (kb.shift) parts.push("shift")
+
     if (kb.meta) parts.push("meta")
+
     if (kb.key) parts.push(kb.key)
+
     if (parts.length === 0) continue
     sigs.push(parts.join("+"))
   }
@@ -112,29 +143,41 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
-function keybinds(value: unknown): KeybindMap {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-  return value as KeybindMap
-}
-
-function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
+function listFor(
+  command: Pick<CommandContext, "catalog" | "options">,
+  map: KeybindMap,
+  palette: string,
+  plugins: ReadonlySet<string> | undefined,
+) {
   const out = new Map<string, KeybindMeta>()
   out.set(PALETTE_ID, { title: palette, group: "General" })
+  // A command that shares another's shortcut is set through that command, unless it already has its own.
+  const follower = (opt: { id: string; follows?: string }) => !!opt.follows && !Predicate.isString(map[opt.id])
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
+
+    // The catalog remembers commands that are not registered right now; a removed or renamed plugin's never return.
+    if (opt.plugin && plugins && !plugins.has(opt.plugin)) continue
+
     if (opt.hidden) continue
-    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+
+    if (follower(opt)) continue
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
   for (const opt of command.options) {
     if (opt.id.startsWith("suggested.")) continue
+
     if (opt.hidden) continue
-    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+
+    if (follower(opt)) continue
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
   for (const [id, value] of Object.entries(map)) {
-    if (typeof value !== "string") continue
+    if (!Predicate.isString(value)) continue
+
     if (out.has(id)) continue
     out.set(id, { title: id, group: groupFor(id) })
   }
@@ -144,16 +187,19 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
 
 function groupedFor(list: Map<string, KeybindMeta>) {
   const out = new Map<KeybindGroup, string[]>()
+
   for (const group of GROUPS) out.set(group, [])
 
   for (const [id, item] of list) {
     const ids = out.get(item.group)
+
     if (!ids) continue
     ids.push(id)
   }
 
   for (const group of GROUPS) {
     const ids = out.get(group)
+
     if (!ids) continue
     ids.sort((a, b) => (list.get(a)?.title ?? "").localeCompare(list.get(b)?.title ?? ""))
   }
@@ -168,9 +214,11 @@ function filteredFor(
   keybind: (id: string) => string,
 ) {
   const value = query.toLowerCase().trim()
+
   if (!value) return grouped
 
   const out = new Map<KeybindGroup, string[]>()
+
   for (const group of GROUPS) out.set(group, [])
 
   const items = Array.from(list.entries()).map(([id, meta]) => ({
@@ -187,6 +235,7 @@ function filteredFor(
 
   for (const result of results) {
     const ids = out.get(result.obj.group)
+
     if (!ids) continue
     ids.push(result.obj.id)
   }
@@ -197,8 +246,10 @@ function filteredFor(
 export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "keybinds">
+    /** The ids of the installed GUI plugins; remembered commands of any other plugin are not listed. */
+    plugins?: () => ReadonlySet<string>
     settings: {
-      current: { keybinds: unknown }
+      current: { keybinds?: KeybindMap }
       keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
     }
     target?: Document
@@ -206,58 +257,79 @@ export function createKeybindSettingsController(
   },
   language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
 ) {
-  const [store, setStore] = createStore({ active: null as string | null })
-  const overrides = createMemo(() => keybinds(input.settings.current.keybinds))
+  const [store, setStore] = createStore<{ active: string | null }>({ active: null })
+  const overrides = createMemo(() => input.settings.current.keybinds ?? {})
+
   const list = createMemo(() => {
     language.locale()
-    return listFor(input.command, overrides(), language.t("command.palette"))
+
+    return listFor(input.command, overrides(), language.t("command.palette"), input.plugins?.())
   })
+
   const grouped = createMemo(() => groupedFor(list()))
   const title = (id: string) => list().get(id)?.title ?? ""
+
   const effective = (id: string) => {
     if (id === PALETTE_ID) return input.settings.keybinds.get(id) ?? DEFAULT_PALETTE_KEYBIND
 
     const custom = input.settings.keybinds.get(id)
-    if (typeof custom === "string") return custom
+
+    if (Predicate.isString(custom)) return custom
 
     const live = input.command.options.find((item) => item.id === id)
+
     if (live?.keybind) return live.keybind
+
     return input.command.catalog.find((item) => item.id === id)?.keybind
   }
+
   const used = createMemo(() => {
     const value = new Map<string, { id: string; title: string }[]>()
 
     for (const id of list().keys()) {
       for (const signature of signatures(effective(id))) {
         const items = value.get(signature)
+
         if (items) {
           items.push({ id, title: title(id) })
           continue
         }
+
         value.set(signature, [{ id, title: title(id) }])
       }
     }
 
     return value
   })
+
   const stop = () => {
     if (!store.active) return
     setStore("active", null)
     input.command.keybinds(true)
   }
+
   const toggle = (id: string) => {
     if (store.active === id) {
       stop()
+
       return
     }
+
     if (store.active) stop()
     setStore("active", id)
     input.command.keybinds(false)
   }
+
+  const unbind = (id: string) => {
+    input.settings.keybinds.set(id, "none")
+    stop()
+  }
+
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
 
   const handle = (event: KeyboardEvent) => {
     const id = store.active
+
     if (!id) return
 
     event.preventDefault()
@@ -266,6 +338,7 @@ export function createKeybindSettingsController(
 
     if (event.key === "Escape") {
       stop()
+
       return
     }
 
@@ -275,16 +348,19 @@ export function createKeybindSettingsController(
       !event.metaKey &&
       !event.altKey &&
       !event.shiftKey
+
     if (clear) {
-      input.settings.keybinds.set(id, "none")
-      stop()
+      unbind(id)
+
       return
     }
 
     const next = recordKeybind(event)
+
     if (!next) return
 
     const conflicts = new Map<string, string>()
+
     for (const signature of signatures(next)) {
       for (const item of used().get(signature) ?? []) {
         if (item.id === id) continue
@@ -300,6 +376,7 @@ export function createKeybindSettingsController(
           titles: [...conflicts.values()].join(", "),
         }),
       })
+
       return
     }
 
@@ -307,7 +384,8 @@ export function createKeybindSettingsController(
     stop()
   }
 
-  const target = input.target ?? (typeof document === "object" ? document : undefined)
+  const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
+
   if (target) makeEventListener(target, "keydown", handle, { capture: true })
 
   onCleanup(() => {
@@ -325,9 +403,10 @@ export function createKeybindSettingsController(
     capture: {
       active: () => store.active,
       toggle,
+      unbind,
     },
     settings: {
-      hasOverrides: () => Object.values(overrides()).some((value) => typeof value === "string"),
+      hasOverrides: () => Object.values(overrides()).some(Predicate.isString),
       reset: () => {
         stop()
         input.settings.keybinds.resetAll()
@@ -340,24 +419,28 @@ export function createKeybindSettingsController(
   }
 }
 
-export function SettingsKeybinds(props: { active?: boolean; autofocus?: boolean }) {
+export function SettingsKeybinds(props: { active?: boolean }) {
   const command = useCommand()
   const settings = useSettings()
+  const host = usePluginHost()
+  const plugins = createMemo(() => new Set(host.definitions().map((definition) => definition.id)))
+
   const controller = createKeybindSettingsController({
     command,
+    plugins,
     settings,
   })
 
   return (
     <SettingsKeybindsView
       visible={props.active}
-      autofocus={props.autofocus}
       groups={controller.catalog.groups}
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
       active={controller.capture.active()}
       onCapture={controller.capture.toggle}
+      onUnbind={controller.capture.unbind}
       hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
@@ -366,31 +449,17 @@ export function SettingsKeybinds(props: { active?: boolean; autofocus?: boolean 
 
 function SettingsKeybindsView(props: {
   visible?: boolean
-  autofocus?: boolean
   groups: KeybindGroup[]
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
   keybind: (id: string) => string
   active: string | null
   onCapture: (id: string) => void
+  onUnbind: (id: string) => void
   hasOverrides: boolean
   onReset: () => void
 }) {
   const language = useLanguage()
-  let search: HTMLInputElement | undefined
-  createEffect(
-    on(
-      () => props.visible ?? true,
-      (visible) => {
-        if (!visible) return
-        const frame = requestAnimationFrame(() => {
-          if (props.visible !== false && props.autofocus !== false && search?.isConnected)
-            search.focus({ preventScroll: true })
-        })
-        onCleanup(() => cancelAnimationFrame(frame))
-      },
-    ),
-  )
   const [store, setStore] = createStore({ filter: "" })
   const filtered = createMemo(() => props.filtered(store.filter))
   const hasResults = createMemo(() => props.groups.some((group) => (filtered().get(group)?.length ?? 0) > 0))
@@ -407,31 +476,12 @@ function SettingsKeybindsView(props: {
             {language.t("settings.shortcuts.reset.button")}
           </Button>
         </div>
-        <div class="settings-tab-search">
-          <TextInput
-            ref={search}
-            type="search"
-            appearance="base"
-            value={store.filter}
-            onInput={(event) => setStore("filter", event.currentTarget.value)}
-            placeholder={language.t("settings.shortcuts.search.placeholder")}
-            spellcheck={false}
-            autocorrect="off"
-            autocomplete="off"
-            autocapitalize="off"
-            aria-label={language.t("settings.shortcuts.search.placeholder")}
-          />
-          <Show when={store.filter}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="small"
-              class="settings-tab-search-clear"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-              onClick={() => setStore("filter", "")}
-            />
-          </Show>
-        </div>
+        <SettingsSearchField
+          value={store.filter}
+          active={props.visible ?? true}
+          onInput={(value) => setStore("filter", value)}
+          placeholder={language.t("settings.shortcuts.search.placeholder")}
+        />
       </div>
       <div class="settings-tab-body">
         <div class="settings-shortcuts settings-section-stack">
@@ -442,27 +492,42 @@ function SettingsKeybindsView(props: {
                   <h3 class="settings-section-title">{language.t(groupKey[group])}</h3>
                   <SettingsList>
                     <For each={filtered().get(group) ?? []}>
-                      {(id) => (
-                        <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-                          <span>{props.title(id)}</span>
-                          <button
-                            type="button"
-                            data-keybind-id={id}
-                            classList={{
-                              "settings-keybind-button": true,
-                              "settings-keybind-button--active": props.active === id,
-                            }}
-                            onClick={() => props.onCapture(id)}
-                          >
-                            <Show
-                              when={props.active === id}
-                              fallback={props.keybind(id) || language.t("settings.shortcuts.unassigned")}
-                            >
-                              {language.t("settings.shortcuts.pressKeys")}
-                            </Show>
-                          </button>
-                        </div>
-                      )}
+                      {(id) => {
+                        const binding = () => props.keybind(id)
+
+                        return (
+                          <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
+                            <span>{props.title(id)}</span>
+                            <div class="flex items-center gap-1">
+                              <Show when={props.active === id && binding()}>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="ghost-danger"
+                                  onClick={() => props.onUnbind(id)}
+                                >
+                                  {language.t("settings.shortcuts.unbind")}
+                                </Button>
+                              </Show>
+                              <Button
+                                type="button"
+                                size="small"
+                                variant={binding() ? "ghost" : "ghost-muted"}
+                                data-keybind-id={id}
+                                data-expanded={props.active === id ? "" : undefined}
+                                onClick={() => props.onCapture(id)}
+                              >
+                                <Show
+                                  when={props.active === id}
+                                  fallback={binding() || language.t("settings.shortcuts.unassigned")}
+                                >
+                                  {language.t("settings.shortcuts.pressKeys")}
+                                </Show>
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      }}
                     </For>
                   </SettingsList>
                 </div>
@@ -470,9 +535,8 @@ function SettingsKeybindsView(props: {
             )}
           </For>
           <Show when={store.filter && !hasResults()}>
-            <div class="settings-shortcuts-status">
-              <span>{language.t("settings.shortcuts.search.empty")}</span>
-              <span class="settings-shortcuts-status-filter">&quot;{store.filter}&quot;</span>
+            <div class="settings-tab-search-empty">
+              <SettingsSearchEmpty query={store.filter} />
             </div>
           </Show>
         </div>

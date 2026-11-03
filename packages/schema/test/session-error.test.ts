@@ -11,7 +11,9 @@ describe("SessionError", () => {
   test("round trips current and future error types through JSON", () => {
     const values: SessionError.Error[] = [
       { type: "provider.rate-limit", message: "Slow down" },
+      { type: "provider.rate-limit", message: "Slow down", status: 429, response: { body: '{"error":{}}' } },
       { type: "provider.auth", message: "Authentication failed" },
+      { type: "provider.free-limit", message: "Free usage limit reached", status: 429, retryAfterMs: 3_600_000 },
       { type: "provider.future-condition", message: "A future provider failure" },
       { type: "unknown", message: "Unexpected" },
     ]
@@ -28,7 +30,7 @@ describe("SessionError", () => {
       Schema.decodeUnknownSync(SessionError.Error)({
         type: "provider.timeout",
         message: "Timeout",
-        retryAfterMs: 2_500,
+        retryable: true,
       }),
     ).toEqual({ type: "provider.timeout", message: "Timeout" })
   })
@@ -36,6 +38,9 @@ describe("SessionError", () => {
   test("rejects missing envelope fields", () => {
     expect(() => Schema.decodeUnknownSync(SessionError.Error)({ type: "provider.auth" })).toThrow()
     expect(() => Schema.decodeUnknownSync(SessionError.Error)({ message: "Missing type" })).toThrow()
+    expect(() =>
+      Schema.decodeUnknownSync(SessionError.Error)({ type: "provider.auth", message: "Failed", response: {} }),
+    ).toThrow()
   })
 })
 

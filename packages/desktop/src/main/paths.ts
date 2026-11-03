@@ -11,6 +11,7 @@ export interface Resolved {
 export const resolve = Effect.gen(function* () {
   const path = yield* Path.Path
   const root = path.dirname(yield* path.fromFileUrl(new URL(import.meta.url)))
+
   return {
     developmentResourcesRoot: path.join(root, "../../resources"),
     preloadPath: path.join(root, "../preload/index.cjs"),

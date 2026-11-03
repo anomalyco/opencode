@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import type { Builtins } from "../interpreter/intrinsics.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
@@ -33,21 +32,16 @@ const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
 export const toHostRegex = (arg: Value, method: string, extraFlags = ""): RegExp => {
-  // Native parity: an undefined pattern behaves as an empty pattern.
-  if (arg === undefined) return new RegExp("", extraFlags)
   if (arg instanceof RegExpObj) return arg.regex
-  if (typeof arg === "string") {
-    try {
-      return new RegExp(arg, extraFlags)
-    } catch (error) {
-      throw syntaxError(
-        `String.${method} received the string ${JSON.stringify(arg)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
-      )
-    }
+  // Anything else is a pattern string, as `new RegExp(arg)` would read it: undefined is the empty pattern.
+  const source = arg === undefined ? "" : coerceToString(arg)
+  try {
+    return new RegExp(source, extraFlags)
+  } catch (error) {
+    throw syntaxError(
+      `String.${method} received the string ${JSON.stringify(source)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
+    )
   }
-  throw typeError(
-    `String.${method} expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string pattern, not ${arg === null ? "null" : typeof arg}.`,
-  )
 }
 
 export const matchToValue = (builtins: Builtins, match: RegExpMatchArray): Arr => {
@@ -88,11 +82,11 @@ export const constructRegExp = (builtins: Builtins, args: Array<Value>, proto: O
 export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.RegExp
-  const regexp = constructor<R>(builtins, proto, {
+  const regexp = constructor(builtins, proto, {
     name: "RegExp",
     length: 2,
-    call: (_, args) => Effect.sync(() => constructRegExp(builtins, args)),
-    construct: (args, newTarget) => Effect.sync(() => constructRegExp(builtins, args, prototypeFrom(newTarget, proto))),
+    call: (_, args) => constructRegExp(builtins, args),
+    construct: (args, newTarget) => constructRegExp(builtins, args, prototypeFrom(newTarget, proto)),
   })
   methods(builtins, regexp, [
     [

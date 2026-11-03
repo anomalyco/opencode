@@ -1,5 +1,6 @@
 import { createMemo, createSignal } from "solid-js"
-import { useConfig } from "../config"
+import { useConfig, useNewDesigns } from "../config"
+import { DIALOG_LIST_INSET } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { useToast } from "../ui/toast"
@@ -13,10 +14,22 @@ type Experiment = {
 // In-flight features anyone can opt into. Each entry is temporary: an
 // experiment either graduates (delete the entry, make the behavior
 // unconditional) or dies (delete the entry and the branch it gated).
-export const experiments: Experiment[] = []
+export const experiments: Experiment[] = [
+  {
+    id: "new-designs",
+    title: "New designs",
+    description: "Preview the new TUI designs",
+  },
+  {
+    id: "client-mcp",
+    title: "TUI tools",
+    description: "Let the agent open terminals in this TUI (requires server support)",
+  },
+]
 
 export function DialogExperiments() {
   const config = useConfig()
+  const newDesigns = useNewDesigns()
   const theme = useTheme()
   const toast = useToast()
   const [selected, setSelected] = createSignal<Experiment>()
@@ -56,11 +69,11 @@ export function DialogExperiments() {
       onMove={(option) => setSelected(option.value)}
       onSelect={(option) => void change(option.value)}
       emptyView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={theme.text.muted}>No experiments available</text>
         </box>
       }
-      footerHints={experiments.length > 0 ? [{ title: "←/→", label: "change" }] : []}
+      footerHints={experiments.length > 0 && !newDesigns() ? [{ title: "change", label: "←/→" }] : []}
       bindings={
         experiments.length > 0
           ? [

@@ -17,8 +17,8 @@ const emailSignup = action(async (formData: FormData) => {
       email_address: emailAddress,
     }),
   })
-  console.log(response)
-  return true
+  if (!response.ok) console.error("EmailOctopus signup failed:", response.status, await response.text())
+  return response.ok
 })
 
 export function EmailSignup() {
@@ -31,16 +31,26 @@ export function EmailSignup() {
         <p>{i18n.t("email.subtitle")}</p>
       </div>
       <form data-slot="form" action={emailSignup} method="post">
-        <input type="email" name="email" placeholder={i18n.t("email.placeholder")} required />
+        <input
+          type="email"
+          name="email"
+          placeholder={i18n.t("email.placeholder")}
+          aria-label={i18n.t("email.placeholder")}
+          required
+        />
         <button type="submit" disabled={submission.pending}>
           {i18n.t("email.subscribe")}
         </button>
       </form>
-      <Show when={submission.result}>
-        <div style="color: #03B000; margin-top: 24px;">{i18n.t("email.success")}</div>
+      <Show when={submission.result === true}>
+        <div role="status" style="color: #03B000; margin-top: 24px;">
+          {i18n.t("email.success")}
+        </div>
       </Show>
-      <Show when={submission.error}>
-        <div style="color: #FF408F; margin-top: 24px;">{submission.error}</div>
+      <Show when={submission.result === false || submission.error}>
+        <div role="alert" style="color: #FF408F; margin-top: 24px;">
+          {i18n.t("email.error")}
+        </div>
       </Show>
     </section>
   )

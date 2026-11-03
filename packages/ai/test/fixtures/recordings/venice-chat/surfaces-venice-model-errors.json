@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:venice-chat",
+      "provider:venice",
+      "protocol:venice-chat",
+      "error"
+    ],
+    "name": "venice-chat/surfaces-venice-model-errors",
+    "recordedAt": "2026-10-05T02:59:11.768Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.venice.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"no-such-model-xyz\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"venice_parameters\":{\"include_venice_system_prompt\":false}}"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"error\":\"Specified model not found: no-such-model-xyz. Did you mean: z-ai-glm-5-3, z-ai-glm-5-3-flash, z-ai-glm-5-turbo?\"}"
+      }
+    }
+  ]
+}

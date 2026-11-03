@@ -7,6 +7,7 @@ const location = { directory: "/repo", project: { id: "project", directory: "/re
 // Serves the current text from the requested cursor, at most one page per request.
 function server(text: () => string, page = Infinity) {
   const cursors: number[] = []
+
   return {
     cursors,
     load: (input: ShellOutputInput): Promise<ShellOutputOutput> => {
@@ -14,6 +15,7 @@ function server(text: () => string, page = Infinity) {
       cursors.push(cursor)
       const full = text()
       const output = full.slice(cursor, cursor + page)
+
       return Promise.resolve({
         location,
         data: { output, cursor: cursor + output.length, size: full.length, truncated: false },
@@ -30,12 +32,16 @@ async function flush() {
 describe("followShellOutput", () => {
   test("stops polling a missing shell and never requests it again", async () => {
     vi.useFakeTimers()
+
     try {
       const cursors: number[] = []
+
       const load = (input: ShellOutputInput): Promise<ShellOutputOutput> => {
         cursors.push(input.cursor ?? 0)
+
         return Promise.reject({ _tag: "ShellNotFoundError", id: input.id, message: "Shell command not found" })
       }
+
       const follow = () =>
         followShellOutput({ id: "shell_missing", directory: "/repo", running: true, load, onOutput() {} })
 
@@ -60,10 +66,12 @@ describe("followShellOutput", () => {
 
   test("polls a running shell once per second and resumes from the cached cursor after a remount", async () => {
     vi.useFakeTimers()
+
     try {
       let text = "hello\n"
       const shell = server(() => text)
       const outputs: string[] = []
+
       const follow = (running: boolean) =>
         followShellOutput({
           id: "shell_live",

@@ -6,7 +6,9 @@ function common(active: string, done: string) {
   const a = Array.from(active)
   const b = Array.from(done)
   let i = 0
+
   while (i < a.length && i < b.length && a[i] === b[i]) i++
+
   return {
     prefix: a.slice(0, i).join(""),
     active: a.slice(i).join(""),
@@ -16,6 +18,7 @@ function common(active: string, done: string) {
 
 function contentWidth(el: HTMLSpanElement | undefined) {
   if (!el) return
+
   return `${Math.ceil(el.getBoundingClientRect().width)}px`
 }
 
@@ -27,9 +30,11 @@ export function ToolStatusTitle(props: {
   split?: boolean
 }) {
   const split = createMemo(() => common(props.activeText, props.doneText))
+
   const suffix = createMemo(
     () => (props.split ?? true) && split().prefix.length >= 2 && split().active.length > 0 && split().done.length > 0,
   )
+
   const prefixLen = createMemo(() => Array.from(split().prefix).length)
   const activeTail = createMemo(() => (suffix() ? split().active : props.activeText))
   const doneTail = createMemo(() => (suffix() ? split().done : props.doneText))
@@ -39,6 +44,7 @@ export function ToolStatusTitle(props: {
     animating: false,
     width: undefined as string | undefined,
   })
+
   const width = () => state.width
   const active = () => state.active
   const animating = () => state.animating
@@ -50,6 +56,7 @@ export function ToolStatusTitle(props: {
 
   const finish = () => {
     if (frame !== undefined) cancelAnimationFrame(frame)
+
     if (finishTimer !== undefined) clearTimeout(finishTimer)
     frame = undefined
     finishTimer = undefined
@@ -62,6 +69,7 @@ export function ToolStatusTitle(props: {
     const next = props.active
     finish()
     setState("active", next)
+
     if (!first) return
 
     setState("animating", true)
@@ -69,10 +77,13 @@ export function ToolStatusTitle(props: {
     frame = requestAnimationFrame(() => {
       frame = undefined
       const last = contentWidth(next ? activeRef : doneRef)
+
       if (!last) {
         finish()
+
         return
       }
+
       if (first !== last) setState("width", last)
       finishTimer = setTimeout(finish, 600)
     })

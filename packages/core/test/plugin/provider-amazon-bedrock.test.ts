@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { AmazonBedrockPlugin } from "@opencode/core/plugin/provider/amazon-bedrock"
 import { Provider } from "@opencode/core/provider"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -12,34 +14,13 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* AmazonBedrockPlugin.effect(host)
 })
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    fx,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
 }
 
 const noAmbientAWS = {
@@ -76,6 +57,27 @@ describe("AmazonBedrockPlugin", () => {
     ),
   )
 
+  it.effect("gives the package the profile of a stored AWS profile login", () =>
+    withEnv(noAmbientAWS, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seedBedrock()
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make(Provider.ID.amazonBedrock),
+          value: Credential.External.make({
+            type: "external",
+            methodID: Integration.MethodID.make("aws-profile"),
+            metadata: { profile: "work" },
+          }),
+        })
+        yield* addPlugin()
+        const result = required(yield* catalog.get(Provider.ID.amazonBedrock))
+        expect(result.settings).toEqual({ profile: "work", region: "us-east-1" })
+        expect(result.activation).toBe("enabled")
+      }),
+    ),
+  )
+
   it.effect("keeps an explicit baseURL over endpoint", () =>
     withEnv(noAmbientAWS, () =>
       Effect.gen(function* () {
@@ -104,8 +106,7 @@ describe("AmazonBedrockPlugin", () => {
         })
       })
       yield* addPlugin()
-      expect((yield* integrations.get(integrationID))?.methods).toEqual([
-        { type: "key" },
+      expect((yield* integrations.get(integrationID))?.methods.filter((method) => method.type === "env")).toEqual([
         { type: "env", names: ["AWS_BEARER_TOKEN_BEDROCK"] },
       ])
     }),

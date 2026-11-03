@@ -16,18 +16,26 @@ export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { 
 
 export function changedFileDiff(value: unknown): value is FileDiffInfo {
   if (!value || typeof value !== "object") return false
+
   if (!("file" in value) || typeof value.file !== "string") return false
+
   if (!("patch" in value) || typeof value.patch !== "string") return false
+
   if (!("additions" in value) || typeof value.additions !== "number") return false
+
   if (!("deletions" in value) || typeof value.deletions !== "number") return false
+
   if (!("status" in value)) return false
+
   if (value.status !== "added" && value.status !== "deleted" && value.status !== "modified") return false
+
   return value.additions > 0 || value.deletions > 0
 }
 
 export function patchFile(value: unknown): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
   let view: ViewDiff | undefined
+
   return {
     path: value.file,
     type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
@@ -42,23 +50,30 @@ export function patchFile(value: unknown): ApplyPatchFile | undefined {
 
 export function patchFiles(value: unknown) {
   if (!Array.isArray(value)) return []
+
   return value.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
 }
 
 export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
   const groups = patchFiles(value).reduce((result, file) => {
     const files = result.get(file.path)
+
     if (files) files.push(file)
+
     if (!files) result.set(file.path, [file])
+
     return result
   }, new Map<string, ApplyPatchFile[]>())
+
   return [...groups].map(([path, files]) => {
     const first = files[0]!
     const last = files.at(-1)!
     const type = last.type === "delete" ? "delete" : first.type === "add" ? "add" : "update"
+
     const chained = files.every(
       (file, index) => !!file.contents && (index === 0 || files[index - 1]?.contents?.after === file.contents.before),
     )
+
     if (!chained) {
       return {
         path,
@@ -80,6 +95,7 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
             additions: 0,
             deletions: 0,
           })
+
     // Parsed hunks already contain net change counts, excluding unchanged context.
     const counts = view.fileDiff.hunks.reduce(
       (result, hunk) => ({
@@ -88,6 +104,7 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
       }),
       { additions: 0, deletions: 0 },
     )
+
     return {
       path,
       type,

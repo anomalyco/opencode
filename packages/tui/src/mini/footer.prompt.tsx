@@ -9,6 +9,7 @@ import {
   StyledText,
   decodePasteBytes,
   fg,
+  measureEditText,
   stripAnsiSequences,
   type ColorInput,
   type KeyEvent,
@@ -39,8 +40,6 @@ import { stringWidth } from "../util/string-width"
 import { errorMessage } from "../util/error"
 import {
   createPromptHistory,
-  displayCharAt,
-  displaySlice,
   EXIT_COMMANDS,
   isExitCommand,
   isCompactCommand,
@@ -160,18 +159,13 @@ export type PromptState = {
   onPaste: (event: PasteEvent) => Promise<void>
   onContentChange: () => void
   onSizeChange: () => void
-  replacePrompt: (prompt: RunPrompt) => void
+  current: () => RunPrompt
+  replacePrompt: (prompt: RunPrompt, cursor?: number) => void
   bind: (area?: TextareaRenderable) => void
 }
 
 function emptyPrompt(shell: boolean): RunPrompt {
   return shell ? { text: "", parts: [], mode: "shell" } : { text: "", parts: [] }
-}
-
-function slashQuery(text: string, cursor: number) {
-  const at = slashTriggerIndex(text, cursor)
-  if (at === undefined) return
-  return { at, value: displaySlice(text, at + 1, cursor) }
 }
 
 function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
@@ -244,7 +238,7 @@ export function RunPromptBody(props: {
       }
 
       // Paste can leave the textarea layout stale until the next edit.
-      area.getLayoutNode().markDirty()
+      area.invalidateIntrinsicSize()
       renderer.requestRender()
       void renderer
         .idle()
@@ -369,6 +363,7 @@ export function createPromptState(input: PromptInput): PromptState {
   let draft: RunPrompt = { text: "", parts: [] }
   let stash: RunPrompt = { text: "", parts: [] }
   let area: TextareaRenderable | undefined
+  const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
   let tick = false
   let prev = input.view()
   let type = 0
@@ -632,7 +627,7 @@ export function createPromptState(input: PromptInput): PromptState {
         continue
       }
 
-      const text = displaySlice(area.plainText, item.start, item.end)
+      const text = area.getTextRange(item.start, item.end)
       const prev =
         part.type === "agent"
           ? (part.source?.value ?? "@" + part.name)
@@ -706,7 +701,7 @@ export function createPromptState(input: PromptInput): PromptState {
     })
   }
 
-  const restore = (value: RunPrompt, cursor = stringWidth(value.text)) => {
+  const restore = (value: RunPrompt, cursor = Infinity) => {
     revision += 1
     draft = promptCopy(value)
     setShell(value.mode === "shell")
@@ -717,7 +712,7 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(value.text)
     restoreParts(value.parts)
-    area.cursorOffset = Math.min(cursor, stringWidth(area.plainText))
+    area.cursorOffset = Math.min(cursor, measure(value.text))
     scheduleRows()
     area.focus()
   }
@@ -745,8 +740,9 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const text = area.plainText
-    const slash = slashQuery(text, cursor)
+    const beforeCursor = area.getTextRange(0, cursor)
+    const slashAt = slashTriggerIndex(beforeCursor, renderer.widthMethod)
+    const slash = slashAt === undefined ? undefined : { at: slashAt, value: area.getTextRange(slashAt + 1, cursor) }
     if (mode() === "slash") {
       if (slash === undefined) {
         hide()
@@ -767,13 +763,13 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (visible() && mode() === "mention") {
-      const query = displaySlice(text, at(), cursor)
+      const query = area.getTextRange(at(), cursor)
       if (cursor <= at() || /\s/.test(query)) {
         hide()
         return
       }
 
-      setQuery(displaySlice(text, at() + 1, cursor))
+      setQuery(area.getTextRange(at() + 1, cursor))
       return
     }
 
@@ -781,12 +777,12 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const idx = mentionTriggerIndex(text, cursor)
+    const idx = mentionTriggerIndex(beforeCursor, renderer.widthMethod)
     if (idx !== undefined) {
       setAt(idx)
       menu.reset()
       setMode("mention")
-      setQuery(displaySlice(text, idx + 1, cursor))
+      setQuery(area.getTextRange(idx + 1, cursor))
     }
   }
 
@@ -845,7 +841,7 @@ export function createPromptState(input: PromptInput): PromptState {
     const value = promptAttachmentLabel(attachments(), { uri: file.uri, name: file.filename })
     area.insertText(value + " ")
     const end = area.cursorOffset - 1
-    const start = end - stringWidth(value)
+    const start = end - measure(value)
     const id = area.extmarks.create({ start, end, virtual: true, typeId: type })
     marks.set(id, parts.length)
     parts.push({
@@ -900,7 +896,7 @@ export function createPromptState(input: PromptInput): PromptState {
         }
         hide()
         syncDraft()
-        target.getLayoutNode().markDirty()
+        target.invalidateIntrinsicSize()
         renderer.requestRender()
         scheduleRows()
       })
@@ -933,7 +929,7 @@ export function createPromptState(input: PromptInput): PromptState {
       stash = promptCopy(draft)
     }
 
-    const next = movePromptHistory(history, dir, area.plainText, area.cursorOffset)
+    const next = movePromptHistory(history, dir, area.plainText, area.cursorOffset, renderer.widthMethod)
     if (!next.apply || next.text === undefined || next.cursor === undefined) {
       return false
     }
@@ -950,7 +946,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (move(dir, event)) return
     if (!area || area.isDestroyed) return false
 
-    const endOffset = stringWidth(area.plainText)
+    const endOffset = measure(area.plainText)
     if (dir === -1) {
       if (area.cursorOffset === 0) return false
       if (area.visualCursor.visualRow === 0) {
@@ -1021,7 +1017,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
       restore({
         text: normalized,
-        parts: realignEditorPromptParts(normalized, current.parts),
+        parts: realignEditorPromptParts(normalized, current.parts, renderer.widthMethod),
         ...(current.mode ? { mode: current.mode } : {}),
         ...(current.command ? { command: current.command } : {}),
       })
@@ -1060,12 +1056,12 @@ export function createPromptState(input: PromptInput): PromptState {
       area.cursorOffset = 0
       const start = area.logicalCursor
       area.cursorOffset =
-        shell() || !head ? cursor : local ? stringWidth(area.plainText) : stringWidth(area.plainText.slice(0, head.end))
+        shell() || !head ? cursor : measure(local ? area.plainText : area.plainText.slice(0, head.end))
       const end = area.logicalCursor
 
       area.deleteRange(start.row, start.col, end.row, end.col)
       area.insertText(text)
-      area.cursorOffset = stringWidth(text)
+      area.cursorOffset = measure(text)
       hide()
       syncDraft()
       if (!shell()) {
@@ -1079,8 +1075,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const tail = displayCharAt(area.plainText, cursor)
-    const append = "@" + next.value + (tail === " " ? "" : " ")
+    const append = "@" + next.value + (area.getTextRange(cursor, cursor + 1) === " " ? "" : " ")
     area.cursorOffset = at()
     const start = area.logicalCursor
     area.cursorOffset = cursor
@@ -1090,7 +1085,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const text = "@" + next.value
     const startOffset = at()
-    const endOffset = startOffset + stringWidth(text)
+    const endOffset = startOffset + measure(text)
     const part = structuredClone(next.part)
     if (part.type === "agent") {
       part.source = {
@@ -1544,6 +1539,10 @@ export function createPromptState(input: PromptInput): PromptState {
       scheduleRows()
     },
     onSizeChange: scheduleRows,
+    current: () => {
+      syncDraft()
+      return promptCopy(draft)
+    },
     replacePrompt: restore,
     bind,
   }

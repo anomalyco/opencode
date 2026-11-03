@@ -1,13 +1,16 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMClient, LLMRequest } from "../../src/index.js"
+import { ai, LLMClient } from "../../src/effect.js"
 import { Azure, OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
-const request = LLM.request({ model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"), prompt: "hello" })
+const request = ai.request({
+  model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"),
+  prompt: "hello",
+})
 const trigger = { mechanism: "trigger" } as const
 
 testEffect(
@@ -22,21 +25,22 @@ testEffect(
       expect(body).toMatchObject({
         model: "fixture",
         stream: true,
-        store: false,
+        store: true,
         instructions: "Keep the context",
-        parallel_tool_calls: true,
+        parallel_tool_calls: false,
         prompt_cache_key: "session-key",
         service_tier: "priority",
         reasoning: { effort: "high", summary: "auto" },
+        context_management: [{ type: "compaction" }],
+        max_tool_calls: 1,
+        tool_choice: "required",
+        text: { verbosity: "high", format: { type: "json_object" } },
         prompt_cache_retention: "24h",
         prompt_cache_options: { mode: "session", ttl: "1h" },
         input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }, { type: "compaction_trigger" }],
       })
       expect(body.tools).toHaveLength(1)
       expect(body.tools[0].name).toBe("lookup")
-      expect(body.tool_choice).toBeUndefined()
-      expect(body.context_management).toBeUndefined()
-      expect(body.text).toBeUndefined()
       expect(body.max_output_tokens).toBeUndefined()
       expect(body.previous_response_id).toBeUndefined()
       return respond(
@@ -57,22 +61,24 @@ testEffect(
       )
     }),
   ),
-).effect("trigger uses normal request preparation, configured deployment, and supplied subscription headers", () =>
+).effect("trigger keeps request controls, configured deployment, and supplied subscription headers", () =>
   Effect.gen(function* () {
     const calls: string[] = []
-    const input = LLM.request({
+    const input = ai.request({
       model: request.model,
       system: "Keep the context",
       prompt: "hello",
       promptCacheKey: "session-key",
       tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
       toolChoice: { type: "tool", name: "lookup" },
-      generation: { maxTokens: 1 },
       providerOptions: {
         store: true,
         reasoningEffort: "high",
         reasoningSummary: "auto",
         contextManagement: [{ type: "compaction" }],
+        parallelToolCalls: false,
+        maxToolCalls: 1,
+        textVerbosity: "low",
       },
       http: {
         headers: { "chatgpt-account-id": "fixture-account", "x-codex-beta-features": "remote_compaction_v2" },
@@ -82,14 +88,13 @@ testEffect(
           prompt_cache_retention: "24h",
           prompt_cache_options: { mode: "session", ttl: "1h" },
           store: true,
-          stream: false,
-          text: { format: { type: "json_object" } },
+          text: { verbosity: "high", format: { type: "json_object" } },
           tool_choice: "required",
         },
       },
     })
-    const original = LLMRequest.input(input)
-    const result = yield* LLMClient.compact(input, {
+    const original = input
+    const result = yield* ai.compact(input, {
       ...trigger,
       http: (request, next) => {
         calls.push("http")
@@ -109,8 +114,79 @@ testEffect(
       totalTokens: 105,
       cacheReadInputTokens: 40,
     })
-    expect(LLMRequest.input(input)).toEqual(original)
+    expect(input).toEqual(original)
     expect(calls).toEqual(["http"])
+  }),
+)
+
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      expect(JSON.parse(text).text).toEqual({ verbosity: "low", format: { type: "json_object" } })
+      return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    }),
+  ),
+).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
+  ai.compact(
+    ai.request({
+      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      prompt: "Hello.",
+      providerOptions: { textVerbosity: "low" },
+      http: { body: { text: { format: { type: "json_object" } } } },
+    }),
+    trigger,
+  ),
+)
+
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      const body = JSON.parse(text)
+      expect(body.text).toEqual({ verbosity: "high", format: { type: "json_object" } })
+      expect(body.max_output_tokens).toBe(20_000)
+      return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    }),
+  ),
+).effect("keeps the effective body-overlay verbosity and text formatting", () =>
+  ai.compact(
+    ai.request({
+      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      prompt: "Hello.",
+      generation: { maxTokens: 20_000 },
+      providerOptions: { textVerbosity: "low" },
+      http: { body: { text: { verbosity: "high", format: { type: "json_object" } } } },
+    }),
+    trigger,
+  ),
+)
+
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      expect(JSON.parse(text).max_output_tokens).toBe(128)
+      return respond(JSON.stringify({ error: { message: "max_output_tokens must be at least 20000" } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })
+    }),
+  ),
+).effect("passes configured output limits through and leaves rejection to the provider", () =>
+  Effect.gen(function* () {
+    const error = yield* ai
+      .compact(
+        ai.request({
+          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+          prompt: "Hello.",
+          generation: { maxTokens: 128 },
+        }),
+        trigger,
+      )
+      .pipe(Effect.flip)
+    expect(error.message).toContain("at least 20000")
   }),
 )
 
@@ -138,7 +214,7 @@ testEffect(
   ),
 ).effect("correlates an ID-less checkpoint across repeated events and ignores other output", () =>
   Effect.gen(function* () {
-    const result = yield* LLMClient.compact(request, trigger)
+    const result = yield* ai.compact(request, trigger)
     expect(result.checkpoint.encrypted).toBe("opaque")
     expect(result.checkpoint.id).toBeString()
     expect("message" in result).toBe(false)
@@ -169,7 +245,7 @@ for (const [name, events] of Object.entries({
     fixedResponse(sseEvents(...wire), { headers: { "content-type": "text/event-stream", "x-fixture": "preserved" } }),
   ).effect(`rejects ${name} checkpoint response and preserves original error context`, () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.compact(request, trigger).pipe(Effect.flip)
+      const error = yield* ai.compact(request, trigger).pipe(Effect.flip)
       expect(error.reason.body).toBe(JSON.stringify(wire.at(-1)))
       expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-fixture": "preserved" } })
     }),
@@ -180,18 +256,16 @@ testEffect(fixedResponse(sseEvents({ type: "response.output_item.done", item: ch
   "rejects clean EOF without response.completed",
   () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.compact(request, trigger).pipe(Effect.flip)
+      const error = yield* ai.compact(request, trigger).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
     }),
 )
-for (const body of [{ input: [] }, { previous_response_id: "stale" }]) {
+for (const body of [{ input: [] }, { previous_response_id: "stale" }, { stream: false }]) {
   testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effect(
     `rejects caller-supplied ${Object.keys(body)[0]} before sending trigger`,
     () =>
       Effect.gen(function* () {
-        const error = yield* LLMClient.compact(LLMRequest.update(request, { http: { body } }), trigger).pipe(
-          Effect.flip,
-        )
+        const error = yield* ai.compact({ ...request, http: { body } }, trigger).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
       }),
   )
@@ -202,14 +276,17 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
   () =>
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
-      const unsupported = LLM.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
-      expect(LLMClient.canCompact(unsupported)).toBe(true)
-      expect(LLMClient.canCompact(unsupported, trigger)).toBe(false)
+      const unsupported = ai.request({
+        model: Azure.configure({ resourceName: "fixture" }).responses("fixture"),
+        prompt: "Hello",
+      })
+      expect(ai.canCompact(unsupported)).toBe(true)
+      expect(ai.canCompact(unsupported, trigger)).toBe(false)
       // @ts-expect-error Exercise untyped consumers; the service must reject before sending.
       const serviceError = yield* client.compact(unsupported, trigger).pipe(Effect.flip)
       expect(serviceError.reason._tag).toBe("UnsupportedOperation")
       // @ts-expect-error Exercise an unknown mechanism supplied by JavaScript.
-      const error = yield* LLMClient.compact(request, { mechanism: "other" }).pipe(Effect.flip)
+      const error = yield* ai.compact(request, { mechanism: "other" }).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }),
 )
@@ -219,7 +296,7 @@ testEffect(fixedResponse("must not use HTTP")).effect(
   () =>
     Effect.gen(function* () {
       let completed = 0
-      const operation = LLMClient.compact(request, {
+      const operation = ai.compact(request, {
         mechanism: "trigger",
         webSocket: {
           execute: () =>

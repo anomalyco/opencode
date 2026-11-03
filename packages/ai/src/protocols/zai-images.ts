@@ -1,30 +1,29 @@
-import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
-import { Media } from "../media.js"
+import { Duration, Effect, Schema } from "effect"
+import type { HttpClientResponse } from "effect/http"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 
-const ADAPTER = "zai-images"
-const NAME = "Z.ai Images"
-const PROVIDER = ProviderID.make("zai")
+const route = MediaProtocol.identity({ id: "zai-images", name: "Z.ai Images", provider: "zai" })
 export const DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
 export const PATH = "/images/generations"
+const OUTPUT_RETENTION = Duration.days(30)
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type ZAIImageString<Known extends string> = Known | (string & {})
-
-/** Provider-native options. The common `size` field lives on the request. */
+/** Provider-native options. Common `aspect` and `resolution` lower to `size`. */
 export type ZAIImageOptions = {
-  readonly quality?: ZAIImageString<"hd" | "standard">
+  /** Exact `WIDTHxHEIGHT`; it wins over `aspect` and `resolution`. */
+  readonly size?: string
+  readonly quality?: OpenString<"hd" | "standard">
   readonly userID?: string
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<ZAIImageOptions>
+export type Request = ImageRequest<ImageModel<ZAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema
@@ -55,10 +54,21 @@ const nativeOptions = (options: ZAIImageOptions | undefined) => {
   return { user_id: userID, ...native }
 }
 
+/** GLM-Image takes 1024–2048 px edges in steps of 32; CogView takes 512–2048 px in steps of 16. */
+const limits = (model: string) =>
+  model.startsWith("glm-image")
+    ? { multiple: 32, minEdge: 1024, maxEdge: 2048, maxPixels: 2 ** 22 }
+    : { multiple: 16, minEdge: 512, maxEdge: 2048, maxPixels: 2 ** 21 }
+
 const fromRequest = Effect.fn("ZAIImages.fromRequest")(function* (request: Request) {
+  const size = yield* ImageSizing.exact(route, request, limits(request.model.id))
   return MediaProtocol.json(
     mergeJsonRecords(
-      { model: request.model.id, prompt: request.prompt, size: request.size },
+      {
+        model: request.model.id,
+        prompt: request.prompt,
+        size: size === undefined ? undefined : `${size.width}x${size.height}`,
+      },
       nativeOptions(request.providerOptions),
       request.http?.body,
     ) ?? {},
@@ -69,27 +79,17 @@ const fromRequest = Effect.fn("ZAIImages.fromRequest")(function* (request: Reque
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
+const decodeDocument = route.decodeJson(ZAIImageResponse)
+
 const decodeResponse = Effect.fn("ZAIImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
-  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, ZAIImageResponse)(response)
+  const output = yield* decodeDocument(response)
   const decoded = output.value
-  if (decoded.data.length === 0) return yield* output.invalid(`${NAME} returned no images`)
-  const filters = decoded.content_filter ?? []
+  if (decoded.data.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   return new ImageResponse({
     // Z.ai returns only URLs and no content type; the media type resolves when the asset is materialized.
-    images: decoded.data.map((item) => Media.url(item.url)),
-    // Z.ai reports applied content filters alongside a successful result; surface them instead of dropping them.
-    notices:
-      filters.length === 0
-        ? undefined
-        : filters.map((filter) => ({
-            type: "moderated" as const,
-            message: `${NAME} applied a content filter${filter.role === undefined ? "" : ` for ${filter.role}`}${
-              filter.level === undefined ? "" : ` at level ${filter.level}`
-            }`,
-            providerMetadata: { zai: filter },
-          })),
+    images: yield* Effect.forEach(decoded.data, (item) => MediaProtocol.expiringUrl(item.url, OUTPUT_RETENTION)),
     providerMetadata: {
       zai: {
         created: decoded.created,
@@ -105,19 +105,14 @@ const decodeResponse = Effect.fn("ZAIImages.decodeResponse")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, ImageResponse>({
-  id: ADAPTER,
-  name: NAME,
-  unsupported: ["images", "mask", "n", "aspectRatio", "seed", "format"],
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
+  unsupported: ["images", "n"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<ZAIImageOptions>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
-    input,
-  )
+  ImageModel.fromRoute<ZAIImageOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const ZAIImages = {
   protocol,

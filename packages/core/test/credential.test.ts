@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
@@ -45,6 +45,30 @@ describe("Credential", () => {
       expect(yield* credentials.list(integrationID)).toEqual([
         expect.objectContaining({ id: created.id, label: "Personal" }),
       ])
+    }),
+  )
+
+  it.effect("reads key form answers stored in configuration before v2.1 as metadata", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const db = (yield* Database.Service).db
+      const integrationID = Integration.ID.make("azure")
+      // A row from an earlier release, which the current schema would otherwise strip.
+      const legacy = {
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "older" },
+        configuration: { resourceName: "answered" },
+      }
+      yield* db.run(
+        sql`INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred_legacy', ${integrationID}, 'Legacy', ${JSON.stringify(legacy)}, 1, 0, 0)`,
+      )
+
+      expect((yield* credentials.get(Credential.ID.make("cred_legacy")))?.value).toEqual({
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "answered" },
+      })
     }),
   )
 
@@ -197,6 +221,51 @@ describe("Credential", () => {
       yield* credentials.remove(older.id)
       expect((yield* credentials.list(integrationID)).at(-1)).toEqual(newer)
       expect((yield* credentials.list(otherIntegrationID)).at(-1)).toEqual(otherOlder)
+    }),
+  )
+
+  it.effect("creates credentials with a requested ID without taking over the current selection", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const integrationID = Integration.ID.make("openai")
+      const events = new Array<Event.Payload>()
+      yield* bus.listen((event) => Effect.sync(() => events.push(event)))
+
+      const first = yield* credentials.create({
+        id: Credential.ID.make("cred_0000imported"),
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "first" }),
+        activate: false,
+      })
+      expect(first.id).toBe(Credential.ID.make("cred_0000imported"))
+      expect((yield* credentials.list(integrationID)).at(-1)).toEqual(first)
+
+      const legacy = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "legacy" }),
+      })
+      yield* database.db
+        .update(CredentialTable)
+        .set({ active: null })
+        .where(eq(CredentialTable.integration_id, integrationID))
+        .run()
+        .pipe(Effect.orDie)
+      const imported = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "imported" }),
+        activate: false,
+      })
+
+      expect(yield* credentials.list(integrationID)).toEqual([first, imported, legacy])
+      expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: first.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Switched.type, data: { integrationID, credentialID: legacy.id } },
+        { type: Credential.Event.Updated.type, data: {} },
+      ])
     }),
   )
 })

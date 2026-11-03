@@ -11,12 +11,20 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
     const value = directory()
     void (async () => {
       const ref = value ? { directory: value } : undefined
+
       if (!ref) await data.location.syncInfo()
       await data.location.integration.sync(ref ?? data.location.default())
     })().catch(() => undefined)
   })
 
+  const location = () => {
+    const value = directory()
+
+    return value ? { directory: value } : undefined
+  }
+
   return {
-    list: () => data.location.integration.list(directory() ? { directory: directory()! } : undefined) ?? [],
+    ready: () => data.location.integration.list(location()) !== undefined,
+    list: () => data.location.integration.list(location()) ?? [],
   }
 }

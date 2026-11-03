@@ -38,13 +38,22 @@ export const KeyMethod = Schema.Struct({
   form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.KeyMethod" })
 
+/** Saves a reference to credentials managed outside opencode, configured by the form answers. */
+export interface ExternalMethod extends Schema.Schema.Type<typeof ExternalMethod> {}
+export const ExternalMethod = Schema.Struct({
+  id: MethodID,
+  type: Schema.Literal("external"),
+  label: Schema.String,
+  form: optional(Form.Fields),
+}).annotate({ identifier: "Integration.ExternalMethod" })
+
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}
 export const EnvMethod = Schema.Struct({
   type: Schema.Literal("env"),
   names: Schema.Array(Schema.String),
 }).annotate({ identifier: "Integration.EnvMethod" })
 
-export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, EnvMethod])
+export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, ExternalMethod, EnvMethod])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Integration.Method" })
 export type Method = typeof Method.Type
@@ -73,6 +82,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const AttemptID = Schema.String.pipe(
   Schema.brand("Integration.AttemptID"),
+  Schema.annotate({ identifier: "Integration.AttemptID" }),
   statics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
 )
 export type AttemptID = typeof AttemptID.Type

@@ -50,43 +50,58 @@ type BrowserCommand<T> =
   | { type: "connections" }
   | { type: "acknowledgements" }
 
+// Keyed by server origin so every installed server keeps its own connections and commands.
 type BrowserTransport = Window & {
-  __testSseTransport?: {
-    command: (command: BrowserCommand<unknown>) => unknown
-  }
+  __testSseTransports?: Record<string, { command: (command: BrowserCommand<unknown>) => unknown }>
 }
 
+// `keepalive` (default true) writes an SSE comment every 15 s like the real server, so long scenarios do not trip the
+// client's stall watchdog. Set it to false only to test that watchdog.
 export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEvent>(
   page: Page,
-  options: { server: string; retry?: number },
+  options: { server: string; retry?: number; keepalive?: boolean },
 ): Promise<SseTransport<T>> {
   const server = new URL(options.server).origin
   await page.addInitScript(
-    ({ server, retry }) => {
+    ({ server, retry, keepalive }) => {
       type Connection = SseConnectionRecord & { controller: ReadableStreamDefaultController<Uint8Array> }
+
       type ProbeWindow = Window & {
         __visualStabilityProbe?: { startedAt: number; markers: { at: number; label: string }[] }
       }
+
       const originalFetch = window.fetch.bind(window)
       const connections: Connection[] = []
       const acknowledgements: SseDeliveryAcknowledgement[] = []
       const encoder = new TextEncoder()
+      const keepalives = new Map<number, ReturnType<typeof setInterval>>()
+
+      const stopKeepalive = (id: number) => {
+        clearInterval(keepalives.get(id))
+        keepalives.delete(id)
+      }
+
       let nextConnectionID = 0
       let nextDeliveryID = 0
 
       const current = () => connections.findLast((connection) => connection.endedAt === undefined)
+
       const chunks = (bytes: Uint8Array, cuts?: readonly number[]) => {
         const boundaries = [...new Set(cuts ?? [])]
           .filter((cut) => Number.isInteger(cut) && cut > 0 && cut < bytes.byteLength)
           .sort((a, b) => a - b)
+
         return [0, ...boundaries].map((start, index) => bytes.slice(start, boundaries[index] ?? bytes.byteLength))
       }
+
       const marker = (label?: string) => {
         if (!label) return
         const probe = (window as ProbeWindow).__visualStabilityProbe
+
         if (!probe) return
         probe.markers.push({ at: performance.now() - probe.startedAt, label })
       }
+
       const frame = (payload: unknown, eventOptions: SseEventOptions = {}) =>
         [
           eventOptions.event === undefined ? "" : `event: ${eventOptions.event}\n`,
@@ -94,6 +109,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
           eventOptions.retry === undefined ? "" : `retry: ${eventOptions.retry}\n`,
           `data: ${JSON.stringify(payload)}\n\n`,
         ].join("")
+
       const acknowledge = (
         connection: Connection,
         bytes: number,
@@ -108,62 +124,87 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
           deliveredAt: performance.now(),
           ...(eventID === undefined ? {} : { eventID }),
         }
+
         acknowledgements.push(acknowledgement)
+
         return acknowledgement
       }
+
       const end = (mode: "close" | "disconnect" | "error", message?: string) => {
         const connection = current()
+
         if (!connection) throw new Error("SSE transport has no active connection")
+        stopKeepalive(connection.id)
         connection.endedAt = performance.now()
         connection.endedBy = mode
+
         if (message) connection.error = message
+
         if (mode === "close") {
           connection.controller.close()
+
           return
         }
+
         const error = new DOMException(
           message ?? "SSE connection disconnected",
           mode === "error" ? "Error" : "NetworkError",
         )
+
         connection.controller.error(error)
       }
 
       const command = (input: BrowserCommand<unknown>) => {
         if (input.type === "connections")
           return connections.map(({ controller: _controller, ...connection }) => connection)
+
         if (input.type === "acknowledgements") return acknowledgements
+
         if (input.type === "end") return end(input.mode, input.message)
         const connection = current()
+
         if (!connection) throw new Error("SSE transport has no active connection")
+
         if (input.type === "raw") {
           marker(input.marker)
           const output = chunks(new Uint8Array(input.bytes), input.cuts)
           output.forEach((chunk) => connection.controller.enqueue(chunk))
+
           return acknowledge(connection, input.bytes.length, output.length)
         }
+
         const encoded = input.deliveries.map((delivery) => ({
           delivery,
           payload: delivery.payload,
           bytes: encoder.encode(frame(delivery.payload, delivery.options)),
         }))
+
         encoded.forEach((item) => marker(item.delivery.options?.marker))
+
         if (input.burst) {
           const bytes = encoder.encode(encoded.map((item) => new TextDecoder().decode(item.bytes)).join(""))
           connection.controller.enqueue(bytes)
+
           return encoded.map((item) => acknowledge(connection, item.bytes.byteLength, 1, item.delivery.options?.id))
         }
+
         const output = chunks(encoded[0]!.bytes, input.cuts)
         output.forEach((chunk) => connection.controller.enqueue(chunk))
+
         return acknowledge(connection, encoded[0]!.bytes.byteLength, output.length, encoded[0]!.delivery.options?.id)
       }
 
-      ;(window as BrowserTransport).__testSseTransport = { command }
+      const host = window as BrowserTransport
+      host.__testSseTransports = { ...host.__testSseTransports, [server]: { command } }
+
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
+
         if (url.origin !== server || url.pathname !== "/api/event") return originalFetch(request)
 
         const id = ++nextConnectionID
+
         const record = {
           id,
           url: url.href,
@@ -171,18 +212,27 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
           headers: Object.fromEntries(request.headers.entries()),
           openedAt: performance.now(),
         } as Connection
+
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             record.controller = controller
             connections.push(record)
+
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
             controller.enqueue(
               encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
             )
+
+            if (keepalive)
+              keepalives.set(
+                id,
+                setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000),
+              )
             request.signal.addEventListener(
               "abort",
               () => {
                 if (record.endedAt !== undefined) return
+                stopKeepalive(id)
                 record.endedAt = performance.now()
                 record.endedBy = "abort"
                 controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
@@ -191,11 +241,14 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
             )
           },
           cancel() {
+            stopKeepalive(id)
+
             if (record.endedAt !== undefined) return
             record.endedAt = performance.now()
             record.endedBy = "disconnect"
           },
         })
+
         return Promise.resolve(
           new Response(stream, {
             status: 200,
@@ -206,37 +259,48 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
           }),
         )
       }
+
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: options.retry },
+    { server, retry: options.retry, keepalive: options.keepalive !== false },
   )
 
   const command = <Result>(input: BrowserCommand<T>) =>
-    page.evaluate((input) => {
-      const transport = (window as BrowserTransport).__testSseTransport
-      if (!transport) throw new Error("SSE transport was not installed before page load")
-      return transport.command(input as BrowserCommand<unknown>)
-    }, input) as Promise<Result>
+    page.evaluate(
+      ({ server, input }) => {
+        const transport = (window as BrowserTransport).__testSseTransports?.[server]
+
+        if (!transport) throw new Error(`SSE transport for ${server} was not installed before page load`)
+
+        return transport.command(input as BrowserCommand<unknown>)
+      },
+      { server, input },
+    ) as Promise<Result>
 
   return {
     server,
     async waitForConnection(input = {}) {
       const connection = await page.waitForFunction(
-        (after) => {
-          const transport = (window as BrowserTransport).__testSseTransport
+        ({ server, after }) => {
+          const transport = (window as BrowserTransport).__testSseTransports?.[server]
           const connections = transport?.command({ type: "connections" }) as SseConnectionRecord[] | undefined
+
           return connections?.findLast((connection) => connection.id > after && connection.endedAt === undefined)
         },
-        input.after ?? 0,
+        { server, after: input.after ?? 0 },
         { timeout: input.timeout },
       )
+
       let result: SseConnectionRecord | undefined
+
       try {
         result = await connection.jsonValue()
       } finally {
         await connection.dispose()
       }
+
       if (!result) throw new Error("SSE transport connection disappeared while waiting")
+
       return result
     },
     send(payload, eventOptions) {
@@ -254,6 +318,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
     },
     heartbeat(eventOptions) {
       const bytes = new TextEncoder().encode(": heartbeat\n\n")
+
       return command({
         type: "raw",
         bytes: Array.from(bytes),

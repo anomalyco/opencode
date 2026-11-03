@@ -2,8 +2,10 @@ import { describe, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Ref, Schema } from "effect"
 import { FileSystem } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { Media, Message } from "../src/index.js"
+import { HttpClientRequest } from "effect/http"
+import { ai, AIError, Media, Message, ToolCallPart } from "../src/effect.js"
+import { OpenAI } from "../src/providers.js"
+import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, scriptedResponses } from "./lib/http.js"
 
@@ -38,6 +40,44 @@ describe("Media", () => {
     }),
   )
 
+  it.effect("rejects local file references as request errors without breaking construction or decoding", () =>
+    Effect.gen(function* () {
+      const model = OpenAI.configure({ apiKey: "test" }).responses("video-model")
+      const restored = yield* Schema.decodeUnknownEffect(Media.AssetSchema)({
+        source: { type: "url", url: " FILE:/C:/clips/video.mp4", mediaType: "video/mp4" },
+      })
+      for (const asset of [
+        Media.url("file:///Users/example/clip.mp4", { mediaType: "video/mp4" }),
+        Media.ref("openai", "file:///Users/example/clip.mp4", "video/mp4"),
+        restored,
+      ]) {
+        const error = yield* compileRequest(ai.request({ model, prompt: [Message.media(asset)] })).pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toContain("Media.file(path)")
+      }
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "read", name: "read", input: {} })]),
+            Message.tool({
+              id: "read",
+              name: "read",
+              resultType: "content",
+              result: [{ type: "file", uri: "file:///Users/example/clip.mp4", mime: "video/mp4" }],
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("Media.file(path)")
+      expect(Media.ref("google", "gs://bucket/clip.mp4").source).toMatchObject({ id: "gs://bucket/clip.mp4" })
+      expect(Media.url("https://example.test/clip.mp4").source).toMatchObject({
+        url: "https://example.test/clip.mp4",
+      })
+    }),
+  )
+
   it.effect("parses data URLs and rejects malformed ones", () =>
     Effect.sync(() => {
       const asset = Media.fromDataUrl("data:image/jpeg;base64,/9j/")
@@ -63,9 +103,41 @@ describe("Media", () => {
       expect(Media.detectMediaType(WEBP)).toBe("image/webp")
       expect(Media.detectMediaType(PDF)).toBe("application/pdf")
       expect(Media.detectMediaType(Uint8Array.from([1, 2, 3]))).toBeUndefined()
+      expect(Media.detectMediaType(new TextEncoder().encode("ID3\x04"))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xfb, 0x90, 0x64]))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xf3, 0x90, 0x64]))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xf1, 0x50, 0x80]))).toBe("audio/aac")
+      expect(Media.detectMediaType(new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt "))).toBe("audio/wav")
+      expect(Media.detectMediaType(new TextEncoder().encode("OggS\0\x02"))).toBe("audio/ogg")
+      expect(Media.detectMediaType(new TextEncoder().encode("fLaC\0\0\0\x22"))).toBe("audio/flac")
       expect(Media.bytes(PNG).mediaType).toBe("image/png")
       expect(Media.bytes(Uint8Array.from([1, 2, 3])).mediaType).toBe("application/octet-stream")
       expect(Media.bytes(Uint8Array.from([1, 2, 3]), "image/x-custom").mediaType).toBe("image/x-custom")
+    }),
+  )
+
+  it.effect("tells ISO-BMFF brands apart", () =>
+    Effect.sync(() => {
+      const ftyp = (hex: string) => Uint8Array.from(Buffer.from(hex, "hex"))
+      expect(Media.detectMediaType(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe(
+        "image/avif",
+      )
+      expect(Media.detectMediaType(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")
+      expect(Media.detectMediaType(ftyp("000000246674797068656963000000006d6966314d6950726d6961664d694842"))).toBe(
+        "image/heic",
+      )
+      expect(Media.detectMediaType(ftyp("00000018667479706d69663100000000617669666d69663100000000"))).toBe("image/avif")
+      expect(Media.detectMediaType(ftyp("00000018667479706d69663100000000686569636d69663100000000"))).toBe("image/heic")
+      expect(Media.detectMediaType(ftyp("000000206674797069736f6d0000020069736f6d69736f32617663316d703431"))).toBe(
+        "video/mp4",
+      )
+      expect(Media.detectMediaType(ftyp("00000014667479707174202000000200717420200000000877696465"))).toBe(
+        "video/quicktime",
+      )
+      expect(Media.detectMediaType(ftyp("0000001c667479704d344120000002004d34412069736f6d69736f3200000008"))).toBe(
+        "audio/mp4",
+      )
+      expect(Media.bytes(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631")).kind).toBe("image")
     }),
   )
 
@@ -154,6 +226,56 @@ describe("Media", () => {
     }),
   )
 
+  it.effect("keeps transient url download headers out of toJSON and AssetSchema encoding", () =>
+    Effect.sync(() => {
+      const asset = Media.url("https://cdn.example.test/video.mp4", {
+        mediaType: "video/mp4",
+        expiresAt: 42,
+        headers: { "x-goog-api-key": "secret" },
+      })
+      expect(asset.headers).toEqual({ "x-goog-api-key": "secret" })
+      const source = { type: "url", url: "https://cdn.example.test/video.mp4", mediaType: "video/mp4", expiresAt: 42 }
+
+      expect(asset.toJSON()).not.toHaveProperty("headers")
+      expect(JSON.stringify(asset)).not.toContain("secret")
+      expect(asset.toJSON().source).toEqual(source)
+
+      const encoded = Schema.encodeSync(Media.AssetSchema)(asset)
+      expect(encoded).not.toHaveProperty("headers")
+      expect(encoded.source).toEqual(source)
+
+      const codec = Schema.fromJsonString(Media.AssetSchema)
+      const json = Schema.encodeSync(codec)(asset)
+      expect(json).not.toContain("secret")
+      const restored = Schema.decodeSync(codec)(json)
+      expect(restored).toBeInstanceOf(Media.Asset)
+      expect(restored.source).toEqual(source)
+      expect(restored.expiresAt).toBe(42)
+      expect(restored.headers).toBeUndefined()
+    }),
+  )
+
+  it.effect("fails url downloads with non-2xx status as a typed AIError keeping http and body", () =>
+    Effect.gen(function* () {
+      const body = JSON.stringify({ error: { message: "file expired" } })
+      const error = yield* Media.url("https://cdn.example.test/expired.png")
+        .bytes()
+        .pipe(
+          Effect.flip,
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(input.respond(body, { status: 404, headers: { "content-type": "application/json" } })),
+            ),
+          ),
+        )
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.message).toContain("file expired")
+      expect(error.reason.http?.status).toBe(404)
+      expect(error.reason.http?.url).toBe("https://cdn.example.test/expired.png")
+      expect(error.reason.body).toBe(body)
+    }),
+  )
+
   it.effect("reads files with sniffed media types and writes materialized assets", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
@@ -168,6 +290,16 @@ describe("Media", () => {
       const plain = `${dir}/notes.md`
       yield* fs.writeFile(plain, new TextEncoder().encode("# hi"))
       expect((yield* Media.file(plain)).mediaType).toBe("text/markdown")
+
+      for (const [name, mediaType] of [
+        ["photo.avif", "image/avif"],
+        ["photo.HEIC", "image/heic"],
+        ["photo.heif", "image/heif"],
+        ["clip.mov", "video/quicktime"],
+      ]) {
+        yield* fs.writeFile(`${dir}/${name}`, Uint8Array.from([1, 2, 3]))
+        expect((yield* Media.file(`${dir}/${name}`)).mediaType).toBe(mediaType)
+      }
 
       const target = `${dir}/copy.png`
       yield* Media.write(Media.base64("AQID", "image/png"), target)

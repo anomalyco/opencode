@@ -16,6 +16,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
+
   const [store, setStore] = createStore({
     name: defaultName(),
     color: props.project.icon?.color,
@@ -25,12 +26,14 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     iconHover: false,
     saving: 0,
   })
+
   const saved = {
     name: props.project.name ?? "",
     startup: store.startup.trim(),
     color: store.color,
     iconOverride: store.iconOverride,
   }
+
   let iconInput: HTMLInputElement | undefined
   let queue = Promise.resolve()
 
@@ -41,8 +44,10 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         if (props.project.id && props.project.id !== "global") {
           const project = await serverCtx().sdk.api.project.update({ projectID: props.project.id, ...patch })
           serverCtx().sync.project.update(project)
+
           return
         }
+
         serverCtx().sync.project.meta(props.project.worktree, patch)
       })
       .then(complete)
@@ -58,6 +63,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   const saveName = () => {
     const value = store.name.trim() === folderName() ? "" : store.name.trim()
+
     // A pending write can change the saved value, so reverting to it must still be queued.
     if (!store.saving && value === saved.name) return
     persist({ name: value }, () => {
@@ -67,6 +73,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   const saveStartup = () => {
     const value = store.startup.trim()
+
     if (!store.saving && value === saved.startup) return
     persist({ commands: { start: value } }, () => {
       saved.startup = value
@@ -86,11 +93,13 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     const reader = new FileReader()
     reader.onload = (event) => {
       const result = event.target?.result
+
       if (typeof result !== "string") return
       setStore("iconOverride", result)
       setStore("iconHover", false)
       saveIcon(store.color, result)
     }
+
     reader.readAsDataURL(file)
   }
 
@@ -109,6 +118,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       event.preventDefault()
       setStore("dragOver", false)
       const file = event.dataTransfer?.files[0]
+
       if (file) selectFile(file)
     },
     dragOver(event: DragEvent) {
@@ -120,14 +130,17 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     },
     inputChange(input: HTMLInputElement) {
       const file = input.files?.[0]
+
       if (file) selectFile(file)
     },
     iconClick() {
       if (store.iconOverride && store.iconHover) {
         setStore("iconOverride", "")
         saveIcon(store.color, "")
+
         return
       }
+
       iconInput?.click()
     },
     setIconInput(input: HTMLInputElement) {

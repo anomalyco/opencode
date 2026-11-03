@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { join } from "node:path"
-import { Effect, FileSystem, Option } from "effect"
+import { ByteSize, Effect, FileSystem, Option } from "effect"
 import { write, type Output } from "../src"
 import { it } from "./effect"
 
@@ -143,14 +143,14 @@ describe("HttpApiCodegen.write", () => {
               mtime: Option.none(),
               atime: Option.none(),
               birthtime: Option.none(),
-              dev: 0,
+              dev: 0n,
               ino: Option.none(),
               mode: 0,
               nlink: Option.none(),
               uid: Option.none(),
               gid: Option.none(),
               rdev: Option.none(),
-              size: FileSystem.Size(0),
+              size: ByteSize.bytes(0),
               blksize: Option.none(),
               blocks: Option.none(),
             }),

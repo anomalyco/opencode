@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test"
+import type { RGBA } from "@opentui/core"
 import {
-  DEFAULT_CATEGORICAL,
   migrateV1,
+  migrateV1NewDesigns,
   resolveThemeDocument,
+  rgbToOklch,
   selectThemeMode,
   themeModes,
+  type HueScale,
+  type ResolvedTheme,
 } from "@opencode/theme/tui"
 import { DEFAULT_THEMES, getOpenCodeTheme, resolveTheme as resolveV1 } from "../../../src/theme"
 import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
@@ -12,7 +16,7 @@ import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 
 const opencodeV1 = opencodeSource as ThemeV1Json
 const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light")
-const opencodeDark = resolveThemeDocument(getOpenCodeTheme(), "dark")
+const opencodeLightHues = allHues(opencodeLight)
 
 test("migrates resolved V1 modes into V2 tokens", () => {
   const migrated = migrateV1(opencodeV1)
@@ -72,7 +76,7 @@ test("references generated hues from matching token colors", () => {
   expect(migrated.base.markdown?.emphasis).toBe("#123456")
 })
 
-test("infers chromatic hues, anchors light and dark colors, and aliases ambiguous hues to gray", () => {
+test("infers and emits only chromatic hues represented by V1 colors", () => {
   const source = structuredClone(opencodeV1)
   const ambiguous = { light: "#808080", dark: "#808080" }
   source.theme.accent = ambiguous
@@ -93,12 +97,12 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(darkRed[200]).toBe("#450000")
   expect(lightRed[100]).not.toBe(lightRed[200])
   expect(darkRed[100]).not.toBe(darkRed[200])
-  expect(migrated.light.hue?.orange).toBe("$hue.gray")
-  expect(migrated.light.hue?.yellow).toBe("$hue.gray")
-  expect(migrated.light.hue?.green).toBe("$hue.gray")
-  expect(migrated.light.hue?.cyan).toBe("$hue.gray")
-  expect(migrated.light.hue?.blue).toBe("$hue.gray")
-  expect(migrated.light.hue?.purple).toBe("$hue.gray")
+  expect(migrated.light.hue?.orange).toBeUndefined()
+  expect(migrated.light.hue?.yellow).toBeUndefined()
+  expect(migrated.light.hue?.green).toBeUndefined()
+  expect(migrated.light.hue?.cyan).toBeUndefined()
+  expect(migrated.light.hue?.blue).toBeUndefined()
+  expect(migrated.light.hue?.purple).toBeUndefined()
   expect(migrated.light.hue?.accent).toBe("$hue.gray")
   expect(migrated.light.hue?.interactive).toBe("$hue.gray")
   expect(() => resolveThemeDocument(migrated, "light")).not.toThrow()
@@ -135,21 +139,22 @@ test("orders categorical hues by V1 semantic color mapping", () => {
   source.theme.warning = mapped("yellow")
   source.theme.primary = mapped("blue")
   source.theme.error = mapped("red")
+  source.theme.info = { light: "#67e8f9", dark: "#0e7490" }
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
-  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
+  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
 
   source.theme.accent = source.theme.secondary
-  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red", "cyan"])
 })
 
 test("gives accent and primary ownership of their inferred hues", () => {
   const source = structuredClone(opencodeV1)
-  source.theme.success = hex(opencodeLight.hue.orange[700])
-  source.theme.accent = hex(opencodeLight.hue.orange[600])
-  source.theme.info = hex(opencodeLight.hue.blue[700])
-  source.theme.primary = hex(opencodeLight.hue.blue[600])
+  source.theme.success = hex(opencodeLightHues.orange[700])
+  source.theme.accent = hex(opencodeLightHues.orange[600])
+  source.theme.info = hex(opencodeLightHues.blue[700])
+  source.theme.primary = hex(opencodeLightHues.blue[600])
 
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
@@ -162,7 +167,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(migrated.light.hue?.accent).toBe("$hue.orange")
   expect(migrated.light.hue?.interactive).toBe("$hue.blue")
 
-  source.theme.primary = hex(opencodeLight.hue.orange[500])
+  source.theme.primary = hex(opencodeLightHues.orange[500])
   const collisionMode = migrateV1(source).light
   const collision = collisionMode?.hue?.orange
   if (typeof collision !== "object") throw new Error("Expected concrete orange scale")
@@ -171,7 +176,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(collisionMode?.hue?.interactive).toBe("$hue.orange")
 })
 
-test("uses default categorical hues when V1 semantic colors are ambiguous", () => {
+test("uses the semantic neutral hue when V1 categorical colors are ambiguous", () => {
   const source = structuredClone(opencodeV1)
   source.theme.secondary = "transparent"
   source.theme.accent = "transparent"
@@ -179,10 +184,11 @@ test("uses default categorical hues when V1 semantic colors are ambiguous", () =
   source.theme.warning = "transparent"
   source.theme.primary = "transparent"
   source.theme.error = "transparent"
+  source.theme.info = "transparent"
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(DEFAULT_CATEGORICAL)
-  expect(migrated.dark?.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.base.categorical).toEqual(["neutral"])
+  expect(migrated.dark?.categorical).toEqual(["neutral"])
 })
 
 test("builds and extrapolates gray from V1 surfaces and text without using menus or borders", () => {
@@ -273,6 +279,42 @@ test("collapses identical V1 backgrounds when both variants infer one mode", () 
   expect(selectThemeMode(migratedLight, "dark").mode).toBe("light")
 })
 
+test("gives dialogs an opaque background when V1 panels are see-through", () => {
+  const lucent = DEFAULT_THEMES["lucent-orng"]!
+  for (const mode of ["dark", "light"] as const) {
+    const legacy = resolveV1(lucent, mode)
+    const dialog = resolveThemeDocument(migrateV1(lucent), mode).surface("dialog")
+    expect(legacy.backgroundPanel.a).toBe(0)
+    const [red, green, blue] = legacy.backgroundMenu.toInts()
+    expect(legacy.backgroundMenu.a).toBeLessThan(1)
+    expect(dialog.background.base.toInts()).toEqual([red, green, blue, 255])
+  }
+
+  const source = structuredClone(opencodeV1)
+  source.theme.background = "transparent"
+  source.theme.backgroundPanel = "transparent"
+  source.theme.backgroundElement = "transparent"
+  source.theme.backgroundMenu = "transparent"
+  expect(hex(resolveThemeDocument(migrateV1(source), "dark").surface("dialog").background.base)).toBe("#000000")
+  expect(hex(resolveThemeDocument(migrateV1(source), "light").surface("dialog").background.base)).toBe("#ffffff")
+
+  const opaque = resolveThemeDocument(migrateV1(opencodeV1), "dark")
+  expect(hex(opaque.surface("dialog").background.base)).toBe(hex(opaque.background.raised.base))
+})
+
+test("gives new designs dialogs an opaque background when V1 panels are see-through", () => {
+  const lucent = DEFAULT_THEMES["lucent-orng"]!
+  for (const mode of ["dark", "light"] as const) {
+    const [red, green, blue] = resolveV1(lucent, mode).backgroundMenu.toInts()
+    const dialog = resolveThemeDocument(migrateV1NewDesigns(lucent), mode).surface("dialog")
+    expect(dialog.background.base.toInts()).toEqual([red, green, blue, 255])
+  }
+
+  const opaque = migrateV1NewDesigns(DEFAULT_THEMES.tokyonight!)
+  expect(opaque.base["@dialog"]?.background?.base).toBe("$background.raised.base")
+  expect(opaque.light?.["@dialog"]?.background?.base).toBe("$hue.neutral.800")
+})
+
 test("keeps both modes when a shared background has different contrast", () => {
   const source = structuredClone(opencodeV1)
   source.theme.background = "#808080"
@@ -281,6 +323,72 @@ test("keeps both modes when a shared background has different contrast", () => {
 
   expect(themeModes(migrated)).toEqual(["light", "dark"])
 })
+
+test("lays out V1 colors on the opencode2 steps under new designs", () => {
+  const migrated = migrateV1NewDesigns(DEFAULT_THEMES.tokyonight!)
+  expect(migrated.base.text?.base).toBe("$hue.neutral.100")
+  expect(migrated.base.text?.muted).toBe("$hue.neutral.200")
+  expect(migrated.base.text?.faint).toBe("$hue.neutral.300")
+  expect(migrated.base.background?.base).toBe("$hue.neutral.900")
+  expect(migrated.base.background?.action?.primary?.$focused).toBe("$hue.interactive.600")
+
+  for (const mode of ["dark", "light"] as const) {
+    const legacy = resolveV1(DEFAULT_THEMES.tokyonight!, mode)
+    const resolved = resolveThemeDocument(migrated, mode)
+    expect(hex(resolved.background.base)).toBe(hex(legacy.background))
+    expect(hex(resolved.text.base)).toBe(hex(legacy.text))
+    expect(hex(resolved.hue.interactive[400])).toBe(hex(legacy.primary))
+    expect(hex(resolved.text.action.primary.selected)).toBe(hex(legacy.primary))
+
+    // Raised surfaces step away from the page the way opencode2's do, and selection is a quiet tint.
+    const lightness = (color: RGBA) => rgbToOklch(color.r, color.g, color.b).l
+    const direction = mode === "dark" ? 1 : -1
+    const surfaces = [resolved.background.base, ...Object.values(resolved.background.raised)].map(lightness)
+    surfaces.slice(1).forEach((value, index) => expect((value - surfaces[index]!) * direction).toBeGreaterThan(0))
+    const focused = resolved.background.action.primary.focused
+    expect(contrast(resolved.text.base, focused)).toBeGreaterThan(contrast(legacy.text, legacy.background) * 0.6)
+    expect(rgbToOklch(focused.r, focused.g, focused.b).c).toBeLessThan(
+      rgbToOklch(legacy.primary.r, legacy.primary.g, legacy.primary.b).c / 2,
+    )
+  }
+})
+
+test("keeps transparent V1 surfaces transparent under new designs", () => {
+  const source = structuredClone(DEFAULT_THEMES.tokyonight!)
+  source.theme.background = "transparent"
+  source.theme.backgroundPanel = "none"
+  for (const mode of ["dark", "light"] as const) {
+    const resolved = resolveThemeDocument(migrateV1NewDesigns(source), mode)
+    expect(resolved.background.base.toInts()[3]).toBe(0)
+    expect(resolved.background.raised.base.toInts()[3]).toBe(0)
+    expect(resolved.background.raised.high.toInts()[3]).toBe(255)
+    expect(resolved.background.action.primary.focused.toInts()[3]).toBe(255)
+  }
+})
+
+test("migrates every built-in V1 theme under new designs", () => {
+  for (const source of Object.values(DEFAULT_THEMES)) {
+    const migrated = migrateV1NewDesigns(source)
+    for (const mode of themeModes(migrated)) {
+      const resolved = resolveThemeDocument(migrated, mode)
+      expect(resolved.text.faint).toBeDefined()
+      expect(resolved.surface("dialog").background.base).toBeDefined()
+    }
+  }
+})
+
+function contrast(first: RGBA, second: RGBA) {
+  const luminance = (color: RGBA) => {
+    const channel = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+  }
+  const [lighter, darker] = [luminance(first), luminance(second)].sort((a, b) => b - a)
+  return (lighter! + 0.05) / (darker! + 0.05)
+}
+
+function allHues(theme: ResolvedTheme) {
+  return theme.hue as typeof theme.hue & Readonly<Record<string, HueScale>>
+}
 
 function hex(color: { toInts(): [number, number, number, number] }) {
   const [r, g, b, a] = color.toInts()

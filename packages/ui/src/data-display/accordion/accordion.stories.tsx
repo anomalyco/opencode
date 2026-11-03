@@ -43,10 +43,13 @@ export const Basic = {
   render: (props) => {
     const [value, setValue] = createSignal(props.value)
     createEffect(() => setValue(props.value))
+
     const current = () => {
       if (props.multiple) return Array.isArray(value()) ? value() : value() ? [value()] : []
+
       return Array.isArray(value()) ? value()[0] : value()
     }
+
     return (
       <div style={{ display: "grid", gap: "8px", width: "420px" }}>
         <Accordion collapsible={props.collapsible} multiple={props.multiple} value={current()} onChange={setValue}>

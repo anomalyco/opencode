@@ -6,7 +6,10 @@ import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, statics } from "./schema.js"
 
-const IDSchema = Schema.String.check(Schema.isStartsWith("sh_")).pipe(Schema.brand("Shell.ID"))
+const IDSchema = Schema.String.check(Schema.isStartingWith("sh_")).pipe(
+  Schema.brand("Shell.ID"),
+  Schema.annotate({ identifier: "Shell.ID" }),
+)
 
 export const ID = IDSchema.pipe(
   statics((schema: typeof IDSchema) => {
@@ -45,6 +48,7 @@ export const Info = Schema.Struct({
   file: Schema.String,
   pid: optional(NonNegativeInt),
   exit: optional(Schema.Finite),
+  signal: optional(Schema.String),
   // Always present; defaults to an empty object when the creator supplies no metadata.
   metadata: Metadata,
   time: Time,

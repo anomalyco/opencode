@@ -3,7 +3,6 @@ import type { DesktopNativeKey } from "@/runtime/i18n/desktop-native"
 export type DesktopMenuPlatform = "macos" | "windows"
 
 export type DesktopMenuAction =
-  | "app.checkForUpdates"
   | "app.installCli"
   | "app.relaunch"
   | "edit.undo"
@@ -35,15 +34,12 @@ export type DesktopMenuRole =
   | "quit"
   | "redo"
   | "reload"
-  | "resetZoom"
   | "selectAll"
   | "toggleDevTools"
   | "togglefullscreen"
   | "undo"
   | "unhide"
   | "windowMenu"
-  | "zoomIn"
-  | "zoomOut"
 
 export type DesktopMenuItem = {
   type: "item"
@@ -53,7 +49,6 @@ export type DesktopMenuItem = {
   role?: DesktopMenuRole
   href?: string
   accelerator?: Partial<Record<DesktopMenuPlatform, string>>
-  enabled?: "updater"
   platforms?: DesktopMenuPlatform[]
 }
 
@@ -63,6 +58,20 @@ export type DesktopMenuSeparator = {
 }
 
 export type DesktopMenuEntry = DesktopMenuItem | DesktopMenuSeparator
+
+// Slack's desktop zoom levels from 100% up. Zoom In, Zoom Out and the Appearance setting all pick one.
+export const desktopZoomLevels = [1, 1.1, 1.25, 1.5, 1.75, 2] as const
+
+export type DesktopZoomLevel = (typeof desktopZoomLevels)[number]
+
+/** The level after `factor` in `direction`. A pinch can leave `factor` between two levels. */
+export function nextDesktopZoomLevel(factor: number, direction: "in" | "out"): DesktopZoomLevel {
+  // Chromium stores zoom on a log scale, so a factor read back can be a hair off the level it was set to.
+  if (direction === "in")
+    return desktopZoomLevels.find((level) => level > factor + 0.01) ?? desktopZoomLevels[desktopZoomLevels.length - 1]
+
+  return desktopZoomLevels.findLast((level) => level < factor - 0.01) ?? desktopZoomLevels[0]
+}
 
 export type DesktopMenu = {
   id: string
@@ -79,12 +88,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     platforms: ["macos"],
     items: [
       { type: "item", role: "about" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.checkForUpdates",
-        action: "app.checkForUpdates",
-        enabled: "updater",
-      },
       { type: "item", labelKey: "desktop.menu.installCli", action: "app.installCli" },
       { type: "item", labelKey: "desktop.menu.settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
       { type: "item", labelKey: "desktop.menu.reloadWebview", action: "view.reload" },
@@ -105,14 +108,8 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       {
         type: "item",
         labelKey: "desktop.menu.newSession",
-        command: "session.new",
-        accelerator: { macos: "Shift+Cmd+S" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.openProject",
-        command: "project.open",
-        accelerator: { macos: "Cmd+O" },
+        command: "tab.new",
+        accelerator: { macos: "Cmd+N" },
       },
       {
         type: "item",
@@ -128,7 +125,13 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         accelerator: { macos: "Cmd+Shift+N", windows: "Ctrl+Shift+N" },
       },
       { type: "separator" },
-      { type: "item", labelKey: "desktop.menu.closeWindow", action: "window.close", role: "close" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.closeWindow",
+        action: "window.close",
+        role: "close",
+        accelerator: { macos: "Shift+Cmd+W", windows: "Ctrl+Shift+W" },
+      },
     ],
   },
   {
@@ -185,14 +188,18 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "view",
     labelKey: "desktop.menu.view",
     items: [
-      { type: "item", labelKey: "desktop.menu.toggleSidebar", command: "sidebar.toggle" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.toggleSidebar",
+        command: "sidebar.toggle",
+        accelerator: { macos: "Shift+Cmd+B" },
+      },
       {
         type: "item",
         labelKey: "desktop.menu.toggleTerminal",
         command: "terminal.toggle",
         accelerator: { macos: "Ctrl+`" },
       },
-      { type: "item", labelKey: "desktop.menu.toggleFileTree", command: "fileTree.toggle" },
       { type: "separator" },
       { type: "item", labelKey: "desktop.menu.reload", action: "view.reload", role: "reload" },
       {
@@ -206,22 +213,19 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         type: "item",
         labelKey: "desktop.menu.actualSize",
         action: "view.resetZoom",
-        role: "resetZoom",
-        accelerator: { windows: "Ctrl+0" },
+        accelerator: { macos: "Cmd+0", windows: "Ctrl+0" },
       },
       {
         type: "item",
         labelKey: "desktop.menu.zoomIn",
         action: "view.zoomIn",
-        role: "zoomIn",
-        accelerator: { windows: "Ctrl++" },
+        accelerator: { macos: "Cmd+=", windows: "Ctrl++" },
       },
       {
         type: "item",
         labelKey: "desktop.menu.zoomOut",
         action: "view.zoomOut",
-        role: "zoomOut",
-        accelerator: { windows: "Ctrl+-" },
+        accelerator: { macos: "Cmd+-", windows: "Ctrl+-" },
       },
       { type: "separator" },
       {
@@ -251,19 +255,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         command: "session.next",
         accelerator: { macos: "Option+Down" },
       },
-      { type: "separator" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.previousProject",
-        command: "project.previous",
-        accelerator: { macos: "Cmd+Option+Up" },
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.nextProject",
-        command: "project.next",
-        accelerator: { macos: "Cmd+Option+Down" },
-      },
     ],
   },
   {
@@ -281,7 +272,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "help",
     labelKey: "desktop.menu.help",
     items: [
-      { type: "item", labelKey: "desktop.menu.documentation", href: "https://opencode.ai/docs" },
+      { type: "item", labelKey: "desktop.menu.documentation", href: "https://opencode.ai/v2/docs" },
       { type: "item", labelKey: "desktop.menu.supportForum", href: "https://discord.com/invite/opencode" },
       { type: "item", labelKey: "desktop.menu.exportLogs", command: "logs.export" },
       { type: "separator" },
@@ -301,4 +292,31 @@ export const DESKTOP_MENU: DesktopMenu[] = [
 
 export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, platform: DesktopMenuPlatform) {
   return !item.platforms || item.platforms.includes(platform)
+}
+
+/** What a GUI plugin's menubar item names in `after`: a built-in item's command, action, or role. */
+export function desktopMenuKey(entry: DesktopMenuEntry) {
+  if (entry.type === "separator") return undefined
+
+  return entry.command ?? entry.action ?? entry.role
+}
+
+/** A menu entry with the key a plugin item's `after` can name. */
+export type DesktopMenuPlaced<Entry> = { readonly key?: string; readonly entry: Entry }
+
+/** Places plugin items after the entry their `after` names, or at the end of the menu. */
+export function desktopMenuWithPlugins<Entry, Extra extends { readonly id: string; readonly after?: string }>(
+  base: readonly DesktopMenuPlaced<Entry>[],
+  extra: readonly Extra[],
+) {
+  const list: DesktopMenuPlaced<Entry | Extra>[] = [...base]
+
+  extra.forEach((item) => {
+    const next = { key: item.id, entry: item }
+    const index = item.after ? list.findIndex((entry) => entry.key === item.after) : -1
+
+    list.splice(index < 0 ? list.length : index + 1, 0, next)
+  })
+
+  return list
 }

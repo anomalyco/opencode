@@ -21,11 +21,13 @@ export interface VcsDiffInput extends VcsScope {
   readonly base?: string
   readonly context: number
   readonly maxOutputBytes: number
+  readonly untracked?: Vcs.Untracked
 }
 
 export interface VcsDefinition {
   readonly id: string
   readonly name: string
+  readonly init?: (input: VcsScope) => Effect.Effect<void, unknown>
   readonly info: (input: VcsScope) => Effect.Effect<Vcs.Info, unknown>
   readonly base?: (input: VcsScope) => Effect.Effect<Vcs.Base | null, unknown>
   readonly branches: (input: VcsBranchesInput) => Effect.Effect<Vcs.BranchList, unknown>
@@ -33,7 +35,7 @@ export interface VcsDefinition {
   readonly diff: (input: VcsDiffInput) => Effect.Effect<readonly FileDiff.Info[], unknown>
 }
 
-export interface VcsDomain extends VcsApi<unknown> {
+export interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
   readonly transform: Transform<VcsEditor>
   readonly reload: () => Effect.Effect<void>
 }

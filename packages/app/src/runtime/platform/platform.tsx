@@ -1,16 +1,14 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
-import { ServerConnection } from "@/runtime/server/registry"
-import type { WslServersPlatform } from "@/servers/wsl/types"
-import type { SshPlatform } from "@/servers/ssh/types"
-import type { UpdaterPlatform } from "@/shell/updates/types"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import type { DraftStore } from "@/runtime/persistence/drafts"
-import type { BrowserPanePlatform } from "./browser-pane"
+import type { Bridge } from "@opencode/plugin/gui/host"
 
 type PickerPaths = string | string[] | null
+
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
+
 type OpenAttachmentPickerOptions = {
   title?: string
   multiple?: boolean
@@ -18,15 +16,14 @@ type OpenAttachmentPickerOptions = {
   extensions?: string[]
   defaultPath?: string
 }
-type SaveFilePickerOptions = { title?: string; defaultPath?: string }
-type PlatformName = "web" | "desktop"
-type DesktopOS = "macos" | "windows" | "linux"
 
-export type PairingInfo = {
-  readonly urls: readonly string[]
-  readonly username: "opencode"
-  readonly password: string
-}
+type OpenFilePathPickerOptions = { title?: string; multiple?: boolean; extensions?: string[] }
+
+type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+
+type PlatformName = "web" | "desktop"
+
+type DesktopOS = "macos" | "windows" | "linux"
 
 export type FatalRendererErrorLog = {
   error: string
@@ -37,11 +34,16 @@ export type FatalRendererErrorLog = {
 }
 
 type PlatformBase = {
+  requestMicrophone?(): Promise<boolean>
+  setVoiceCallActive?(active: boolean): Promise<void>
   /** App version */
   version?: string
 
   /** Open a web or mail URL in the default system application */
   openExternal(url: string): void
+
+  /** Open an authentication page, reporting whether the browser could be launched. */
+  openBrowser?(url: string): Promise<boolean>
 
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
@@ -59,10 +61,13 @@ type PlatformBase = {
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
-  openAttachmentPickerDialog?(
+  openAttachmentPickerDialog?<Value>(
     opts: OpenAttachmentPickerOptions,
-    onFile: (file: File) => Promise<unknown>,
+    onFile: (file: File) => Promise<Value>,
   ): Promise<void>
+
+  /** Open a native file picker and return the selected paths without reading the files (desktop only) */
+  openFilePathPickerDialog?(opts: OpenFilePathPickerOptions): Promise<string[] | null>
 
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
@@ -79,27 +84,23 @@ type PlatformBase = {
   /** Prompt drafts, history, and their blobs. */
   draftStore?: DraftStore
 
-  /** Application-global desktop updater */
-  updater?: UpdaterPlatform
-
   /** Fetch override */
   fetch?: typeof fetch
-
-  /** Get the configured default server URL (platform-specific) */
-  getDefaultServer?(): Promise<ServerConnection.Key | null>
-
-  /** Set the default server URL to use on app startup (platform-specific) */
-  setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
-
-  /** Manage WSL sidecar servers (Electron on Windows only) */
-  wslServers?: WslServersPlatform
-  sshServers?: SshPlatform
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
+  /** Saved interface zoom level; a pinch can move `webviewZoom` off it (desktop only) */
+  zoomLevel?: Accessor<DesktopZoomLevel>
+
+  /** Save an interface zoom level and apply it to every window (desktop only) */
+  setZoomLevel?(level: DesktopZoomLevel): Promise<void>
+
   /** Whether the native desktop window is fullscreen */
   windowFullscreen?: Accessor<boolean>
+
+  /** Move the native macOS traffic lights' top-left corner, in window points (desktop only) */
+  setTrafficLightsPosition?(position: { x: number; y: number }): Promise<void>
 
   /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
   getPinchZoomEnabled?(): Promise<boolean> | boolean
@@ -107,9 +108,11 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
-  /** Prevent the local display from sleeping while the desktop app is running. */
-  getKeepScreenActive?(): Promise<boolean>
-  setKeepScreenActive?(enabled: boolean): Promise<void>
+  /** Get whether the native spellchecker underlines misspelled words (desktop only) */
+  getSpellcheckEnabled?(): Promise<boolean>
+
+  /** Turn the native spellchecker on or off (desktop only) */
+  setSpellcheckEnabled?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
@@ -132,13 +135,8 @@ type PlatformBase = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 
-  /** Native browser pane hosted by the platform (desktop only). */
-  browserPane?: BrowserPanePlatform
-
-  /** Pair another device with the local desktop server. */
-  pair?: {
-    info(): Promise<PairingInfo>
-  }
+  /** GUI plugin bridge to the main-process plugin host (desktop only). */
+  plugins?: Bridge
 }
 
 export type Platform = PlatformBase &

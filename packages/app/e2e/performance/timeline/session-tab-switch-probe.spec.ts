@@ -21,6 +21,7 @@ for (const tag of ["a", "button"] as const) {
           row.style.visibility = "hidden"
         })
       })
+
       const result = await measureSessionSwitch(page, {
         destinationIDs: ["destination"],
         sourceIDs: ["source"],
@@ -36,28 +37,34 @@ for (const tag of ["a", "button"] as const) {
             .dispatchEvent("mousedown", { button: 0 })
           await page.waitForFunction(() => {
             const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+
             return host.__sessionSwitchProbe?.samples.some((sample) => !sample.hasVisibleRows)
           })
           await page.locator("[data-message-id]").evaluate((row) => row.style.removeProperty("visibility"))
           await page.waitForFunction(() => {
             const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+
             return host.__sessionSwitchProbe?.samples.some(
               (sample) => sample.destination.length > 0 && sample.requiredPartVisible === false,
             )
           })
+
           const beforeClip = await page.evaluate(() => {
             const row = document.querySelector<HTMLElement>("[data-timeline-key]")!
             row.style.cssText = "height:10px;position:relative;overflow:clip"
             const answer = row.querySelector<HTMLElement>("[data-timeline-part-id]")!
             answer.style.cssText = "position:absolute;top:30px;width:150px"
             answer.querySelector('[data-component="markdown"]')!.setAttribute("data-markdown-ready", "")
+
             return (
               (window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }).__sessionSwitchProbe
                 ?.samples.length ?? 0
             )
           })
+
           await page.waitForFunction((count) => {
             const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+
             return host.__sessionSwitchProbe?.samples
               .slice(count)
               .some((sample) => sample.requiredPartVisible === false)
@@ -67,6 +74,7 @@ for (const tag of ["a", "button"] as const) {
           })
         },
       })
+
       expect(result.blankSamples).toBeGreaterThan(0)
       expect(result.firstCorrectObservedMs).not.toBeNull()
       expect(result.stableObservedMs).not.toBeNull()

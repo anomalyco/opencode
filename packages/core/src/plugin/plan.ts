@@ -1,6 +1,6 @@
 export * as PlanPlugin from "./plan.js"
 
-import { Message, ToolFailure } from "@opencode/ai"
+import { Message, ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { SessionEvent } from "@opencode/schema/session-event"
@@ -38,7 +38,6 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
         item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
-        item.permissions.push({ action: "external_directory", resource: path.join(directory, "*"), effect: "allow" })
       })
     })
 
@@ -73,11 +72,7 @@ export const Plugin = define({
         )
     })
 
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter(
-        (event): event is SessionEvent.Created | SessionEvent.AgentSelected =>
-          event.type === "session.created" || event.type === "session.agent.selected",
-      ),
+    yield* ctx.event.subscribe({ types: ["session.created", "session.agent.selected"] }).pipe(
       Stream.runForEach((event) => {
         const text = switchReminder(event, enterReminder)
         if (!text) return Effect.void

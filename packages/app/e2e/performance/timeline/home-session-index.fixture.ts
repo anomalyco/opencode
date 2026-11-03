@@ -114,12 +114,14 @@ const DAY = 24 * 60 * 60 * 1000
 export function createHomeIndexFixture(input: { count: number; now: number; directories?: number }) {
   const random = mulberry32(0x5eed_0000 + input.count)
   const directoryCount = Math.min(input.directories ?? 12, repos.length)
+
   const directories: HomeIndexDirectory[] = repos.slice(0, directoryCount).map((name, index) => ({
     directory: `/Users/dev/repos/${name}`,
     name,
     projectID: `prj_${hex(random, 16)}`,
     project: index < Math.max(1, Math.round(directoryCount * 0.66)),
   }))
+
   // Zipf-like spread: a few repositories hold most of the history.
   const weights = directories.map((_, index) => 1 / Math.pow(index + 1, 0.9))
   const total = weights.reduce((sum, weight) => sum + weight, 0)
@@ -129,9 +131,12 @@ export function createHomeIndexFixture(input: { count: number; now: number; dire
   // increasing so no two sessions share an updated time.
   const offsets = Array.from({ length: input.count }, () => {
     const bucket = random()
+
     // 5% today, 5% yesterday, the rest skewed toward recent months over 18 months.
     if (bucket < 0.05) return Math.floor(random() * DAY * 0.9)
+
     if (bucket < 0.1) return DAY + Math.floor(random() * DAY * 0.9)
+
     return 2 * DAY + Math.floor(Math.pow(random(), 2) * 538 * DAY)
   })
     .sort((a, b) => a - b)
@@ -142,13 +147,16 @@ export function createHomeIndexFixture(input: { count: number; now: number; dire
     const directory = directories[cumulative.findIndex((edge) => pick <= edge)] ?? directories[0]
     const updated = input.now - offset
     const duration = 5 * 60_000 + Math.floor(random() * 6 * 60 * 60_000)
+
     const tokens = {
       input: 5_000 + Math.floor(random() * 400_000),
       output: 500 + Math.floor(random() * 60_000),
       reasoning: random() < 0.6 ? Math.floor(random() * 20_000) : 0,
       cache: { read: Math.floor(random() * 900_000), write: Math.floor(random() * 120_000) },
     }
+
     const outcome = random() < 0.9 ? "succeeded" : random() < 0.6 ? "failed" : "interrupted"
+
     return {
       id: `ses_${base62(random, 26)}`,
       projectID: directory.projectID,
@@ -171,6 +179,7 @@ export function createHomeIndexFixture(input: { count: number; now: number; dire
       location: { directory: directory.directory },
     }
   })
+
   // The mock lists sessions in array order and reverses for `desc`, so keep
   // the fixture ascending by updated time like the server's index order.
   const sessions = newestFirst.toReversed()
@@ -205,20 +214,24 @@ export type HomeIndexFixture = ReturnType<typeof createHomeIndexFixture>
 function title(random: () => number, index: number) {
   const verb = verbs[Math.floor(random() * verbs.length)]
   const object = objects[Math.floor(random() * objects.length)]
+
   const context = contexts[Math.floor(random() * contexts.length)]
     .replace("{n}", String(1000 + Math.floor(random() * 45_000)))
     .replace("{file}", files[Math.floor(random() * files.length)])
+
   // Keep titles unique so row identity checks cannot match a sibling.
   return `${verb} ${object}${context} [${index.toString(36)}]`
 }
 
 function mulberry32(seed: number) {
   let state = seed >>> 0
+
   return () => {
     state = (state + 0x6d2b79f5) >>> 0
     let t = state
     t = Math.imul(t ^ (t >>> 15), t | 1)
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }

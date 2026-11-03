@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, rename } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
-import { Data, Duration, Effect, Schema, Semaphore } from "effect"
+import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
 import type { Handoff } from "@opencode/schema/persistent-pty"
+import { Session } from "@opencode/schema/session"
 
 const ProtocolVersion = 7
 const MaxFrameBytes = 8 * 1024 * 1024
@@ -18,8 +19,9 @@ export const WireTerminal = Schema.Struct({
   id: Schema.Number,
   pid: Schema.NullOr(Schema.Number),
   title: Schema.String,
+  user_title: Schema.optional(Schema.NullOr(Schema.String)),
   foreground_process: Schema.NullOr(Schema.String),
-  group_id: Schema.String,
+  group_id: Session.ID,
   command: Schema.Array(Schema.String),
   cwd: Schema.String,
   cols: Schema.Number,
@@ -36,6 +38,7 @@ const Registration = Schema.Struct({
   protocol: Schema.Number,
   socket: Schema.String,
   token: Schema.String,
+  features: Schema.optional(Schema.Array(Schema.String)),
 })
 type Registration = typeof Registration.Type
 
@@ -45,6 +48,7 @@ export const WireResponse = Schema.Union([
     instance_id: Schema.String,
     pid: Schema.Number,
     protocol: Schema.Number,
+    features: Schema.optional(Schema.Array(Schema.String)),
   }),
   Schema.Struct({ type: Schema.Literal("created"), terminal: WireTerminal }),
   Schema.Struct({ type: Schema.Literal("terminals"), terminals: Schema.Array(WireTerminal) }),
@@ -116,6 +120,15 @@ export type StreamEvent =
   | { readonly type: "title_changed"; readonly title: string }
   | { readonly type: "foreground_process_changed"; readonly process: string | null }
 
+export type SubscribeInput = {
+  readonly cursor: number
+  readonly attachmentID: string
+  readonly role: Role
+  readonly takeover?: boolean
+  readonly onEvent: (event: StreamEvent) => void
+  readonly onEnd: () => void
+}
+
 export type DaemonAttachment = {
   readonly terminal: WireTerminal
   readonly role: Role
@@ -140,27 +153,24 @@ export class DaemonError extends Data.TaggedError("PersistentPty.DaemonError")<{
 export interface DaemonTransport {
   readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
+  readonly supports: (feature: string) => Effect.Effect<boolean, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
   readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
     id: number,
-    input: {
-      readonly cursor: number
-      readonly attachmentID: string
-      readonly role: Role
-      readonly takeover?: boolean
-      readonly onEvent: (event: StreamEvent) => void
-      readonly onEnd: () => void
-    },
+    input: SubscribeInput,
   ) => Effect.Effect<DaemonAttachment, DaemonError>
 }
 
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
-  directory: string,
+  root: string,
+  initialID: string,
   binary: () => Promise<string> = () => Promise.resolve(process.env.OPENCODE_PTY_BIN || "opencode-pty"),
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
+  // Each daemon owns the runtime directory `<root>/<id>`.
+  let id = initialID
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
   let closed = false
@@ -195,7 +205,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* () {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
@@ -219,19 +229,20 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       response.protocol !== ProtocolVersion
     )
       return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "opencode-pty registration mismatch" }))
-    return decoded
+    // Daemons older than the features list omit it; trust the live daemon's answer over the file.
+    return { ...decoded, features: response.features ?? [] }
   })
 
-  const start = Effect.fn("PersistentPty.daemon.start")(function* () {
+  const spawnDaemon = Effect.fn("PersistentPty.daemon.spawn")(function* () {
     const executable = yield* Effect.tryPromise({ try: binary, catch: (cause) => failure("spawn", cause) })
     const child = yield* Effect.tryPromise({
       try: () =>
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
-          const child = spawn(executable, ["daemon"], {
-            detached: true,
-            stdio: "ignore",
-            env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: directory },
-          })
+          const child = spawn(
+            executable,
+            ["daemon", "--runtime-dir", root, "--name", id],
+            { detached: true, windowsHide: true, stdio: "ignore" },
+          )
           child.once("spawn", () => {
             child.unref()
             resolve(child)
@@ -243,7 +254,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     return yield* Effect.gen(function* () {
       const deadline = Date.now() + 5_000
       let last: DaemonError | undefined
-      while (Date.now() < deadline) {
+      while (Date.now() < deadline && child.exitCode === null && child.signalCode === null) {
         const found = yield* discover().pipe(
           Effect.map((value) => ({ value })),
           Effect.catch((error) => {
@@ -269,6 +280,25 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   })
 
+  // An unreachable daemon can still hold this directory's lock, so retry once in a fresh directory.
+  const start = () =>
+    spawnDaemon().pipe(
+      Effect.catch((error) =>
+        Effect.gen(function* () {
+          yield* Effect.logWarning("Starting opencode-pty in a fresh runtime directory", { cause: error.message })
+          abandon()
+          return yield* spawnDaemon()
+        }),
+      ),
+    )
+
+  const abandon = () => {
+    owner?.socket.destroy()
+    owner = undefined
+    registration = undefined
+    id = crypto.randomUUID()
+  }
+
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
     if (closed) return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY owner scope is closed" }))
     if (registration) return registration
@@ -288,15 +318,21 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   })
 
-  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")(function* (value: object, shouldStart: boolean) {
-    const current = yield* connect(shouldStart)
-    return yield* oneShot(current, value).pipe(
-      Effect.catch((error) => {
-        if (error.kind === "registration" && registration === current) registration = undefined
-        return Effect.fail(error)
-      }),
-    )
-  })
+  // Runs against the live registration and forgets it when the daemon rejects it as stale.
+  const withRegistration = <A>(shouldStart: boolean, run: (current: Registration) => Effect.Effect<A, DaemonError>) =>
+    Effect.gen(function* () {
+      const current = yield* connect(shouldStart)
+      return yield* run(current).pipe(
+        Effect.catch((error) => {
+          if (error.kind === "registration" && registration === current) registration = undefined
+          return Effect.fail(error)
+        }),
+      )
+    })
+
+  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")((value: object, shouldStart: boolean) =>
+    withRegistration(shouldStart, (current) => oneShot(current, value)),
+  )
 
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
@@ -314,6 +350,11 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     request(value).pipe(
       Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
     )
+
+  const supports = Effect.fn("PersistentPty.daemon.supports")(function* (feature: string) {
+    const current = yield* connect(false)
+    return current.features?.includes(feature) ?? false
+  })
 
   const shutdown = Effect.gen(function* () {
     const response = yield* requestIfRunning({ op: "shutdown" })
@@ -348,40 +389,71 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       )
       if (response.type !== "handoff")
         return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
-      return { directory, instanceID: registered.instance_id, ticket: response.ticket, expiresAt: response.expires_at }
+      return {
+        directory: path.join(root, id),
+        instanceID: registered.instance_id,
+        ticket: response.ticket,
+        expiresAt: response.expires_at,
+      }
     }),
   )
 
   const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (
-    id: number,
-    input: Parameters<DaemonTransport["subscribe"]>[1],
+    terminalID: number,
+    input: SubscribeInput,
   ) {
-    const attempt = Effect.gen(function* () {
-      const current = yield* connect(false)
-      return yield* Effect.tryPromise({
-        try: () => subscribePromise(current, id, input),
+    const attempt = withRegistration(false, (current) =>
+      Effect.tryPromise({
+        try: () => subscribePromise(current, terminalID, input),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
-      }).pipe(
-        Effect.catch((error) => {
-          if (error.kind === "registration" && registration === current) registration = undefined
-          return Effect.fail(error)
-        }),
-      )
-    })
+      }),
+    )
     return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
-  // A replacement must own its inherited daemon before the server becomes ready.
+  // A replacement must own its inherited daemon before the server becomes ready. Terminals are
+  // best-effort: any failure abandons the old daemon so the restart itself always succeeds.
   if (inherited) {
-    if (inherited.expiresAt <= Date.now())
-      return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
-    const current = yield* discover()
-    if (current.instance_id !== inherited.instanceID)
-      return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-    yield* claim(current, inherited.ticket)
+    let found: Registration | undefined
+    yield* Effect.gen(function* () {
+      if (inherited.expiresAt <= Date.now())
+        return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
+      // Older releases put the daemon directory outside the root; its directory name is still the ID.
+      id = path.basename(inherited.directory)
+      found = yield* discover(inherited.directory)
+      if (found.instance_id !== inherited.instanceID)
+        return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
+      if (path.resolve(inherited.directory) !== path.resolve(root, id))
+        yield* migrate(inherited.directory, path.join(root, id))
+      yield* claim(found, inherited.ticket)
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.gen(function* () {
+          if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
+          yield* Effect.logWarning("Discarding PTY restart handoff; persistent terminals will start fresh", {
+            cause: Cause.pretty(cause),
+          })
+          if (found) yield* oneShot(found, { op: "shutdown" }).pipe(Effect.ignore)
+          abandon()
+        }),
+      ),
+    )
   }
 
-  return { request, requestIfRunning, shutdown, handoff, subscribe } satisfies DaemonTransport
+  return { request, requestIfRunning, supports, shutdown, handoff, subscribe } satisfies DaemonTransport
+})
+
+// Older releases kept registrations in purgeable temp directories. Renaming keeps the lock file's
+// inode, so the still-running daemon keeps holding its lock in the new location.
+const migrate = Effect.fn("PersistentPty.daemon.migrate")(function* (directory: string, target: string) {
+  yield* Effect.tryPromise({
+    try: async () => {
+      await mkdir(target, { recursive: true, mode: 0o700 })
+      await rename(path.join(directory, "service.lock"), path.join(target, "service.lock"))
+      await rename(path.join(directory, "service.json"), path.join(target, "service.json"))
+    },
+    catch: (cause) => failure("registration", cause),
+  })
 })
 
 async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {
@@ -465,13 +537,7 @@ const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registratio
           try: () => decode(first),
           catch: (cause) => failure("protocol", cause),
         })
-        if (response.type === "error")
-          return yield* Effect.fail(
-            new DaemonError({
-              kind: response.message === "authentication failed" ? "registration" : "protocol",
-              message: response.message,
-            }),
-          )
+        if (response.type === "error") return yield* Effect.fail(responseError(response.message))
         return response
       }),
     (socket) => Effect.sync(() => socket.destroy()),
@@ -492,7 +558,7 @@ const oneShot = Effect.fn("PersistentPty.daemon.oneShot")(function* (registratio
 async function subscribePromise(
   registration: Registration,
   id: number,
-  input: Parameters<DaemonTransport["subscribe"]>[1],
+  input: SubscribeInput,
 ): Promise<DaemonAttachment> {
   const socket = net.createConnection(registration.socket)
   const frames = decoder(socket)
@@ -517,11 +583,7 @@ async function subscribePromise(
     const initial = await frames.next()
     if (initial.done) throw new Error("opencode-pty closed before attachment")
     const response = decode(initial.value)
-    if (response.type === "error")
-      throw new DaemonError({
-        kind: response.message === "authentication failed" ? "registration" : "protocol",
-        message: response.message,
-      })
+    if (response.type === "error") throw responseError(response.message)
     if (response.type !== "attached") throw new Error(`unexpected opencode-pty response: ${response.type}`)
     let detached = false
     const pump = async () => {
@@ -622,8 +684,14 @@ async function* decoder(socket: net.Socket) {
   if (pending.length !== 0) throw new Error("opencode-pty truncated frame")
 }
 
+const decodeWireResponse = Schema.decodeUnknownSync(Schema.fromJsonString(WireResponse))
+
 function decode(payload: Uint8Array) {
-  return Schema.decodeUnknownSync(WireResponse)(JSON.parse(Buffer.from(payload).toString("utf8")))
+  return decodeWireResponse(Buffer.from(payload).toString("utf8"))
+}
+
+function responseError(message: string) {
+  return new DaemonError({ kind: message === "authentication failed" ? "registration" : "protocol", message })
 }
 
 function failure(kind: DaemonError["kind"], cause: unknown) {

@@ -361,11 +361,34 @@ export interface DialogSelectOption<Value> {
   readonly disabled?: boolean
 }
 
+export type DialogSelectAction<Value> = {
+  readonly bind: string
+  readonly title: string
+  readonly side?: "left" | "right"
+} & (
+  | {
+      /** Unavailable while no option is selected. */
+      readonly selection?: "required"
+      readonly onTrigger: (value: Value) => void
+    }
+  | {
+      readonly selection: "none"
+      readonly onTrigger: () => void
+    }
+)
+
 export interface DialogSelectOptions<Value> {
   readonly title: string
   readonly placeholder?: string
   readonly options: readonly DialogSelectOption<Value>[]
   readonly current?: Value
+  /** Returns matching options in display order, including for an empty query. Receives only enabled options. Results are listed flat. */
+  readonly search?: (
+    query: string,
+    options: readonly DialogSelectOption<Value>[],
+  ) => readonly DialogSelectOption<Value>[]
+  /** Footer actions, also triggered by their bindings. Triggering one does not close the dialog. */
+  readonly actions?: readonly DialogSelectAction<Value>[]
 }
 
 export interface Dialog {
@@ -438,8 +461,13 @@ export interface KeymapActive {
 }
 
 export interface Keymap {
-  /** Creates a reactive keymap layer owned by the calling component. */
-  layer(input: () => KeymapLayer): void
+  /**
+   * Creates a reactive keymap layer. It is removed when the plugin deactivates, or earlier when the component or reactive
+   * computation that created it is disposed. The factory must be pure. It runs once untracked for initial command-shape
+   * validation, then reactively. Initial command-shape errors throw synchronously. OpenTUI handles binding-parse errors.
+   * Errors from later reactive updates follow Solid's error handling.
+   */
+  layer(factory: () => KeymapLayer): void
   /** Dispatches a reachable command by ID. */
   dispatch(id: string, input?: string): void
   /** Returns every formatted shortcut for a registered command. */
@@ -498,6 +526,16 @@ export interface UI {
     move(sessionID: string, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
+  }
+  readonly model: {
+    /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */
+    current(): { readonly providerID: string; readonly modelID: string; readonly variant?: string } | undefined
+    readonly variant: {
+      /** Variant IDs of the selected model. Reactive when read in a Solid computation. */
+      list(): readonly string[]
+      /** Selects a variant of the selected model, or the model default when undefined. Returns false when no model is selected or the variant is unavailable. */
+      set(variant: string | undefined): boolean
+    }
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void

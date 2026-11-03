@@ -1,6 +1,13 @@
 /** @jsxImportSource @opentui/solid */
-import { expect, test } from "bun:test"
-import { BoxRenderable, ImageRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
+import { afterAll, expect, test } from "bun:test"
+import {
+  BoxRenderable,
+  ImageRenderable,
+  RGBA,
+  TextareaRenderable,
+  type CliRenderer,
+  type RootRenderable,
+} from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -48,6 +55,11 @@ import { tmpdir } from "../fixture/fixture"
 import { diffImageFixture } from "../fixture/diff-image"
 
 const tuiConfig = createTuiResolvedConfig()
+const themeRenderer = await createTestRenderer({})
+afterAll(async () => {
+  themeRenderer.renderer.destroy()
+  await themeRenderer.renderer.closed
+})
 
 async function nativeLightTheme() {
   await using tmp = await tmpdir()
@@ -57,6 +69,7 @@ async function nativeLightTheme() {
   try {
     return await resolveRunTheme(
       {
+        nativeScene: themeRenderer.renderer.nativeScene,
         themeMode: "light",
         getPalette: async (): ReturnType<CliRenderer["getPalette"]> => {
           throw new Error("Palette unavailable")
@@ -224,7 +237,7 @@ async function renderFooter(
         <Harness />
       </box>
     ),
-    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true, exitOnCtrlC: false },
   )
 
   return {
@@ -407,6 +420,37 @@ test("mini retains ordinary paste ANSI stripping and newline normalization", asy
   }
 })
 
+test("mini places a mention and the cursor at measured offsets after wide text", async () => {
+  const sent = Promise.withResolvers<RunPrompt>()
+  const app = await renderFooter({
+    agents: ["helper", "助手"].map((id) => ({ id, name: id, mode: "subagent" as const, hidden: false })),
+    onSubmit: (prompt) => {
+      sent.resolve(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.pasteBracketedText("\t👨‍👩‍👧நி @助")
+    await app.waitForFrame((frame) => frame.includes("@助手") && !frame.includes("@helper"))
+    app.mockInput.pressEnter()
+    // Down on the last row moves the cursor to the end of the text.
+    app.mockInput.pressArrow("left")
+    app.mockInput.pressArrow("down")
+    await app.mockInput.typeText("x")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("\t👨‍👩‍👧நி @助手 x")
+    app.mockInput.pressEnter()
+    const buffer = app.renderer.currentFocusedEditor!.editBuffer
+    const [start, value] = [buffer.measureText("\t👨‍👩‍👧நி "), "@助手"]
+    expect(await sent.promise).toMatchObject({
+      text: "\t👨‍👩‍👧நி @助手 x",
+      parts: [{ type: "agent", name: "助手", source: { start, end: start + buffer.measureText(value), value } }],
+    })
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("a failed clipboard read cancels a waiting submit without losing the draft", async () => {
   const pending = Promise.withResolvers<ClipboardContent | undefined>()
   const submitted: RunPrompt[] = []
@@ -584,8 +628,8 @@ test("direct footer preserves a partial multi-field form draft across permission
     "api".split("").forEach((key) => app.mockInput.pressKey(key))
     app.mockInput.pressEnter()
     await app.renderOnce()
-    "keep this draft".split("").forEach((key) => app.mockInput.pressKey(key))
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this draft")
+    "keep this 草稿".split("").forEach((key) => app.mockInput.pressKey(key))
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this 草稿")
 
     app.setView({
       type: "permission",
@@ -602,7 +646,8 @@ test("direct footer preserves a partial multi-field form draft across permission
     app.setView({ type: "form", request })
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("2/2")
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this draft")
+    app.mockInput.pressKey("!")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this 草稿!")
 
     app.setView({ type: "prompt" })
     await app.renderOnce()
@@ -1268,7 +1313,7 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
     expect(frame).toContain("Pending prompts")
     expect(frame).toContain("follow up")
     expect(frame).toContain(delivery === "queue" ? "queued" : "steering")
-    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete`)
+    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete · ctrl+u undo`)
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
@@ -1289,6 +1334,139 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
     expect(actions.at(-1)).toBe("cancel:m-1")
     expect(app.captureCharFrame()).not.toContain("Pending prompts")
     expect(app.captureCharFrame()).not.toContain("1 pending")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo appends a pending prompt to the draft", async () => {
+  const actions: string[] = []
+  const submitted: RunPrompt[] = []
+  const queued: FooterQueuedPrompt = {
+    messageID: "m-1",
+    prompt: {
+      messageID: "m-1",
+      text: "look at main.ts",
+      parts: [],
+    },
+    delivery: "queue",
+  }
+  const app = await renderFooter({
+    queuedPrompts: [queued],
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+    onQueuedPromptAction: async (action, inboxID) => {
+      actions.push(`${action}:${inboxID}`)
+      app.setQueuedPrompts([])
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("existing draft")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(actions).toEqual(["cancel:m-1"])
+    expect(app.captureCharFrame()).toContain("existing draft")
+    expect(app.captureCharFrame()).toContain("look at main.ts")
+    expect(app.captureCharFrame()).not.toContain("Pending prompts")
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(submitted).toMatchObject([{ text: "existing draft\n\nlook at main.ts" }])
+    expect(submitted[0].messageID).toBeUndefined()
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo leaves the queue and input alone when cancellation fails", async () => {
+  const statuses: string[] = []
+  const app = await renderFooter({
+    queuedPrompts: [{ messageID: "m-1", prompt: { text: "still queued", parts: [] }, delivery: "queue" }],
+    onStatus: (status) => statuses.push(status),
+    onQueuedPromptAction: async () => {
+      throw new Error("cancel failed")
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(statuses.at(-1)).toContain("failed to undo pending prompt: cancel failed")
+    expect(app.captureCharFrame()).toContain("Pending prompts")
+    app.mockInput.pressKey("ESCAPE")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("still queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo retains mentioned files when the prompt is sent again", async () => {
+  const submitted: RunPrompt[] = []
+  const app = await renderFooter({
+    queuedPrompts: [
+      {
+        messageID: "m-1",
+        delivery: "queue",
+        prompt: {
+          messageID: "m-1",
+          text: "inspect @src/main.ts please",
+          parts: [
+            {
+              type: "file",
+              url: "file:///src/main.ts",
+              filename: "main.ts",
+              source: { type: "file", path: "src/main.ts", text: { start: 8, end: 20, value: "@src/main.ts" } },
+            },
+          ],
+        },
+      },
+    ],
+    onQueuedPromptAction: async () => {
+      // A permission can unmount the composer while the cancellation is in flight.
+      app.setView({
+        type: "permission",
+        request: { id: "per_undo", sessionID: "ses_child", action: "read", resources: ["src/index.ts"] },
+      })
+      app.setQueuedPrompts([])
+    },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.pasteBracketedText("\t👨‍👩‍👧நி\f")
+    await Bun.sleep(0)
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    app.setView({ type: "prompt" })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("inspect @src/main.ts please")
+    await app.mockInput.typeText("!")
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(submitted).toMatchObject([
+      { text: "\t👨‍👩‍👧நி\f\n\ninspect @src/main.ts please!", parts: [{ type: "file", url: "file:///src/main.ts" }] },
+    ])
+    expect(submitted[0].messageID).toBeUndefined()
   } finally {
     app.cleanup()
   }
@@ -2153,7 +2331,7 @@ test("direct permission rejection submits through keymap return binding", async 
       <Keymap.Provider config={tuiConfig}>
         <RejectField
           theme={RUN_THEME_FALLBACK.footer}
-          text=""
+          text={"中\t"}
           disabled={false}
           onChange={(input) => {
             text = input
@@ -2183,7 +2361,7 @@ test("direct permission rejection submits through keymap return binding", async 
     expect(app.captureCharFrame()).toContain("retry")
     app.mockInput.pressEnter()
     await app.renderOnce()
-    expect(submits).toEqual(["retry"])
+    expect(submits).toEqual(["中\tretry"])
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

@@ -62,7 +62,6 @@ export function BreadcrumbSelect(props: {
           </svg>
         </Select.Icon>
       </Select.Trigger>
-      <Select.HiddenSelect />
       <Select.Content data-component="stats-breadcrumb-select-content" data-variant={props.variant}>
         <Select.Listbox data-slot="stats-breadcrumb-select-listbox" />
       </Select.Content>

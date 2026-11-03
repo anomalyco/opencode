@@ -2,14 +2,13 @@ export * as CodeModeCatalog from "./catalog.js"
 
 import { Schema } from "effect"
 
-export const Tool = Schema.Struct({
-  type: Schema.Literal("tool"),
-  name: Schema.String,
-  description: Schema.String,
-  signature: Schema.String,
-  pinned: Schema.optionalKey(Schema.Boolean),
-})
-export type Tool = typeof Tool.Type
+export type Tool = {
+  readonly type: "tool"
+  readonly name: string
+  readonly description: string
+  readonly signature: string
+  readonly pinned?: boolean
+}
 
 export type Namespace = {
   readonly type: "namespace"

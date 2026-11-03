@@ -1,12 +1,14 @@
 import { LOCALE_HEADER } from "../lib/language"
 
-const statsPageCacheControl = "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+// Stats change throughout the day; expired snapshots must refresh before reuse.
+export const statsPageCacheControl = "public, max-age=60, s-maxage=300, must-revalidate"
 
 export function setStatsPageCacheHeaders(headers: Headers | undefined) {
   if (!headers) return
 
   headers.set("Cache-Control", statsPageCacheControl)
-  appendVary(headers, "Accept-Language", "Cookie", LOCALE_HEADER)
+  // The same URL serves Markdown to clients that ask for it.
+  appendVary(headers, "Accept", "Accept-Language", "Cookie", LOCALE_HEADER)
 }
 
 function appendVary(headers: Headers, ...values: string[]) {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { ConfigAgent } from "../src/config/agent.js"
@@ -195,6 +196,8 @@ describe("contract hygiene", () => {
       Project.Info,
       Pty.Info,
       Session.ListAnchor,
+      Session.ListCursor,
+      Session.ListFilter,
       Session.Revert,
       SessionInbox.Delivery,
       SessionInbox.UserPayload,
@@ -231,7 +234,7 @@ describe("contract hygiene", () => {
   })
 
   test("current source limits Any to reviewed boundaries and avoids mutable contract wrappers", async () => {
-    const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
+    const files = [...new Bun.Glob("*.ts").scanSync(path.join(import.meta.dir, "../src"))].filter(
       (file) => !file.endsWith("-v1.ts"),
     )
     const sources = await Promise.all(
@@ -257,15 +260,15 @@ describe("contract hygiene", () => {
       text: "hello",
     })
     expect(
-      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", state: { id: "opaque" } }),
-    ).toEqual({ type: "reasoning", text: "thinking", state: { id: "opaque" } })
+      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", native: { id: "opaque" } }),
+    ).toEqual({ type: "reasoning", text: "thinking", native: { id: "opaque" } })
     expect(
       SessionMessage.AssistantTool.make({
         type: "tool",
         id: "call_1",
         name: "search",
         executed: true,
-        providerState: { itemId: "item_1" },
+        native: { itemId: "item_1" },
         state: { status: "streaming", input: "" },
         time: { created: DateTime.makeUnsafe(0) },
       }),

@@ -9,8 +9,8 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates the three explicit diff source defaults", () => {
-  for (const source of ["branch", "committed", "working"] as const) {
+test("validates the explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working", "turn"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
   }
   expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
@@ -73,6 +73,15 @@ test("resolves nested config and keybind defaults", () => {
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
+  expect(config.cursor).toEqual({ style: "block", blinking: true })
+  expect(resolve({ cursor: { style: "line" } }, { terminalSuspend: true }).cursor).toEqual({
+    style: "line",
+    blinking: true,
+  })
+  expect(resolve({ cursor: { blinking: false } }, { terminalSuspend: true }).cursor).toEqual({
+    style: "block",
+    blinking: false,
+  })
 })
 
 test("resolves automatic tabs from the terminal environment", () => {
@@ -112,6 +121,14 @@ test("shows the TPS default in session settings", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
   expect(setting?.category).toBe("Session")
   expect(setting?.default).toBe(true)
+})
+
+test("shows transcript verbosity in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
+    category: "Session",
+    default: "medium",
+    values: ["low", "medium", "high"],
+  })
 })
 
 test("names tool grouping explicitly in settings", () => {
@@ -235,6 +252,7 @@ test("centralizes named command defaults and resolves explicit none", () => {
     "diff.next_hunk": "]",
     "diff.previous_hunk": "[",
     "diff.mark_reviewed": "m",
+    "diff.toggle_fullscreen": "f",
     "diff.help": "?,shift+?,shift+/",
   }
   const config = resolve({}, { terminalSuspend: true })

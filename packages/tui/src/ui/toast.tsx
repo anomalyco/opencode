@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
+import { errorMessage } from "../util/error"
 export type ToastOptions = {
   title?: string
   message: string
@@ -53,6 +54,14 @@ function ToastSurface(props: {
       borderColor={theme.text.feedback[props.toast.variant].base}
       border={["left", "right"]}
       customBorderChars={SplitBorder.customBorderChars}
+      renderAfter={function () {
+        // The host terminal draws its cursor above TUI cells, regardless of paint order.
+        const cursor = renderer.getCursorState()
+        const x = cursor.x - 1
+        const y = cursor.y - 1
+        if (!cursor.visible || x < this.x || x >= this.x + this.width || y < this.y || y >= this.y + this.height) return
+        renderer.setCursorPosition(cursor.x, cursor.y, false)
+      }}
       onMouseOver={() => hover(true)}
       onMouseOut={() => hover(false)}
       onMouseUp={() => {
@@ -164,16 +173,8 @@ function init() {
       setStore("currentToast", toastOptions)
       start(toastOptions.duration)
     },
-    error: (err: any) => {
-      if (err instanceof Error)
-        return toast.show({
-          variant: "error",
-          message: err.message,
-        })
-      toast.show({
-        variant: "error",
-        message: "An unknown error has occurred",
-      })
+    error: (err: unknown) => {
+      toast.show({ variant: "error", message: errorMessage(err) })
     },
     pause() {
       if (!store.currentToast || paused) return

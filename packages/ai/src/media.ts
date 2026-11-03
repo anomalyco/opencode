@@ -1,12 +1,13 @@
 export * as Media from "./media.js"
 
-import { Effect, Encoding, FileSystem, Schema, SchemaGetter } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, FileSystem, Schema, SchemaGetter } from "effect"
+import { Base64 } from "effect/encoding"
+import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
-import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
+import { AIError, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
-import { Service } from "./route/executor-service.js"
-import { detectMediaType, extensionMediaType } from "./utils/media-type.js"
+import { responseHttp, Service } from "./route/executor-service.js"
+import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
 
@@ -34,8 +35,6 @@ const UrlSource = Schema.Struct({
   mediaType: Schema.optional(Schema.String),
   /** Epoch milliseconds after which the provider no longer serves the URL. */
   expiresAt: Schema.optional(Schema.Number),
-  /** Headers required to fetch the URL, such as provider auth for Veo downloads. */
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 
 /** A provider-side handle: OpenAI `file_id`, Gemini file URI, `gs://`, `runway://`, or a prior generation id. */
@@ -52,8 +51,14 @@ export const Source = Schema.Union([BytesSource, Base64Source, UrlSource, RefSou
 export type Source = Schema.Schema.Type<typeof Source>
 
 // ---------------------------------------------------------------------------
-// Kind, Info, Notice
+// Kind, Info
 // ---------------------------------------------------------------------------
+
+export type AspectRatio = `${number}:${number}`
+export const AspectRatio = Schema.declare<AspectRatio>(
+  (value): value is AspectRatio => typeof value === "string" && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value),
+  { title: "Media.AspectRatio" },
+)
 
 export const Kind = Schema.Literals(["image", "video", "audio", "document", "other"])
 export type Kind = Schema.Schema.Type<typeof Kind>
@@ -79,14 +84,6 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Media.Info" })
 export type Info = Schema.Schema.Type<typeof Info>
 
-/** A provider-side partial result such as stripped audio or a moderated sample; never a silent drop. */
-export const Notice = Schema.Struct({
-  type: Schema.Literals(["moderated", "filtered", "other"]),
-  message: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "Media.Notice" })
-export type Notice = Schema.Schema.Type<typeof Notice>
-
 // ---------------------------------------------------------------------------
 // Asset
 // ---------------------------------------------------------------------------
@@ -110,6 +107,8 @@ export class Asset {
   /** Epoch milliseconds after which a `url` source stops resolving. */
   readonly expiresAt?: number
   readonly providerMetadata?: ProviderMetadata
+  /** Transient download credentials for `url` sources; see `Asset.Input.headers`. */
+  readonly headers?: Record<string, string>
 
   // Derived payload forms are cached on the instance because every protocol lowering re-reads the same payload. The
   // cache is check-then-set (concurrent first reads of a `url` source may both download) and is never observable
@@ -127,13 +126,14 @@ export class Asset {
     this.info = input.info
     this.expiresAt = input.source.type === "url" ? input.source.expiresAt : undefined
     this.providerMetadata = input.providerMetadata
+    this.headers = input.source.type === "url" ? input.headers : undefined
   }
 
   /** Inline payload without effects, for protocols that embed base64 or data URLs directly. */
   inline(): Inline | undefined {
     const source = this.source
     if (source.type !== "bytes" && source.type !== "base64") return undefined
-    const base64 = source.type === "base64" ? source.data : (this.#base64 ??= Encoding.encodeBase64(source.data))
+    const base64 = source.type === "base64" ? source.data : (this.#base64 ??= Base64.encode(source.data))
     const mime = this.mediaType.toLowerCase()
     return { mime, base64, dataUrl: `data:${mime};base64,${base64}` }
   }
@@ -148,10 +148,10 @@ export class Asset {
         return Effect.fail(invalid(`Cannot materialize provider ref ${source.provider}:${source.id}`))
       const decoded =
         source.type === "base64"
-          ? Effect.fromResult(Encoding.decodeBase64(source.data)).pipe(
+          ? Effect.fromResult(Base64.decode(source.data)).pipe(
               Effect.mapError((cause) => invalid(`Media asset contains invalid base64 data`, cause)),
             )
-          : download(source)
+          : download(source, this.headers)
       return decoded.pipe(Effect.tap((data) => Effect.sync(() => (this.#bytes = data))))
     })
   }
@@ -161,7 +161,7 @@ export class Asset {
       const source = this.source
       if (source.type === "base64") return Effect.succeed(source.data)
       if (this.#base64 !== undefined) return Effect.succeed(this.#base64)
-      return this.bytes().pipe(Effect.map((data) => (this.#base64 = Encoding.encodeBase64(data))))
+      return this.bytes().pipe(Effect.map((data) => (this.#base64 = Base64.encode(data))))
     })
   }
 
@@ -176,7 +176,7 @@ export class Asset {
   toJSON() {
     const source = this.source
     return {
-      source: source.type === "bytes" ? { ...source, data: Encoding.encodeBase64(source.data) } : source,
+      source: source.type === "bytes" ? { ...source, data: Base64.encode(source.data) } : source,
       info: this.info,
       providerMetadata: this.providerMetadata,
     }
@@ -198,6 +198,12 @@ export namespace Asset {
     readonly source: Source
     readonly info?: Info
     readonly providerMetadata?: ProviderMetadata
+    /**
+     * Headers required to download a `url` source, such as the provider API key Veo demands for its file URIs.
+     * They are runtime-only: never part of `source`, `toJSON()`, or `AssetSchema`, so a persisted asset cannot leak
+     * credentials and cannot be downloaded again after a round-trip. Call `materialize()` before persisting.
+     */
+    readonly headers?: Record<string, string>
   }
 }
 
@@ -226,10 +232,13 @@ export const AssetSchema = AssetEncoded.pipe(
   }),
 )
 
-const download = Effect.fn("Media.download")(function* (source: Extract<Source, { readonly type: "url" }>) {
+const download = Effect.fn("Media.download")(function* (
+  source: Extract<Source, { readonly type: "url" }>,
+  headers: Record<string, string> | undefined,
+) {
   const executor = yield* Service
   const response = yield* executor.execute(
-    HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(source.headers ?? {})),
+    HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})),
   )
   const buffer = yield* response.arrayBuffer.pipe(
     Effect.mapError(
@@ -237,7 +246,7 @@ const download = Effect.fn("Media.download")(function* (source: Extract<Source, 
         new AIError({
           reason: new InvalidProviderOutputError({
             message: `Failed to read media from ${source.url}`,
-            http: new HttpContext({ url: response.request.url, status: response.status, headers: response.headers }),
+            http: responseHttp(response),
             cause,
           }),
         }),
@@ -264,8 +273,8 @@ export const url = (
   value: string,
   options?: AssetOptions & Omit<Extract<Source, { readonly type: "url" }>, "type" | "url">,
 ) => {
-  const { mediaType, expiresAt, headers, ...rest } = options ?? {}
-  return from({ type: "url", url: value, mediaType, expiresAt, headers }, rest)
+  const { mediaType, expiresAt, ...rest } = options ?? {}
+  return from({ type: "url", url: value, mediaType, expiresAt }, rest)
 }
 
 export const ref = (provider: string | ProviderID, id: string, mediaType?: string, options?: AssetOptions) =>
@@ -293,7 +302,7 @@ export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset,
     const data = yield* fs
       .readFile(path)
       .pipe(Effect.mapError((cause) => invalid(`Failed to read media file ${path}`, cause)))
-    return bytes(data, detectMediaType(data) ?? extensionMediaType(path), options)
+    return bytes(data, fileMediaType(data, path), options)
   })
 
 /** Materialize an asset and write its bytes through `FileSystem`. */

@@ -1,8 +1,7 @@
-import { Effect } from "effect"
-import type { Value } from "./objects.js"
+import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
-import { mapGlobal, setGlobal } from "../stdlib/collections.js"
+import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
 import { jsonGlobal } from "../stdlib/json.js"
@@ -15,23 +14,45 @@ import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
 import { headersGlobal } from "../stdlib/headers.js"
 import { iteratorGlobals } from "../stdlib/iterator.js"
 import { coercion } from "../stdlib/value.js"
-import { base64Global, cryptoGlobal } from "../stdlib/web.js"
+import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
-import { constants, constructor, native } from "./native.js"
+import { constants, constructor, methods, native, receiver } from "./native.js"
 import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
+import { checkArrayLength } from "./limits.js"
 import { generatorGlobals } from "./generators.js"
 import { promiseGlobal } from "./promises.js"
 import type { Interpreter } from "./interpreter.js"
 
 // Function.prototype.constructor exists so `fn.constructor === Function` holds; dynamic code is unsupported.
 const functionGlobal = <R>(ctx: Interpreter<R>) => {
-  const reject = () =>
-    Effect.sync(() => {
-      throw typeError("The Function constructor is not supported; write the function inline.")
-    })
-  return constructor<R>(ctx.builtins, ctx.builtins.Function, {
+  const reject = () => {
+    throw typeError("The Function constructor is not supported; write the function inline.")
+  }
+  const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
+  methods(ctx.builtins, ctx.builtins.Function, [
+    ["call", 1, (thisValue, args, site) => ctx.call(target(thisValue, "call"), args[0], args.slice(1), site)],
+    [
+      "apply",
+      2,
+      (thisValue, args, site) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site),
+    ],
+    [
+      "bind",
+      1,
+      (thisValue, args) => {
+        const fn = target(thisValue, "bind")
+        const bound = args.slice(1)
+        return native(ctx.builtins, {
+          name: `bound ${coerceToString(get(fn, "name"))}`,
+          length: Math.max(0, fn.length - bound.length),
+          call: (_, rest, site) => ctx.call(fn, args[0], [...bound, ...rest], site),
+        })
+      },
+    ],
+  ])
+  return constructor(ctx.builtins, ctx.builtins.Function, {
     name: "Function",
     length: 1,
     call: reject,
@@ -39,13 +60,22 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
   })
 }
 
+// CreateListFromArrayLike: `apply` reads `length` and the indexed properties of any object.
+const listFromArrayLike = (value: Value): Array<Value> => {
+  if (value === undefined || value === null) return []
+  if (value instanceof Arr) return [...value.items]
+  if (!(value instanceof Obj)) throw typeError("Function.prototype.apply expects an array-like argument list.")
+  const length = Math.max(0, coerceToInteger(get(value, "length")))
+  checkArrayLength(length)
+  return Array.from({ length }, (_, index) => get(value, String(index)))
+}
+
 const symbolGlobal = <R>(ctx: Interpreter<R>) => {
-  const symbol = native<R>(ctx.builtins, {
+  const symbol = native(ctx.builtins, {
     name: "Symbol",
-    call: () =>
-      Effect.sync(() => {
-        throw typeError("Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.")
-      }),
+    call: () => {
+      throw typeError("Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.")
+    },
     callback: false,
   })
   constants(symbol, { asyncIterator: AsyncIteratorSymbol, iterator: IteratorSymbol })
@@ -57,8 +87,17 @@ type Factory = <R>(ctx: Interpreter<R>) => Value
 // A table rather than a list so the names are known before any runtime exists.
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
-  search: (ctx) =>
-    native(ctx.builtins, { name: "search", call: (_, args) => ctx.tool(ctx.tools.search, args), callback: false }),
+  search: (ctx) => native(ctx.builtins, { name: "search", call: (_, args) => ctx.search(args), callback: false }),
+  require: (ctx) =>
+    native(ctx.builtins, {
+      name: "require",
+      length: 1,
+      call: (_, args, site) => {
+        const specifier = args[0]
+        if (typeof specifier !== "string") throw typeError("require expects a module name string.")
+        return ctx.module(specifier, site)
+      },
+    }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,
@@ -82,6 +121,8 @@ const table: Record<string, Factory> = {
   RegExp: (ctx) => regexpGlobal(ctx),
   Map: (ctx) => mapGlobal(ctx),
   Set: (ctx) => setGlobal(ctx),
+  WeakMap: (ctx) => weakMapGlobal(ctx),
+  WeakSet: (ctx) => weakSetGlobal(ctx),
   URL: (ctx) => urlGlobal(ctx),
   URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
   Headers: (ctx) => headersGlobal(ctx),
@@ -95,6 +136,7 @@ const table: Record<string, Factory> = {
   atob: (ctx) => base64Global(ctx, "atob"),
   btoa: (ctx) => base64Global(ctx, "btoa"),
   crypto: (ctx) => cryptoGlobal(ctx),
+  structuredClone: (ctx) => structuredCloneGlobal(ctx),
   ...Object.fromEntries(errorTypes.map((type) => [type, <R>(ctx: Interpreter<R>) => errorGlobal(type, ctx)])),
 }
 

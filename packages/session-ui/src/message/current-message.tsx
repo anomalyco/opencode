@@ -1,16 +1,21 @@
-import type {
-  SessionMessageAssistant,
-  SessionMessageAssistantTool,
-  SessionMessageUser,
-} from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import {
+  CurrentContextToolGroup,
+  CurrentFileToolGroup,
+  CurrentReadToolGroup,
+  ToolDisplay,
+} from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import type { UserRun } from "../timeline/user-runs"
+import type { TurnSources } from "../sources/sources"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+
 export { SessionShellMessage } from "../tools/tool-renderer"
+
 export { currentContentDefaultOpen } from "./current-tool-state"
 
 export function SessionUserMessage(props: {
@@ -19,9 +24,16 @@ export function SessionUserMessage(props: {
   displayText?: string
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  voice?: boolean
   historicalAgent: string
   historicalModel: SessionMessageAssistant["model"]
+  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
+  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
+  run?: UserRun
+  fold?: boolean
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }) {
   return (
     <CurrentUserMessageDisplay
@@ -30,9 +42,15 @@ export function SessionUserMessage(props: {
       text={props.displayText ?? props.message.text}
       comments={props.comments}
       references={props.references}
+      voice={props.voice}
       agent={props.historicalAgent}
       model={props.historicalModel}
+      previousSelection={props.previousSelection}
       actions={props.actions}
+      run={props.run}
+      fold={props.fold}
+      expanded={props.expanded}
+      onExpandedChange={props.onExpandedChange}
     />
   )
 }
@@ -43,6 +61,8 @@ export function SessionAssistantContent(props: {
   contentID: string
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number | null
+  sources?: TurnSources
+  onOpenSources?: () => void
   defaultOpen?: boolean
   reasoningDefaultOpen?: boolean
   toolOpen?: boolean
@@ -59,6 +79,8 @@ export function SessionAssistantContent(props: {
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
             turnDurationMs={props.turnDurationMs}
+            sources={props.sources}
+            onOpenSources={props.onOpenSources}
           />
         )}
       </Match>
@@ -100,6 +122,10 @@ export function SessionAssistantContent(props: {
 
 export function SessionContextToolGroup(props: ComponentProps<typeof CurrentContextToolGroup>) {
   return <CurrentContextToolGroup {...props} />
+}
+
+export function SessionReadToolGroup(props: ComponentProps<typeof CurrentReadToolGroup>) {
+  return <CurrentReadToolGroup {...props} />
 }
 
 export function SessionFileToolGroup(props: {

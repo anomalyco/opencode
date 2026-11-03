@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { HttpBody, HttpClientRequest } from "effect/unstable/http"
+import { HttpBody, HttpClientRequest } from "effect/http"
 import { redactedErrorRequest } from "../src/http/recorder"
 import { make, redactHeaders, redactUrl } from "../src/redaction/redactor"
 import { secretFindings } from "../src/redaction/secrets"

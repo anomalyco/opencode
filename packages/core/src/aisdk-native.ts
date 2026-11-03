@@ -14,28 +14,29 @@ type Target<ID extends string> = Overlays & {
   variants?: (Overlays & { id: ID })[]
 }
 
-type Context = { readonly providerID: string; readonly canonical?: string; readonly modelID?: string }
+type Context = {
+  readonly providerID: string
+  readonly canonical?: string
+  readonly modelID?: string
+  readonly shape?: "responses" | "completions"
+}
 
 export function rewrite<ID extends string>(
   target: Target<ID>,
   input: Context & { readonly specifier: string | undefined },
 ) {
   if (input.specifier === undefined) return
-  const plain = resolve(input.specifier, input)
-  if (!plain) return
   const settings = decode(target.settings ?? {})
-  const replacement = resolve(input.specifier, { ...input, settings }) ?? plain
+  const replacement = resolve(input.specifier, { ...input, settings })
+  if (!replacement) return
   const translated = options(replacement, input.modelID, settings)
   if (target.package !== undefined || replacement !== input.specifier) target.package = replacement
-  target.settings =
-    target.settings === undefined
-      ? undefined
-      : {
-          ...translated.settings,
-          ...(!NATIVE.has(input.specifier) && replacement === "@opencode/ai/providers/openai-compatible"
-            ? { provider: input.canonical ?? input.providerID }
-            : {}),
-        }
+  // Without `provider`, the native compatible package reports every AI SDK-mapped host as `openai-compatible`.
+  const identity =
+    replacement === "@opencode/ai/providers/openai-compatible" && !Provider.builtinPackages.has(input.specifier)
+      ? { provider: input.canonical ?? input.providerID }
+      : {}
+  target.settings = target.settings === undefined ? undefined : { ...translated.settings, ...identity }
   target.headers = Provider.mergeHeaders(translated.headers, target.headers)
   target.body = Provider.mergeOverlay(translated.body, target.body)
   target.variants = target.variants?.map((variant) => {
@@ -57,6 +58,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
+  "@ai-sdk/cohere": "@opencode/ai/providers/cohere",
   "@ai-sdk/deepinfra": "@opencode/ai/providers/deepinfra",
   "@ai-sdk/google": "@opencode/ai/providers/google",
   "@ai-sdk/google-vertex": "@opencode/ai/providers/google-vertex",
@@ -67,8 +69,10 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/openai-compatible": "@opencode/ai/providers/openai-compatible",
   "@ai-sdk/togetherai": "@opencode/ai/providers/togetherai",
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
+  "@ai-sdk/gateway": "@opencode/ai/providers/vercel-ai-gateway",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
+  "venice-ai-sdk-provider": "@opencode/ai/providers/venice",
 }
 
 const protocols = (name: string) => ({
@@ -91,10 +95,15 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-ai-gateway",
     "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   },
+  cohere: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cohere/chat" },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
   deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
+  digitalocean: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/digitalocean" },
   "fireworks-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/fireworks" },
-  "google-vertex": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/google-vertex/chat" },
+  "google-vertex": {
+    "@ai-sdk/openai-compatible": "@opencode/ai/providers/google-vertex/chat",
+    "@ai-sdk/mistral": "@opencode/ai/providers/google-vertex/mistral",
+  },
   "kimi-for-coding": protocols("moonshot"),
   meta: protocols("meta"),
   minimax: protocols("minimax"),
@@ -109,37 +118,45 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "zhipuai-coding-plan": protocols("zai-coding-plan"),
 }
 
-const NATIVE = new Set([
-  ...Object.values(PACKAGES),
-  ...Object.values(HOSTS).flatMap((host) => Object.values(host)),
-  "@opencode/ai/providers/azure/chat",
-  "@opencode/ai/providers/amazon-bedrock/mantle",
-  "@opencode/ai/providers/amazon-bedrock/mantle/chat",
-  "@opencode/ai/providers/amazon-bedrock/mantle/responses",
-])
-
 export function native(npm: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {
   const host = HOSTS[context.providerID]?.[npm]
   if (host) return host
   if (npm === "@ai-sdk/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@ai-sdk/azure" && context.settings?.useCompletionUrls === true)
-    return "@opencode/ai/providers/azure/chat"
+  if (npm === "@ai-sdk/azure" && azureChat(context)) return "@opencode/ai/providers/azure/chat"
   return PACKAGES[npm]
 }
 
+const azureChat = (context: Context & { readonly settings?: Provider.Settings }) =>
+  context.shape === "completions" || context.settings?.useCompletionUrls === true
+
+// Mantle serves Claude only through Anthropic Messages and GPT-OSS only through Chat.
 const mantle = (modelID: string | undefined) => {
   if (modelID === undefined) return "@opencode/ai/providers/amazon-bedrock/mantle"
+  if (modelID.includes("anthropic.")) return "@opencode/ai/providers/amazon-bedrock/mantle/messages"
   return `@opencode/ai/providers/amazon-bedrock/mantle/${modelID.includes("gpt-oss") ? "chat" : "responses"}`
+}
+
+// Old hyphenated Vertex entrypoints that stale configs may still name.
+const LEGACY_VERTEX: Readonly<Record<string, string>> = {
+  "@opencode/ai/providers/google-vertex-chat": "@opencode/ai/providers/google-vertex/chat",
+  "@opencode/ai/providers/google-vertex-responses": "@opencode/ai/providers/google-vertex/responses",
+  "@opencode/ai/providers/google-vertex-interactions": "@opencode/ai/providers/google-vertex/interactions",
+  "@opencode/ai/providers/google-vertex-mistral": "@opencode/ai/providers/google-vertex/mistral",
 }
 
 function resolve(specifier: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {
   const npm = Provider.packageName(specifier)
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
-  if (npm === "@opencode/ai/providers/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@opencode/ai/providers/azure/responses" && context.settings?.useCompletionUrls === true)
+  if (npm === "@opencode/ai/providers/amazon-bedrock/mantle" || npm === "@opencode/ai/providers/amazon-bedrock-mantle")
+    return mantle(context.modelID)
+  if (npm in LEGACY_VERTEX) return LEGACY_VERTEX[npm]
+  if (
+    (npm === "@opencode/ai/providers/azure" || npm === "@opencode/ai/providers/azure/responses") &&
+    azureChat(context)
+  )
     return "@opencode/ai/providers/azure/chat"
-  return NATIVE.has(npm) ? npm : undefined
+  return Provider.builtinPackages.has(npm) ? npm : undefined
 }
 
 type Overlay = {
@@ -151,8 +168,12 @@ type Overlay = {
 function options(replacement: string, modelID: string | undefined, settings: Legacy): Overlay {
   const converse = replacement === "@opencode/ai/providers/amazon-bedrock" && modelID !== undefined
   const kept = Struct.omit(settings, ["headers", "extraBody", "useCompletionUrls", ...OPENROUTER_KEYS])
+  const thinking = converse ? bedrockThinking(modelID, settings) : undefined
   return {
-    settings: replacement.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(kept, converse) : kept,
+    settings: {
+      ...(replacement.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(kept, converse) : kept),
+      ...(thinking === undefined ? {} : { thinking }),
+    },
     ...(settings.headers === undefined ? {} : { headers: settings.headers }),
     ...(settings.extraBody === undefined ? {} : { body: settings.extraBody }),
     ...(converse ? bedrockRequest(modelID, settings) : {}),
@@ -196,6 +217,13 @@ function bedrockSettings(settings: Legacy, converse: boolean) {
   }
 }
 
+// Claude's enabled budget is a typed setting so the protocol can fit it under the output limit.
+function bedrockThinking(modelID: string | undefined, settings: Legacy) {
+  const reasoning = settings.reasoningConfig
+  if (!modelID?.includes("anthropic") || reasoning?.type !== "enabled" || reasoning.budgetTokens === undefined) return
+  return { type: "enabled", budgetTokens: reasoning.budgetTokens }
+}
+
 function bedrockRequest(modelID: string | undefined, settings: Legacy): Pick<Overlay, "body"> {
   const additional = settings.additionalModelRequestFields ?? {}
   const reasoning = settings.reasoningConfig
@@ -210,9 +238,6 @@ function bedrockRequest(modelID: string | undefined, settings: Legacy): Pick<Ove
   const betas = settings.anthropicBeta ?? []
   const fields = Provider.mergeOverlay(additional, {
     ...(betas.length > 0 ? { anthropic_beta: [...(additional.anthropic_beta ?? []), ...betas] } : {}),
-    ...(anthropic && type === "enabled" && budget !== undefined
-      ? { thinking: { type: "enabled", budget_tokens: budget } }
-      : {}),
     ...(anthropic && type === "adaptive"
       ? { thinking: { type: "adaptive", ...(display === undefined ? {} : { display }) } }
       : {}),

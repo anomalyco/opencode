@@ -1,20 +1,22 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createMemo, For, Index, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
-import { Spinner } from "@opencode/ui/spinner"
-import { ScrollView } from "@opencode/ui/scroll-view"
+import { Loader } from "@opencode/ui/loader"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionLabel } from "@/session/title"
 import { shouldOpenSessionInBackground } from "./open"
+import { createAltHold } from "./alt-hold"
 import "./view.css"
 import {
   HomeSessionStatusController,
@@ -25,9 +27,20 @@ import {
 } from "./controller"
 
 const SHOW_HOME_SESSION_ARCHIVE = false
+
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
+
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
+
 const HOME_SESSION_LONG_PRESS_MS = 500
+
+const HOME_SESSION_PLACEHOLDER_DELAY_MS = 250
+
+// Matches the list's reveal animation in view.css.
+const HOME_SESSION_REVEAL_MS = 200
+
+// Title widths for the placeholder rows, as a share of the row's label area.
+const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
 // tab in the background without navigating, matching browser conventions.
@@ -46,6 +59,9 @@ export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
   groups: HomeSessionGroup[]
   loading: boolean
+  desktop: boolean
+  location: (record: HomeSessionRecord) => { worktree: string; branch: string | undefined }
+  onRevealLocations: (record?: HomeSessionRecord) => void
   showProjectName: boolean
   server: ServerConnection.Key
   canCreateSession: boolean
@@ -91,6 +107,20 @@ type HomeSessionRowUI = {
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
+  const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
+  const showLocations = createAltHold(props.desktop, props.onRevealLocations)
+  // A list that arrives within the delay paints directly; slower loads show placeholder rows until it does, which stay
+  // mounted while the list fades in over them.
+  const [placeholder, setPlaceholder] = createSignal(false)
+
+  createEffect(() => {
+    const timer = props.loading
+      ? setTimeout(() => setPlaceholder(true), HOME_SESSION_PLACEHOLDER_DELAY_MS)
+      : setTimeout(() => setPlaceholder(false), prefersReducedMotion() ? 0 : HOME_SESSION_REVEAL_MS)
+
+    onCleanup(() => clearTimeout(timer))
+  })
+
   return (
     <section
       ref={props.onSetHoverTarget}
@@ -101,7 +131,12 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
         class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
         onWheel={props.onWheel}
       >
-        <HomeSessionSearch {...props} />
+        <HomeSessionSearch
+          {...props}
+          showLocations={showLocations()}
+          hoveredSession={hover.sessionID}
+          onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
+        />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
           <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
             <Button
@@ -124,15 +159,20 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
         />
       </div>
-      <div class="-mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
-        <Show
-          when={!props.loading}
-          fallback={
-            <div class="pt-1 md:pt-3">
-              <HomeSessionSkeleton label={props.language.t("common.loading")} />
-            </div>
-          }
-        >
+      <div
+        data-slot="home-sessions-list"
+        data-reveal={placeholder() || undefined}
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        aria-busy={props.loading}
+      >
+        <Show when={placeholder()}>
+          <HomeSessionSkeleton
+            visible={props.loading}
+            showProjectName={props.showProjectName}
+            desktop={props.desktop}
+          />
+        </Show>
+        <Show when={!props.loading}>
           <Show
             when={props.groups.length > 0}
             fallback={
@@ -162,7 +202,17 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                           rows would be disposed mid-interaction whenever a
                           sync response lands. */}
                       <Key each={group().sessions} by={(record) => record.session.id}>
-                        {(record) => <HomeSessionRow {...props} record={record()} rowUI={rowUI} setRowUI={setRowUI} />}
+                        {(record) => (
+                          <HomeSessionRow
+                            {...props}
+                            record={record()}
+                            rowUI={rowUI}
+                            setRowUI={setRowUI}
+                            showLocations={showLocations()}
+                            hoveredSession={hover.sessionID}
+                            onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
+                          />
+                        )}
                       </Key>
                     </div>
                   </>
@@ -176,7 +226,10 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
   )
 }
 
-function HomeSessionLeadingController(props: {
+// The project avatar leads the row and never changes; a working session shows its activity ring at the row's trailing
+// edge, as session tabs do. `order-last` moves the ring past the labels from here, so one status subscription serves
+// both, and `ms-auto` pins it to the end even where the labels are `display: contents`.
+function HomeSessionIndicators(props: {
   server: HomeSessionsViewProps["server"]
   isOpenTab: HomeSessionsViewProps["isOpenTab"]
   record: HomeSessionRecord
@@ -187,23 +240,19 @@ function HomeSessionLeadingController(props: {
       record={props.record}
       isOpenTab={props.isOpenTab}
       render={(state) => (
-        <HomeSessionLeading
-          record={props.record}
-          open={state.open()}
-          unread={state.unread()}
-          loading={state.loading()}
-        />
+        <>
+          {/* A busy session shows its activity ring instead of the unread dot. */}
+          <HomeSessionLeading record={props.record} open={state.open()} unread={state.unread() && !state.loading()} />
+          <Show when={state.loading()}>
+            <ActivityRing class="order-last ms-auto" />
+          </Show>
+        </>
       )}
     />
   )
 }
 
-function HomeSessionLeading(props: {
-  record: HomeSessionRecord
-  open: boolean
-  unread: boolean
-  loading: boolean
-}) {
+function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean }) {
   return (
     <div class="relative shrink-0">
       <Show when={props.open}>
@@ -220,13 +269,18 @@ function HomeSessionLeading(props: {
         project={props.record.project}
         directory={props.record.session.location.directory}
         unread={props.unread}
-        loading={props.loading}
       />
     </div>
   )
 }
 
-function HomeSessionSearch(props: HomeSessionsViewProps) {
+function HomeSessionSearch(
+  props: HomeSessionsViewProps & {
+    showLocations: boolean
+    hoveredSession: string | undefined
+    onHoverSession: (sessionID: string | undefined) => void
+  },
+) {
   return (
     <div class="w-full">
       <div ref={props.onSetSearchRoot} data-component="home-session-search" class="relative z-30 w-full">
@@ -249,7 +303,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                   when={!props.searchLoading}
                   fallback={
                     <div class="flex items-center justify-center px-4 py-3 text-v2-text-text-muted [font-weight:440]">
-                      <Spinner class="size-4" />
+                      <Loader class="size-4" />
                     </div>
                   }
                 >
@@ -275,7 +329,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <ScrollView class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
+                      <div class="max-h-[min(20rem,40dvh)] overflow-y-auto" data-scrollable ref={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -287,7 +341,7 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                             )}
                           </For>
                         </div>
-                      </ScrollView>
+                      </div>
                     </div>
                   </Show>
                 </Show>
@@ -325,20 +379,28 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                 event.preventDefault()
                 props.onSearchClose()
                 event.currentTarget.blur()
+
                 return
               }
+
               if (!props.searchOpen || props.searchResults.length === 0) return
+
               if (event.altKey || event.metaKey) return
+
               if (event.key === "ArrowDown") {
                 event.preventDefault()
                 props.onSearchMove(1)
+
                 return
               }
+
               if (event.key === "ArrowUp") {
                 event.preventDefault()
                 props.onSearchMove(-1)
+
                 return
               }
+
               if (event.key === "Enter" && !event.isComposing) {
                 event.preventDefault()
                 props.onSearchSelectActive()
@@ -369,9 +431,13 @@ function HomeSessionSearchResultRow(
   props: HomeSessionsViewProps & {
     record: HomeSessionRecord
     selected: boolean
+    showLocations: boolean
+    hoveredSession: string | undefined
+    onHoverSession: (sessionID: string | undefined) => void
   },
 ) {
   const title = createMemo(() => sessionLabel(props.record.session))
+  const location = createMemo(() => props.location(props.record))
   const showProjectName = () => props.showProjectName && props.record.projectName
   const key = () => homeSessionSearchKey(props.record)
 
@@ -385,14 +451,21 @@ function HomeSessionSearchResultRow(
       role="option"
       aria-selected={props.selected}
       class={`
-        flex h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-3 pl-[18px] pr-6 text-left
+        flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left
         transition-[background-color] duration-[120ms] ease-in-out
         hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
       classList={{
         "bg-v2-overlay-simple-overlay-hover": props.selected,
+        "gap-1.5": props.desktop,
+        "gap-2": !props.desktop,
       }}
-      onMouseEnter={() => props.onSearchHighlight(props.record)}
+      onMouseEnter={() => {
+        props.onSearchHighlight(props.record)
+        props.onHoverSession(props.record.session.id)
+        props.onRevealLocations(props.record)
+      }}
+      onMouseLeave={() => props.onHoverSession(undefined)}
       onMouseDown={(event) => {
         if (event.button === 1) event.preventDefault()
       }}
@@ -403,16 +476,22 @@ function HomeSessionSearchResultRow(
         props.onSearchSelect(props.record, { background: true })
       }}
     >
-      <HomeSessionLeadingController
-        server={props.server}
-        isOpenTab={props.isOpenTab}
-        record={props.record}
-      />
+      <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
       <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} search />
+          <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} search />
         </Show>
+        <HomeSessionLocation
+          location={location()}
+          show={props.showLocations || props.hoveredSession === props.record.session.id}
+          instantHide={
+            !props.showLocations &&
+            props.hoveredSession !== undefined &&
+            props.hoveredSession !== props.record.session.id
+          }
+          desktop={props.desktop}
+        />
       </div>
     </button>
   )
@@ -445,9 +524,13 @@ function HomeSessionRow(
     record: HomeSessionRecord
     rowUI: HomeSessionRowUI
     setRowUI: SetStoreFunction<HomeSessionRowUI>
+    showLocations: boolean
+    hoveredSession: string | undefined
+    onHoverSession: (sessionID: string | undefined) => void
   },
 ) {
   const title = createMemo(() => sessionLabel(props.record.session))
+  const location = createMemo(() => props.location(props.record))
   const showProjectName = () => props.showProjectName && props.record.projectName
   const sessionID = () => props.record.session.id
   const menu = () => (props.rowUI.menu?.id === sessionID() ? props.rowUI.menu : undefined)
@@ -461,8 +544,10 @@ function HomeSessionRow(
   // row components, so instance refs can point at detached nodes by the time
   // deferred focus runs.
   const rowSelector = () => `[data-component="home-session-row-container"][data-session-id="${sessionID()}"]`
+
   const rowButton = () =>
     document.querySelector<HTMLButtonElement>(`${rowSelector()} [data-component="home-session-row"]`)
+
   const renameInput = () =>
     document.querySelector<HTMLInputElement>(`${rowSelector()} [data-component="home-session-rename"]`)
 
@@ -471,6 +556,7 @@ function HomeSessionRow(
     longPressTimer = undefined
     longPressStart = undefined
   }
+
   onCleanup(clearLongPress)
 
   const openMenu = (element: HTMLElement, clientX: number, clientY: number) => {
@@ -486,12 +572,15 @@ function HomeSessionRow(
       input?.select()
     })
   }
+
   const closeEditor = () => {
     if (editor()?.renaming) return
     props.setRowUI("editor", (value) => (value?.id === sessionID() ? undefined : value))
   }
+
   const saveEditor = async () => {
     const current = editor()
+
     if (!current || current.renaming) return
     props.setRowUI("editor", { ...current, renaming: true })
     const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
@@ -500,14 +589,18 @@ function HomeSessionRow(
     const restore = document.activeElement === document.body || document.activeElement === renameInput()
     props.setRowUI("editor", (value) => {
       if (value?.id !== sessionID()) return value
+
       return saved ? undefined : { ...value, renaming: false }
     })
+
     if (!restore) return
     requestAnimationFrame(() => {
       if (saved) {
         rowButton()?.focus()
+
         return
       }
+
       renameInput()?.focus()
     })
   }
@@ -530,13 +623,10 @@ function HomeSessionRow(
         fallback={
           <div
             data-slot="home-session-editor"
-            class="flex h-10 min-w-0 w-full flex-1 items-center gap-2 py-3 ps-1.5 pe-3 md:ps-3 md:pe-10"
+            class="flex h-10 min-w-0 w-full flex-1 items-center py-3 ps-1.5 pe-3 md:ps-3"
+            classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           >
-            <HomeSessionLeadingController
-              server={props.server}
-              isOpenTab={props.isOpenTab}
-              record={props.record}
-            />
+            <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
             <div data-slot="home-session-labels" class="contents">
               <InlineInput
                 data-component="home-session-rename"
@@ -547,7 +637,7 @@ function HomeSessionRow(
                 class={`
                 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
-                ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
+                 ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
                 style={{ "--inline-input-shadow": "none", "text-align": "start" }}
                 onInput={(event) => {
@@ -556,16 +646,20 @@ function HomeSessionRow(
                 }}
                 onKeyDown={(event) => {
                   event.stopPropagation()
+
                   // Enter and Escape during IME composition commit or cancel
                   // the composition, not the rename. Safari can report the
                   // composition-confirming keydown with isComposing false but
                   // keyCode 229.
                   if (event.isComposing || event.keyCode === 229) return
+
                   if (event.key === "Enter") {
                     event.preventDefault()
                     void saveEditor()
+
                     return
                   }
+
                   if (event.key !== "Escape") return
                   event.preventDefault()
                   closeEditor()
@@ -586,16 +680,23 @@ function HomeSessionRow(
           aria-haspopup="menu"
           aria-expanded={!!menu()}
           class={`
-            flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-            bg-transparent py-3 ps-1.5 pe-3 md:ps-3 md:pe-10 text-start text-v2-text-text-muted [font-weight:530]
+            flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
+            bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
             hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
           `}
+          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {
             if (event.button === 1) event.preventDefault()
           }}
+          onMouseEnter={() => {
+            props.onHoverSession(props.record.session.id)
+            props.onRevealLocations(props.record)
+          }}
+          onMouseLeave={() => props.onHoverSession(undefined)}
           onPointerDown={(event) => {
             suppressClick = false
+
             if (event.pointerType !== "touch") return
             clearLongPress()
             const element = event.currentTarget
@@ -610,6 +711,7 @@ function HomeSessionRow(
           }}
           onPointerMove={(event) => {
             if (!longPressStart) return
+
             if (Math.abs(event.clientX - longPressStart.x) <= 8 && Math.abs(event.clientY - longPressStart.y) <= 8)
               return
             clearLongPress()
@@ -631,11 +733,14 @@ function HomeSessionRow(
             // never that click and passes through.
             if (suppressClick) {
               suppressClick = false
+
               if (event.detail !== 0) {
                 event.preventDefault()
+
                 return
               }
             }
+
             props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
           }}
           onAuxClick={(event) => {
@@ -644,16 +749,26 @@ function HomeSessionRow(
             props.onOpenSession(props.record.session, { background: true })
           }}
         >
-          <HomeSessionLeadingController
-            server={props.server}
-            isOpenTab={props.isOpenTab}
-            record={props.record}
-          />
-          <div data-slot="home-session-labels" class="contents">
+          <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+          <div
+            data-slot="home-session-labels"
+            class="min-w-0 flex-1 items-center gap-1.5"
+            classList={{ flex: props.desktop, contents: !props.desktop }}
+          >
             <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
             <Show when={showProjectName()}>
-              <HomeSessionProjectName name={props.record.projectName} />
+              <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} />
             </Show>
+            <HomeSessionLocation
+              location={location()}
+              show={props.showLocations || props.hoveredSession === props.record.session.id}
+              instantHide={
+                !props.showLocations &&
+                props.hoveredSession !== undefined &&
+                props.hoveredSession !== props.record.session.id
+              }
+              desktop={props.desktop}
+            />
           </div>
         </button>
       </Show>
@@ -687,6 +802,7 @@ function HomeSessionRow(
               event.preventDefault()
               const outside = menuInteractedOutside
               menuInteractedOutside = false
+
               if (outside || editor()) return
               requestAnimationFrame(() => rowButton()?.focus())
             }}
@@ -746,13 +862,51 @@ function HomeSessionTitle(props: { title: string; showProjectName: boolean; sear
   )
 }
 
-function HomeSessionProjectName(props: { name: string; search?: boolean }) {
+function HomeSessionLocation(props: {
+  location: { worktree: string; branch: string | undefined }
+  show: boolean
+  instantHide: boolean
+  desktop: boolean
+}) {
+  if (!props.desktop) return null
+
+  return (
+    <span
+      dir="ltr"
+      aria-hidden={!props.show || undefined}
+      class="flex min-w-0 shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap ease-out motion-reduce:transition-none"
+      classList={{
+        "-ms-1.5 max-w-0 opacity-0": !props.show,
+        "max-w-[60%] opacity-100": props.show,
+        "transition-[max-width,opacity] duration-[120ms]": !props.instantHide,
+        "transition-none": props.instantHide,
+      }}
+    >
+      <Icon name="outline-worktree" class="shrink-0 text-v2-icon-icon-muted" />
+      <span class="min-w-0 overflow-hidden text-ellipsis [font-weight:440]">{props.location.worktree}</span>
+      <Show when={props.location.branch}>
+        {(branch) => (
+          <>
+            <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 overflow-hidden text-ellipsis [font-weight:440]">{branch()}</span>
+          </>
+        )}
+      </Show>
+    </span>
+  )
+}
+
+function HomeSessionProjectName(props: { name: string; search?: boolean; trailing?: boolean }) {
   return (
     <span
       data-component="home-session-project-name"
       dir="auto"
-      class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
-      classList={{ "text-[13px] leading-4 tracking-[-0.04px]": !!props.search }}
+      class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
+      classList={{
+        "flex-[0_1_auto]": !!props.trailing,
+        "flex-[1_1_auto]": !props.trailing,
+        "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,
+      }}
     >
       {props.name}
     </span>
@@ -789,14 +943,30 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnT
   )
 }
 
-function HomeSessionSkeleton(props: { label: string }) {
+function HomeSessionSkeleton(props: { visible: boolean; showProjectName: boolean; desktop: boolean }) {
   return (
-    <div class="flex min-w-0 flex-col gap-4">
-      <div class="flex h-7 min-w-0 items-center justify-between ps-1.5 pe-4 md:ps-4">
-        <div class={HOME_SECTION_LABEL}>{props.label}</div>
-      </div>
-      <div class="flex min-w-0 flex-col gap-px" aria-hidden="true">
-        <For each={[0, 1, 2, 3]}>{() => <div class="h-10 rounded-[6px] bg-v2-background-bg-deep opacity-70" />}</For>
+    <div
+      data-component="home-session-skeleton"
+      data-visible={props.visible || undefined}
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-x-0 top-0 pt-1 pr-3 md:pt-3"
+    >
+      <div class="h-7" />
+      <div class="flex min-w-0 flex-col gap-px pt-2 md:pt-4">
+        <For each={HOME_SESSION_PLACEHOLDER_WIDTHS}>
+          {(width) => (
+            <div
+              class="flex h-10 min-w-0 items-center ps-1.5 pe-3 md:ps-3 md:pe-10"
+              classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "max-md:h-12": props.showProjectName }}
+            >
+              <span class="size-4 shrink-0 rounded-[4px] bg-v2-background-bg-layer-02" />
+              <span class="h-2 rounded-full bg-v2-background-bg-layer-02" style={{ width: `${width}%` }} />
+              <Show when={props.showProjectName}>
+                <span class="h-2 w-16 shrink-0 rounded-full bg-v2-background-bg-layer-01" />
+              </Show>
+            </div>
+          )}
+        </For>
       </div>
     </div>
   )

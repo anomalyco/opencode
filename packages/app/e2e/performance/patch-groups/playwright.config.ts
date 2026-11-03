@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test"
 
 const baseURL = `http://127.0.0.1:${process.env.PATCH_PORT ?? 4317}`
+
 export default defineConfig({
   testDir: ".",
   testMatch: "*.bench.ts",

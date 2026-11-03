@@ -16,8 +16,40 @@ const error = async (code: string) => {
 }
 
 describe("source syntax", () => {
+  test("reports a syntax error with its location and what code must look like", async () => {
+    expect(await error(`const = 1`)).toEqual({
+      kind: "ParseError",
+      message:
+        "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body. (line 1, col 7)",
+      location: { line: 1, column: 7 },
+    })
+  })
+
+  test("explains that exports aren't available", async () => {
+    expect(await error(`const x = 1\nexport { x }`)).toEqual({
+      kind: "ParseError",
+      message: "SyntaxError: Exports aren't available. Return the result instead. (line 2, col 1)",
+      location: { line: 2, column: 1 },
+    })
+  })
+
   test("rejects TypeScript-only syntax", async () => {
-    expect((await error(`const value: number = 1; return value`)).kind).toBe("ParseError")
+    const failure = await error(`const value: number = 1; return value`)
+    expect(failure.kind).toBe("ParseError")
+    expect(failure.message).toEndWith("Code must be plain JavaScript written as a program body. (line 1, col 12)")
+    expect(failure.location).toEqual({ line: 1, column: 12 })
+  })
+
+  test("locates a syntax error on a later line", async () => {
+    const failure = await error("const a = 1\nconst b = 2\nreturn a +* b")
+    expect(failure.message).toBe(
+      "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body. (line 3, col 11)",
+    )
+    expect(failure.location).toEqual({ line: 3, column: 11 })
+  })
+
+  test("rejects empty code", async () => {
+    expect(await error(" \n\t")).toEqual({ kind: "ParseError", message: "Code cannot be empty." })
   })
 })
 
@@ -68,9 +100,9 @@ describe("error identity", () => {
 
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
+    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()
   })
 
@@ -115,11 +147,11 @@ describe("source locations", () => {
   test("names a missing method on a call instead of the previous line", async () => {
     const failure = await error(`// Try search with different namespaces
 for (const ns of ["github", "tools.github", "tools", ""]) {
-  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  const s = await search({query: "star", namespace: ns, limit: 100}).filter((item) => item.path);
   return s
 }`)
     expect(failure.location).toEqual({ line: 3, column: 19 })
-    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+    expect(failure.message).toBe("TypeError: search(...).filter is not a function. (line 3, col 19)")
   })
 })
 

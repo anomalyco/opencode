@@ -13,7 +13,7 @@ test("renders large diffs as plain text without changing ordinary highlighting",
   await page.goto("/")
   await page.waitForFunction(() => !!window.highlighting)
   const ordinary = await page.evaluate(() => window.highlighting.mount(1))
-  expect(ordinary.options).toMatchObject({ lineDiffType: "word-alt", maxLineDiffLength: 1000, tokenizeMaxLineLength: 1000 })
+  expect(ordinary.options).toMatchObject({ lineDiffType: "word-line", maxLineDiffLength: 1000, tokenizeMaxLineLength: 1000 })
   expect(ordinary.syntaxSpans).toBeGreaterThan(0)
   await expect(page.locator('[data-line="11"][data-line-type="change-addition"]')).toContainText("status: 201")
 })

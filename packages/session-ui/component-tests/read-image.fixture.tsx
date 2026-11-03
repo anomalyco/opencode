@@ -18,13 +18,16 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
       baseUrl: location.origin,
       headers: { Authorization: `Basic ${btoa("opencode:fixture")}` },
     })
+
     const [state, setState] = createStore({ open: true, visible: true, running: !!options.running, appended: false })
     const status = () => (state.running ? "running" : "completed")
+
     const tools = createMemo(() => [
       storyTool("read_image", "read", status(), { path: options.path }),
       storyTool("read_text", "read", "completed", { path: "src/example.ts", limit: 20 }),
       ...(state.appended ? [storyTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
     ])
+
     return (
       <DialogProvider>
         <section style={{ "max-width": "720px", padding: "24px" }}>

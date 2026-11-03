@@ -1,15 +1,21 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
-import type { SessionRequestKind } from "@opencode/plugin/effect/session"
-import { Effect, Option, Schema, Semaphore, Stream } from "effect"
+import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
+import { isRecord } from "@opencode/util/record"
+import { Effect, Option, Schema } from "effect"
+import { HttpClient } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
-import { Bus } from "../../bus.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
+import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
+import { SharedCache } from "../../shared-cache.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -158,50 +164,43 @@ export const GithubCopilotPlugin = define({
   id: "opencode.provider.github.copilot",
   effect: Effect.fn(function* (ctx) {
     const providers = yield* Provider.Service
-    const bus = yield* Bus.Service
-    const loading = Semaphore.makeUnsafe(1)
-    const loaded: {
-      baseURL?: string
-      models?: CopilotModels.Snapshot
-      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-    } = {}
-
-    const load = Effect.fn("GithubCopilotPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("github-copilot")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      if (credential?.type !== "oauth") {
-        loaded.baseURL = undefined
-        loaded.models = undefined
-        loaded.connection = undefined
-        return
-      }
-
-      const url = copilotBaseURL(credential.metadata) ?? baseURL()
-      const provider = yield* providers.get(Provider.ID.githubCopilot)
-      const remote = yield* Effect.tryPromise({
-        try: () =>
-          CopilotModels.load(url, {
-            ...provider?.headers,
-            Authorization: `Bearer ${credential.refresh}`,
-            "User-Agent": App.useragent(ctx.app),
-            "X-GitHub-Api-Version": apiVersion,
-          }),
-        catch: (cause) => cause,
-      }).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("failed to sync GitHub Copilot models", { cause }).pipe(Effect.as(undefined)),
-        ),
-      )
-      if (
-        IntegrationConnection.key(connection) !==
-        IntegrationConnection.key(yield* ctx.integration.connection.active("github-copilot"))
-      )
-        return
-      loaded.baseURL = url
-      loaded.models = remote
-      loaded.connection = connection
+    const cache = yield* SharedCache.Service
+    const http = yield* HttpClient.HttpClient
+    const discovered = yield* ProviderRefresh.start({
+      integrationID: "github-copilot",
+      initial: {} as {
+        readonly baseURL?: string
+        readonly token?: string
+        readonly models?: CopilotModels.Snapshot
+        readonly connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+      },
+      active: ctx.integration.connection.active("github-copilot"),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
+        const { connection, credential } = yield* activeCredential(ctx, "github-copilot")
+        if (!connection || credential?.type !== "oauth") return { connection, value: {} }
+        const url = copilotBaseURL(credential.metadata) ?? baseURL()
+        const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
+        const models = yield* cache
+          .get({
+            key: modelsKey(connection, url, headers),
+            ...options,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                current?.type === "oauth"
+                  ? CopilotModels.load(http, url, {
+                      ...headers,
+                      Authorization: `Bearer ${current.refresh}`,
+                      "User-Agent": App.useragent(ctx.app),
+                      "X-GitHub-Api-Version": apiVersion,
+                    })
+                  : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
+              ),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return { connection, value: { baseURL: url, token: credential.refresh, models, connection } }
+      }),
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -211,6 +210,7 @@ export const GithubCopilotPlugin = define({
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
+      const loaded = discovered.current
       if (loaded.models) {
         evt.add({
           info: item.provider,
@@ -221,10 +221,22 @@ export const GithubCopilotPlugin = define({
         })
         return
       }
+      // Without the live model list, the models.dev package says which Copilot API serves
+      // each model: Anthropic Messages stays native, OpenAI means Responses, and anything
+      // else goes through the bundled Copilot SDK's model ID fallback.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
+          if (model.package === "@opencode/ai/providers/anthropic") {
+            if (loaded.baseURL)
+              model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
+            return
+          }
+          const responses = model.package === "@opencode/ai/providers/openai"
           model.package = Provider.aisdk("@ai-sdk/github-copilot")
-          if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+          model.settings = Provider.mergeOverlay(model.settings, {
+            ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),
+            ...(responses ? { endpoint: "responses" } : {}),
+          })
         })
       }
     })
@@ -237,17 +249,9 @@ export const GithubCopilotPlugin = define({
         })
       }
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* refresh().pipe(Effect.forkScoped)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.package !== "@ai-sdk/github-copilot") return
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
@@ -257,19 +261,44 @@ export const GithubCopilotPlugin = define({
         const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
+      { providerID: Provider.ID.githubCopilot },
     )
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
         Effect.gen(function* () {
-          if (evt.model.providerID !== Provider.ID.githubCopilot) return
           const session = yield* ctx.session
             .get({ sessionID: evt.sessionID })
             .pipe(Effect.orElseSucceed(() => undefined))
           const interaction = interactionType(evt.kind, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
-          evt.headers["X-Interaction-Id"] = evt.sessionID
+          evt.headers["X-Interaction-Id"] = session ? SessionAffinity.get(session) : evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
+        }),
+      { providerID: Provider.ID.githubCopilot },
+    )
+    // GitHub's integration guide designates session naming as a utility scenario served by
+    // free, rate-limited utility models. Any failure leaves the result unset so the normal
+    // billable title path still runs.
+    yield* ctx.session.hook(
+      "title",
+      (evt) =>
+        Effect.gen(function* () {
+          const loaded = discovered.current
+          if (!loaded.baseURL || !loaded.token || !loaded.models) return
+          const agent = yield* ctx.agent
+            .get({ agentID: Agent.ID.make("title") })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          if (agent?.data.model) return
+          const model = utilityTitleModels.find((id) => loaded.models?.has(id))
+          if (!model) return
+          evt.result = yield* utilityTitle(
+            { baseURL: loaded.baseURL, token: loaded.token, model, app: ctx.app },
+            evt,
+          ).pipe(
+            Effect.tapError((cause) => Effect.logDebug("Copilot utility title failed", { model, cause })),
+            Effect.orElseSucceed(() => undefined),
+          )
         }),
       { providerID: Provider.ID.githubCopilot },
     )
@@ -277,7 +306,6 @@ export const GithubCopilotPlugin = define({
       "http.request",
       (evt) =>
         Effect.gen(function* () {
-          if (evt.model.providerID !== Provider.ID.githubCopilot) return
           const token = evt.request.headers.get("x-api-key")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
@@ -289,7 +317,6 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
           evt.language = evt.sdk.languageModel(evt.model.modelID ?? evt.model.id)
           return
@@ -303,13 +330,29 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        const match = /^gpt-(\d+)/.exec(id)
-        evt.language =
-          match && Number(match[1]) >= 5 && !id.startsWith("gpt-5-mini") ? evt.sdk.responses(id) : evt.sdk.chat(id)
+        // Copilot serves Grok and MAI Code only on /responses, and Gemini only on
+        // /chat/completions; advertised endpoint metadata above wins whenever the
+        // live model list provides it.
+        const gpt = /^gpt-(\d+)/.exec(id)
+        const responses =
+          (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
+          id.startsWith("grok-") ||
+          id.startsWith("mai-code-")
+        evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
+      { providerID: Provider.ID.githubCopilot },
     )
   }),
 } satisfies PluginInternal.InternalPlugin)
+
+function modelsKey(
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  url: string,
+  headers: Record<string, string>,
+) {
+  const fingerprint = SharedCache.fingerprint(JSON.stringify(Object.entries(headers).toSorted()))
+  return `github-copilot:${IntegrationConnection.key(connection)}:${url}:${fingerprint}`
+}
 
 function normalizeDomain(input: string) {
   return input.replace(/^https?:\/\//, "").replace(/\/$/, "")
@@ -363,6 +406,70 @@ function request(url: string, init: RequestInit) {
 
 type Fetch = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>
 
+// Matches the Copilot client: gpt-4o-mini is the "small utility" model; when an account
+// lacks it the request falls through to the regular title path instead of another guess.
+export const utilityTitleModels = ["gpt-4o-mini"]
+
+const UtilityCompletion = Schema.Struct({
+  choices: Schema.Array(Schema.Struct({ message: Schema.Struct({ content: Schema.NullOr(Schema.String) }) })),
+})
+const decodeUtilityCompletion = Schema.decodeUnknownEffect(Schema.fromJsonString(UtilityCompletion))
+
+// This issues its own /chat/completions call instead of steering core's title request.
+// The `session.title` hook exposes `model` read-only, so pointing core at another model
+// would mean widening that contract and re-resolving inside SessionModelRequest; rewriting
+// the body in `http.request` is worse still, since the endpoint (/responses for GPT-5,
+// /v1/messages for Claude) is fixed before that hook runs and gpt-4o-mini only serves
+// /chat/completions. Utility titles are Copilot-specific, stateless, non-streaming, and
+// free, so a small request here costs less than a core seam. Trade-offs: no session
+// usage record for the title step (the call bills nothing) and no `http.*` hook visibility.
+export function utilityTitle(
+  input: { baseURL: string; token: string; model: string; app: App.Info; fetch?: Fetch },
+  request: Pick<SessionTitle, "sessionID" | "system" | "messages" | "options">,
+) {
+  const send = input.fetch ?? fetch
+  const text = (parts: ReadonlyArray<{ type: string; text?: string | null }>) =>
+    parts.flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : [])).join("\n")
+  const messages = [
+    ...(request.system.length ? [{ role: "system", content: text(request.system) }] : []),
+    ...request.messages.map((message) => ({ role: message.role, content: text(message.content) })),
+  ]
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const response = await send(`${input.baseURL}/chat/completions`, {
+        method: "POST",
+        signal,
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          "Content-Type": "application/json",
+          "User-Agent": App.useragent(input.app),
+          "X-GitHub-Api-Version": apiVersion,
+          "Openai-Intent": "conversation-edits",
+          "X-Interaction-Type": "agent-session-name-generation",
+          "X-Interaction-Id": request.sessionID,
+          "x-initiator": "agent",
+        },
+        body: JSON.stringify({
+          model: input.model,
+          messages,
+          stream: false,
+          ...(typeof request.options.maxTokens === "number" ? { max_tokens: request.options.maxTokens } : {}),
+        }),
+      })
+      if (!response.ok) throw new Error(`Utility title request failed: ${response.status}`)
+      return response.text()
+    },
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.timeout("20 seconds"),
+    Effect.flatMap(decodeUtilityCompletion),
+    Effect.flatMap((completion) => {
+      const title = completion.choices[0]?.message.content?.trim()
+      return title ? Effect.succeed(title) : Effect.fail(new Error("Utility title response was empty"))
+    }),
+  )
+}
+
 export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, app: App.Info): Fetch {
   const send = upstream ?? fetch
   return async (input, init) => {
@@ -409,16 +516,16 @@ export function interactionType(kind: SessionRequestKind, child: boolean) {
 type RequestMetadata = ReturnType<typeof requestMetadata>
 
 function requestMetadata(url: string, body: unknown) {
-  if (!record(body)) return { agent: false, vision: false }
+  if (!isRecord(body)) return { agent: false, vision: false }
   if (Array.isArray(body.input)) {
     const last = body.input.at(-1)
     return {
-      agent: !record(last) || last.role !== "user",
+      agent: !isRecord(last) || last.role !== "user",
       vision: body.input.some(
         (item) =>
-          record(item) &&
+          isRecord(item) &&
           Array.isArray(item.content) &&
-          item.content.some((part) => record(part) && part.type === "input_image"),
+          item.content.some((part) => isRecord(part) && part.type === "input_image"),
       ),
     }
   }
@@ -426,35 +533,31 @@ function requestMetadata(url: string, body: unknown) {
   const last = body.messages.at(-1)
   if (url.includes("completions")) {
     return {
-      agent: !record(last) || last.role !== "user",
+      agent: !isRecord(last) || last.role !== "user",
       vision: body.messages.some(
         (message) =>
-          record(message) &&
+          isRecord(message) &&
           Array.isArray(message.content) &&
-          message.content.some((part) => record(part) && part.type === "image_url"),
+          message.content.some((part) => isRecord(part) && part.type === "image_url"),
       ),
     }
   }
-  const content = record(last) && Array.isArray(last.content) ? last.content : []
+  const content = isRecord(last) && Array.isArray(last.content) ? last.content : []
   return {
     agent:
-      !record(last) || last.role !== "user" || !content.some((part) => record(part) && part.type !== "tool_result"),
+      !isRecord(last) || last.role !== "user" || !content.some((part) => isRecord(part) && part.type !== "tool_result"),
     vision: body.messages.some(
       (message) =>
-        record(message) &&
+        isRecord(message) &&
         Array.isArray(message.content) &&
         message.content.some(
           (part) =>
-            record(part) &&
+            isRecord(part) &&
             (part.type === "image" ||
               (part.type === "tool_result" &&
                 Array.isArray(part.content) &&
-                part.content.some((nested) => record(nested) && nested.type === "image"))),
+                part.content.some((nested) => isRecord(nested) && nested.type === "image"))),
         ),
     ),
   }
-}
-
-function record(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null && !Array.isArray(input)
 }

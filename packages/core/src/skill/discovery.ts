@@ -2,7 +2,7 @@ export * as SkillDiscovery from "./discovery.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -13,7 +13,7 @@ import { Hash } from "@opencode/util/hash"
 const skillConcurrency = 4
 const fileConcurrency = 8
 
-function isSafeSegment(value: string) {
+export function isSafeSegment(value: string) {
   return (
     value.length > 0 &&
     value !== "." &&
@@ -24,7 +24,7 @@ function isSafeSegment(value: string) {
   )
 }
 
-function isSafeRelativePath(value: string) {
+export function isSafeRelativePath(value: string) {
   const segments = value.split("/")
   return (
     value.length > 0 &&

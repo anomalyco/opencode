@@ -16,14 +16,15 @@ Do not add a second executable entry type, registry-owned executor, authorizatio
 
 Tool schemas use `input` and `output` terminology. Each tool carries its name, options, schemas, and executable behavior in one object.
 
-Location-scoped built-in layers acquire `Permission.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission sources are always constructed from the canonical invocation context:
+Location-scoped built-in layers acquire `Permission.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission requests always take their requester fields from the canonical invocation context through `Permission.invocation`:
 
 ```ts
-const source = {
-  type: "tool" as const,
-  messageID: context.messageID,
-  id: context.id,
-}
+yield* permission.assert({
+  action: "read",
+  resources: [target.resource],
+  save: ["*"],
+  ...Permission.invocation(context),
+})
 ```
 
 Leaves own resolution, permission, and side-effect ordering. Translate only expected typed errors into `ToolFailure`; do not use `catchCause`, because interruption and defects must survive. User declines from `Permission.assert` and question dismissals travel as defects beneath leaf `mapError` blankets and resurface as typed failures at `SessionModelRequest.executeTool`; leaves must never catch or convert them. A decline with feedback (`Permission.CorrectedError`) stays typed so the leaf converts it into `ToolFailure` and the model continues.
@@ -58,7 +59,3 @@ Tool filtering is catalog visibility, not execution authorization. A call still 
 Built-ins return complete tool responses. `Tool.Snapshot.execute` is the local execution boundary. Generic output bounding is applied by the Session runner after execution.
 
 Producer capture remains local to producers. Shell stores combined process output in its backing file and returns a bounded tail with the full-output path when truncated.
-
-## Current Gaps
-
-- Future Session-scoped registrations still need an explicit canonical registration design.

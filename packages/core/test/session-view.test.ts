@@ -84,6 +84,11 @@ describe("Session.view", () => {
       if (!unread.time.idle || !unread.time.viewed) return yield* Effect.die(new Error("Expected attention times"))
       expect(DateTime.toEpochMillis(unread.time.idle)).toBeGreaterThan(DateTime.toEpochMillis(unread.time.viewed))
       expect(unread.outcome).toBe("failed")
+      expect((yield* session.messages({ sessionID: created.id, order: "asc" })).at(-1)).toMatchObject({
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: "failed" },
+      })
 
       yield* session.view({ sessionID: created.id, idle: DateTime.toEpochMillis(unread.time.idle) })
       expect((yield* session.get(created.id)).time.viewed).toEqual(unread.time.idle)

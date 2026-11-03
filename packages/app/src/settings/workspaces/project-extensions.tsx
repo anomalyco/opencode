@@ -21,6 +21,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { ProjectFolderMissing } from "./project-folder-missing"
 import { configuredLanguageServers } from "./project-lsp"
 import { SettingsList } from "@/settings/list"
 import "./project.css"
@@ -62,6 +63,7 @@ const ProjectSectionHeader: Component<{
   action: JSX.Element
 }> = (props) => {
   const language = useLanguage()
+
   return (
     <div class="project-settings-extension-section-header">
       <div class="project-settings-extension-section-copy">
@@ -87,6 +89,7 @@ const SharedSection: Component<{
 }> = (props) => {
   const language = useLanguage()
   const [open, setOpen] = createSignal(false)
+
   return (
     <Show when={props.count > 0}>
       <div class="project-settings-shared">
@@ -120,14 +123,17 @@ const ProjectLanguageServers: Component = () => {
   const language = useLanguage()
   const server = useServerSDK()
   const location = useWorkspaceLocation()
+
   const config = useQuery(() => ({
     queryKey: [server.scope, "settings-project-language-servers", location().directory],
     enabled: server.connection.status() === "connected",
     queryFn: () => server.api.config.get({ location: { directory: location().directory } }),
   }))
+
   const configured = createMemo(() =>
     configuredLanguageServers(config.isPending || config.isError ? [] : (config.data ?? [])),
   )
+
   const empty = () => !config.isPending && !config.isError && configured().servers.length === 0
   onCleanup(
     server.event.on("config.updated", (event) => {
@@ -229,36 +235,55 @@ export const ProjectSettingsExtensions: Component<{
   const globalMcpNames = createMemo(() =>
     [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort(),
   )
+
   const projectMcpNames = createMemo(() => {
     const shared = new Set(globalMcpNames())
+
     return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
       .map((server) => server.name)
       .filter((name) => !shared.has(name))
       .sort()
   })
+
   const mcpEnabled = (name: string) =>
     data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
       ?.status.status === "connected"
 
+  // Reading `.latest` rethrows a failed fetch, such as the project's plugin list after its folder is deleted, so these
+  // lists fall back to empty instead of crashing the page.
   const [globalPluginList] = createResource(
     () => serverSDK.connection.status() === "connected",
-    () => serverSDK.api.plugin.list().then((result) => result.data),
+    () =>
+      serverSDK.api.plugin
+        .list()
+        .then((result) => result.data)
+        .catch(() => []),
     { initialValue: [] },
   )
+
   const [projectPluginList] = createResource(
     () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
-    (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
+    (directory) =>
+      serverSDK.api.plugin
+        .list({ location: { directory } })
+        .then((result) => result.data)
+        .catch(() => []),
     { initialValue: [] },
   )
+
   const globalPlugins = createMemo(() => pluginLabels(globalPluginList.latest ?? []))
+
   const projectPlugins = createMemo(() => {
     const shared = new Set(globalPlugins())
+
     return pluginLabels(projectPluginList.latest ?? []).filter((name) => !shared.has(name))
   })
 
   const serverSkills = createMemo(() => data.location.skill.list() ?? [])
+
   const projectSkills = createMemo(() => {
     const shared = new Set(serverSkills().map(skillKey))
+
     return (data.location.skill.list({ directory: directorySDK().directory }) ?? []).filter(
       (item) => !shared.has(skillKey(item)),
     )
@@ -304,6 +329,7 @@ export const ProjectSettingsExtensions: Component<{
       </div>
 
       <div class="settings-tab-body">
+        <ProjectFolderMissing />
         <Tabs
           variant="pill"
           value={props.subtab ?? "mcps"}
@@ -314,7 +340,7 @@ export const ProjectSettingsExtensions: Component<{
         >
           <Tabs.List>
             <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
-            <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>
+            <Tabs.Trigger value="plugins">{language.t("settings.extensions.tab.plugins")}</Tabs.Trigger>
             <Tabs.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</Tabs.Trigger>
             <Tabs.Trigger value="lsps">{language.t("project.settings.extensions.tab.lsps")}</Tabs.Trigger>
           </Tabs.List>
@@ -353,7 +379,7 @@ export const ProjectSettingsExtensions: Component<{
                 kind="skills"
                 empty={projectSkills().length === 0}
                 action={
-                  <ExternalLink class="settings-extension-link" href="https://opencode.ai/docs/skills/">
+                  <ExternalLink class="settings-extension-link" href="https://opencode.ai/v2/docs/skills">
                     {language.t("settings.extensions.addSkills")}
                   </ExternalLink>
                 }

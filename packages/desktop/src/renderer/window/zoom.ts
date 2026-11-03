@@ -2,20 +2,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+import { nextDesktopZoomLevel, type DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import { createSignal } from "solid-js"
 import { api } from "../api"
 
 const OS_NAME = (() => {
   if (navigator.userAgent.includes("Mac")) return "macos"
+
   if (navigator.userAgent.includes("Windows")) return "windows"
+
   if (navigator.userAgent.includes("Linux")) return "linux"
+
   return "unknown"
 })()
 
 const [webviewZoom, setWebviewZoom] = createSignal(1)
+
+const [zoomLevel, setZoomLevelSignal] = createSignal<DesktopZoomLevel>(1)
+
 let requestedZoom = 1
+
 let pinchZoomEnabled = false
-let wheelPinch = undefined as
+
+let wheelPinch:
   | {
       active: boolean
       startZoom: number
@@ -25,9 +34,13 @@ let wheelPinch = undefined as
   | undefined
 
 const MAX_ZOOM_LEVEL = 10
+
 const MIN_ZOOM_LEVEL = 0.2
+
 const WHEEL_PINCH_THRESHOLD = 20
+
 const WHEEL_PINCH_STEP = 0.2
+
 const WHEEL_PINCH_END_DELAY = 160
 
 const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
@@ -53,29 +66,45 @@ void api.getZoomFactor().then((factor) => {
   setWebviewZoom(requestedZoom)
 })
 
-api.onZoomFactorChanged((factor) => {
-  requestedZoom = clamp(factor)
+void api.getZoomLevel().then(setZoomLevelSignal)
+
+api.onZoomChanged((zoom) => {
+  requestedZoom = clamp(zoom.factor)
   setWebviewZoom(requestedZoom)
+  setZoomLevelSignal(zoom.level)
 })
 
 void api.getPinchZoomEnabled().then((enabled) => {
   pinchZoomEnabled = enabled
+  syncWheelPinchListener()
 })
 
 api.onPinchZoomEnabledChanged((enabled) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
+  syncWheelPinchListener()
 })
 
 const setPinchZoomEnabled = (enabled: boolean) => {
   pinchZoomEnabled = enabled
   resetWheelPinch()
+  syncWheelPinchListener()
+
   return api.setPinchZoomEnabled(enabled)
 }
 
-const resetZoom = () => applyZoom(1)
-const zoomIn = () => applyZoom(clamp(requestedZoom + 0.2))
-const zoomOut = () => applyZoom(clamp(requestedZoom - 0.2))
+// Main saves the level and applies it to every window, then reports the new zoom back.
+const setZoomLevel = (level: DesktopZoomLevel) => {
+  requestedZoom = level
+
+  return api.setZoomLevel(level)
+}
+
+const resetZoom = () => void setZoomLevel(1)
+
+const zoomIn = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "in"))
+
+const zoomOut = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "out"))
 
 const resetWheelPinch = () => {
   clearTimeout(wheelPinch?.timeout)
@@ -84,7 +113,9 @@ const resetWheelPinch = () => {
 
 const normalizeWheelDelta = (event: WheelEvent) => {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
+
   if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * window.innerHeight
+
   return event.deltaY
 }
 
@@ -101,10 +132,12 @@ const updateWheelPinch = (event: WheelEvent) => {
   wheelPinch.totalDelta += normalizeWheelDelta(event)
 
   if (!wheelPinch.active && Math.abs(wheelPinch.totalDelta) < WHEEL_PINCH_THRESHOLD) return
+
   if (!wheelPinch.active) {
     wheelPinch.active = true
     wheelPinch.startZoom = requestedZoom
     wheelPinch.totalDelta = 0
+
     return
   }
 
@@ -112,17 +145,24 @@ const updateWheelPinch = (event: WheelEvent) => {
   applyZoom(clamp(wheelPinch.startZoom - (wheelPinch.totalDelta / WHEEL_PINCH_THRESHOLD) * WHEEL_PINCH_STEP))
 }
 
-window.addEventListener(
-  "wheel",
-  (event) => {
-    if (!pinchZoomEnabled) return
-    if (!event.ctrlKey) return
+const onWheelPinch = (event: WheelEvent) => {
+  if (!event.ctrlKey) return
 
-    event.preventDefault()
-    updateWheelPinch(event)
-  },
-  { passive: false },
-)
+  event.preventDefault()
+  updateWheelPinch(event)
+}
+
+// A cancelable window wheel listener makes every scroll gesture wait for the main thread, so it
+// is only attached while pinch zoom is on. Main's zoom-changed handler covers Ctrl+wheel otherwise.
+const syncWheelPinchListener = () => {
+  if (pinchZoomEnabled) {
+    window.addEventListener("wheel", onWheelPinch, { passive: false })
+
+    return
+  }
+
+  window.removeEventListener("wheel", onWheelPinch)
+}
 
 window.addEventListener("keydown", (event) => {
   if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
@@ -130,17 +170,21 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "-") {
     event.preventDefault()
     zoomOut()
+
     return
   }
+
   if (event.key === "=" || event.key === "+") {
     event.preventDefault()
     zoomIn()
+
     return
   }
+
   if (event.key === "0") {
     event.preventDefault()
     resetZoom()
   }
 })
 
-export { webviewZoom, resetZoom, setPinchZoomEnabled, zoomIn, zoomOut }
+export { webviewZoom, zoomLevel, resetZoom, setPinchZoomEnabled, setZoomLevel, zoomIn, zoomOut }

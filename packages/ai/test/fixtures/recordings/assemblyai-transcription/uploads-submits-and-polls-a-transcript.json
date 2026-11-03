@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:assemblyai-transcription",
+      "provider:assemblyai",
+      "protocol:assemblyai-transcription"
+    ],
+    "name": "assemblyai-transcription/uploads-submits-and-polls-a-transcript",
+    "recordedAt": "2026-09-23T14:03:07.504Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.eu.assemblyai.com/v2/upload",
+        "headers": {
+          "content-type": "application/octet-stream"
+        },
+        "body": "[audio]"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"upload_url\":\"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\"}\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.eu.assemblyai.com/v2/transcript",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"audio_url\":\"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\",\"speech_models\":[\"universal-3-5-pro\"],\"language_detection\":true,\"speaker_labels\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\"id\": \"a1de21ad-a178-4c28-b8f0-4b0334b72126\", \"language_model\": \"assemblyai_default\", \"acoustic_model\": \"assemblyai_default\", \"language_code\": null, \"speech_understanding\": null, \"translated_texts\": null, \"status\": \"processing\", \"audio_url\": \"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\", \"text\": null, \"words\": null, \"utterances\": null, \"confidence\": null, \"audio_duration\": null, \"punctuate\": true, \"format_text\": true, \"dual_channel\": false, \"webhook_url\": null, \"webhook_status_code\": null, \"webhook_auth\": false, \"webhook_auth_header_name\": null, \"speed_boost\": false, \"auto_highlights_result\": null, \"auto_highlights\": false, \"audio_start_from\": null, \"audio_end_at\": null, \"word_boost\": [], \"boost_param\": null, \"prompt\": null, \"keyterms_prompt\": null, \"filter_profanity\": false, \"redact_pii\": false, \"redact_pii_audio\": false, \"redact_pii_audio_quality\": null, \"redact_pii_audio_options\": null, \"redact_pii_policies\": null, \"redact_pii_sub\": null, \"redact_static_entities\": null, \"speaker_labels\": true, \"speaker_options\": {\"min_speakers_expected\": null, \"max_speakers_expected\": null, \"advanced_speaker_segmentation\": true}, \"content_safety\": false, \"iab_categories\": false, \"content_safety_labels\": {}, \"iab_categories_result\": {}, \"language_detection\": true, \"language_detection_options\": {\"expected_languages\": null, \"fallback_language\": null, \"code_switching\": null, \"code_switching_confidence_threshold\": null, \"on_low_language_confidence\": null, \"on_no_speech_detected\": \"fallback\", \"swiss_german\": null, \"language_detection_model\": null, \"localization\": null}, \"language_detection_results\": null, \"language_confidence_threshold\": null, \"language_confidence\": null, \"custom_spelling\": null, \"throttled\": false, \"auto_chapters\": false, \"summarization\": false, \"summary_type\": null, \"summary_model\": null, \"custom_topics\": false, \"topics\": [], \"speech_threshold\": null, \"speech_model\": null, \"speech_models\": [\"universal-3-5-pro\"], \"speech_model_used\": null, \"temperature\": null, \"remove_audio_tags\": \"all\", \"chapters\": null, \"disfluencies\": false, \"entity_detection\": false, \"sentiment_analysis\": false, \"sentiment_analysis_results\": null, \"entities\": null, \"speakers_expected\": null, \"summary\": null, \"custom_topics_results\": null, \"is_deleted\": null, \"multichannel\": null, \"project_id\": 2040069, \"token_id\": 2077829}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.eu.assemblyai.com/v2/transcript/a1de21ad-a178-4c28-b8f0-4b0334b72126",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\"id\": \"a1de21ad-a178-4c28-b8f0-4b0334b72126\", \"language_model\": \"assemblyai_default\", \"acoustic_model\": \"assemblyai_default\", \"language_code\": null, \"speech_understanding\": null, \"translated_texts\": null, \"status\": \"processing\", \"audio_url\": \"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\", \"text\": null, \"words\": null, \"utterances\": null, \"confidence\": null, \"audio_duration\": null, \"punctuate\": true, \"format_text\": true, \"dual_channel\": false, \"webhook_url\": null, \"webhook_status_code\": null, \"webhook_auth\": false, \"webhook_auth_header_name\": null, \"speed_boost\": false, \"auto_highlights_result\": null, \"auto_highlights\": false, \"audio_start_from\": null, \"audio_end_at\": null, \"word_boost\": [], \"boost_param\": null, \"prompt\": null, \"keyterms_prompt\": [], \"filter_profanity\": false, \"redact_pii\": false, \"redact_pii_audio\": false, \"redact_pii_audio_quality\": null, \"redact_pii_audio_options\": null, \"redact_pii_policies\": null, \"redact_pii_sub\": null, \"redact_static_entities\": null, \"speaker_labels\": true, \"speaker_options\": {\"min_speakers_expected\": null, \"max_speakers_expected\": null, \"advanced_speaker_segmentation\": true}, \"content_safety\": false, \"iab_categories\": false, \"content_safety_labels\": {}, \"iab_categories_result\": {}, \"language_detection\": true, \"language_detection_options\": {\"expected_languages\": null, \"fallback_language\": null, \"code_switching\": null, \"code_switching_confidence_threshold\": null, \"on_low_language_confidence\": null, \"on_no_speech_detected\": \"fallback\", \"swiss_german\": null, \"language_detection_model\": null, \"localization\": null}, \"language_detection_results\": null, \"language_confidence_threshold\": null, \"language_confidence\": null, \"custom_spelling\": null, \"throttled\": false, \"auto_chapters\": false, \"summarization\": false, \"summary_type\": null, \"summary_model\": null, \"custom_topics\": false, \"topics\": [], \"speech_threshold\": null, \"speech_model\": null, \"speech_models\": [\"universal-3-5-pro\"], \"speech_model_used\": null, \"temperature\": null, \"remove_audio_tags\": \"all\", \"chapters\": null, \"disfluencies\": false, \"entity_detection\": false, \"sentiment_analysis\": false, \"sentiment_analysis_results\": null, \"entities\": null, \"speakers_expected\": null, \"summary\": null, \"custom_topics_results\": null, \"is_deleted\": null, \"multichannel\": null, \"project_id\": 2040069, \"token_id\": 2077829}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.eu.assemblyai.com/v2/transcript/a1de21ad-a178-4c28-b8f0-4b0334b72126",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\"id\": \"a1de21ad-a178-4c28-b8f0-4b0334b72126\", \"language_model\": \"assemblyai_default\", \"acoustic_model\": \"assemblyai_default\", \"language_code\": \"en\", \"speech_understanding\": null, \"translated_texts\": null, \"status\": \"completed\", \"audio_url\": \"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\", \"text\": \"Hello from Open Code.\", \"words\": [{\"text\": \"Hello\", \"start\": 445, \"end\": 633, \"confidence\": 0.8883743, \"speaker\": \"A\"}, {\"text\": \"from\", \"start\": 719, \"end\": 890, \"confidence\": 0.9978282, \"speaker\": \"A\"}, {\"text\": \"Open\", \"start\": 959, \"end\": 1147, \"confidence\": 0.9486656, \"speaker\": \"A\"}, {\"text\": \"Code.\", \"start\": 1215, \"end\": 1455, \"confidence\": 0.5913869, \"speaker\": \"A\"}], \"utterances\": [{\"speaker\": \"A\", \"text\": \"Hello from Open Code.\", \"confidence\": 0.85656375, \"start\": 445, \"end\": 1455, \"words\": [{\"text\": \"Hello\", \"start\": 445, \"end\": 633, \"confidence\": 0.8883743, \"speaker\": \"A\"}, {\"text\": \"from\", \"start\": 719, \"end\": 890, \"confidence\": 0.9978282, \"speaker\": \"A\"}, {\"text\": \"Open\", \"start\": 959, \"end\": 1147, \"confidence\": 0.9486656, \"speaker\": \"A\"}, {\"text\": \"Code.\", \"start\": 1215, \"end\": 1455, \"confidence\": 0.5913869, \"speaker\": \"A\"}]}], \"confidence\": 0.85656375, \"audio_duration\": 2, \"punctuate\": true, \"format_text\": true, \"dual_channel\": false, \"webhook_url\": null, \"webhook_status_code\": null, \"webhook_auth\": false, \"webhook_auth_header_name\": null, \"speed_boost\": false, \"auto_highlights_result\": null, \"auto_highlights\": false, \"audio_start_from\": null, \"audio_end_at\": null, \"word_boost\": [], \"boost_param\": null, \"prompt\": null, \"keyterms_prompt\": [], \"filter_profanity\": false, \"redact_pii\": false, \"redact_pii_audio\": false, \"redact_pii_audio_quality\": null, \"redact_pii_audio_options\": null, \"redact_pii_policies\": null, \"redact_pii_sub\": null, \"redact_static_entities\": null, \"speaker_labels\": true, \"speaker_options\": {\"min_speakers_expected\": null, \"max_speakers_expected\": null, \"advanced_speaker_segmentation\": true}, \"content_safety\": false, \"iab_categories\": false, \"content_safety_labels\": {\"status\": \"unavailable\", \"results\": [], \"summary\": {}}, \"iab_categories_result\": {\"status\": \"unavailable\", \"results\": [], \"summary\": {}}, \"language_detection\": true, \"language_detection_options\": {\"expected_languages\": null, \"fallback_language\": null, \"code_switching\": null, \"code_switching_confidence_threshold\": null, \"on_low_language_confidence\": null, \"on_no_speech_detected\": \"fallback\", \"swiss_german\": null, \"language_detection_model\": null, \"localization\": null}, \"language_detection_results\": null, \"language_confidence_threshold\": null, \"language_confidence\": 0.9934, \"custom_spelling\": null, \"throttled\": false, \"auto_chapters\": false, \"summarization\": false, \"summary_type\": null, \"summary_model\": null, \"custom_topics\": false, \"topics\": [], \"speech_threshold\": null, \"speech_model\": null, \"speech_models\": [\"universal-3-5-pro\"], \"speech_model_used\": \"universal-3-5-pro\", \"temperature\": null, \"remove_audio_tags\": \"all\", \"chapters\": null, \"disfluencies\": false, \"entity_detection\": false, \"sentiment_analysis\": false, \"sentiment_analysis_results\": null, \"entities\": null, \"speakers_expected\": null, \"summary\": null, \"custom_topics_results\": null, \"is_deleted\": null, \"multichannel\": null, \"project_id\": 2040069, \"token_id\": 2077829}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.eu.assemblyai.com/v2/transcript/a1de21ad-a178-4c28-b8f0-4b0334b72126",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\"id\": \"a1de21ad-a178-4c28-b8f0-4b0334b72126\", \"language_model\": \"assemblyai_default\", \"acoustic_model\": \"assemblyai_default\", \"language_code\": \"en\", \"speech_understanding\": null, \"translated_texts\": null, \"status\": \"completed\", \"audio_url\": \"https://cdn.assemblyai.com/upload/f057ab4f09d5f28527be4b830b3d92f8bf6a97e5f854837cf22efbf2d09b5182/ed6a04e2-e34c-4a70-89da-b1ec34d2fb5f\", \"text\": \"Hello from Open Code.\", \"words\": [{\"text\": \"Hello\", \"start\": 445, \"end\": 633, \"confidence\": 0.8883743, \"speaker\": \"A\"}, {\"text\": \"from\", \"start\": 719, \"end\": 890, \"confidence\": 0.9978282, \"speaker\": \"A\"}, {\"text\": \"Open\", \"start\": 959, \"end\": 1147, \"confidence\": 0.9486656, \"speaker\": \"A\"}, {\"text\": \"Code.\", \"start\": 1215, \"end\": 1455, \"confidence\": 0.5913869, \"speaker\": \"A\"}], \"utterances\": [{\"speaker\": \"A\", \"text\": \"Hello from Open Code.\", \"confidence\": 0.85656375, \"start\": 445, \"end\": 1455, \"words\": [{\"text\": \"Hello\", \"start\": 445, \"end\": 633, \"confidence\": 0.8883743, \"speaker\": \"A\"}, {\"text\": \"from\", \"start\": 719, \"end\": 890, \"confidence\": 0.9978282, \"speaker\": \"A\"}, {\"text\": \"Open\", \"start\": 959, \"end\": 1147, \"confidence\": 0.9486656, \"speaker\": \"A\"}, {\"text\": \"Code.\", \"start\": 1215, \"end\": 1455, \"confidence\": 0.5913869, \"speaker\": \"A\"}]}], \"confidence\": 0.85656375, \"audio_duration\": 2, \"punctuate\": true, \"format_text\": true, \"dual_channel\": false, \"webhook_url\": null, \"webhook_status_code\": null, \"webhook_auth\": false, \"webhook_auth_header_name\": null, \"speed_boost\": false, \"auto_highlights_result\": null, \"auto_highlights\": false, \"audio_start_from\": null, \"audio_end_at\": null, \"word_boost\": [], \"boost_param\": null, \"prompt\": null, \"keyterms_prompt\": [], \"filter_profanity\": false, \"redact_pii\": false, \"redact_pii_audio\": false, \"redact_pii_audio_quality\": null, \"redact_pii_audio_options\": null, \"redact_pii_policies\": null, \"redact_pii_sub\": null, \"redact_static_entities\": null, \"speaker_labels\": true, \"speaker_options\": {\"min_speakers_expected\": null, \"max_speakers_expected\": null, \"advanced_speaker_segmentation\": true}, \"content_safety\": false, \"iab_categories\": false, \"content_safety_labels\": {\"status\": \"unavailable\", \"results\": [], \"summary\": {}}, \"iab_categories_result\": {\"status\": \"unavailable\", \"results\": [], \"summary\": {}}, \"language_detection\": true, \"language_detection_options\": {\"expected_languages\": null, \"fallback_language\": null, \"code_switching\": null, \"code_switching_confidence_threshold\": null, \"on_low_language_confidence\": null, \"on_no_speech_detected\": \"fallback\", \"swiss_german\": null, \"language_detection_model\": null, \"localization\": null}, \"language_detection_results\": null, \"language_confidence_threshold\": null, \"language_confidence\": 0.9934, \"custom_spelling\": null, \"throttled\": false, \"auto_chapters\": false, \"summarization\": false, \"summary_type\": null, \"summary_model\": null, \"custom_topics\": false, \"topics\": [], \"speech_threshold\": null, \"speech_model\": null, \"speech_models\": [\"universal-3-5-pro\"], \"speech_model_used\": \"universal-3-5-pro\", \"temperature\": null, \"remove_audio_tags\": \"all\", \"chapters\": null, \"disfluencies\": false, \"entity_detection\": false, \"sentiment_analysis\": false, \"sentiment_analysis_results\": null, \"entities\": null, \"speakers_expected\": null, \"summary\": null, \"custom_topics_results\": null, \"is_deleted\": null, \"multichannel\": null, \"project_id\": 2040069, \"token_id\": 2077829}"
+      }
+    }
+  ]
+}

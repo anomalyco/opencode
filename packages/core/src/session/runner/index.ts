@@ -1,10 +1,11 @@
 export * as SessionRunner from "./index.js"
 
-import type { AIError } from "@opencode/ai"
+import type { FileSystem } from "../../filesystem.js"
+import type { AIError } from "@opencode/ai/effect"
 import { Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
 import type { Promotable } from "../inbox.js"
-import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error.js"
+import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
 import { SessionRunnerModel } from "./model.js"
 import type { Instructions } from "../../instructions/index.js"
 
@@ -14,15 +15,15 @@ export type RunError =
   | MessageDecodeError
   | AgentNotFoundError
   | StepFailedError
-  | UserInterruptedError
   | Instructions.InitializationBlocked
+  | FileSystem.DirectoryNotFoundError
 
 export type Continuation = { readonly step: number }
 
 export type DrainResult = Data.TaggedEnum<{
   Complete: {}
-  Moved: { readonly continuation?: Continuation }
-  Reloaded: { readonly force: boolean; readonly continuation?: Continuation }
+  Moved: { readonly continuation?: Continuation; readonly stepped?: true }
+  Reloaded: { readonly force: boolean; readonly continuation?: Continuation; readonly stepped?: true }
 }>
 export const DrainResult = Data.taggedEnum<DrainResult>()
 
@@ -35,6 +36,8 @@ export interface Interface {
     readonly continuation?: Continuation
     /** "steer" settles the active intent without promoting queued next-turn work. */
     readonly promotable?: Promotable
+    /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
+    readonly stepped?: boolean
   }) => Effect.Effect<DrainResult, RunError>
 }
 

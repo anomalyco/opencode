@@ -3,6 +3,7 @@ import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
 import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
 type Progress = { label: string; numerator?: number; denominator?: number }
@@ -18,7 +19,7 @@ export function MigrationOverlay() {
     await Bun.sleep(1_000)
     void (async () => {
       while (true) {
-        const status = await client.api.migration.v1.status({ signal: abort.signal })
+        const status = await client.api.experimental.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
         if (status.status === "completed") return
         if (status.status === "error") throw new Error(status.error)
@@ -30,7 +31,7 @@ export function MigrationOverlay() {
       toast.show({
         variant: "error",
         title: "Data migration failed",
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
         duration: 10_000,
       })
     })

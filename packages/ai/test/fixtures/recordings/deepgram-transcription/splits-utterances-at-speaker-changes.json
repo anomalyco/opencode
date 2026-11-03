@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:deepgram-transcription",
+      "provider:deepgram",
+      "protocol:deepgram-transcription"
+    ],
+    "name": "deepgram-transcription/splits-utterances-at-speaker-changes",
+    "recordedAt": "2026-09-23T13:46:35.886Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&detect_language=true&diarize_model=latest&utterances=true",
+        "headers": {
+          "content-type": "audio/mpeg"
+        },
+        "body": "[audio]"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"metadata\":{\"transaction_key\":\"deprecated\",\"request_id\":\"01a0ce84-a81d-7161-8505-c08d5e0c25bb\",\"sha256\":\"12e9ccb9d346c28b071c2fab7ce48556d0cc115af6850aacb338e7548807cb80\",\"created\":\"2026-09-23T13:46:35.566Z\",\"duration\":3.552625,\"channels\":1,\"models\":[\"2187e11a-3532-4498-b076-81fa530bdd49\"],\"model_info\":{\"2187e11a-3532-4498-b076-81fa530bdd49\":{\"name\":\"general-nova-3\",\"version\":\"2025-07-31.0\",\"arch\":\"nova-3\"}},\"diarize_info\":{\"model_uuid\":\"6946b038-8264-4505-acf7-9822c009fecb\",\"arch\":\"v2\"}},\"results\":{\"channels\":[{\"alternatives\":[{\"transcript\":\"Did the release ship? Yes. It shipped this morning.\",\"confidence\":1.0,\"words\":[{\"word\":\"did\",\"start\":0.08,\"end\":0.48,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Did\"},{\"word\":\"the\",\"start\":0.48,\"end\":0.64,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"the\"},{\"word\":\"release\",\"start\":0.64,\"end\":0.96,\"confidence\":0.99902344,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"release\"},{\"word\":\"ship\",\"start\":0.96,\"end\":1.52,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"ship?\"},{\"word\":\"yes\",\"start\":1.5999999,\"end\":2.32,\"confidence\":0.9980469,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"Yes.\"},{\"word\":\"it\",\"start\":2.32,\"end\":2.56,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"It\"},{\"word\":\"shipped\",\"start\":2.56,\"end\":2.8799999,\"confidence\":0.9707031,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"shipped\"},{\"word\":\"this\",\"start\":2.8799999,\"end\":3.1999998,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"this\"},{\"word\":\"morning\",\"start\":3.1999998,\"end\":3.52,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"morning.\"}],\"paragraphs\":{\"transcript\":\"\\nSpeaker 0: Did the release ship?\\n\\nSpeaker 1: Yes. It shipped this morning.\",\"paragraphs\":[{\"sentences\":[{\"text\":\"Did the release ship?\",\"start\":0.08,\"end\":1.52}],\"speaker\":0,\"num_words\":4,\"start\":0.08,\"end\":1.52},{\"sentences\":[{\"text\":\"Yes.\",\"start\":1.5999999,\"end\":2.32},{\"text\":\"It shipped this morning.\",\"start\":2.32,\"end\":3.52}],\"speaker\":1,\"num_words\":5,\"start\":1.5999999,\"end\":3.52}]}}],\"detected_language\":\"en\",\"language_confidence\":0.917855}],\"utterances\":[{\"start\":0.08,\"end\":3.52,\"confidence\":0.99641925,\"channel\":0,\"transcript\":\"Did the release ship? Yes. It shipped this morning.\",\"words\":[{\"word\":\"did\",\"start\":0.08,\"end\":0.48,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Did\"},{\"word\":\"the\",\"start\":0.48,\"end\":0.64,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"the\"},{\"word\":\"release\",\"start\":0.64,\"end\":0.96,\"confidence\":0.99902344,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"release\"},{\"word\":\"ship\",\"start\":0.96,\"end\":1.52,\"confidence\":1.0,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"ship?\"},{\"word\":\"yes\",\"start\":1.5999999,\"end\":2.32,\"confidence\":0.9980469,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"Yes.\"},{\"word\":\"it\",\"start\":2.32,\"end\":2.56,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"It\"},{\"word\":\"shipped\",\"start\":2.56,\"end\":2.8799999,\"confidence\":0.9707031,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"shipped\"},{\"word\":\"this\",\"start\":2.8799999,\"end\":3.1999998,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"this\"},{\"word\":\"morning\",\"start\":3.1999998,\"end\":3.52,\"confidence\":1.0,\"speaker\":1,\"speaker_confidence\":0.98,\"punctuated_word\":\"morning.\"}],\"speaker\":1,\"id\":\"67ba8055-e541-4089-abfa-0163558083cc\"}]}}"
+      }
+    }
+  ]
+}

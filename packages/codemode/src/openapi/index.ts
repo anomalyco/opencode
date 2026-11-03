@@ -1,4 +1,4 @@
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient } from "effect/http"
 import { make, type Tool } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {

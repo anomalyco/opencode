@@ -6,7 +6,14 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { createTimelineProjection, reuseTimelineRows, Timeline, TimelineRow, type PartGroup } from "./projection"
+import {
+  createTimelineProjection,
+  reasoningHeading,
+  reuseTimelineRows,
+  Timeline,
+  TimelineRow,
+  type PartGroup,
+} from "./projection"
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
@@ -42,6 +49,18 @@ const part = (key: string, partID: string) =>
   })
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
+
+const diff = (files: string[]) =>
+  new TimelineRow.TurnDiff({ userMessageID: "user-1", messageID: "idle-1", from: "user-1", files })
+
+const spaced = (spacing?: "tool" | "content") =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: { key: "part:a", type: "part", ref: { messageID: "assistant-1", partID: "a" } },
+    previousAssistantPart: true,
+    spacing,
+  })
+
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
@@ -53,6 +72,7 @@ describe("Timeline.resolveContent", () => {
     content,
     time: { created: 0 },
   })
+
   const tool = (id: string): SessionMessageAssistantTool => ({
     id,
     type: "tool",
@@ -71,6 +91,7 @@ describe("Timeline.resolveContent", () => {
         { type: "reasoning", text: "thought", time: { created: 0 } },
       ]),
     })
+
     expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
     expect(Timeline.resolveContent(store.message, "assistant:reasoning:0")).toBe(store.message.content[1])
     expect(Timeline.resolveContent(store.message, "read")).toBe(store.message.content[2])
@@ -189,6 +210,29 @@ describe("reuseTimelineRows", () => {
       reused: [[0, 0]],
     },
     {
+      name: "reuses a row whose list field is equal",
+      previous: [diff(["a.ts", "b.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose list field changed",
+      previous: [diff(["a.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose optional field changed",
+      previous: [spaced("tool")],
+      rows: [spaced("content")],
+      expected: ["assistant-part:part:part:a"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
@@ -199,12 +243,13 @@ describe("reuseTimelineRows", () => {
       ],
       reused: [],
     },
-  ])("$name", ({ previous, rows, expected, reused }) => {
+  ])("$name", ({ previous, rows, expected, reused, replaced }) => {
     const result = reuseTimelineRows([...previous], [...rows])
 
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+    replaced?.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).not.toBe(previous[previousIndex]))
   })
 })
 
@@ -212,6 +257,7 @@ describe("createTimelineProjection", () => {
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
+
     const messages = [
       { id: "agent", type: "agent-switched", agent: "explore", time: { created: 1 } },
       { id: "model", type: "model-switched", model: selectedModel, time: { created: 2 } },
@@ -258,6 +304,58 @@ describe("createTimelineProjection", () => {
     expect(result.rowByKey.get("user-message:user-1")).toBe(result.rows[2])
   })
 
+  test("indexes the agent and model each prompt's predecessor chose, ignoring later switches in its turn", () => {
+    const first = { id: "first", providerID: "provider" } satisfies ModelRef
+    const second = { id: "second", providerID: "provider", variant: "high" } satisfies ModelRef
+
+    const messages = [
+      { id: "user-1", type: "user", text: "first", time: { created: 1 } },
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: first,
+        content: [{ type: "text", text: "answer" }],
+        time: { created: 2, completed: 3 },
+      },
+      // A steer's selection reconfigures the running turn before the steer is delivered.
+      { id: "model", type: "model-switched", model: second, time: { created: 4 } },
+      {
+        id: "assistant-2",
+        type: "assistant",
+        agent: "build",
+        model: second,
+        content: [{ type: "text", text: "more" }],
+        time: { created: 5, completed: 6 },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        text: "steer",
+        metadata: { agent: "build", model: { modelID: "second", providerID: "provider", variant: "high" } },
+        time: { created: 7 },
+      },
+      {
+        id: "user-3",
+        type: "user",
+        text: "another steer",
+        metadata: { agent: "plan", model: { modelID: "second", providerID: "provider", variant: "high" } },
+        time: { created: 8 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "busy" },
+      reasoningMode: "full",
+    })
+
+    expect(result.previousSelectionByID.has("user-1")).toBe(false)
+    // Without metadata, the first prompt chose what its first reply ran with, not the switch a later steer made.
+    expect(result.previousSelectionByID.get("user-2")).toEqual({ agent: "build", model: first })
+    expect(result.previousSelectionByID.get("user-3")).toEqual({ agent: "build", model: second })
+  })
+
   test("reuses a stable projected row array", () => {
     const messages = [
       { id: "user-1", type: "user", text: "first", time: { created: 1 } },
@@ -270,11 +368,13 @@ describe("createTimelineProjection", () => {
         time: { created: 2, completed: 3 },
       },
     ] satisfies SessionMessageInfo[]
+
     const first = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
       reasoningMode: "full",
     })
+
     const second = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
@@ -317,5 +417,37 @@ describe("createTimelineProjection", () => {
       "assistant-1",
       "assistant-2",
     ])
+  })
+})
+
+describe("reasoningHeading", () => {
+  test("returns the most recent thinking summary heading as sections stream in", () => {
+    const sections = [
+      "**Designing Interactive Experience**\nI'm focusing on crafting a fun, tactile, and interactive visual toy.",
+      "**Analyzing Reading Recommendations**\nI'm currently dissecting whether Luke Parker should read the *Throne of Glass* series.",
+      "**Constructing Reader Tools**\nI'm now building out interactive tools.",
+    ]
+
+    expect(reasoningHeading(sections[0])).toBe("Designing Interactive Experience")
+    expect(reasoningHeading(sections.slice(0, 2).join("\n\n"))).toBe("Analyzing Reading Recommendations")
+    expect(reasoningHeading(sections.join("\n\n"))).toBe("Constructing Reader Tools")
+  })
+
+  test("keeps the previous heading while the next bold heading is still streaming", () => {
+    const text = [
+      "**Designing Interactive Experience**\nI'm focusing on crafting a fun, tactile, and interactive visual toy.",
+      "**Analyzing Reading",
+    ].join("\n\n")
+
+    expect(reasoningHeading(text)).toBe("Designing Interactive Experience")
+  })
+
+  test("returns the latest heading across markdown heading styles and ignores inline bold spans", () => {
+    expect(reasoningHeading("## First step\n\nDetails.\n\n## Second step\n\nMore details.")).toBe("Second step")
+    expect(reasoningHeading("<h2>First step</h2>\n<p>Body</p>\n<h3>Second step</h3>")).toBe("Second step")
+    expect(reasoningHeading("First step\n===\n\nSecond step\n---")).toBe("Second step")
+    expect(
+      reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**"),
+    ).toBe("Designing Interactive Experience")
   })
 })

@@ -8,7 +8,7 @@ import { ProjectID } from "./project-id.js"
 export const ID = ProjectID
 export type ID = typeof ID.Type
 
-export const Vcs = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9._-]*$/)).annotate({
+export const Vcs = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9._-]*$/u)).annotate({
   identifier: "Project.Vcs",
 })
 export const Current = Schema.Struct({
@@ -32,6 +32,8 @@ export interface Commands extends Schema.Schema.Type<typeof Commands> {}
 export const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
+  active: NonNegativeInt,
+  archived: optional(NonNegativeInt),
 }).annotate({ identifier: "Project.Time" })
 export interface Time extends Schema.Schema.Type<typeof Time> {}
 

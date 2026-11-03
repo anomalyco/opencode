@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import { define, hidden, Native, Arr, ErrorObj, Obj, type Value } from "./objects.js"
 
 export const errorTypes = [
@@ -27,6 +26,8 @@ const builtins = [
   "RegExp",
   "Map",
   "Set",
+  "WeakMap",
+  "WeakSet",
   "URL",
   "URLSearchParams",
   "Headers",
@@ -64,7 +65,7 @@ export const primitivePrototype = (builtins: Builtins, value: Value): Obj | unde
 export const createBuiltins = (): Builtins => {
   const object = new Obj(null)
   // Function.prototype is itself callable and returns undefined.
-  const fn = new Native(object, { name: "", call: () => Effect.undefined })
+  const fn = new Native(object, { name: "", call: () => undefined })
   const plain = () => new Obj(object)
   const error = plain()
   define(error, "name", "Error", hidden)
@@ -88,6 +89,8 @@ export const createBuiltins = (): Builtins => {
     RegExp: plain(),
     Map: plain(),
     Set: plain(),
+    WeakMap: plain(),
+    WeakSet: plain(),
     URL: plain(),
     URLSearchParams: plain(),
     Headers: plain(),

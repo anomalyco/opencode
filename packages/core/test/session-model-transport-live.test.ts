@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LLM, Message } from "@opencode/ai"
+import { ai, AIError, Message } from "@opencode/ai/effect"
 import {
   LLMClient,
   RequestExecutor,
@@ -12,8 +12,8 @@ import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Headers } from "effect/http"
+import { Socket } from "effect/socket"
 import { makeWebSocketServer, type WebSocketServerFixture, type WebSocketServerOptions } from "./lib/websocket-server"
 
 const sessionID = Session.ID.make("ses_live_websocket")
@@ -123,12 +123,12 @@ describe("SessionModelTransport local WebSocket server", () => {
           )
 
           const first = yield* client
-            .use((llm) => llm.generate(LLM.request({ model, prompt: "First" }), { webSocket: executor }))
+            .use((llm) => llm.generate(ai.request({ model, prompt: "First" }), { webSocket: executor }))
             .pipe(Effect.provide(layer))
           const second = yield* client
             .use((llm) =>
               llm.generate(
-                LLM.request({
+                ai.request({
                   model,
                   messages: [Message.user("First"), first.message, Message.user("Be brief")],
                 }),
@@ -200,13 +200,13 @@ describe("SessionModelTransport local WebSocket server", () => {
               ),
             ),
           )
-          const request = LLM.request({
+          const request = ai.request({
             model,
             messages: [Message.user("First"), Message.assistant("Hello"), Message.user("Continue")],
           })
 
           yield* LLMClient.Service.use((llm) =>
-            llm.generate(LLM.request({ model, prompt: "First" }), { webSocket: executor }),
+            llm.generate(ai.request({ model, prompt: "First" }), { webSocket: executor }),
           ).pipe(Effect.provide(layer))
           const rejected = yield* LLMClient.Service.use((llm) => llm.generate(request, { webSocket: executor })).pipe(
             Effect.provide(layer),

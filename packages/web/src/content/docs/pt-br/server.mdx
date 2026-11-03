@@ -154,8 +154,6 @@ O servidor opencode expõe as seguintes APIs.
 | `POST`   | `/session/:id/init`                      | Analisar o app e criar `AGENTS.md`                    | corpo: `{ messageID, providerID, modelID }`, retorna `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Fazer um fork de uma sessão existente em uma mensagem | corpo: `{ messageID? }`, retorna <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Abortar uma sessão em execução                        | Retorna `boolean`                                                                   |
-| `POST`   | `/session/:id/share`                     | Compartilhar uma sessão                               | Retorna <a href={typesUrl}><code>Session</code></a>                                 |
-| `DELETE` | `/session/:id/share`                     | Descompartilhar uma sessão                            | Retorna <a href={typesUrl}><code>Session</code></a>                                 |
 | `GET`    | `/session/:id/diff`                      | Obter a diferença para esta sessão                    | query: `messageID?`, retorna <a href={typesUrl}><code>FileDiff[]</code></a>         |
 | `POST`   | `/session/:id/summarize`                 | Resumir a sessão                                      | corpo: `{ providerID, modelID }`, retorna `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Reverter uma mensagem                                 | corpo: `{ messageID, partID? }`, retorna `boolean`                                  |

@@ -1,16 +1,23 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "./color.js"
-import { DEFAULT_CATEGORICAL } from "./categorical.js"
 import type { BaseThemeDefinition, HueDefinition, Mode, ThemeDefinition, ThemeDocument } from "./index.js"
 import { HueStep } from "./schema.js"
 import type { Theme, ThemeV1Json } from "./v1.js"
 
-type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
+export type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
 type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "purple"
 type V1HueToken = "secondary" | "accent" | "success" | "warning" | "primary" | "error" | "info"
 
-const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
-const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
+export const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
+export const categoricalTokens: readonly V1HueToken[] = [
+  "secondary",
+  "accent",
+  "success",
+  "warning",
+  "primary",
+  "error",
+  "info",
+]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
 // Canonical swatches copied from the original default-theme classifier keep V1 migration self-contained.
@@ -63,12 +70,12 @@ export function migrateV1(theme: ThemeV1Json): ThemeDocument {
   }
 }
 
-function base(definition: ThemeDefinition): BaseThemeDefinition {
+export function base(definition: ThemeDefinition): BaseThemeDefinition {
   const { hue: _, ...base } = definition
   return base
 }
 
-function detectMode(theme: Theme): Mode {
+export function detectMode(theme: Theme): Mode {
   return luminance(theme.text) > luminance(theme.background) ? "dark" : "light"
 }
 
@@ -98,16 +105,16 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     hue: {
       gray: neutralScale(theme),
       ...Object.fromEntries(
-        chromaticHues.map((name) => {
+        chromaticHues.flatMap((name) => {
           const match = hues.byHue[name]
-          return [name, match ? hueScale(match.color, mode) : "$hue.gray"]
+          return match ? [[name, hueScale(match.color, mode)]] : []
         }),
       ),
       accent: hues.byToken.accent ? `$hue.${hues.byToken.accent}` : "$hue.gray",
       interactive: hues.byToken.primary ? `$hue.${hues.byToken.primary}` : "$hue.gray",
       neutral: "$hue.gray",
     } as HueDefinition,
-    categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
+    categorical: uniqueCategorical.length ? uniqueCategorical : ["neutral"],
     text: {
       base: text,
       muted: textMuted,
@@ -210,14 +217,26 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     },
     "@dialog": {
       background: {
-        base: "$background.raised.base",
+        base: dialogBackground(theme),
         action: { primary: { $hovered: "$background.raised.high" } },
       },
     },
   })
 }
 
-function referenceHues(theme: ThemeDefinition): ThemeDefinition {
+// Dialogs float over the session, so a see-through panel would let the content underneath show through them.
+// Fall back to the first visible surface color, made opaque.
+export function dialogBackground(theme: Theme) {
+  if (theme.backgroundPanel.a === 1) return "$background.raised.base"
+  const visible = [theme.backgroundPanel, theme.backgroundMenu, theme.backgroundElement, theme.background].find(
+    (color) => color.a > 0,
+  )
+  if (!visible) return luminance(theme.text) > 0.5 ? "#000000" : "#ffffff"
+  const [red, green, blue] = visible.toInts()
+  return hexInts(red, green, blue, 255)
+}
+
+export function referenceHues(theme: ThemeDefinition): ThemeDefinition {
   const definitions = theme.hue as Record<string, string | Partial<Record<HueStep, string>>> | undefined
   if (!definitions) return theme
   const scales = new Map<string, Partial<Record<HueStep, string>>>()
@@ -266,7 +285,7 @@ function referenceHues(theme: ThemeDefinition): ThemeDefinition {
   ) as ThemeDefinition
 }
 
-function inferHues(theme: Theme) {
+export function inferHues(theme: Theme) {
   const colors: readonly [V1HueToken, RGBA][] = [
     ["accent", theme.accent],
     ["success", theme.success],
@@ -330,7 +349,7 @@ function ambiguous(color: RGBA, chroma = toOklch(color).c) {
   return color.toInts()[3] === 0 || chroma < minimumChroma
 }
 
-function resolveV1(theme: ThemeV1Json, mode: "dark" | "light"): Theme {
+export function resolveV1(theme: ThemeV1Json, mode: "dark" | "light"): Theme {
   const defs = theme.defs ?? {}
 
   function resolveColor(value: unknown, chain: string[] = []): RGBA {
@@ -368,7 +387,7 @@ function resolveV1(theme: ThemeV1Json, mode: "dark" | "light"): Theme {
   } as Theme
 }
 
-function selectedForeground(theme: Theme, background: RGBA) {
+export function selectedForeground(theme: Theme, background: RGBA) {
   if (theme._hasSelectedListItemText) return theme.selectedListItemText
   if (theme.background.a !== 0) return theme.background
   return 0.299 * background.r + 0.587 * background.g + 0.114 * background.b > 0.5
@@ -443,12 +462,12 @@ function interpolate(first: RGBA, second: RGBA, amount: number) {
   return alpha === 255 ? generated : `${generated}${byte(alpha)}`
 }
 
-function toOklch(color: RGBA) {
+export function toOklch(color: RGBA) {
   const [red, green, blue] = color.toInts()
   return rgbToOklch(red / 255, green / 255, blue / 255)
 }
 
-function hex(color: RGBA) {
+export function hex(color: RGBA) {
   return hexInts(...color.toInts())
 }
 
@@ -456,7 +475,7 @@ function hexInts(r: number, g: number, b: number, a: number) {
   return `#${byte(r)}${byte(g)}${byte(b)}${a === 255 ? "" : byte(a)}`
 }
 
-function byte(value: number) {
+export function byte(value: number) {
   return value.toString(16).padStart(2, "0")
 }
 

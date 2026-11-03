@@ -24,6 +24,7 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
 
     if (active()) {
       setRun(true)
+
       return
     }
 

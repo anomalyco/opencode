@@ -1,9 +1,9 @@
-import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
+import { createMediaSource } from "./media-source"
 
 type ImagePreviewItem = Readonly<{
   uri: string
@@ -15,8 +15,8 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
   const [index, setIndex] = createSignal(Math.max(0, Math.min(props.images.length - 1, props.initial)))
-  const [failed, setFailed] = createSignal(false)
   const current = createMemo(() => props.images[index()])
+  const media = createMediaSource(() => current().uri)
   const imageHeight = createMemo(() => Math.max(3, dimensions().height - 8))
 
   dialog.setSize("xlarge")
@@ -24,7 +24,6 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
 
   function move(direction: number) {
     if (props.images.length < 2) return
-    setFailed(false)
     setIndex((value) => (value + direction + props.images.length) % props.images.length)
   }
 
@@ -37,35 +36,50 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
   }))
 
   return (
-    <box id="prompt-image-viewer" paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
-          Image {index() + 1} of {props.images.length}
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
+    <DialogLayout
+      id="prompt-image-viewer"
+      header={<DialogHeader title={`Image ${index() + 1} of ${props.images.length}`} />}
+      footer={{
+        actions: {
+          primary:
+            props.images.length > 1
+              ? [
+                  { title: "previous", key: "←", onTrigger: () => move(-1) },
+                  { title: "next", key: "→", onTrigger: () => move(1) },
+                ]
+              : [],
+        },
+        get children() {
+          return (
+            <text fg={media.failed() ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" truncate>
+              {media.failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
+            </text>
+          )
+        },
+      }}
+      legacyFooter={
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={theme.text.muted} onMouseUp={() => move(-1)}>
+            {props.images.length > 1 ? "← previous" : ""}
+          </text>
+          <text fg={media.failed() ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" truncate>
+            {media.failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
+          </text>
+          <text fg={theme.text.muted} onMouseUp={() => move(1)}>
+            {props.images.length > 1 ? "next →" : ""}
+          </text>
+        </box>
+      }
+    >
       <image
         id="prompt-image-viewer-image"
-        source={current().uri}
+        source={media.source()}
         fit="fit"
         protocol="auto"
         width="100%"
         height={imageHeight()}
-        onError={() => setFailed(true)}
+        onError={media.onError}
       />
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.muted} onMouseUp={() => move(-1)}>
-          {props.images.length > 1 ? "← previous" : ""}
-        </text>
-        <text fg={failed() ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" truncate>
-          {failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => move(1)}>
-          {props.images.length > 1 ? "next →" : ""}
-        </text>
-      </box>
-    </box>
+    </DialogLayout>
   )
 }

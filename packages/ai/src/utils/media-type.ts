@@ -17,11 +17,33 @@ export const detectMediaType = (bytes: Uint8Array): string | undefined => {
     if (riffType === "WAVE") return "audio/wav"
   }
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) return "application/pdf"
-  if (bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp") return "video/mp4"
+  if (bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp") {
+    // AVIF, HEIC, QuickTime and M4A share MP4's container; the major brand tells them apart, and generic HEIF brands
+    // list `avif`/`avis` among the compatible brands that follow the minor version.
+    const brand = ascii(bytes, 8, 12)
+    const boxEnd = Math.min(new DataView(bytes.buffer, bytes.byteOffset).getUint32(0), bytes.length)
+    const compatible = Array.from({ length: Math.floor((boxEnd - 16) / 4) }, (_, index) =>
+      ascii(bytes, 16 + index * 4, 20 + index * 4),
+    )
+    const generic = brand === "mif1" || brand === "msf1"
+    if (
+      brand === "avif" ||
+      brand === "avis" ||
+      (generic && (compatible.includes("avif") || compatible.includes("avis")))
+    )
+      return "image/avif"
+    if (generic || ["heic", "heix", "hevc", "hevx"].includes(brand)) return "image/heic"
+    if (brand === "qt  ") return "video/quicktime"
+    if (brand === "M4A ") return "audio/mp4"
+    return "video/mp4"
+  }
   if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return "video/webm"
-  if (startsWith(bytes, [0x49, 0x44, 0x33]) || startsWith(bytes, [0xff, 0xfb]) || startsWith(bytes, [0xff, 0xf3]))
-    return "audio/mpeg"
+  if (startsWith(bytes, [0x49, 0x44, 0x33])) return "audio/mpeg"
+  // An 11-bit frame sync; layer bits `00` mark AAC ADTS, any other layer is MPEG audio.
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+    return (bytes[1] & 0x06) === 0 ? "audio/aac" : "audio/mpeg"
   if (startsWith(bytes, [0x4f, 0x67, 0x67, 0x53])) return "audio/ogg"
+  if (startsWith(bytes, [0x66, 0x4c, 0x61, 0x43])) return "audio/flac"
   return undefined
 }
 
@@ -31,16 +53,41 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
   pdf: "application/pdf",
   mp4: "video/mp4",
+  mov: "video/quicktime",
   webm: "video/webm",
   mp3: "audio/mpeg",
+  m4a: "audio/mp4",
   wav: "audio/wav",
   ogg: "audio/ogg",
+  flac: "audio/flac",
+  aac: "audio/aac",
   txt: "text/plain",
   md: "text/markdown",
   csv: "text/csv",
 }
 
-export const extensionMediaType = (path: string): string | undefined =>
+const extensionMediaType = (path: string): string | undefined =>
   EXTENSIONS[path.slice(path.lastIndexOf(".") + 1).toLowerCase()]
+
+/** Media type of a file's contents: sniffed magic bytes, then the path's extension. */
+export const fileMediaType = (bytes: Uint8Array, path: string) => detectMediaType(bytes) ?? extensionMediaType(path)
+
+const EXTENSION_ALIASES: Readonly<Record<string, string>> = {
+  "audio/mp3": "mp3",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/webm": "webm",
+  "audio/wave": "wav",
+  "audio/x-wav": "wav",
+  "audio/x-flac": "flac",
+}
+
+export const mediaTypeExtension = (mediaType: string): string | undefined => {
+  const type = mediaType.split(";", 1)[0].trim().toLowerCase()
+  return EXTENSION_ALIASES[type] ?? Object.entries(EXTENSIONS).find(([, known]) => known === type)?.[0]
+}

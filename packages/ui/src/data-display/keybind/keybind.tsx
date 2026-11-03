@@ -3,11 +3,12 @@ import "./keybind.css"
 
 export interface KeybindProps extends ComponentProps<"div"> {
   keys: string[]
-  variant?: "neutral" | "ghost"
+  variant?: "neutral" | "ghost" | "outline"
 }
 
 export function Keybind(props: KeybindProps) {
   const [local, rest] = splitProps(props, ["keys", "variant", "class", "classList"])
+
   return (
     <div
       {...rest}

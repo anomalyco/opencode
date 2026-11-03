@@ -4,29 +4,36 @@ import { ShellParse } from "../../src/shell/parse.js"
 import { ShellScan } from "../../src/shell/scan.js"
 import { Wildcard } from "../../src/util/wildcard.js"
 
-async function parity(source: string) {
-  const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-  const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-  expect(native, source).toEqual(legacy)
+async function checkResources(source: string) {
+  const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+  for (const command of parsed.commands) {
+    if (
+      !/^[A-Za-z_][A-Za-z0-9_]*=/.test(command.resource) &&
+      !/^(?:\d*>>?|\d*>&|&>>?|\d*<|\d*<>|>\|)/.test(command.resource) &&
+      !command.resource.includes("\\\n")
+    ) {
+      expect(Wildcard.match(command.resource, command.save), `${source}: ${JSON.stringify(command)}`).toBe(true)
+    }
+  }
 }
 
 describe("Bash redirect resource oracle", () => {
   test.each([
-    ["printf hello | cat > marker", ["printf hello", "cat"]],
-    ["printf ok && git status > output", ["printf ok", "git status"]],
+    ["printf hello | cat > marker", ["printf hello", "cat > marker"]],
+    ["printf ok && git status > output", ["printf ok", "git status > output"]],
     ["cat > output", ["cat > output"]],
     ["cat > output | cat", ["cat > output", "cat"]],
-    ["pwd | > output cat > tail", ["pwd", "> output cat"]],
-    ["pwd && cat > output file", ["pwd", "cat"]],
+    ["pwd | > output cat > tail", ["pwd", "> output cat > tail"]],
+    ["pwd && cat > output file", ["pwd", "cat > output file"]],
     ["pwd; cat > output", ["pwd", "cat > output"]],
     ["pwd\ncat > output", ["pwd", "cat > output"]],
-  ] as const)("matches exact permission resources: %s", async (source, resources) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    expect(legacy.commands.map((command) => command.resource)).toEqual([...resources])
-    await parity(source)
+  ] as const)("keeps redirects visible across lists and pipelines: %s", async (source, resources) => {
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands.map((command) => command.resource)).toEqual([...resources])
+    await checkResources(source)
   })
 
-  test("matches redirect positions across generated list and pipeline boundaries", async () => {
+  test("scans redirect positions across generated list and pipeline boundaries", async () => {
     const redirects = [">output", ">>output", "<input", "2>err", "2>&1", "<&0", ">|output", "&>output", "&>>output"]
     const separators = [" | ", " |& ", " && ", " || ", "; ", " & ", "\n"]
     for (const redirect of redirects) {
@@ -38,10 +45,15 @@ describe("Bash redirect resource oracle", () => {
         `${redirect} FOO=bar git status 3>tail`,
         `npm run ${redirect} test`,
       ]) {
-        await parity(command)
+        // Dash reads `&>` as `&` and `>`, so words after its target start another command there.
+        if (redirect.startsWith("&") && !command.endsWith(redirect)) {
+          expect(ShellScan.scan(command).kind).toBe("opaque")
+          continue
+        }
+        await checkResources(command)
         for (const separator of separators) {
-          await parity(`printf ok${separator}${command}`)
-          await parity(`${command}${separator}pwd >last`)
+          await checkResources(`printf ok${separator}${command}`)
+          await checkResources(`${command}${separator}pwd >last`)
         }
       }
     }
@@ -80,59 +92,57 @@ describe("Bash redirect resource oracle", () => {
     "pwd | cat 2\\>out",
     "if true; then printf ok && cat >$(printf path); fi",
     "if true; then printf ok && git >out status; else cat >log; fi",
-    "pwd && cd >out /outside",
     "time git status",
     "time -p git status",
     "coproc git status",
-  ])("preserves nested commands, prefixes, and context: %s", parity)
+  ])("preserves nested commands, prefixes, and context: %s", checkResources)
 
-  test("keeps lexical words and nested redirect-target commands after narrowing the resource", () => {
-    const result = ShellScan.scan('pwd | git >"$(printf output)" status')
+  test("keeps full redirect resource, lexical words, and nested redirect-target commands", async () => {
+    const source = 'pwd | git >"$(printf output)" status'
+    const result = ShellScan.scan(source)
     expect(result.kind).toBe("scanned")
     if (result.kind !== "scanned") throw new Error(`Unexpected opacity: ${result.reason}`)
     expect(result.commands[1]).toMatchObject({
-      resource: "git",
+      resource: 'git >"$(printf output)" status',
       words: ["git", "status"],
       rawWords: ["git", "status"],
       redirectWordCount: 1,
     })
     expect(result.commands[2]).toMatchObject({ resource: "printf output", rawWords: ["printf", "output"] })
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands[1]).toEqual({ resource: 'git >"$(printf output)" status', save: "git *" })
+    expect(Wildcard.match(parsed.commands[1]!.resource, parsed.commands[1]!.save)).toBe(true)
   })
 
-  test("excludes ignored trailing continuations from narrowed command prefixes", async () => {
+  test("retains trailing redirect span after a continuation on pipeline RHS", async () => {
     const source = "pwd | cat\\\n >out"
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
     const result = ShellScan.scan(source)
     expect(result.kind).toBe("scanned")
     if (result.kind !== "scanned") throw new Error(`Unexpected opacity: ${result.reason}`)
-    expect(result.commands.map((command) => command.resource)).toEqual(
-      legacy.commands.map((command) => command.resource),
-    )
     expect(result.commands[1]?.rawWords).toEqual(["cat"])
-    expect(legacy.commands[1]).toEqual({ resource: "cat", save: "cat *" })
-    const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-    expect(native).toEqual(legacy)
-    expect(native.commands.every((command) => Wildcard.match(command.resource, command.save))).toBe(true)
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands).toEqual([
+      { resource: "pwd", save: "pwd *" },
+      { resource: "cat\\\n >out", save: "cat *" },
+    ])
   })
 
   test.each(["cat\\\n", "cat \\\n", "cat\\\n\\\n", "cat\\\n;", "cat >out\\\n", "cat >out \\\n"])(
     "saved prefixes cover their standalone continuation command: %j",
     async (source) => {
-      await parity(source)
       const result = ShellScan.scan(source)
       expect(result.kind).toBe("scanned")
       if (result.kind !== "scanned") throw new Error(result.reason)
       expect(result.commands[0]?.rawWords).toEqual(["cat"])
-      const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-      expect(native.commands[0]).toEqual({ resource: source.includes(">out") ? "cat >out" : "cat", save: "cat *" })
-      expect(native.commands.every((command) => Wildcard.match(command.resource, command.save))).toBe(true)
+      const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+      expect(parsed.commands[0]).toEqual({ resource: source.includes(">out") ? "cat >out" : "cat", save: "cat *" })
+      expect(parsed.commands.every((command) => Wildcard.match(command.resource, command.save))).toBe(true)
     },
   )
 
   test.each(["printf 'literal\\\n'\\\n", 'printf "literal\\\n"\\\n', "printf a\\\nb\\\n", 'printf a\\\n""\\\n'])(
     "preserves meaningful raw syntax before an ignored trailing continuation: %j",
     async (source) => {
-      await parity(source)
       const result = ShellScan.scan(source)
       expect(result.kind).toBe("scanned")
       if (result.kind !== "scanned") throw new Error(result.reason)
@@ -141,14 +151,18 @@ describe("Bash redirect resource oracle", () => {
     },
   )
 
-  test("known gap: assignment then redirect on a pipeline RHS retains the native command", async () => {
+  test("assignment then redirect on a pipeline RHS retains the full command and trailing redirect", async () => {
     const source = "printf ok | FOO=bar >output git status 3>tail"
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-    expect(legacy.commands).toEqual([{ resource: "printf ok", save: "printf *" }])
-    expect(native.commands).toEqual([
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands).toEqual([
       { resource: "printf ok", save: "printf *" },
-      { resource: "FOO=bar >output git status", save: "git status *" },
+      { resource: "FOO=bar >output git status 3>tail", save: "git status *" },
     ])
+  })
+
+  test("redirect before cd operand retains the target directory", async () => {
+    const source = "pwd && cd >out /outside"
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed).toEqual({ commands: [{ resource: "pwd", save: "pwd *" }], directories: ["/outside"] })
   })
 })

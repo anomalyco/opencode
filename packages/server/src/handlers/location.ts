@@ -2,7 +2,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
 export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (handlers) =>
@@ -24,7 +24,7 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
           Effect.provideService(LocationServiceMap.Service, locations),
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
+              ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
               : Effect.fail(new ServiceUnavailableError({ message: Cause.pretty(cause), service: "location" })),
           ),
         ),

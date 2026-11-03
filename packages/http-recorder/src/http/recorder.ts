@@ -1,12 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node-shared"
 import { Deferred, Effect, Layer, Ref } from "effect"
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { fileSystem, Service } from "../cassette/store.js"
 import type { RecorderOptions } from "../options.js"
 import { make, redactUrl, type Redactor } from "../redaction/redactor.js"
@@ -69,7 +63,11 @@ const responseFromSnapshot = (request: HttpClientRequest.HttpClientRequest, snap
 export const redactedErrorRequest = (
   request: HttpClientRequest.HttpClientRequest,
   redactedUrl = redactUrl(request.url),
-) => HttpClientRequest.make(request.method)(redactedUrl)
+) => {
+  // Received requests can carry any method string, which HttpClientRequest.make does not accept.
+  const base = HttpClientRequest.get(redactedUrl)
+  return HttpClientRequest.makeWith(request.method, base.url, base.urlParams, base.hash, base.headers, base.body)
+}
 const transportError = (request: HttpClientRequest.HttpClientRequest, description: string, redactedUrl?: string) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({ request: redactedErrorRequest(request, redactedUrl), description }),

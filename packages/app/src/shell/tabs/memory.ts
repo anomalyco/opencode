@@ -10,7 +10,9 @@ export function createTabMemory(owner: Owner | null) {
 
   const remove = (key: string) => {
     const state = entries.get(key)
+
     if (!state) return
+
     for (const entry of state.values()) entry.dispose()
     entries.delete(key)
   }
@@ -21,11 +23,14 @@ export function createTabMemory(owner: Owner | null) {
     },
     ensure<T>(key: string, name: string, init: () => T) {
       const state = entries.get(key) ?? new Map<string, Entry>()
+
       if (!entries.has(key)) entries.set(key, state)
       const existing = state.get(name)
+
       if (existing) return existing.value as T
       const entry = createRoot((dispose) => ({ value: init(), dispose }), owner)
       state.set(name, entry)
+
       return entry.value
     },
     remove,

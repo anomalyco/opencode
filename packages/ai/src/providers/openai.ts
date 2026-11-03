@@ -1,14 +1,29 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import {
+  HttpOptions,
+  ProviderID,
+  ToolDefinition,
+  mergeHttpOptions,
+  type ModelID,
+  type OpenString,
+  type ProviderOptions,
+} from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
-import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images.js"
+import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAISpeech } from "../protocols/openai-speech.js"
+import { OpenAITranscription } from "../protocols/openai-transcription.js"
+import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
 
-export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options.js"
+export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
+export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
+export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
+export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
 
 export const id = ProviderID.make("openai")
 
@@ -25,14 +40,14 @@ export type Config = RouteDefaultsInput &
   }
 
 export interface ImageGenerationOptions {
-  readonly action?: OpenAIImageString<"auto" | "generate" | "edit">
-  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
-  readonly inputFidelity?: OpenAIImageString<"low" | "high">
+  readonly action?: OpenString<"auto" | "generate" | "edit">
+  readonly background?: OpenString<"auto" | "opaque" | "transparent">
+  readonly inputFidelity?: OpenString<"low" | "high">
   readonly outputCompression?: number
-  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
+  readonly outputFormat?: OpenString<"png" | "jpeg" | "webp">
   readonly partialImages?: number
-  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
-  readonly size?: OpenAIImageString<
+  readonly quality?: OpenString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly size?: OpenString<
     "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
   >
 }
@@ -59,7 +74,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
     readonly organization?: string
     readonly project?: string
@@ -87,25 +102,34 @@ export const configure = (input: Config = {}) => {
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
-    responsesRoute
-      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
-      .model<OpenAIProviderOptionsInput>({ id })
+    responsesRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
       compatibility: { supportsPromptCacheKey: true },
     })
-  const image = (modelID: string | ModelID) =>
-    OpenAIImages.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL,
-      headers: input.headers,
-      http: mergeHttpOptions(
-        input.http === undefined ? undefined : HttpOptions.make(input.http),
-        input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-      ),
-    })
+  const deployment = MediaRoute.deployment(input, auth(input))
+  const media = {
+    ...deployment,
+    http: mergeHttpOptions(
+      deployment.http,
+      input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
+    ),
+  }
+  // The ChatGPT backend (ChatGPT sign-in) rejects multipart image edits with "Unsupported content type".
+  const imageInput = media.baseURL?.startsWith("https://chatgpt.com/") ? "json-edits" : undefined
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, providerOptions, imageInput })
+  const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
+  const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
+  const decisionRoute = OpenAIDecisions.route.with({
+    endpoint: { baseURL: media.baseURL },
+    auth: media.auth,
+    headers: media.headers,
+    http: media.http,
+  })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -113,6 +137,9 @@ export const configure = (input: Config = {}) => {
     responses,
     chat,
     image,
+    speech,
+    transcription,
+    decision,
     configure,
   }
 }
@@ -128,7 +155,7 @@ const config = ({
   project,
   queryParams,
   ...providerOptions
-}: Settings): Config => {
+}: Settings = {}): Config => {
   const headers = {
     ...(organization === undefined ? {} : { "OpenAI-Organization": organization }),
     ...(project === undefined ? {} : { "OpenAI-Project": project }),
@@ -138,24 +165,33 @@ const config = ({
     apiKey,
     baseURL,
     headers: Object.keys(headers).length === 0 ? undefined : headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
-    queryParams: queryParams === undefined ? undefined : { ...queryParams },
+    queryParams,
   }
 }
 
-export const model: ProviderPackage.Definition<
+export const model: ProviderPackage.Model<
   Settings,
   OpenAIProviderOptionsInput,
   typeof OpenAIResponses.route.compact
->["model"] = (modelID, settings) => {
+> = (modelID, settings) => {
   return configure(config(settings)).responses(modelID)
 }
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).chat(modelID)
+export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
+export const speech = provider.speech
+export const transcription = provider.transcription
+export const decision = provider.decision

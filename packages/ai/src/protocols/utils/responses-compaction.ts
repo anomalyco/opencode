@@ -5,7 +5,7 @@ import {
   CompactionPart,
   CompactionResponse,
   HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ContentPart,
   mergeJsonRecords,
@@ -19,12 +19,18 @@ import { OpenResponses } from "../open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "../shared.js"
 import { Media } from "../../media.js"
 
+// /compact has a smaller wire contract than /responses; keep the request controls it accepts.
 const Body = Schema.Struct({
   model: Schema.String,
   input: Schema.Array(Schema.Unknown),
   instructions: optionalNull(Schema.String),
   previous_response_id: optionalNull(Schema.String),
   service_tier: optionalNull(Schema.String),
+  reasoning: Schema.optional(JsonObject),
+  text: Schema.optional(JsonObject),
+  include: OpenResponses.coreFields.include,
+  parallel_tool_calls: OpenResponses.coreFields.parallel_tool_calls,
+  tools: Schema.optional(Schema.Array(JsonObject)),
   prompt_cache_key: optionalNull(Schema.String),
   prompt_cache_retention: optionalNull(Schema.String),
   prompt_cache_options: optionalNull(
@@ -74,17 +80,27 @@ const Response = Schema.Struct({
   usage: Schema.optional(Schema.StructWithRest(OpenResponses.OpenResponsesUsage, [JsonObject])),
 })
 
-export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =>
+export const make = (
+  adapter: OpenResponses.ProviderAdapter,
+  lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
+): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
     // The standalone compaction endpoint rejects histories containing configuration updates.
     const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
+    const generation = OpenResponses.lowerGeneration(request)
+    const tools = request.tools.length === 0 ? undefined : yield* lowerTools(request)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {
           ...native,
-          service_tier: request.providerOptions?.serviceTier,
-          prompt_cache_key: ProviderShared.promptCacheKey(request),
+          service_tier: generation.service_tier,
+          reasoning: generation.reasoning,
+          text: generation.text,
+          include: generation.include,
+          parallel_tool_calls: generation.parallel_tool_calls,
+          tools,
+          prompt_cache_key: generation.prompt_cache_key,
         },
         request.http?.body,
       ),
@@ -92,16 +108,22 @@ export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =
     const url = Endpoint.render(route.endpoint, { request, body: native })
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
-      request: LLMRequest.update(request, {
+      request: {
+        ...request,
         http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-      }),
+      },
       body,
       endpoint: Endpoint.path(url.toString()),
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
     const response = yield* executor.execute(
-      ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
+      ProviderShared.jsonPost({
+        url: parts.url,
+        body: parts.bodyText,
+        headers: parts.headers,
+        encoding: request.http?.encoding,
+      }),
       options?.http,
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(

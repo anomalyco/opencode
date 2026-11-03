@@ -9,7 +9,7 @@ import {
   type ScrollBoxRenderable,
   type TextareaRenderable,
 } from "@opentui/core"
-import open from "open"
+import { openUrl } from "@opencode/util/open"
 import { useTheme } from "../../context/theme"
 import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
@@ -18,7 +18,7 @@ import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
-import { useConfig } from "../../config"
+import { useCursorStyle } from "../../config"
 import { errorMessage } from "../../util/error"
 import {
   formCustom,
@@ -64,7 +64,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const keymap = Keymap.use()
   const enabled = useInteractivity()
   const active = () => enabled() && keymap.mode.current() === FORM_MODE
-  const config = useConfig().data
+  const cursorStyle = useCursorStyle()
   const clipboard = useClipboard()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
@@ -478,7 +478,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     const current = externalField()
     if (!current) return
     setStore("error", "")
-    void open(current.url)
+    void openUrl(current.url)
       .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }
@@ -806,13 +806,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 return (
                   <box
                     paddingRight={2}
-                    backgroundColor={
-                      isTab()
-                        ? theme.background.formfield.selected
-                        : tabHover() === index()
-                          ? theme.background.formfield.focused
-                          : theme.background.raised.base
-                    }
+                    backgroundColor={theme.background.raised.base}
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
                     onMouseUp={() => {
@@ -828,13 +822,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               }}
             </For>
             <box
-              backgroundColor={
-                confirm()
-                  ? theme.background.formfield.selected
-                  : tabHover() === "confirm"
-                    ? theme.background.formfield.focused
-                    : theme.background.raised.base
-              }
+              backgroundColor={theme.background.raised.base}
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
               onMouseUp={() => {
@@ -897,7 +885,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
-                  cursorStyle={config.cursor}
+                  cursorStyle={cursorStyle()}
                   ref={(val: TextareaRenderable) => {
                     textarea = val
                     val.traits = { status: "ANSWER" }
@@ -941,7 +929,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.raised.base}
+                            backgroundColor={theme.background.raised.base}
                             paddingRight={1}
                           >
                             <text
@@ -949,7 +937,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.raised.base}
+                            backgroundColor={theme.background.raised.base}
                             flexDirection="row"
                           >
                             <Show when={multi()}>
@@ -995,7 +983,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   >
                     <box flexDirection="row">
                       <box
-                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.raised.base}
+                        backgroundColor={theme.background.raised.base}
                         paddingRight={1}
                       >
                         <text fg={other() ? theme.text.formfield.focused : theme.text.muted}>
@@ -1005,7 +993,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       <box
                         flexDirection="row"
                         flexGrow={1}
-                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.raised.base}
+                        backgroundColor={theme.background.raised.base}
                       >
                         <Show when={multi()}>
                           <text
@@ -1037,7 +1025,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         >
                           <textarea
                             flexGrow={1}
-                            cursorStyle={config.cursor}
+                            cursorStyle={cursorStyle()}
                             ref={(val: TextareaRenderable) => {
                               textarea = val
                               val.traits = { status: "ANSWER" }

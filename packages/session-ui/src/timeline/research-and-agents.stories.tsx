@@ -14,6 +14,7 @@ import {
   webResearchDocument,
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
+import { timelinePresets } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -75,10 +76,57 @@ export const DelegateFocusedTasks = {
   ),
 }
 
+const delegationDocument = storyDocument([
+  storyTool("tool_delegation_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
+  storyTool("tool_delegation_grep", "grep", "completed", { pattern: "timelineDetail" }),
+  storyTool("tool_delegation_read", "read", "completed", { path: "src/timeline/projection.ts" }),
+  storyTool(
+    "tool_delegation_explore",
+    "subagent",
+    "completed",
+    { agent: "explore", description: "Map the timeline grouping rules", prompt: "Find where tool rows are grouped." },
+    { output: "Grouping lives in the timeline projection.", metadata: { sessionID: "session_child_explore" } },
+  ),
+  storyTool(
+    "tool_delegation_review",
+    "subagent",
+    "completed",
+    { agent: "review", description: "Review the detail presets", prompt: "Check each timeline preset." },
+    { output: "Every preset is consistent.", metadata: { sessionID: "session_child_review" } },
+  ),
+  storyTool("tool_delegation_read_tests", "read", "completed", { path: "src/timeline/rows-current.test.ts" }),
+  storyTool("tool_delegation_grep_tests", "grep", "completed", { pattern: "subagent" }),
+  storyTool(
+    "tool_delegation_general",
+    "subagent",
+    "completed",
+    { agent: "general", description: "Run the focused timeline tests", prompt: "Run the timeline tests." },
+    { output: "All timeline tests pass.", metadata: { sessionID: "session_child_general" } },
+  ),
+  { type: "text", text: "Each delegated task keeps its own row while the reads and searches between them stay grouped." },
+])
+
+export const DelegateBetweenTools = {
+  args: { subagents: "separate" },
+  argTypes: { subagents: { control: { type: "inline-radio" }, options: ["separate", "grouped"] } },
+  render: (args: { subagents: "separate" | "grouped" }) => (
+    <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
+      <CurrentSessionProviders document={delegationDocument}>
+        <SessionTimeline
+          document={delegationDocument}
+          timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: args.subagents } }}
+        />
+      </CurrentSessionProviders>
+    </section>
+  ),
+}
+
 function CodebaseExplorationStory() {
   const [state, setState] = createStore({ read: false, glob: false })
+
   const tool = (name: "read" | "glob", completed: boolean) => {
     const input = name === "read" ? { path: "src/a.ts", offset: 0, limit: 120 } : { path: ".", pattern: "**/*.ts" }
+
     return {
       type: "tool",
       id: `tool_context_${name}`,
@@ -93,6 +141,7 @@ function CodebaseExplorationStory() {
       },
     } satisfies SessionMessageAssistantTool
   }
+
   const document = createMemo(
     () =>
       ({
@@ -112,6 +161,7 @@ function CodebaseExplorationStory() {
         diffs: [],
       }) satisfies SessionDocument,
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex gap-2">
@@ -276,16 +326,25 @@ const CompleteAgentWorkflow = {
 const RecoverFromToolFailures = {
   render: () => {
     const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
+
     const input = (name: string): Record<string, JsonValue> => {
       if (name === "shell") return { command: "exit 1" }
+
       if (name === "edit" || name === "write") return { path: "src/error.ts", content: "" }
+
       if (name === "patch") return { patchText: "Update src/error.ts" }
+
       if (name === "webfetch") return { url: "https://example.com" }
+
       if (name === "websearch") return { query: "failure" }
+
       if (name === "subagent") return { description: "Fail subagent", agent: "explore", prompt: "Inspect." }
+
       if (name === "skill") return { name: "failure" }
+
       return { target: "failure" }
     }
+
     return (
       <CurrentSessionTimelineStory
         title="Recover from failed work"
@@ -308,6 +367,7 @@ const RecoverFromToolFailures = {
 
 function FailedCommandAndQuestionStory() {
   const [state, setState] = createStore({ failed: false })
+
   const document = createMemo(() =>
     storyDocument(
       [
@@ -327,6 +387,7 @@ function FailedCommandAndQuestionStory() {
       !state.failed,
     ),
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <button type="button" onClick={() => setState("failed", true)}>

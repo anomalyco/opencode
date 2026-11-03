@@ -5,13 +5,16 @@ import { listAllSessions } from "./list"
 describe("listAllSessions", () => {
   test("loads every page in server order and retains the query", async () => {
     const calls: SessionListInput[] = []
+
     const pages = new Map<string | undefined, { data: SessionInfo[]; cursor: { next?: string } }>([
       [undefined, { data: [sessionInfo("session-3"), sessionInfo("session-2")], cursor: { next: "next" } }],
       ["next", { data: [sessionInfo("session-1", true)], cursor: {} }],
     ])
+
     const api = {
       list: async (query = {}) => {
         calls.push(query)
+
         return pages.get(query.cursor) ?? { data: [], cursor: {} }
       },
     } satisfies Pick<SessionApi, "list">
@@ -28,10 +31,13 @@ describe("listAllSessions", () => {
 
   test("requests the terminal empty page when the server returns a next cursor", async () => {
     const cursors: Array<string | undefined> = []
+
     const api = {
       list: async (query = {}) => {
         cursors.push(query.cursor)
+
         if (query.cursor) return { data: [], cursor: { next: "unused" } }
+
         return { data: [sessionInfo("session-1")], cursor: { next: "terminal" } }
       },
     } satisfies Pick<SessionApi, "list">

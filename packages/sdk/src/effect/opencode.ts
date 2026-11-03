@@ -5,7 +5,7 @@ import type { Session } from "@opencode/core/session"
 import type { Workspace } from "@opencode/core/workspace"
 import { Context, Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { EmbeddedHost } from "../internal/host"
 import type { SdkInstances } from "../internal/instances"
 

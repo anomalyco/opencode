@@ -9,7 +9,7 @@ Brugerdefinerede kommandoer giver mulighed for at angive en prompt, du vil køre
 /my-command
 ```
 
-Brugerdefinerede kommandoer er ud over de indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`. [Learn more](/docs/tui#commands).
+Brugerdefinerede kommandoer er ud over de indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/help`. [Learn more](/docs/tui#commands).
 
 ---
 
@@ -23,7 +23,7 @@ Opret `.opencode/commands/test.md`:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Brug indstillingerne `command` i din OpenCode [config](/docs/config):
       // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Du kan også definere kommandoer ved hjælp af markdown-filer. Placer dem i:
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -163,7 +163,7 @@ Dette erstatter:
 
 ### Shell-output
 
-Brug _!`command`_ til at injicere [bash command](/docs/tui#bash-commands) output i din prompt.
+Brug _!`command`_ til at injicere [shell command](/docs/tui#shell-commands) output i din prompt.
 
 For eksempel, for at oprette en brugerdefineret kommando, der analyserer testdækning:
 
@@ -302,7 +302,7 @@ Brug `model`-konfigurationen til at tilsidesætte standardmodellen for denne kom
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -314,7 +314,7 @@ Dette er en **valgfri** konfigurationsindstilling.
 
 ## Indbyggede kommandoer
 
-opencode indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
+opencode indeholder flere indbyggede kommandoer som `/init`, `/undo`, `/redo`, `/help`; [learn more](/docs/tui#commands).
 
 :::note
 Brugerdefinerede kommandoer kan tilsidesætte indbyggede kommandoer.

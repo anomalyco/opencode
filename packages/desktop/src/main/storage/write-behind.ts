@@ -12,15 +12,18 @@ export function createWriteBehind<T>(input: {
   const flush = () => {
     clearTimeout(timer)
     timer = undefined
+
     if (closed || pending.size === 0) return
     const batch = new Map(pending)
     pending.clear()
+
     try {
       input.write(batch)
     } catch (error) {
       // The renderer already saw these writes succeed. Keep them queued so the next flush retries
       // them; anything written for the same key since then takes precedence.
       for (const [key, value] of batch) if (!pending.has(key)) pending.set(key, value)
+
       if (!input.onError) throw error
       input.onError(error)
     }

@@ -166,12 +166,12 @@ describe("ShellScan", () => {
     },
   )
 
-  test("keeps first-command redirects but excludes list-level redirects from resources", () => {
+  test("keeps redirects in resources across list operators", () => {
     expect(ShellScan.scan("FOO=bar 2>>err printf ok > out && cat < input")).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: "FOO=bar 2>>err printf ok > out", words: ["printf", "ok"] },
-        { resource: "cat", words: ["cat"] },
+        { resource: "cat < input", words: ["cat"] },
       ],
     })
   })
@@ -181,7 +181,7 @@ describe("ShellScan", () => {
       kind: "scanned",
       commands: [
         { resource: "printf ok>out 2>&1", words: ["printf", "ok"] },
-        { resource: "cat", words: ["cat"] },
+        { resource: "cat<input", words: ["cat"] },
       ],
     })
   })
@@ -217,6 +217,8 @@ describe("ShellScan", () => {
     ["CDPATH=/usr # comment\ncd bin; rm victim", ["cd", "rm"]],
     ["HOME=/etc # comment\ncd; rm victim", ["cd", "rm"]],
     ["VALUE=$(printf 2); echo $((VALUE + 1))", ["printf", "echo"]],
+    ["MSG='Use ${FOO} here'; some_cmd || exit $?", ["some_cmd", "exit"]],
+    ["f() { local REGEX='[0-9]+${FOO}'; return $?; }", ["local", "return"]],
   ] as const)("scans assignment-only boundaries without evaluating their effects: %s", (command, names) => {
     const result = ShellScan.scan(command)
     expect(result.kind).toBe("scanned")
@@ -234,8 +236,6 @@ describe("ShellScan", () => {
     "{fd}>/tmp/log touch /tmp/victim",
     "time touch /tmp/victim",
     "printf '%s' \"$(printf safe ${x%)}; touch /tmp/victim)\"",
-    "s=abc; x='a[$(touch /tmp/victim)0]'; printf '%s' \"${s:x}\"",
-    "ref='x[$(touch /tmp/victim)0]'; printf '%s' \"${!ref}\"",
     "if true; then echo safe; fi > /tmp/victim",
     "if true; then :; 'if' victim; fi",
   ])("scans Bash lexical forms without interpreting shell values: %s", (command) => {

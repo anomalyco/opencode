@@ -1,5 +1,6 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect, test } from "bun:test"
-import { AIError, TransportError } from "@opencode/ai"
+import { AIError, TransportError } from "@opencode/ai/effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -15,7 +16,6 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
-import { UserInterruptedError } from "@opencode/core/session/error"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -50,10 +50,6 @@ describe("SessionExecution lifecycle", () => {
     const interrupted = Effect.runSyncExit(Effect.interrupt)
     expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
-    expect(SessionExecution.terminal(Exit.fail(new UserInterruptedError()))).toEqual({
-      type: "interrupted",
-      reason: "user",
-    })
   })
 
   it.effect("the sweep only lists claimed top-level Sessions", () =>
@@ -278,6 +274,7 @@ describe("SessionExecution lifecycle", () => {
           sessionID,
           text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })),
       )
       // Drains completed naturally, so claims are released and counters reset.
@@ -539,6 +536,44 @@ describe("SessionRestart background recovery", () => {
         shellID: "sh_completed",
         state: "completed",
       })
+      expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.effect("delivers an image outcome persisted before its notification, and cancels one still running", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_background_image")
+      yield* seedSessions(database, [sessionID])
+      const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
+      yield* jobs.start({
+        id: "image_done",
+        type: "experimental_image_generate",
+        recovery: recovery("/tmp/done.png"),
+        run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
+      })
+      yield* jobs.background("image_done")
+      yield* jobs.wait({ id: "image_done" })
+      yield* jobs.start({
+        id: "image_running",
+        type: "experimental_image_generate",
+        recovery: recovery("/tmp/running.png"),
+        run: Effect.never,
+      })
+      yield* jobs.background("image_running")
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      const inbox = yield* SessionInbox.list(database.db, sessionID)
+      expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
+        '<image id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</image>',
+        '<image id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</image>',
+      ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
@@ -1375,7 +1410,7 @@ function buildExecution(
         () =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices>,
+          runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       ),
     )
     return yield* Layer.buildWithScope(

@@ -1,54 +1,34 @@
 import { describe, expect, test } from "bun:test"
 import { createSidecarResolver, initializationData } from "./initialization"
 
+function failure(error: unknown) {
+  try {
+    initializationData(Object.assign(() => undefined, { error }))
+  } catch (caught) {
+    return caught
+  }
+}
+
 describe("desktop renderer initialization", () => {
-  test("throws the original initialization error before rendering server providers", () => {
-    const error = new Error("sidecar startup failed")
-
-    try {
-      initializationData(Object.assign(() => undefined, { error }))
-      throw new Error("expected initialization to fail")
-    } catch (failure) {
-      expect(failure).toBe(error)
-      expect((failure as Error & { localServerStartup?: boolean }).localServerStartup).toBe(true)
-    }
-  })
-
-  test("preserves clean RPC startup errors", () => {
+  test("throws the original initialization error, marked as a local server startup, before rendering", () => {
     const error = new Error("Cannot migrate session_message projections")
-
-    try {
-      initializationData(Object.assign(() => undefined, { error }))
-      throw new Error("expected initialization to fail")
-    } catch (failure) {
-      expect(failure).toBe(error)
-      expect((failure as Error).message).toBe("Cannot migrate session_message projections")
-    }
-  })
-
-  test("returns initialized sidecar data", () => {
+    expect(failure(error)).toBe(error)
+    expect(error).toHaveProperty("localServerStartup", true)
+    // The RPC error text reaches the error screen unchanged.
+    expect(error.message).toBe("Cannot migrate session_message projections")
+    // A falsy error is still an error.
+    const empty = failure("")
+    expect(empty).toBeInstanceOf(Error)
+    expect(empty).toHaveProperty("message", "")
+    expect(empty).toHaveProperty("localServerStartup", true)
     const sidecar = { url: "http://127.0.0.1:1234" }
-
     expect(initializationData(Object.assign(() => sidecar, { error: undefined }))).toBe(sidecar)
-  })
-
-  test("does not discard falsy initialization errors", () => {
-    let caught: unknown
-    try {
-      initializationData(Object.assign(() => undefined, { error: "" }))
-    } catch (error) {
-      caught = error
-    }
-
-    expect(caught).toBeInstanceOf(Error)
-    if (!(caught instanceof Error)) return
-    expect(caught.message).toBe("")
-    expect((caught as Error & { localServerStartup?: boolean }).localServerStartup).toBe(true)
   })
 
   test("refreshes the managed sidecar endpoint", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => sidecar },
       current: () => undefined,
@@ -62,6 +42,7 @@ describe("desktop renderer initialization", () => {
   test("keeps the current sidecar when reconnection resolves the same endpoint", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => ({ ...sidecar }) },
       current: () => sidecar,
@@ -76,11 +57,13 @@ describe("desktop renderer initialization", () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const pending = Promise.withResolvers<typeof sidecar>()
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: () => pending.promise },
       current: () => undefined,
       update: (next) => updates.push(next),
     })
+
     const abort = new AbortController()
     const result = resolve(abort.signal)
     abort.abort()

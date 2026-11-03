@@ -8,21 +8,20 @@ describe("error description", () => {
     )
   })
 
-  test("uses the generic description for other errors", () => {
-    expect(errorDescriptionKey(new Error("unknown"))).toBe("error.page.description")
-    expect(errorDescriptionKey(Object.assign(new Error("unknown"), { localServerStartup: false }))).toBe(
-      "error.page.description",
-    )
-  })
+  test.each([new Error("unknown"), Object.assign(new Error("unknown"), { localServerStartup: false })])(
+    "uses the generic description for other errors",
+    (error) => {
+      expect(errorDescriptionKey(error)).toBe("error.page.description")
+    },
+  )
 })
 
 describe("error status", () => {
-  test("finds status codes in an error cause", () => {
-    expect(errorStatus(new Error("UnexpectedStatus", { cause: { status: 502 } }))).toBe(502)
-  })
-
-  test("finds status codes in structured error data", () => {
-    expect(errorStatus({ name: "APIError", data: { statusCode: 401 } })).toBe(401)
+  test.each([
+    [new Error("UnexpectedStatus", { cause: { status: 502 } }), 502],
+    [{ name: "APIError", data: { statusCode: 401 } }, 401],
+  ])("finds status codes in an error cause or structured data", (error, status) => {
+    expect(errorStatus(error)).toBe(status)
   })
 
   test("ignores invalid and circular status values", () => {

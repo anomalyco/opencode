@@ -10,6 +10,7 @@ export interface CheckboxProps extends ParentProps<ComponentProps<typeof Root>> 
 
 export function Checkbox(props: CheckboxProps) {
   const [local, others] = splitProps(props, ["children", "class", "label", "hideLabel", "description", "icon"])
+
   return (
     <Root {...others} data-component="checkbox">
       <Input data-slot="checkbox-checkbox-input" />

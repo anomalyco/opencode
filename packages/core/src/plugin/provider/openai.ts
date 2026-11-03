@@ -1,14 +1,18 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import type { SessionRequest } from "@opencode/plugin/effect/session"
+import { Deferred, Effect, Option, Schema, Semaphore } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
-import { Bus } from "../../bus.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
+import { configuredSettings } from "./configured.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -20,9 +24,10 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-// ChatGPT accounts lost gpt-5.4 and gpt-5.4-mini in Codex on 2026-08-31 (replacements: gpt-5.6-terra, gpt-5.6-luna).
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark"])
-const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
+// Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark, for ChatGPT accounts.
+const codexDisallowed = new Set(["gpt-5.6"])
+// The image models the Codex client generates and edits with on the Codex login.
+const codexImageModels = new Set(["gpt-image-2"])
 
 type Pkce = {
   verifier: string
@@ -53,7 +58,7 @@ const browser = (app: App.Info) =>
     method: {
       id: browserMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (browser)",
+      label: "Codex browser (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -121,7 +126,7 @@ function listen(server: Server) {
             Effect.catchIf(addressInUse, () =>
               Effect.fail(
                 new Error(
-                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.`,
+                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose Codex device code (legacy), then try again.`,
                 ),
               ),
             ),
@@ -172,7 +177,7 @@ const headless = (app: App.Info) =>
     method: {
       id: headlessMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (headless)",
+      label: "Codex device code (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -230,20 +235,21 @@ const headless = (app: App.Info) =>
 export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
 
     const load = Effect.fn("OpenAIPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("openai")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
+      const { credential } = yield* activeCredential(ctx, "openai")
+      const previous = chatgpt
       chatgpt =
         credential?.type === "oauth" &&
         (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
           ? credential
           : undefined
+      return (
+        (previous === undefined) !== (chatgpt === undefined) ||
+        previous?.metadata?.accountID !== chatgpt?.metadata?.accountID
+      )
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -251,6 +257,8 @@ export const OpenAIPlugin = define({
       editor.method.update(headless(ctx.app))
     })
     yield* load()
+    // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
+    const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.openai)
       if (!item) return
@@ -259,6 +267,8 @@ export const OpenAIPlugin = define({
         provider.settings = Provider.mergeOverlay(provider.settings, {
           transport: provider.settings?.transport ?? "websocket",
           ...(chatgpt ? { baseURL: codexBaseURL } : {}),
+          // The ChatGPT backend rejects uncompressed bodies over ~1 MiB and decodes zstd.
+          ...(chatgpt && configured?.baseURL === undefined ? { encoding: provider.settings?.encoding ?? "zstd" } : {}),
         })
         if (!chatgpt) return
         provider.headers = Provider.mergeHeaders(provider.headers, {
@@ -279,39 +289,48 @@ export const OpenAIPlugin = define({
             return
           }
           const apiID = draft.modelID ?? draft.id
+          if (draft.type === "image") {
+            if (codexImageModels.has(apiID)) draft.cost = []
+            else draft.enabled = false
+            return
+          }
           const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
           const major = Number(match?.[1])
           const minor = Number(match?.[2] ?? 0)
-          if (
-            !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
-          ) {
+          if (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 5))) {
             draft.enabled = false
             return
           }
           draft.cost = []
-          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
         })
       }
     })
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (!chatgpt) return
           if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
             evt.baseURL = codexBaseURL
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
           evt.headers.originator = "opencode"
-          evt.headers["session-id"] = evt.sessionID
+          // ChatGPT routes its prompt cache on this header, so children share the parent's.
+          evt.headers["session-id"] = session ? SessionAffinity.get(session) : evt.sessionID
         }),
       { providerID: Provider.ID.openai },
     )
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
-      Stream.runForEach(refresh),
-      Effect.forkScoped({ startImmediately: true }),
+    // The ChatGPT backend rejects a requested output limit, and OpenAI counts one against rate limits.
+    const omitOutputLimit = (evt: SessionRequest) =>
+      Effect.sync(() => {
+        delete evt.options.maxTokens
+      })
+    for (const name of ["context", "compaction"] as const)
+      yield* ctx.session.hook(name, omitOutputLimit, { providerID: Provider.ID.openai })
+    yield* ProviderRefresh.onSwitch(
+      "openai",
+      loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

@@ -15,7 +15,9 @@ export function clearReadyWatcher(state: ReadyWatcher) {
 export function getViewerHost(container: HTMLElement | undefined) {
   if (!container) return
   const host = container.querySelector("diffs-container")
+
   if (!(host instanceof HTMLElement)) return
+
   return host
 }
 
@@ -25,11 +27,14 @@ export function getViewerRoot(container: HTMLElement | undefined) {
 
 export function applyViewerScheme(host: HTMLElement | undefined) {
   if (!host) return
+
   if (typeof document === "undefined") return
 
   const scheme = document.documentElement.dataset.colorScheme
+
   if (scheme === "dark" || scheme === "light") {
     host.dataset.colorScheme = scheme
+
     return
   }
 
@@ -40,11 +45,13 @@ export function observeViewerScheme(getHost: () => HTMLElement | undefined) {
   if (typeof document === "undefined") return () => {}
 
   applyViewerScheme(getHost())
+
   if (typeof MutationObserver === "undefined") return () => {}
 
   const root = document.documentElement
   const monitor = new MutationObserver(() => applyViewerScheme(getHost()))
   monitor.observe(root, { attributes: true, attributeFilter: ["data-color-scheme"] })
+
   return () => monitor.disconnect()
 }
 
@@ -65,10 +72,13 @@ export function notifyShadowReady(opts: {
   const runReady = () => {
     const step = (left: number) => {
       if (token !== opts.state.token) return
+
       if (left <= 0) {
         opts.onReady()
+
         return
       }
+
       requestAnimationFrame(() => step(left - 1))
     }
 
@@ -78,6 +88,7 @@ export function notifyShadowReady(opts: {
   const observeRoot = (root: ShadowRoot) => {
     if (opts.isReady(root)) {
       runReady()
+
       return
     }
 
@@ -86,6 +97,7 @@ export function notifyShadowReady(opts: {
     clearReadyWatcher(opts.state)
     opts.state.observer = new MutationObserver(() => {
       if (token !== opts.state.token) return
+
       if (!opts.isReady(root)) return
 
       clearReadyWatcher(opts.state)
@@ -95,6 +107,7 @@ export function notifyShadowReady(opts: {
   }
 
   const root = opts.getRoot()
+
   if (!root) {
     if (typeof MutationObserver === "undefined") return
 
@@ -102,11 +115,13 @@ export function notifyShadowReady(opts: {
       if (token !== opts.state.token) return
 
       const next = opts.getRoot()
+
       if (!next) return
 
       observeRoot(next)
     })
     opts.state.observer.observe(opts.container, { childList: true, subtree: true })
+
     return
   }
 

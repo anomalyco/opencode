@@ -33,20 +33,18 @@ const levelNames = new Map<Logger.Options<unknown>["logLevel"], LogLevel>([
   [levels.fatal, "fatal"],
 ])
 
-function normalizeLevel(level: Logger.Options<unknown>["logLevel"]): LogLevel | undefined {
-  return levelNames.get(level)
-}
-
 export function layer(log?: LogOptions) {
   const logger = Logger.make((options) => {
     if (!log) return
-    const level = normalizeLevel(options.logLevel)
+    const level = levelNames.get(options.logLevel)
     if (!level) return
     const entry = Logger.formatStructured.log(options)
     const values = Array.isArray(entry.message) ? entry.message : [entry.message]
     const [message, ...data] = values
     const details =
-      data.length === 1 && !Array.isArray(data[0]) ? (data[0] as Readonly<Record<string, unknown>>) : undefined
+      data.length === 1 && typeof data[0] === "object" && data[0] !== null && !Array.isArray(data[0])
+        ? (data[0] as Readonly<Record<string, unknown>>)
+        : undefined
     const { cause: detailCause, ...detailAttributes } = details ?? {}
     const attributes = {
       ...entry.annotations,

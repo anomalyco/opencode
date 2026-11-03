@@ -1,9 +1,9 @@
 import { WebSearch } from "@opencode/core/websearch"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { response } from "../location"
+import { awaitPlugins, response } from "../location"
 
 export const WebSearchHandler = HttpApiBuilder.group(Api, "server.websearch", (handlers) =>
   Effect.gen(function* () {
@@ -18,6 +18,8 @@ export const WebSearchHandler = HttpApiBuilder.group(Api, "server.websearch", (h
       .handle(
         "websearch.query",
         Effect.fn("server.websearch.query")(function* (request) {
+          // A cold Location must finish activating plugins before their providers can be resolved.
+          yield* awaitPlugins
           const websearch = yield* WebSearch.Service
           return yield* response(
             websearch.query(request.payload).pipe(

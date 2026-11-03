@@ -16,8 +16,8 @@ export class DatabaseSettings extends Schema.Class<DatabaseSettings>("DatabaseSe
 const decodeDatabaseSettings = Schema.decodeUnknownSync(DatabaseSettings)
 
 const config = Config.all({
-  url: Config.nonEmptyString("DATABASE_URL").pipe(Config.withDefault(Resource.StatsDatabase.url)),
-  migrationsDir: Config.nonEmptyString("DATABASE_MIGRATIONS_DIR").pipe(Config.withDefault("./migrations")),
+  url: Config.NonEmptyString("DATABASE_URL").pipe(Config.withDefault(Resource.StatsDatabase.url)),
+  migrationsDir: Config.NonEmptyString("DATABASE_MIGRATIONS_DIR").pipe(Config.withDefault("./migrations")),
 }).pipe(Config.map(decodeDatabaseSettings))
 
 export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSettings>()(

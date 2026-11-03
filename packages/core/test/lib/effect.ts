@@ -1,7 +1,7 @@
 import { test, type TestOptions } from "bun:test"
 import { Cause, Effect, Exit, Layer, type Scope } from "effect"
 import { TestClock, TestConsole } from "effect/testing"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 

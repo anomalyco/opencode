@@ -2,14 +2,11 @@ import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
-import { fixture } from "./session-timeline-stress.fixture"
-import { expected, messages, workload } from "./session-tab-switch.fixture"
-import {
-  createReviewDiffs,
-  installStressSessionTabs,
-  installTimelineSettings,
-  stressSessionHref,
-} from "./timeline-test-helpers"
+import { fixture, installStressSessionTabs, installTimelineSettings } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
+import { expected, messages } from "../../utils/markdown-sessions"
+import { workload } from "./session-tab-switch.fixture"
+import { createReviewDiffs } from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 const scenarios = [
@@ -21,18 +18,23 @@ const scenarios = [
 ] as const
 
 const viewport = { width: 1440, height: 900 }
+
 const reviewDiffs = createReviewDiffs()
+
 benchmark.use({ viewport, video: "off", trace: "off", serviceWorkers: "block", traceScope: "interaction" })
 
 scenarios.forEach((scenario) => {
   benchmark(`tab switch: ${scenario.cache}, review ${scenario.review}`, async ({ page, report }, testInfo) => {
     const requests = await prepareSessionTabs(page)
+
     if (scenario.review === "open") await openReviewPane(page)
+
     if (scenario.cache === "warm") {
       await switchSession(page, fixture.targetID, fixture.expected.targetTitle)
       await expectReadyTimeline(page, fixture.targetID)
       await switchSession(page, fixture.sourceID, fixture.expected.sourceTitle)
     }
+
     if (scenario.review === "resized") await openReviewPane(page)
     await expectReadyTimeline(page, fixture.sourceID)
     await benchmarkDiagnostics(page).startTrace()
@@ -43,7 +45,7 @@ scenarios.forEach((scenario) => {
       sourceIDs: messages[fixture.sourceID].map((message) => message.id),
       lastID: expected[fixture.targetID].lastID,
       requiredPartID: expected[fixture.targetID].answerID,
-      href: stressSessionHref(fixture.targetID),
+      href: sessionHref(fixture.targetID),
       switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
     })
 
@@ -71,6 +73,7 @@ scenarios.forEach((scenario) => {
         requireReadyAnswer: true,
       },
     )
+
     if (testInfo.repeatEachIndex === 0) {
       await page.screenshot({ path: testInfo.outputPath("destination.png") })
       await testInfo.attach("destination", { path: testInfo.outputPath("destination.png"), contentType: "image/png" })
@@ -83,8 +86,10 @@ async function prepareSessionTabs(page: Page) {
   page.on("request", (request) => {
     if (request.method() !== "GET") return
     const match = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)
+
     if (match) requests.push(decodeURIComponent(match[1]))
   })
+
   if (process.env.OPENCODE_PERFORMANCE_HTTP_FIXTURE !== "1")
     await mockOpenCodeServer(page, {
       sessions: fixture.sessions,
@@ -97,11 +102,12 @@ async function prepareSessionTabs(page: Page) {
     })
   await installTimelineSettings(page)
   await installStressSessionTabs(page)
-  await page.goto(stressSessionHref(fixture.sourceID))
+  await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await expectReadyTimeline(page, fixture.sourceID)
   await expect(page.locator(`[data-timeline-part-id="${expected[fixture.targetID].answerID}"]`)).toHaveCount(0)
   expect(requests).toEqual([fixture.sourceID])
+
   return requests
 }
 
@@ -120,7 +126,7 @@ async function expectReadyTimeline(page: Page, sessionID: string) {
 }
 
 async function switchSession(page: Page, sessionID: string, title: string) {
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(sessionID)}"]`)
+  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sessionID)}"]`)
   await expect(tab).toHaveCount(1)
   await tab.click()
   await expectSessionTitle(page, title)
@@ -131,6 +137,7 @@ async function openReviewPane(page: Page) {
   await expect(page.locator("#review-panel")).toBeVisible()
   await page.waitForFunction(() => {
     const text = document.querySelector("#review-panel")?.textContent ?? ""
+
     return text.includes("generated-000.ts") && text.includes("+3")
   })
   await page.locator('[data-slot="session-chat-panel"]').evaluate(async (panel) => {
@@ -140,8 +147,10 @@ async function openReviewPane(page: Page) {
 
 async function retainedRendererMemory(page: Page) {
   const cdp = await page.context().newCDPSession(page)
+
   try {
     await cdp.send("HeapProfiler.collectGarbage")
+
     return {
       heap: await cdp.send("Runtime.getHeapUsage"),
       dom: await cdp.send("Memory.getDOMCounters"),

@@ -1,7 +1,7 @@
 import { orthogonalPathPoints, translateDiagramBounds, type DiagramPoint } from "../core/geometry.js"
 import { SpatialIndex, spatialPathClaim, spatialRectClaim } from "../core/spatial.js"
 import { diagramTextWidth, measureDiagramTextBox, splitDiagramLines } from "../core/text.js"
-import { stateDiagramNoteConnector, type StateDiagramNoteConnector } from "./note.js"
+import type { StateDiagramNoteConnector } from "./note.js"
 import {
   createStateTransitionRenderPlans,
   hasReverseTransition,

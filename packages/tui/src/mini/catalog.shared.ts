@@ -110,6 +110,6 @@ export async function loadRunProviders(
   return runProviders([...providers.data], [...models.data])
 }
 
-function requestOptions(signal?: AbortSignal): [] | [{ signal: AbortSignal }] {
+export function requestOptions(signal?: AbortSignal): [] | [{ signal: AbortSignal }] {
   return signal ? [{ signal }] : []
 }

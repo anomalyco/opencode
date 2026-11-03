@@ -24,7 +24,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Think briefly, then reply exactly with: Hello!\"}]}],\"instructions\":\"Show concise reasoning when the provider supports visible reasoning summaries.\",\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"low\",\"summary\":\"auto\"},\"text\":{\"verbosity\":\"low\"},\"max_output_tokens\":120,\"stream\":true}"
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Think briefly, then reply exactly with: Hello!\"}]}],\"instructions\":\"Show concise reasoning when the provider supports visible reasoning summaries.\",\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"reasoning\":{\"effort\":\"low\",\"summary\":\"auto\"},\"max_output_tokens\":120,\"stream\":true}"
       },
       "response": {
         "status": 200,

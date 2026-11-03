@@ -7,7 +7,8 @@ import {
   type MockInput,
   type MockMouse,
 } from "@opentui/core/testing"
-import { Effect, Encoding, Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
 import { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
 import { SimulationSemantics } from "./semantics"
@@ -206,7 +207,7 @@ function captureImages(renderer: CliRenderer): SimulationProtocol.Frontend.Captu
         height: fitted.height,
         pixelWidth: raw.width,
         pixelHeight: raw.height,
-        rgba: Encoding.encodeBase64(rgba),
+        rgba: Base64.encode(rgba),
       }]
     } finally {
       extracted?.dispose()

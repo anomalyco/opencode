@@ -5,7 +5,12 @@ import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { createTimelineVirtualizer } from "../src/session/timeline/virtualizer"
 
-export function mountTimelineVirtualizer(input: { count: number; rowHeight: number; immediate?: boolean }) {
+export function mountTimelineVirtualizer(input: {
+  count: number
+  rowHeight: number
+  immediate?: boolean
+  viewportHeight?: number
+}) {
   const host = document.createElement("main")
   host.dataset.testid = "timeline-virtualizer-fixture"
   host.dataset.scrolls = "0"
@@ -14,22 +19,27 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
   document.body.appendChild(host)
 
   function Fixture() {
-    const [state, setState] = createStore({ pinned: true, ready: false })
+    const [state, setState] = createStore({ pinned: true, ready: false, grown: false })
+
     const rows = Array.from(
       { length: input.count },
       (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
     )
+
     const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))
     const indexes = new Map(rows.map((row, index) => [row.userMessageID, index]))
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
+    let scrollToEnd = () => {}
+
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
       projection: {
         rows: () => rows,
         rowByKey: () => rowByKey,
         activeMessageID: () => undefined,
+        messageByID: () => new Map(),
         messageRowIndex: () => indexes,
         messageLastRowIndex: () => indexes,
       },
@@ -41,9 +51,10 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         viewport = element
         resize.observe(element, { box: "border-box" })
       },
-      setContentRef: (element) => {
-        content = element
-        reveal.observe(element, { attributes: true, attributeFilter: ["style"] })
+      onContentResize: () => {
+        if (content) return
+        content = host.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
+        reveal.observe(content, { attributes: true, attributeFilter: ["style"] })
       },
       onPin: () => setState("pinned", true),
       onUnpin: () => setState("pinned", false),
@@ -56,12 +67,16 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
       onUserScroll: () => {},
       onHistoryScroll: () => {},
       canRenderImmediately: () => input.immediate ?? false,
+      setScrollToEnd: (fn) => {
+        scrollToEnd = fn
+      },
     })
 
     const resize = new ResizeObserver((entries) => {
       host.dataset.observedHeight = String(entries[0].borderBoxSize[0].blockSize)
       host.dataset.viewportResizes = String(Number(host.dataset.viewportResizes) + 1)
     })
+
     const reveal = new MutationObserver(() => {
       if (content.style.visibility === "hidden" || host.dataset.firstReveal) return
       // Capture the first reveal, not a later frame after geometry has recovered.
@@ -71,11 +86,14 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
         viewportHeight: viewport.clientHeight,
         scrollTop: viewport.scrollTop,
-        clipped: mounted
-          .filter((element) => element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1)
-          .map((element) => element.dataset.timelineKey),
+        clipped: mounted.flatMap((element) =>
+          element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1
+            ? [element.dataset.timelineKey]
+            : [],
+        ),
       })
     })
+
     onCleanup(() => {
       resize.disconnect()
       reveal.disconnect()
@@ -104,16 +122,23 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         >
           Reconnect ready rows
         </button>
-        <div ref={container} style={{ height: "180px", width: "400px" }}>
+        <button type="button" onClick={() => scrollToEnd()}>
+          Scroll to end
+        </button>
+        <button type="button" onClick={() => setState("grown", true)}>
+          Grow last row
+        </button>
+        <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
-            workspaceSession={() => false}
             deferred={() => false}
             renderRow={(row) => (
               <div
                 data-component="markdown"
                 data-markdown-ready={state.ready ? "" : undefined}
-                style={{ height: `${input.rowHeight}px` }}
+                style={{
+                  height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
+                }}
               >
                 {row().userMessageID}
               </div>

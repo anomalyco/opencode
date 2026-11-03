@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
-import { resolveThemeDocument } from "@opencode/theme/tui"
+import { resolveThemeDocument, type HueScale, type ResolvedTheme } from "@opencode/theme/tui"
 import { terminalPalette } from "../../src/component/terminal-pane"
 import { getOpenCodeTheme } from "../../src/theme"
 
 test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic colors", (mode) => {
   const theme = resolveThemeDocument(getOpenCodeTheme(), mode)
+  const hues = allHues(theme)
   const black = theme.hue.neutral[mode === "dark" ? 800 : 200]
   const white = theme.hue.neutral[mode === "dark" ? 200 : 800]
   const brightWhite = theme.hue.neutral[mode === "dark" ? 100 : 900]
@@ -12,8 +13,8 @@ test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic 
     theme.text.feedback.error.base,
     theme.text.feedback.success.base,
     theme.text.feedback.warning.base,
-    theme.hue.blue[200],
-    mode === "dark" ? theme.hue.purple[200] : theme.hue.accent[200],
+    hues.blue[200],
+    mode === "dark" ? hues.purple[200] : theme.hue.accent[200],
     theme.text.feedback.info.base,
     white,
   ]
@@ -38,9 +39,10 @@ test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic 
 
 test("falls back to accent when no hue is confidently blue or magenta", () => {
   const resolved = resolveThemeDocument(getOpenCodeTheme(), "dark")
+  const hues = allHues(resolved)
   const hue = {
-    ...Object.fromEntries(Object.keys(resolved.hue).map((name) => [name, resolved.hue.red])),
-    accent: resolved.hue.green,
+    ...Object.fromEntries(Object.keys(hues).map((name) => [name, hues.red])),
+    accent: hues.green,
   } as typeof resolved.hue
   const theme = { ...resolved, hue }
   const palette = [
@@ -59,4 +61,8 @@ function byte(value: number) {
 
 function hex(color: { toInts(): [number, number, number, number] }) {
   return `#${color.toInts().slice(0, 3).map(byte).join("")}`
+}
+
+function allHues(theme: ResolvedTheme) {
+  return theme.hue as typeof theme.hue & Readonly<Record<string, HueScale>>
 }

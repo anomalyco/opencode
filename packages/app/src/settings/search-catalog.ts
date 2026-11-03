@@ -12,7 +12,7 @@ type Entry<Tab> = {
   description?: Label
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  available?: "desktop" | "browser" | "dev" | "mobile-dev"
+  available?: "desktop" | "browser" | "mobile"
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -20,23 +20,15 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
-  {
-    tab: "pairing",
-    label: "settings.pairing.title",
-    keywords: "pair device qr local",
-    available: "desktop",
-  },
-  {
-    tab: "pairing",
-    label: "pair.screenActive.title",
-    description: "pair.screenActive.description",
-    target: "settings-keep-screen-active",
-    keywords: "display sleep awake local",
-    available: "desktop",
-  },
-  { tab: "experimental", label: "settings.tab.experimental" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
+  { tab: "experimental", label: "settings.tab.experimental", keywords: "experiments preview beta" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
+  {
+    tab: "general",
+    label: "settings.general.row.interfaceMode.title",
+    target: "settings-tab-layout",
+    keywords: "top side tabs inbox sidebar mode layout vertical horizontal focus pro",
+  },
   {
     tab: "general",
     label: "settings.workspaces.default.title",
@@ -48,13 +40,8 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "general",
     label: "command.permissions.autoaccept.enable",
     target: "settings-auto-accept-permissions",
-    keywords: "permissions approve allow auto accept",
-  },
-  {
-    tab: "general",
-    label: "settings.general.row.terminalPlacement.title",
-    target: "settings-terminal-placement",
-    keywords: "terminal side bottom position",
+    description: "settings.permissions.autoAccept.default.description",
+    keywords: "permissions approve allow auto accept default",
   },
   {
     tab: "general",
@@ -70,15 +57,16 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
-    label: "session.review.wrapLines",
-    target: "settings-mobile-diff-wrap",
-    keywords: "diff wrap lines",
+    label: "settings.general.row.spellcheck.title",
+    target: "settings-spellcheck",
+    keywords: "spelling spell check dictionary",
+    available: "desktop",
   },
   {
     tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
-    available: "mobile-dev",
+    available: "mobile",
   },
   {
     tab: "general",
@@ -89,23 +77,53 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
-    label: "settings.general.row.releaseNotes.title",
-    target: "settings-release-notes",
-    section: "settings.general.section.updates",
-    available: "desktop",
+    label: "settings.timeline.row.backgroundActivity.title",
+    description: "settings.timeline.row.backgroundActivity.description",
+    target: "settings-background-activity",
+    section: "settings.timeline.title",
+    keywords: "capsule panel subagent shell background activity position alignment hidden left center right",
   },
   {
     tab: "general",
-    label: "settings.updates.row.check.title",
-    target: "settings-check-updates",
-    section: "settings.general.section.updates",
-    available: "desktop",
+    label: "settings.timeline.row.width.title",
+    description: "settings.timeline.row.width.description",
+    target: "settings-timeline-width",
+    section: "settings.timeline.title",
+    keywords: "column line length measure narrow focused comfortable wide readability",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.turnDiffs.title",
+    description: "settings.timeline.row.turnDiffs.description",
+    target: "settings-show-turn-diffs",
+    section: "settings.timeline.title",
   },
   {
     tab: "general",
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newIcons.title",
+    target: "settings-new-icons",
+    description: "settings.experimental.row.newIcons.description",
+    keywords: "icons iconography glyphs redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.foldUserMessages.title",
+    target: "settings-fold-user-messages",
+    description: "settings.experimental.row.foldUserMessages.description",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newQuestionUI.title",
+    target: "settings-new-question-ui",
+    description: "settings.experimental.row.newQuestionUI.description",
+    keywords: "question answers keyboard dock redesign",
   },
   {
     tab: "appearance",
@@ -133,6 +151,19 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "terminal typeface",
   },
   {
+    tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
+    label: "settings.appearance.row.reduceMotion.title",
+    target: "settings-reduce-motion",
+    keywords: "animation accessibility",
+  },
+  {
     tab: "notifications",
     label: "settings.general.notifications.agent.title",
     target: "settings-notifications-agent",
@@ -147,6 +178,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.notifications",
     description: "settings.general.notifications.permissions.description",
     keywords: "desktop notifications permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
   },
   {
     tab: "notifications",
@@ -174,6 +213,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.sounds.errors.title",
     target: "settings-sounds-errors",
     section: "settings.general.section.sounds",
@@ -181,27 +228,17 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "sound audio errors",
   },
   {
-    tab: "experimental",
-    label: "settings.general.row.browserPane.title",
-    target: "settings-experimental-browser",
-    available: "browser",
-  },
-  {
-    tab: "experimental",
-    label: "settings.appearance.row.tabs.title",
-    target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
-  },
-  { tab: "experimental", label: "settings.appearance.row.projectName.title", target: "settings-show-project-name" },
-  {
-    tab: "experimental",
-    label: "settings.general.row.showProjectIcon.title",
-    target: "settings-show-project-icon",
-    available: "dev",
+    tab: "notifications",
+    label: "settings.general.sounds.interface.title",
+    target: "settings-sounds-interface",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.interface.description",
+    keywords: "sound audio interface effects wordmark logo",
   },
 ]
 
-export const serverSettings: Entry<SettingsServerTab>[] = [
+// Pages showing the selected server, and rows of its card on the Servers page.
+export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
   { tab: "projects", label: "settings.tab.projects" },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "providers", label: "settings.providers.title", keywords: "connect api key credentials" },
@@ -213,21 +250,19 @@ export const serverSettings: Entry<SettingsServerTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "status.popover.tab.plugins" },
+  {
+    tab: "extensions",
+    subtab: "plugins",
+    label: "settings.extensions.tab.plugins",
+    keywords: "extension gui built-in",
+  },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
-    tab: "general",
+    tab: "servers",
     label: "settings.general.row.shell.title",
     target: "settings-shell",
     description: "settings.general.row.shell.description",
     keywords: "bash zsh powershell",
-  },
-  {
-    tab: "general",
-    label: "settings.server.preferences.websearch.title",
-    target: "settings-websearch",
-    description: "settings.server.preferences.websearch.description",
-    keywords: "web search provider",
   },
 ]
 
@@ -235,6 +270,12 @@ export const projectSettings: Entry<SettingsProjectTab>[] = [
   { tab: "general", label: "project.settings.name.title", target: "settings-project-name", keywords: "rename" },
   { tab: "general", label: "dialog.project.edit.icon", target: "settings-project-icon" },
   { tab: "general", label: "dialog.project.edit.color", target: "settings-project-color" },
+  {
+    tab: "general",
+    label: "command.permissions.autoaccept.enable",
+    target: "settings-project-auto-accept-permissions",
+    keywords: "permissions approve allow auto accept",
+  },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "extensions", label: "settings.tab.extensions" },
   {
@@ -243,7 +284,7 @@ export const projectSettings: Entry<SettingsProjectTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "status.popover.tab.plugins" },
+  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   { tab: "extensions", subtab: "lsps", label: "project.settings.extensions.tab.lsps", keywords: "language servers" },
 ]

@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { inputTypeScript, jsonSchemaToTypeScript, outputTypeScript } from "../src/tool-schema.js"
+import {
+  decodeInput,
+  inputProperties,
+  inputTypeScript,
+  jsonSchemaToTypeScript,
+  outputTypeScript,
+} from "../src/tool-schema.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.
@@ -525,6 +531,34 @@ describe("pretty signature rendering", () => {
 })
 
 describe("JSON Schema definition scope", () => {
+  test.each(["Lookup Input", "café", "A/B~C% D#E"])(
+    "resolves Effect definition %s in signatures and input metadata",
+    (identifier) => {
+      const tool = Tool.make({
+        description: "Named tool",
+        input: Schema.Struct({ city: Schema.String }).annotate({ identifier }),
+        output: Schema.Struct({ city: Schema.String }).annotate({ identifier }),
+        execute: (input) => Effect.succeed(input),
+      })
+      expect(inputTypeScript(tool)).toBe("{ city: string }")
+      expect(outputTypeScript(tool)).toBe("{ city: string }")
+      expect(inputProperties(tool)).toEqual([{ name: "city", description: undefined, required: true }])
+    },
+  )
+
+  test.each(["#/$defs/%", "#/$defs/A~2B", "#/$defs/Missing", "#/$defs/Loop", "https://example.test/schema"])(
+    "keeps malformed, unresolved, and recursive reference %s unknown",
+    ($ref) => {
+      const tool = Tool.make({
+        description: "Unresolved tool",
+        input: { $ref, $defs: { Loop: { $ref: "#/$defs/Loop" } } },
+        execute: () => Effect.succeed(null),
+      })
+      expect(inputTypeScript(tool)).toBe("unknown")
+      expect(inputProperties(tool)).toEqual([])
+    },
+  )
+
   test.each(["definitions", "$defs"])("resolves root %s and lets $defs take precedence", (key) => {
     const schema = { $ref: `#/${key}/Value`, [key]: { Value: { type: "string" } } }
     expect(jsonSchemaToTypeScript(schema)).toBe("string")
@@ -612,14 +646,102 @@ describe("non-identifier property names render as quoted keys", () => {
       input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
       execute: () => Effect.succeed(null),
     })
-    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number | "Infinity" | "-Infinity" | "NaN" }')
-    expect(inputTypeScript(tool, true)).toBe(
-      ["{", '  "foo-bar": string,', '  plain?: number | "Infinity" | "-Infinity" | "NaN",', "}"].join("\n"),
-    )
+    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
+    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
   })
 })
 
 describe("union schemas render every alternative", () => {
+  test("Effect numbers advertise the numeric values accepted by the input decoder", () => {
+    const tool = Tool.make({
+      description: "Numeric tool",
+      input: Schema.Struct({ amount: Schema.Number }),
+      output: Schema.Number,
+      execute: (input) => Effect.succeed(input.amount),
+    })
+    expect(inputTypeScript(tool)).toBe("{ amount: number }")
+    expect(inputTypeScript(tool, true)).toBe("{\n  amount: number,\n}")
+    expect(outputTypeScript(tool)).toBe("number")
+    expect(outputTypeScript(tool, true)).toBe("number")
+    expect(decodeInput(tool, { amount: 42 })).toEqual({ amount: 42 })
+    for (const amount of ["NaN", "Infinity", "-Infinity"]) {
+      expect(() => decodeInput(tool, { amount })).toThrow("Expected number")
+    }
+  })
+
+  test("Effect number encodings render as number wherever they appear", () => {
+    const Amount = Schema.Number.annotate({ identifier: "Amount" })
+    const schema = Schema.Struct({
+      plain: Schema.Number,
+      count: Schema.Int,
+      bounded: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
+      positive: Schema.Number.check(Schema.isGreaterThan(0)),
+      maybe: Schema.optionalKey(Schema.Number),
+      nullable: Schema.NullOr(Schema.Number),
+      list: Schema.Array(Schema.Number),
+      scores: Schema.Record(Schema.String, Schema.Number),
+      nested: Schema.Struct({ first: Amount, second: Amount }),
+    })
+    const tool = Tool.make({ description: "Numbers", input: schema, output: schema, execute: Effect.succeed })
+    const compact = [
+      "{ plain: number",
+      "count: number",
+      "bounded: number",
+      "positive: number",
+      "maybe?: number",
+      "nullable: number | null",
+      "list: Array<number>",
+      "scores: { [key: string]: number }",
+      "nested: { first: number; second: number } }",
+    ].join("; ")
+    expect(inputTypeScript(tool)).toBe(compact)
+    expect(outputTypeScript(tool)).toBe(compact)
+    for (const rendered of [inputTypeScript(tool, true), outputTypeScript(tool, true)]) {
+      expect(rendered).toContain("  /** @integer */\n  count: number,")
+      expect(rendered).toContain("  /** @integer @minimum 1 @maximum 10 */\n  bounded: number,")
+      expect(rendered).not.toContain("Infinity")
+    }
+    const named = Tool.make({ description: "n", input: Amount, output: Amount, execute: Effect.succeed })
+    expect(inputTypeScript(named)).toBe("number")
+    expect(outputTypeScript(named)).toBe("number")
+  })
+
+  test("strings that only spell non-finite numbers render as number", () => {
+    const literals = ["NaN", "Infinity", "-Infinity"] as const
+    const union = Schema.Union([Schema.Finite, Schema.Literals(literals)])
+    const tool = Tool.make({ description: "n", input: union, output: union, execute: Effect.succeed })
+    expect(inputTypeScript(tool)).toBe("number")
+    expect(outputTypeScript(tool)).toBe("number")
+    // The signature only narrows what the model is told; the strings still decode.
+    for (const value of literals) expect(decodeInput(tool, value)).toBe(value)
+
+    expect(jsonSchemaToTypeScript({ anyOf: [{ type: "number" }, { type: "string", enum: [...literals] }] })).toBe(
+      "number",
+    )
+    expect(
+      jsonSchemaToTypeScript({
+        anyOf: [{ type: "number" }, ...literals.map((value) => ({ type: "string", enum: [value] }))],
+      }),
+    ).toBe("number")
+  })
+
+  test("keeps string enums with other values alongside numbers", () => {
+    expect(
+      jsonSchemaToTypeScript({
+        anyOf: [{ type: "number" }, { type: "string", enum: ["NaN", "Infinity", "unknown"] }],
+      }),
+    ).toBe('number | "NaN" | "Infinity" | "unknown"')
+    const tool = Tool.make({
+      description: "Number or status",
+      input: Schema.Union([Schema.Number, Schema.Literal("unknown")]),
+      output: Schema.Union([Schema.Number, Schema.Literal("unknown")]),
+      execute: (input) => Effect.succeed(input),
+    })
+    expect(inputTypeScript(tool)).toContain('"unknown"')
+    expect(outputTypeScript(tool)).toContain('"unknown"')
+    expect(decodeInput(tool, "unknown")).toBe("unknown")
+  })
+
   test("anyOf with a number branch keeps sibling alternatives", () => {
     const schema = {
       anyOf: [{ type: "string" }, { type: "number" }],
@@ -703,7 +825,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
       source: "Effect",
       schema: Schema.Struct({
         count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(10)),
-        name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/)),
+        name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/u)),
         labels: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(
           Schema.isMinLength(1),
           Schema.isMaxLength(5),
@@ -804,6 +926,128 @@ describe("JSDoc signatures in catalogs and search results", () => {
     expect(catalog.map(({ signature }) => signature)).toContain(github.signature)
     expect(catalog.map(({ signature }) => signature)).toContain(orders.signature)
     expect(github.signature).toContain("/** Repository owner */")
+  })
+})
+
+describe("empty input signatures agree with decoding", () => {
+  test.each([
+    { name: "a plain empty struct", input: Schema.Struct({}) },
+    {
+      name: "an annotated empty struct",
+      input: Schema.Struct({}).annotate({ identifier: "Empty", description: "No input" }),
+    },
+    { name: "a checked empty struct", input: Schema.Struct({}).check(Schema.makeFilter(() => true)) },
+    {
+      name: "an empty encoded struct transformed to a non-empty struct",
+      input: Schema.Struct({}).pipe(
+        Schema.decodeTo(Schema.Struct({ token: Schema.String }), {
+          decode: SchemaGetter.transform(() => ({ token: "x" })),
+          encode: SchemaGetter.transform(() => ({})),
+        }),
+      ),
+    },
+    { name: "a raw JSON Schema empty object", input: { type: "object", properties: {} } },
+  ])("$name advertises () and runs with zero arguments", async ({ input }) => {
+    const runtime = CodeMode.make({
+      tools: {
+        ping: Tool.make({ description: "Ping", input, output: Schema.String, execute: () => Effect.succeed("pong") }),
+      },
+    })
+    const signature = "tools.ping(): Promise<string>"
+    expect(runtime.catalog[0]?.signature).toBe(signature)
+    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.ping" })'))
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("search failed")
+    expect(result.value).toMatchObject({ items: [{ signature }] })
+    expect(await Effect.runPromise(runtime.execute("return await tools.ping()"))).toMatchObject({
+      ok: true,
+      value: "pong",
+    })
+  })
+
+  test.each([
+    { name: "a record of JSON values", input: Schema.Record(Schema.String, Schema.Json), call: "{ a: 1 }" },
+    { name: "a record of unknown values", input: Schema.Record(Schema.String, Schema.Unknown), call: "{ a: 1 }" },
+    {
+      name: "a pattern-keyed record",
+      input: Schema.Record(Schema.TemplateLiteral(["x-", Schema.String]), Schema.String),
+      call: '{ "x-a": "1" }',
+    },
+    { name: "a constrained empty struct", input: Schema.Struct({}).check(Schema.isMinProperties(1)), call: "{ a: 1 }" },
+  ])("$name is not advertised as a zero-argument call", async ({ input, call }) => {
+    const runtime = CodeMode.make({
+      tools: {
+        take: Tool.make({ description: "Take", input, output: Schema.String, execute: () => Effect.succeed("taken") }),
+      },
+    })
+    expect(runtime.catalog[0]?.signature).not.toBe("tools.take(): Promise<string>")
+    expect(await Effect.runPromise(runtime.execute(`return await tools.take(${call})`))).toMatchObject({
+      ok: true,
+      value: "taken",
+    })
+  })
+
+  test("a required encoded input transformed to an empty struct keeps its required fields", async () => {
+    const consume = Tool.make({
+      description: "Consume token",
+      input: Schema.Struct({ token: Schema.String }).pipe(
+        Schema.decodeTo(Schema.Struct({}), {
+          decode: SchemaGetter.transform(() => ({})),
+          encode: SchemaGetter.transform(() => ({ token: "x" })),
+        }),
+      ),
+      output: Schema.String,
+      execute: () => Effect.succeed("consumed"),
+    })
+    const runtime = CodeMode.make({ tools: { consume } })
+    const signature = "tools.consume({\n  token: string,\n}): Promise<string>"
+    expect(() => decodeInput(consume, {})).toThrow()
+    expect(runtime.catalog[0]?.signature).toBe(signature)
+    const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.consume" })'))
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("search failed")
+    expect(result.value).toMatchObject({ items: [{ signature }] })
+    expect(await Effect.runPromise(runtime.execute("return await tools.consume()"))).toMatchObject({
+      ok: false,
+      error: { kind: "InvalidToolInput" },
+    })
+    expect(await Effect.runPromise(runtime.execute('return await tools.consume({ token: "t" })'))).toMatchObject({
+      ok: true,
+      value: "consumed",
+    })
+  })
+})
+
+describe("empty object signatures", () => {
+  const output = (schema: Schema.Decoder<unknown>) =>
+    Tool.make({ description: "Inspect", input: Schema.Struct({}), output: schema, execute: () => Effect.succeed({}) })
+
+  test("an empty struct output renders as {}", () => {
+    const tool = output(Schema.Struct({}))
+    expect(outputTypeScript(tool)).toBe("{}")
+    expect(outputTypeScript(tool, true)).toBe("{}")
+    expect(CodeMode.make({ tools: { inspect: tool } }).catalog[0]?.signature).toBe("tools.inspect(): Promise<{}>")
+  })
+
+  test("nested empty structs render as {}", () => {
+    const tool = output(
+      Schema.Struct({
+        meta: Schema.Struct({}),
+        extra: Schema.optionalKey(Schema.Struct({}).annotate({ description: "Extra data" })),
+      }),
+    )
+    expect(outputTypeScript(tool)).toBe("{ meta: {}; extra?: {} }")
+    expect(outputTypeScript(tool, true)).toBe(
+      ["{", "  meta: {},", "  /** Extra data */", "  extra?: {},", "}"].join("\n"),
+    )
+  })
+
+  test("raw schemas render only the exact empty-struct shapes as {}", () => {
+    expect(jsonSchemaToTypeScript({ not: { type: "null" } })).toBe("{}")
+    expect(jsonSchemaToTypeScript({ anyOf: [{ type: "object" }, { type: "array" }] })).toBe("{}")
+    expect(jsonSchemaToTypeScript({ type: "string", not: { type: "null" } })).toBe("string")
+    expect(jsonSchemaToTypeScript({ not: { type: "string" } })).toBe("unknown")
+    expect(jsonSchemaToTypeScript({ not: { type: "null", description: "Not null" } })).toBe("unknown")
   })
 })
 

@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 import { dialogWidth } from "../../../src/ui/dialog"
 import {
   dialogSelectContentWidth,
@@ -12,6 +12,8 @@ import {
   type DialogSelectProps,
 } from "../../../src/ui/dialog-select"
 import { truncateFilePath } from "../../../src/ui/file-path"
+import { getOpenCodeTheme } from "../../../src/theme"
+import { resolveThemeDocument } from "@opencode/theme/tui"
 import { stringWidth } from "../../../src/util/string-width"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -23,10 +25,11 @@ async function renderSelect(
   onGlobal: () => void,
   onRow: (option: DialogSelectOption<string>) => void,
   current?: string,
+  settings: Parameters<typeof createTuiResolvedConfig>[0] = {},
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
-  const config = createTuiResolvedConfig()
+  const config = createTuiResolvedConfig(settings)
   const [{ ConfigProvider }, { ThemeProvider }, { Keymap }, { DialogProvider }, { DialogSelect }, { ToastProvider }] =
     await Promise.all([
       import("../../../src/config"),
@@ -91,7 +94,10 @@ async function mountSelect<T>(
   initial: DialogSelectOption<T>[],
   current?: T,
   focusCurrent?: boolean,
-  select?: Pick<DialogSelectProps<T>, "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget">,
+  select?: Pick<
+    DialogSelectProps<T>,
+    "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget" | "search"
+  >,
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -372,6 +378,30 @@ test("dialog actions run without options while row actions still require a selec
   }
 })
 
+test("matches the search cursor to the highlighted row until text is typed under new designs", async () => {
+  await using tmp = await tmpdir()
+  const theme = resolveThemeDocument(getOpenCodeTheme(), "dark")
+  const app = await renderSelect(
+    tmp.path,
+    [{ title: "First", value: "first" }],
+    () => {},
+    () => {},
+    undefined,
+    { experimental: { "new-designs": true } },
+  )
+
+  try {
+    await app.waitFor(() => app.renderer.getCursorState().visible)
+    expect(app.renderer.getCursorState().color.toInts()).toEqual(theme.background.action.primary.focused.toInts())
+
+    await app.mockInput.typeText("f")
+    await app.waitFor(() => app.renderer.getCursorState().color.equals(theme.text.base))
+    expect(app.renderer.getCursorState().color.toInts()).toEqual(theme.text.base.toInts())
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("renders one gap before an empty state", async () => {
   await using tmp = await tmpdir()
   const app = await renderSelect(
@@ -409,8 +439,9 @@ test("footer actions run when filtering leaves no selected row", async () => {
     await app.waitForFrame((frame) => frame.includes("No results found"))
 
     app.mockInput.pressKey("d", { ctrl: true })
-    app.mockInput.pressTab()
-    app.mockInput.pressEnter()
+    const frame = app.captureCharFrame().split("\n")
+    const row = frame.findIndex((line) => line.includes("new ctrl+a"))
+    await app.mockMouse.click(frame[row]!.indexOf("new ctrl+a") + 1, row)
 
     expect(global).toBe(1)
     expect(rows).toEqual([])
@@ -522,6 +553,27 @@ test("keeps the current option selected when options reorder", async () => {
   }
 })
 
+test("custom search follows a current change batched with reordered results", async () => {
+  await using tmp = await tmpdir()
+  const options = ["alpha", "beta", "gamma"].map((value) => ({ title: value, value }))
+  const [results, setResults] = createSignal(options)
+  const select = await mountSelect(tmp.path, options, "alpha", undefined, { search: () => results() })
+
+  try {
+    batch(() => {
+      select.replaceCurrent("gamma")
+      setResults(options.toReversed())
+    })
+    await select.app.waitForFrame((frame) => frame.indexOf("gamma") < frame.indexOf("alpha"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["gamma"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
 test.each([false, 0, "", null, "current", undefined])("focuses current %p when it changes", async (current) => {
   await using tmp = await tmpdir()
   const select = await mountSelect<string | typeof current>(
@@ -597,6 +649,27 @@ test("shows no-match and still closes after a flat filter goes empty", async () 
 
     select.app.mockInput.pressEscape()
     await select.app.waitForFrame((frame) => !frame.includes("Mutable options") && !frame.includes("No results found"))
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("dialog rows do not add renderer resize listeners", async () => {
+  await using tmp = await tmpdir()
+  const options = ["first", "second", "third"].map((value) => ({ title: value, value }))
+  const select = await mountSelect(tmp.path, options)
+
+  try {
+    const count = () =>
+      (select.app.renderer as unknown as { listenerCount(event: string): number }).listenerCount("resize")
+    const before = count()
+    // Mounting 30 rows must not add one resize listener per row (Node warns
+    // past 10 listeners on one emitter).
+    select.replaceOptions(
+      Array.from({ length: 30 }, (_, index) => ({ title: `Item ${index}`, value: `item-${index}` })),
+    )
+    await select.app.waitForVisualIdle()
+    expect(count()).toBe(before)
   } finally {
     select.app.renderer.destroy()
   }

@@ -1,17 +1,19 @@
 import { describe, expect } from "bun:test"
-import { LLM, LanguageModel, Message } from "@opencode/ai"
+import { ai, LanguageModel, Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
-import { compileRequest } from "@opencode/ai/route/client"
+import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
+import { withEnv } from "./fixture/env"
 import { it } from "./lib/effect"
 
 interface ModelOptions {
@@ -53,27 +55,6 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     modelID: info.modelID,
   })
   return Info.make(info)
-}
-
-function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
-      Object.entries(variables).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
 }
 
 function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effect.Effect<A, E, R>) {
@@ -165,7 +146,7 @@ describe("ModelResolver", () => {
         expect(String(selected.provider)).toBe(providerID)
         expect(selected.route.id).toBe(route)
         expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
-        const prepared = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
+        const prepared = yield* compileRequest(ai.request({ model: selected, prompt: "Hello" }))
         expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
         expect(prepared.body).not.toHaveProperty("apiKey")
       }
@@ -241,6 +222,24 @@ describe("ModelResolver", () => {
     ),
   )
 
+  it.effect("fills Mantle catalog URLs from the provider region", () =>
+    withEnv({ AWS_REGION: undefined, AWS_DEFAULT_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          providerID: Provider.ID.amazonBedrock,
+          modelID: "openai.gpt-5.5",
+          settings: { baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1" },
+        })
+        const resolved = yield* ModelResolver.fromCatalogModel({
+          ...catalog,
+          settings: Provider.mergeOverlay({ region: "us-west-2" }, catalog.settings),
+        })
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+      }),
+    ),
+  )
+
   it.effect("prefers the configured Mantle region over the environment", () =>
     withEnv({ AWS_REGION: "us-east-1" }, () =>
       Effect.gen(function* () {
@@ -281,7 +280,7 @@ describe("ModelResolver", () => {
           http: { body: { custom_extension: { enabled: true } } },
         },
       })
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body.max_output_tokens).toBeUndefined()
       expect(JSON.stringify(prepared.body)).not.toContain("max_output_tokens")
     }),
@@ -294,7 +293,7 @@ describe("ModelResolver", () => {
           settings: { apiKey: "secret", baseURL: "https://openai.example/v1" },
         }),
       )
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
 
       expect(JSON.stringify(prepared.body)).not.toContain("apiKey")
       expect(JSON.stringify(prepared.body)).not.toContain("secret")
@@ -310,7 +309,7 @@ describe("ModelResolver", () => {
           }),
         )
         const headers = yield* resolved.route.auth.apply({
-          request: LLM.request({ model: resolved, prompt: "Hello" }),
+          request: ai.request({ model: resolved, prompt: "Hello" }),
           method: "POST",
           url: "https://openai.example/v1/responses",
           body: "{}",
@@ -371,9 +370,11 @@ describe("ModelResolver", () => {
         },
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        external: () => Effect.die("unused"),
         activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
       },
       oauth: {
         connect: () => Effect.die("unused"),
@@ -407,7 +408,7 @@ describe("ModelResolver", () => {
           Effect.gen(function* () {
             const resolved = yield* resolver.resolveModel(selection)
             const headers = yield* resolved.model.route.auth.apply({
-              request: LLM.request({ model: resolved.model, prompt: "Hello" }),
+              request: ai.request({ model: resolved.model, prompt: "Hello" }),
               method: "POST",
               url: resolved.model.route.endpoint.baseURL ?? "",
               body: "{}",
@@ -436,7 +437,7 @@ describe("ModelResolver", () => {
         )
         const exit = yield* Effect.exit(
           resolved.route.auth.apply({
-            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
             url: "https://google.example.com/v1",
             body: "{}",
@@ -470,7 +471,7 @@ describe("ModelResolver", () => {
           body: {},
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
+      const request = ai.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
       const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
@@ -572,11 +573,34 @@ describe("ModelResolver", () => {
         reasoningSummary: "auto",
         include: ["reasoning.encrypted_content"],
       })
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body).toMatchObject({
         include: ["reasoning.encrypted_content"],
         reasoning: { effort: "xhigh", summary: "auto" },
       })
+    }),
+  )
+
+  it.effect("sends xAI Responses effort variants with reasoning summaries", () =>
+    Effect.gen(function* () {
+      const base = model("@opencode/ai/providers/xai", { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, [{ type: "effort", values: ["low", "high"] }]),
+      })
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("high"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.route.id).toBe("xai-responses")
+      expect(prepared.body).toMatchObject({
+        reasoning: { effort: "high", summary: "auto" },
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(prepared.body).not.toHaveProperty("reasoning_effort")
     }),
   )
 
@@ -670,7 +694,7 @@ describe("ModelResolver", () => {
         }),
         Credential.Key.make({ type: "key", key: "secret" }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = ai.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -685,7 +709,7 @@ describe("ModelResolver", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
+      const credential = Credential.Key.make({ type: "key", key: "stored-secret" })
       const resolved = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/openai"), {
           settings: { apiKey: "configured-secret", baseURL: "https://openai.example/v1" },
@@ -695,7 +719,7 @@ describe("ModelResolver", () => {
         credential,
       )
       const headers = yield* resolved.route.auth.apply({
-        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        request: ai.request({ model: resolved, prompt: "Hello" }),
         method: "POST",
         url: "https://openai.example/v1/responses",
         body: "{}",
@@ -703,7 +727,79 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer stored-secret")
-      expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+    }),
+  )
+
+  it.effect("lets Azure CLI requests past package auth for the Azure plugin to authorize", () =>
+    withConfigEnv({}, () =>
+      Effect.gen(function* () {
+        const credential = Credential.External.make({
+          type: "external",
+          methodID: Integration.MethodID.make("azure-cli"),
+          metadata: { resourceName: "cli-resource" },
+        })
+        // The Azure plugin projects the credential's resource into provider settings.
+        const azure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/azure"), {
+            providerID: Provider.ID.azure,
+            settings: { resourceName: "cli-resource" },
+            headers: {},
+            body: {},
+          }),
+          credential,
+        )
+        const foundry = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/anthropic"), {
+            providerID: Provider.ID.azure,
+            settings: { baseURL: "https://cli-resource.services.ai.azure.com/anthropic/v1" },
+            headers: {},
+            body: {},
+          }),
+          credential,
+        )
+        const authorize = (resolved: LanguageModel) =>
+          resolved.route.auth.apply({
+            request: ai.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url: "https://cli-resource.openai.azure.com/openai/v1/responses",
+            body: "{}",
+            headers: Headers.empty,
+          })
+
+        expect(azure.route.endpoint.baseURL).toBe("https://cli-resource.openai.azure.com/openai/v1")
+        expect((yield* authorize(azure))["api-key"]).toBe("azure-cli")
+        expect((yield* authorize(foundry)).authorization).toBe("Bearer azure-cli")
+      }),
+    ),
+  )
+
+  it.effect("does not project API key metadata into settings or the request body", () =>
+    Effect.gen(function* () {
+      // V1 auth.json stored connect-form answers as API key metadata, and the legacy import preserves them there.
+      const failure = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "responses-deployment",
+          settings: { apiVersion: "2025-01-01-preview" },
+          headers: {},
+          body: {},
+        }),
+        Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "migrated-resource" } }),
+      ).pipe(Effect.flip)
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "responses-deployment",
+          settings: { apiVersion: "2025-01-01-preview", resourceName: "configured-resource" },
+          headers: {},
+          body: {},
+        }),
+        Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "migrated-resource" } }),
+      )
+
+      expect(failure).toBeInstanceOf(ModelResolver.ModelConfigurationError)
+      expect(resolved.route.endpoint.baseURL).toBe("https://configured-resource.openai.azure.com/openai/v1")
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 
@@ -746,7 +842,7 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({
+      const request = ai.request({
         model: resolved,
         system: [
           { type: "text", text: "Base instructions." },
@@ -832,7 +928,7 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = ai.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -883,7 +979,7 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("maps OAuth credentials to native provider auth settings", () =>
+  it.effect("maps OAuth credentials to native provider auth settings without their metadata", () =>
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/openai"), {
@@ -896,10 +992,12 @@ describe("ModelResolver", () => {
         access: "oauth-token",
         refresh: "refresh",
         expires: Date.now() + 60_000,
+        metadata: { server: "https://console.example", orgID: "org_123", orgName: "Acme" },
       })
       const packages = [
         ["@opencode/ai/providers/google-vertex", "accessToken"],
         ["@opencode/ai/providers/google-vertex/gemini", "accessToken"],
+        ["@opencode/ai/providers/google-vertex/interactions", "accessToken"],
         ["@opencode/ai/providers/google-vertex/chat", "accessToken"],
         ["@opencode/ai/providers/google-vertex/responses", "accessToken"],
         ["@opencode/ai/providers/google-vertex/messages", "accessToken"],
@@ -914,6 +1012,9 @@ describe("ModelResolver", () => {
               model: (modelID, settings) => {
                 expect(settings).toMatchObject({ [key]: "oauth-token" })
                 expect(settings).not.toHaveProperty("apiKey")
+                expect(settings).not.toHaveProperty("server")
+                expect(settings).not.toHaveProperty("orgID")
+                expect(settings).not.toHaveProperty("orgName")
                 return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
               },
             }),
@@ -1067,6 +1168,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/openai-compatible", "@opencode/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
+        ["@ai-sdk/gateway", "@opencode/ai/providers/vercel-ai-gateway", "openai/gpt-5.4"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
         ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const
@@ -1249,12 +1351,9 @@ describe("ModelResolver", () => {
       const workers = yield* ModelResolver.fromCatalogModel(
         model("@opencode/ai/providers/cloudflare-workers-ai", {
           modelID: "@cf/meta/llama-3.1-8b-instruct",
+          settings: { accountId: "account" },
         }),
-        Credential.Key.make({
-          type: "key",
-          key: "workers-secret",
-          configuration: { accountId: "account" },
-        }),
+        Credential.Key.make({ type: "key", key: "workers-secret" }),
       )
 
       expect(google.route.id).toBe("gemini")
@@ -1282,7 +1381,7 @@ describe("ModelResolver", () => {
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.id).toBe("xai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
@@ -1305,8 +1404,8 @@ describe("ModelResolver", () => {
         }),
       )
       const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          modelID: "cohere-api-model",
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          modelID: "perplexity-api-model",
           settings: { project: "test" },
           headers: { "x-aisdk": "header" },
           body: { custom: true },
@@ -1314,20 +1413,21 @@ describe("ModelResolver", () => {
         Credential.Key.make({
           type: "key",
           key: "fallback-secret",
-          configuration: { accountId: "account" },
+          metadata: { accountId: "account" },
         }),
         {
           loadAISDK: (runtime) =>
             Effect.sync(() => {
               expect(runtime).toMatchObject({
                 id: "test-model",
-                modelID: "cohere-api-model",
+                modelID: "perplexity-api-model",
                 providerID: "test-provider",
-                package: Provider.aisdk("@ai-sdk/cohere"),
-                settings: { project: "test", apiKey: "fallback-secret", accountId: "account" },
+                package: Provider.aisdk("@ai-sdk/perplexity"),
+                settings: { project: "test", apiKey: "fallback-secret" },
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
               })
+              expect(runtime.settings).not.toHaveProperty("accountId")
               return LanguageModel.make({
                 id: runtime.modelID ?? runtime.id,
                 provider: runtime.providerID,
@@ -1337,7 +1437,7 @@ describe("ModelResolver", () => {
         },
       )
 
-      expect(resolved).toMatchObject({ id: "cohere-api-model", provider: "test-provider" })
+      expect(resolved).toMatchObject({ id: "perplexity-api-model", provider: "test-provider" })
     }),
   )
 
@@ -1345,7 +1445,7 @@ describe("ModelResolver", () => {
     withEnv({ REQUIRED_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${REQUIRED_HOST}/v1" },
           }),
           undefined,
@@ -1364,7 +1464,7 @@ describe("ModelResolver", () => {
     withEnv({ PROVIDER_HOST: "${MISSING_HOST}", MISSING_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${PROVIDER_HOST}/v1" },
           }),
           undefined,
@@ -1401,8 +1501,8 @@ describe("ModelResolver", () => {
   it.effect("rejects AISDK packages without an available loader", () =>
     Effect.gen(function* () {
       const failure = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { baseURL: "https://perplexity.example/v1" },
         }),
       ).pipe(Effect.flip)
 
@@ -1410,9 +1510,9 @@ describe("ModelResolver", () => {
         _tag: "SessionRunnerModel.UnsupportedPackageError",
         providerID: "test-provider",
         modelID: "test-model",
-        package: "aisdk:@ai-sdk/cohere",
+        package: "aisdk:@ai-sdk/perplexity",
       })
-      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/cohere")
+      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/perplexity")
     }),
   )
 
@@ -1476,18 +1576,18 @@ describe("ModelResolver", () => {
         detail: "Provider package @opencode/ai/providers/custom is broken",
       })
 
-      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/cohere")), undefined, {
+      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/perplexity")), undefined, {
         loadAISDK: (runtime) =>
           Effect.fail(
-            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Cohere plugin failed") }),
+            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Perplexity plugin failed") }),
           ),
       }).pipe(Effect.flip)
       expect(init).toMatchObject({
         _tag: "SessionRunnerModel.ModelInitializationError",
         phase: "init",
-        detail: "Cohere plugin failed",
+        detail: "Perplexity plugin failed",
       })
-      expect(init.message).toBe("Cannot initialize test-provider/test-model: Cohere plugin failed")
+      expect(init.message).toBe("Cannot initialize test-provider/test-model: Perplexity plugin failed")
     }),
   )
 
@@ -1499,8 +1599,8 @@ describe("ModelResolver", () => {
         }),
       )
       yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { apiKey: "", baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { apiKey: "", baseURL: "https://perplexity.example/v1" },
         }),
         undefined,
         {

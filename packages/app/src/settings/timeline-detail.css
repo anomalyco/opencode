@@ -24,7 +24,7 @@
   [data-slot="timeline-detail-scale"] {
     position: relative;
     height: 28px;
-    margin-top: 24px;
+    margin-top: 16px;
     margin-inline: 8px;
   }
 
@@ -58,6 +58,10 @@
       border-radius: 50%;
       background: var(--timeline-detail-marker-background);
 
+      &[data-selected] {
+        background: var(--v2-background-bg-accent);
+      }
+
       &:dir(rtl) {
         transform: translate(50%, -50%);
       }
@@ -74,7 +78,6 @@
     margin: 0;
     margin-inline: -8px;
     background: transparent;
-    cursor: pointer;
     border-radius: 4px;
 
     &:focus-visible {
@@ -127,7 +130,7 @@
   }
 
   [data-slot="timeline-detail-advanced"] {
-    margin-top: 20px;
+    margin-top: 0;
     padding-top: 8px;
   }
 
@@ -233,7 +236,7 @@
   [data-slot="timeline-detail-activity"] {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     min-width: 0;
 
     > label {
@@ -253,6 +256,24 @@
     /* Labels also activate :hover on their associated button. Keep that feedback local to the icon. */
     &:has(> label:hover) [data-action="timeline-detail-visibility"][data-variant="ghost-muted"] {
       background-color: transparent;
+    }
+  }
+}
+
+@container timeline-detail (min-width: 311px) {
+  [data-component="timeline-detail-control"]
+    [data-slot="timeline-detail-advanced"]:has(> [data-slot="collapsible-trigger"][aria-expanded="true"]) {
+    > [data-slot="collapsible-trigger"] {
+      position: relative;
+      z-index: 1;
+    }
+
+    > [data-slot="collapsible-content"] {
+      margin-top: -24px;
+    }
+
+    [data-slot="timeline-detail-columns"] {
+      min-height: 24px;
     }
   }
 }

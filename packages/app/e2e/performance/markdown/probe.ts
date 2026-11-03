@@ -40,6 +40,7 @@ export async function installMarkdownGate(
         armed = true
       },
     }
+
     let armed = false
     let id: number | undefined
     let release: (() => void) | undefined
@@ -54,8 +55,10 @@ export async function installMarkdownGate(
             stats.responses++
             stats.held = true
             release = () => callback.call(this, event)
+
             return
           }
+
           callback.call(this, event)
         })
       },
@@ -65,21 +68,26 @@ export async function installMarkdownGate(
         id = request.id
         stats.admitted++
       }
+
       post.call(this, request)
     }
+
     const parse = DOMParser.prototype.parseFromString
     DOMParser.prototype.parseFromString = function (text, type) {
       if (stats.released && String(text).includes("Recovery implementation review")) {
         stats.sanitizeCalls++
         stats.sanitizeChars += String(text).length
       }
+
       return parse.call(this, text, type)
     }
+
     document.addEventListener(
       "mousedown",
       (event) => {
         if (!armed || stats.started) return
         const target = event.target instanceof Element ? event.target.closest("a") : undefined
+
         if (target?.getAttribute("href") !== href) return
         stats.started = performance.now()
       },
@@ -90,8 +98,10 @@ export async function installMarkdownGate(
     new MutationObserver(() => {
       if (!stats.started || stats.released) return
       const current = document.querySelector(`[data-timeline-part-id="${sourcePart}"] [data-markdown-ready]`)
+
       if (!current) return
       stats.ready ||= performance.now()
+
       if (document.querySelector(`[data-timeline-part-id="${targetPart}"]`)) return
       stats.released = performance.now()
       performance.mark("markdown-timeline-disposed")
@@ -103,6 +113,7 @@ export async function installMarkdownGate(
         channel.port1.close()
         channel.port2.close()
       }
+
       channel.port2.postMessage(null)
     }).observe(document, { childList: true, subtree: true, attributes: true })
     Object.defineProperty(window, "markdownGate", { value: stats })

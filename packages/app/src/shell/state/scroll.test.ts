@@ -4,13 +4,16 @@ import { createScrollPersistence } from "./scroll"
 describe("createScrollPersistence", () => {
   test("debounces persisted scroll writes", () => {
     vi.useFakeTimers()
+
     try {
       const snapshot = {
         session: {
           review: { x: 0, y: 0 },
         },
       } as Record<string, Record<string, { x: number; y: number }>>
+
       const writes: Array<Record<string, { x: number; y: number }>> = []
+
       const scroll = createScrollPersistence({
         debounceMs: 10,
         getSnapshot: (sessionKey) => snapshot[sessionKey],

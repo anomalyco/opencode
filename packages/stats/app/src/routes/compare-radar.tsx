@@ -9,7 +9,7 @@ const toolUseBenchmarkPattern = /(terminal bench|claw eval|tau ?(?:bench|2|3))/
 
 export type ComparisonRadarModel = {
   name: string
-  labName: string
+  labName?: string
   catalog: ModelCatalogEntry | null
 }
 
@@ -22,6 +22,12 @@ type RadarAxis = {
   label: string
   description: string
   score: (model: ModelCatalogEntry) => number | undefined
+  capability?: "reasoning" | "toolCall"
+}
+
+type RadarScore = {
+  value: number
+  fallback?: string
 }
 
 type RadarPoint = {
@@ -37,7 +43,7 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
       name: model.name,
       labName: model.labName,
       color: radarColors[index % radarColors.length],
-      scores: axes().map((axis) => (model.catalog ? axis.score(model.catalog) : undefined)),
+      scores: axes().map((axis) => resolveRadarScore(axis, model.catalog)),
     })),
   )
   const accessibleDescription = createMemo(() =>
@@ -61,7 +67,10 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
               <i style={{ background: model.color }} aria-hidden="true" />
               <span>
                 <strong>{model.name}</strong>
-                <small>{model.labName}</small>
+                <Show when={model.labName}>{(name) => <small>{name()}</small>}</Show>
+                <Show when={model.scores.some((score) => score.fallback)}>
+                  <small data-slot="compare-radar-coverage">Hollow points use fallbacks · hover for details</small>
+                </Show>
               </span>
             </li>
           )}
@@ -89,10 +98,16 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
                   <polygon data-slot="compare-radar-area" points={radarSeriesPolygon(model.scores)} />
                   <For each={model.scores}>
                     {(score, index) => {
-                      const point = () => radarPoint(index(), axes().length, score ?? 0)
+                      const point = () => radarPoint(index(), axes().length, score.value)
                       return (
                         <>
-                          <circle data-slot="compare-radar-point" cx={point().x} cy={point().y} r="0.95" />
+                          <circle
+                            data-slot="compare-radar-point"
+                            data-fallback={score.fallback ? "true" : undefined}
+                            cx={point().x}
+                            cy={point().y}
+                            r="0.95"
+                          />
                           <circle
                             data-slot="compare-radar-point-hit"
                             cx={point().x}
@@ -138,6 +153,13 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
           >
             <strong>{axes()[activeAxis() ?? 0]?.label}</strong>
             <p>{axes()[activeAxis() ?? 0]?.description}</p>
+            <For each={series()}>
+              {(model) => (
+                <p>
+                  {model.name}: {formatRadarScore(model.scores[activeAxis() ?? 0])}
+                </p>
+              )}
+            </For>
           </div>
         </Show>
       </div>
@@ -166,7 +188,7 @@ export function ComparisonRadar(props: ComparisonRadarProps) {
   )
 }
 
-function buildRadarAxes(catalogModels: readonly ModelCatalogEntry[]): RadarAxis[] {
+export function buildRadarAxes(catalogModels: readonly ModelCatalogEntry[]): RadarAxis[] {
   const benchmarks = benchmarkScoreGroups(catalogModels)
   const toolUseBenchmarks = benchmarkScoreGroups(catalogModels, true)
   const costs = catalogModels.flatMap((model) => {
@@ -180,9 +202,10 @@ function buildRadarAxes(catalogModels: readonly ModelCatalogEntry[]): RadarAxis[
   return [
     {
       label: "Reasoning",
-      description: "Ability to solve complex, multi-step problems. Based on reasoning benchmarks when available.",
-      score: (model) =>
-        benchmarkPercentile(model, benchmarks, reasoningBenchmarkPattern) ?? (model.reasoning ? 100 : 0),
+      capability: "reasoning",
+      description:
+        "Ability to solve complex, multi-step problems. Benchmarks take priority; reasoning support defaults to 50/100.",
+      score: (model) => benchmarkPercentile(model, benchmarks, reasoningBenchmarkPattern),
     },
     {
       label: "Coding",
@@ -218,7 +241,8 @@ function buildRadarAxes(catalogModels: readonly ModelCatalogEntry[]): RadarAxis[
     },
     {
       label: "Tool use",
-      description: "Performance on agent benchmarks including Terminal-Bench, Tau3, and Claw-Eval.",
+      capability: "toolCall",
+      description: "Agent benchmark performance. Benchmarks take priority; tool calling support defaults to 50/100.",
       score: (model) =>
         benchmarkPercentile(model, toolUseBenchmarks, toolUseBenchmarkPattern, {
           aggregate: "average",
@@ -324,9 +348,9 @@ function radarPolygonPoints(count: number, score: number) {
     .join(" ")
 }
 
-function radarSeriesPolygon(scores: (number | undefined)[]) {
+function radarSeriesPolygon(scores: RadarScore[]) {
   return scores
-    .map((score, index) => radarPoint(index, scores.length, score ?? 0))
+    .map((score, index) => radarPoint(index, scores.length, score.value))
     .map((point) => `${point.x},${point.y}`)
     .join(" ")
 }
@@ -355,6 +379,17 @@ function roundRadarCoordinate(value: number) {
   return Math.round(value * 1000) / 1000
 }
 
-function formatRadarScore(score: number | undefined) {
-  return score === undefined ? "No data" : `${Math.round(score)}/100`
+function formatRadarScore(score: RadarScore) {
+  return `${Math.round(score.value)}/100${score.fallback ? ` — ${score.fallback}` : ""}`
+}
+
+export function resolveRadarScore(axis: RadarAxis, model: ModelCatalogEntry | null): RadarScore {
+  const score = model ? axis.score(model) : undefined
+  if (score !== undefined) return { value: score }
+  const supported = axis.capability ? model?.[axis.capability] : undefined
+  if (supported === undefined) return { value: 50, fallback: "No data; neutral placeholder" }
+  const capability = axis.capability === "toolCall" ? "Tool calling" : "Reasoning"
+  return supported
+    ? { value: 50, fallback: `${capability} supported; no comparable benchmark` }
+    : { value: 0, fallback: `${capability} not supported` }
 }

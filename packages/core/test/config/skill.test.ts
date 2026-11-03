@@ -7,6 +7,7 @@ import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
+import { SkillScan } from "@opencode/core/config/plugin/skill-scan"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Bus } from "@opencode/core/bus"
@@ -20,6 +21,7 @@ import { Skill } from "@opencode/core/skill"
 import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { WellKnown } from "@opencode/core/wellknown"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { advance, drain } from "../lib/clock"
 import { tmpdir } from "../fixture/tmpdir"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -123,6 +125,18 @@ function emitAndWait(update: Watcher.Update) {
 }
 
 describe("SkillFile.parse", () => {
+  test("reads disable-model-invocation as autoinvoke", () => {
+    const parse = (frontmatter: string) =>
+      SkillFile.parse("/repo/skills", "/repo/skills/deploy/SKILL.md", `---\n${frontmatter}\n---\n# deploy`)
+    expect(parse("disable-model-invocation: true")).toMatchObject({ skill: { autoinvoke: false } })
+    expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
+    expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
+    expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
+    expect(
+      parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),
+    ).toMatchObject({ skill: { autoinvoke: true } })
+  })
+
   test("parses root and nested skill ids and metadata flags", () => {
     const directory = "/repo/skills"
     expect(
@@ -193,7 +207,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             { claude: [AbsolutePath.make(claude)], agents: [AbsolutePath.make(agents)] },
           )
           const watcher = yield* Watcher.Test
-          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory" })))
+          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory", ignore: SkillScan.ignore.toSorted() })))
         }),
       ),
     ),
@@ -323,7 +337,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
-  it.live("watches canonical directories behind symlinked skills", () =>
+  it.live("watches canonical files behind symlinked skills", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
@@ -340,7 +354,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([source], tmp.path)
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Initial")
-          expect(yield* watcher.subscriptions()).toContainEqual({ path: target, type: "directory" })
+          expect(yield* watcher.subscriptions()).toContainEqual({ path: file, type: "file" })
 
           yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
           yield* emitAndWait({ type: "update", path: file })
@@ -369,7 +383,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("First")
           expect(yield* watcher.subscriptions()).toEqual([
-            { path: first, type: "directory" },
+            { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
           ])
 
@@ -381,9 +395,9 @@ describe("ConfigSkillPlugin.Plugin", () => {
 
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
           expect(yield* watcher.subscriptions()).toEqual([
-            { path: first, type: "directory" },
+            { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
-            { path: second, type: "directory" },
+            { path: second, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
           ])
         }),
@@ -402,7 +416,8 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
 
           yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
-          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          yield* watcher.emit({ type: "create", path: path.join(tmp.path, "generated") })
+          while ((yield* watcher.subscriptions()).at(-1)?.path !== source) yield* Effect.sleep("10 millis")
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(source, "deploy"), { recursive: true })
             await write(source, "deploy", "Deploy")
@@ -410,6 +425,55 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "create", path: source })
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
         }),
+      ),
+    ),
+  )
+
+  it.effect("ignores unrelated config updates and coalesces compatibility bursts into one reload", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const claude = path.join(tmp.path, ".claude")
+          const skills = path.join(claude, "skills")
+          const service = yield* Skill.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigCompatibilityPlugin.Plugin.effect(
+            host({
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () => service.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+          yield* Effect.yieldNow
+
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "commands", "review.md") })
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "agents", "reviewer.md") })
+          yield* drain
+          expect(reloads).toBe(0)
+
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(skills, "review"), { recursive: true })
+            await write(skills, "review", "Review once")
+          })
+          yield* configTest.emitChange({ type: "create", path: claude })
+          yield* configTest.emitChange({ type: "create", path: path.join(skills, "review", "SKILL.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(skills, "review", "SKILL.md") })
+          yield* advance(() => reloads >= 1)
+          yield* drain
+          expect(reloads).toBe(1)
+          expect((yield* service.list()).find((item) => item.id === "review")?.description).toBe("Review once")
+        }).pipe(
+          Effect.provide(
+            Config.testLayer(
+              [new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })],
+              { claude: [AbsolutePath.make(path.join(tmp.path, ".claude"))], agents: [] },
+            ),
+          ),
+        ),
       ),
     ),
   )

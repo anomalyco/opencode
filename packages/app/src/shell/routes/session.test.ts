@@ -25,7 +25,9 @@ describe("session routes", () => {
     expect(
       await rootSession(sessions.child, async (id) => {
         const session = sessions[id]
+
         if (!session) throw new Error(`Missing session: ${id}`)
+
         return session
       }),
     ).toBe(sessions.root)
@@ -37,6 +39,8 @@ describe("session routes", () => {
       parent: { id: "parent", parentID: "child" },
     }
 
-    expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow("Session parent cycle: child")
+    await expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow(
+      "Session parent cycle: child",
+    )
   })
 })

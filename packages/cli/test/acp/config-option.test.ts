@@ -1,49 +1,41 @@
 import { describe, expect, test } from "bun:test"
-import {
-  buildConfigOptions,
-  buildEffortSelectOption,
-  buildModeSelectOption,
-  buildModelSelectOption,
-  formatVariantName,
-  parseModelSelection,
-  type ConfigOptionProvider,
-} from "../../src/acp/config-option"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import type { Catalog } from "../../src/acp/catalog"
+import { configOptions, parseModelSelection } from "../../src/acp/config-option"
 
-const providers: ConfigOptionProvider[] = [
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    models: [
-      { id: "claude/sonnet-4", name: "Claude Sonnet 4", variants: ["default", "high", "very-high"] },
-      { id: "claude-haiku", name: "Claude Haiku" },
-    ],
-  },
-  { id: "openai", name: "OpenAI", models: [{ id: "gpt-5", name: "GPT-5", variants: ["minimal", "low"] }] },
-]
+const model = (providerID: string, id: string, name: string, variants: string[] = []) => ({
+  ...Model.Info.default(Provider.ID.make(providerID), Model.ID.make(id)),
+  name,
+  variants: variants.map((variant) => ({ id: Model.VariantID.make(variant) })),
+})
+
+const catalog: Catalog = {
+  models: [
+    model("anthropic", "claude/sonnet-4", "Claude Sonnet 4", ["default", "high", "very-high"]),
+    model("anthropic", "claude-haiku", "Claude Haiku"),
+    model("openai", "gpt-5", "GPT-5", ["minimal", "low"]),
+    model("test", "effort", "Effort", ["low", "default", "high"]),
+  ],
+  defaultModel: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") },
+  modes: [{ id: Agent.ID.make("build"), name: "Build" }],
+  defaultModeID: Agent.ID.make("build"),
+  commands: [],
+}
+
+const effortOption = (providerID: string, id: string) =>
+  configOptions(catalog, {
+    model: {
+      providerID: Provider.ID.make(providerID),
+      id: Model.ID.make(id),
+      variant: Model.VariantID.make("missing"),
+    },
+  }).find((option) => option.id === "effort")
 
 describe("acp config options", () => {
-  test("builds the model select option with ACP verifier category", () => {
-    expect(
-      buildModelSelectOption({
-        providers,
-        currentModel: { providerID: "anthropic", modelID: "claude/sonnet-4" },
-      }),
-    ).toEqual({
-      id: "model",
-      name: "Model",
-      category: "model",
-      type: "select",
-      currentValue: "anthropic/claude/sonnet-4",
-      options: [
-        { value: "anthropic/claude-haiku", name: "Anthropic/Claude Haiku" },
-        { value: "anthropic/claude/sonnet-4", name: "Anthropic/Claude Sonnet 4" },
-        { value: "openai/gpt-5", name: "OpenAI/GPT-5" },
-      ],
-    })
-  })
-
   test("builds effort option from variants and falls back to default when current variant is invalid", () => {
-    expect(buildEffortSelectOption({ variants: ["low", "default", "high"], currentVariant: "missing" })).toEqual({
+    expect(effortOption("test", "effort")).toEqual({
       id: "effort",
       name: "Effort",
       description: "Available effort levels for this model",
@@ -56,96 +48,29 @@ describe("acp config options", () => {
         { value: "high", name: "High" },
       ],
     })
+    expect(effortOption("openai", "gpt-5")?.currentValue).toBe("minimal")
   })
 
-  test("effort fallback uses the first variant when default is absent", () => {
-    expect(buildEffortSelectOption({ variants: ["minimal", "low"], currentVariant: "missing" }).currentValue).toBe(
-      "minimal",
-    )
-  })
-
-  test("builds the mode select option with descriptions when present", () => {
-    expect(
-      buildModeSelectOption({
-        currentModeId: "build",
-        modes: [
-          { id: "build", name: "Build", description: "Make code changes" },
-          { id: "plan", name: "Plan" },
-        ],
-      }),
-    ).toEqual({
-      id: "mode",
-      name: "Session Mode",
-      category: "mode",
-      type: "select",
-      currentValue: "build",
-      options: [
-        { value: "build", name: "Build", description: "Make code changes" },
-        { value: "plan", name: "Plan" },
-      ],
-    })
-  })
-
-  test("builds full config options with model, effort, and mode in stable order", () => {
-    const options = buildConfigOptions({
-      providers,
-      currentModel: { providerID: "anthropic", modelID: "claude/sonnet-4" },
-      currentVariant: "very-high",
-      modes: [
-        { id: "build", name: "Build" },
-        { id: "plan", name: "Plan" },
-      ],
-      currentModeId: "plan",
-    })
-
-    expect(options.map((option) => option.id)).toEqual(["model", "effort", "mode"])
-    expect(options.map((option) => option.category)).toEqual(["model", "thought_level", "mode"])
-    expect(options[0]?.currentValue).toBe("anthropic/claude/sonnet-4")
-    expect(options[1]?.currentValue).toBe("very-high")
-  })
-
-  test("full config options omit effort for models without variants", () => {
-    expect(
-      buildConfigOptions({
-        providers,
-        currentModel: { providerID: "anthropic", modelID: "claude-haiku" },
-      }).map((option) => option.id),
-    ).toEqual(["model"])
-  })
-
-  test("parses provider/model selections", () => {
-    expect(parseModelSelection("openai/gpt-5", providers)).toEqual({
-      model: { providerID: "openai", modelID: "gpt-5" },
-    })
-  })
-
-  test("parses provider/model/variant selections when the base model exposes that variant", () => {
-    expect(parseModelSelection("openai/gpt-5/low", providers)).toEqual({
-      model: { providerID: "openai", modelID: "gpt-5" },
-      variant: "low",
-    })
-  })
-
-  test("prefers exact slash-containing model ids before treating the tail as a variant", () => {
-    expect(parseModelSelection("anthropic/claude/sonnet-4", providers)).toEqual({
-      model: { providerID: "anthropic", modelID: "claude/sonnet-4" },
-    })
-  })
-
-  test("parses trailing variants for slash-containing model ids", () => {
-    expect(parseModelSelection("anthropic/claude/sonnet-4/high", providers)).toEqual({
-      model: { providerID: "anthropic", modelID: "claude/sonnet-4" },
-      variant: "high",
-    })
-  })
-
-  test("keeps unknown trailing segments in the model id when they are not valid variants", () => {
-    expect(parseModelSelection("anthropic/claude/sonnet-4/missing", providers)).toEqual({
-      model: { providerID: "anthropic", modelID: "claude/sonnet-4/missing" },
-    })
-  })
-
-  test("formats variant names for display", () => {
-    expect(formatVariantName("very_high-effort")).toBe("Very High Effort")
+  test.each([
+    ["openai/gpt-5", { providerID: Provider.ID.openai, id: Model.ID.make("gpt-5") }],
+    [
+      "openai/gpt-5/low",
+      { providerID: Provider.ID.openai, id: Model.ID.make("gpt-5"), variant: Model.VariantID.make("low") },
+    ],
+    ["anthropic/claude/sonnet-4", { providerID: Provider.ID.anthropic, id: Model.ID.make("claude/sonnet-4") }],
+    [
+      "anthropic/claude/sonnet-4/high",
+      {
+        providerID: Provider.ID.anthropic,
+        id: Model.ID.make("claude/sonnet-4"),
+        variant: Model.VariantID.make("high"),
+      },
+    ],
+    [
+      "anthropic/claude/sonnet-4/missing",
+      { providerID: Provider.ID.anthropic, id: Model.ID.make("claude/sonnet-4/missing") },
+    ],
+  ])("parses the model selection %s, preferring exact slash-containing model ids", (value, expected) => {
+    expect(parseModelSelection(value, catalog.models)).toEqual(expected)
   })
 })

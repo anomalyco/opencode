@@ -1,6 +1,6 @@
 import { Layer } from "effect"
-import { HttpClient } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { HttpClient } from "effect/http"
+import { Socket } from "effect/socket"
 import { Api } from "./api.js"
 import { hasCassetteSync, removeCassetteSync } from "./cassette/store.js"
 import { layer, layerFetch } from "./http/recorder.js"

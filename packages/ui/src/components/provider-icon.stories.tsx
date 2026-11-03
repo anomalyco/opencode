@@ -28,6 +28,7 @@ Use in model pickers or provider lists.
 `
 
 const story = create({ title: "UI/ProviderIcon", mod, args: { id: "openai" } })
+
 export default {
   title: "UI/ProviderIcon",
   id: "components-provider-icon",

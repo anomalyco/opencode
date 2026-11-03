@@ -1,10 +1,11 @@
 export * as SessionRunnerModel from "./model.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Agent } from "../../agent.js"
 import { ModelResolver } from "../../model-resolver.js"
 import { SessionSchema } from "../schema.js"
 
@@ -29,19 +30,6 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
-export const VariantUnavailableError = ModelResolver.VariantUnavailableError
-export type VariantUnavailableError = ModelResolver.VariantUnavailableError
-export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export const ModelConfigurationError = ModelResolver.ModelConfigurationError
-export type ModelConfigurationError = ModelResolver.ModelConfigurationError
-export const ModelInitializationError = ModelResolver.ModelInitializationError
-export type ModelInitializationError = ModelResolver.ModelInitializationError
-export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-export type UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
 
@@ -84,11 +72,18 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
+    const agents = yield* Agent.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         if (!session.model) {
-          const resolved = yield* resolver.resolve()
+          const agent = (yield* agents.select(session.agent)).info?.model
+          const preferred =
+            agent &&
+            (yield* available()).find((model) => model.providerID === agent.providerID && model.id === agent.id)
+          const resolved = preferred
+            ? yield* resolver.resolveModel(preferred, agent.variant)
+            : yield* resolver.resolve()
           if (resolved) return resolved
           return yield* new ModelNotSelectedError({ sessionID: session.id })
         }
@@ -106,4 +101,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node, Agent.node] })

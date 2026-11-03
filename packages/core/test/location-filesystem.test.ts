@@ -1,14 +1,15 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Option, PlatformError, Stream } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
@@ -26,23 +27,25 @@ const provide = (directory: string, workspaceID?: Workspace.ID) =>
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 describe("FileSystem", () => {
   it.live("reads text and binary files", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "text.txt"), "hello"))
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2])))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2, 3, 4])))
         const service = yield* FileSystem.Service
         const text = yield* service.read({ path: RelativePath.make("text.txt") })
         const binary = yield* service.read({ path: RelativePath.make("data.bin") })
-        expect(new TextDecoder().decode(text.content)).toBe("hello")
+        expect(new TextDecoder().decode(yield* Stream.mkUint8Array(text.stream()))).toBe("hello")
         expect(text.mime).toBe("text/plain")
-        expect(binary.content).toEqual(new Uint8Array([0, 1, 2]))
+        expect(text.size).toBe(5)
+        expect(Option.isSome(text.mtime)).toBe(true)
+        expect(yield* Stream.mkUint8Array(binary.stream())).toEqual(new Uint8Array([0, 1, 2, 3, 4]))
+        expect(yield* Stream.mkUint8Array(binary.stream({ offset: 1, bytesToRead: 3 }))).toEqual(
+          new Uint8Array([1, 2, 3]),
+        )
       }).pipe(provide(directory)),
     ),
   )
@@ -79,9 +82,75 @@ describe("FileSystem", () => {
         // host realpath canonicalization stays load-bearing for local placements.
         const local = yield* FileSystem.Service.pipe(provide(missing), Effect.exit)
         expect(Exit.isFailure(local)).toBe(true)
+        if (Exit.isFailure(local)) {
+          const error = Cause.findErrorOption(local.cause)
+          expect(error).toMatchObject({
+            _tag: "Some",
+            value: {
+              _tag: "FileSystem.DirectoryNotFoundError",
+              directory: missing,
+              message: `Directory not found: ${missing}`,
+            },
+          })
+        }
       }),
     ),
   )
+
+  for (const input of [
+    { reason: "PermissionDenied", code: "EACCES", denied: true },
+    { reason: "Unknown", code: "EPERM", denied: true },
+    { reason: "Unknown", code: "EIO", denied: false },
+  ] as const) {
+    it.live(`classifies directory initialization failure ${input.code}`, () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const filesystem = yield* FSUtil.Service
+          const cause = PlatformError.systemError({
+            _tag: input.reason,
+            module: "FileSystem",
+            method: "realPath",
+            pathOrDescriptor: directory,
+            cause: Object.assign(new Error(input.code), { code: input.code }),
+          })
+          const result = yield* FileSystem.Service.pipe(
+            Effect.provide(
+              LayerNode.compile(FileSystem.node, {
+                replacements: [
+                  Location.node.replace(
+                    Layer.succeed(Location.Service, location({ directory: AbsolutePath.make(directory) })),
+                  ),
+                  FSUtil.node.replace(
+                    Layer.succeed(FSUtil.Service, {
+                      ...filesystem,
+                      realPath: (target) => (target === directory ? Effect.fail(cause) : filesystem.realPath(target)),
+                    }),
+                  ),
+                ],
+              }),
+            ),
+            Effect.exit,
+          )
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) {
+            if (input.denied) {
+              expect(Cause.findErrorOption(result.cause)).toMatchObject({
+                _tag: "Some",
+                value: {
+                  _tag: "FileSystem.DirectoryAccessDeniedError",
+                  directory,
+                  cause,
+                  message: `Access denied to directory: ${directory}`,
+                },
+              })
+              return
+            }
+            expect(result.cause.reasons.filter(Cause.isDieReason)).toMatchObject([{ defect: cause }])
+          }
+        }).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
+      ),
+    )
+  }
 
   it.live("lists parents and siblings with paths relative to the current location", () =>
     withTmp((directory) =>
@@ -106,6 +175,10 @@ describe("FileSystem", () => {
           ])
           const absolute = yield* filesystem.list({ path: path.join(directory, "sibling") })
           expect(absolute).toEqual(sibling)
+          const missing = yield* Effect.flip(filesystem.list({ path: RelativePath.make("missing") }))
+          expect(missing).toBeInstanceOf(FileSystem.NotFoundError)
+          const file = yield* Effect.flip(filesystem.list({ path: RelativePath.make("../sibling/file.txt") }))
+          expect(file).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),
@@ -123,9 +196,10 @@ describe("FileSystem", () => {
         // the location root to the real directory.
         const read = yield* FileSystem.Service.pipe(
           Effect.flatMap((service) => service.read({ path: RelativePath.make("file.txt") })),
+          Effect.flatMap((file) => Stream.mkUint8Array(file.stream())),
           provide(link),
         )
-        expect(new TextDecoder().decode(read.content)).toBe("linked")
+        expect(new TextDecoder().decode(read)).toBe("linked")
       }),
     ),
   )

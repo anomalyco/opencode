@@ -10,10 +10,12 @@ test("serves an empty config document list for composer defaults", async () => {
     sessions: [],
     pageMessages: () => ({ items: [] }),
   })
+
   try {
     const response = await server.handler(
       new Request("http://localhost/api/config?location%5Bdirectory%5D=C%3A%2FOpenCode"),
     )
+
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual([])
   } finally {
@@ -26,14 +28,17 @@ test("applies message latency after a list response gate is released", async () 
   const gate = Promise.withResolvers<void>()
   const started = Promise.withResolvers<void>()
   let handler: ((route: Route) => Promise<void>) | undefined
+
   const page = {
     addInitScript: () => Promise.resolve(),
     on: () => page,
     route: (_url: string, callback: (route: Route) => Promise<void>) => {
       handler = callback
+
       return Promise.resolve()
     },
   } as unknown as Page
+
   await mockOpenCodeServer(page, {
     provider: {},
     directory: "C:/OpenCode",
@@ -43,11 +48,13 @@ test("applies message latency after a list response gate is released", async () 
     beforeMessagesResponse: () => {
       events.push("before")
       started.resolve()
+
       return gate.promise
     },
     onMessages: (request) => events.push(request.phase),
     pageMessages: () => {
       events.push("page")
+
       return { items: [] }
     },
   })
@@ -61,9 +68,11 @@ test("applies message latency after a list response gate is released", async () 
     }),
     fulfill: () => {
       events.push("fulfill")
+
       return Promise.resolve()
     },
   } as unknown as Route)
+
   await started.promise
   expect(events).toEqual(["start", "before"])
 
@@ -77,14 +86,17 @@ test("applies message latency after a list response gate is released", async () 
 test("routes requests through the HttpApi contract", async () => {
   const connected = Promise.withResolvers<{ integrationID: string; body: unknown }>()
   let handler: ((route: Route) => Promise<void>) | undefined
+
   const page = {
     addInitScript: () => Promise.resolve(),
     on: () => page,
     route: (_url: string, callback: (route: Route) => Promise<void>) => {
       handler = callback
+
       return Promise.resolve()
     },
   } as unknown as Page
+
   await mockOpenCodeServer(page, {
     provider: {},
     directory: "C:/OpenCode",
@@ -105,6 +117,7 @@ test("routes requests through the HttpApi contract", async () => {
     }),
     fulfill: (response: Parameters<Route["fulfill"]>[0]) => {
       status = response?.status
+
       return Promise.resolve()
     },
   } as unknown as Route)

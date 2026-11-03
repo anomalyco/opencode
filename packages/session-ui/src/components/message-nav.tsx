@@ -14,6 +14,7 @@ export function MessageNav(
   },
 ) {
   const i18n = useI18n()
+
   const [local, others] = splitProps(props, [
     "messages",
     "current",
@@ -23,6 +24,7 @@ export function MessageNav(
     "getChanges",
     "class",
   ])
+
   const [hovercardOpen, setHovercardOpen] = createSignal(false)
 
   const selectMessage = (message: SessionMessageUser) => {
@@ -109,9 +111,11 @@ export function MessageNav(
 function MessageDiffBars(props: { changes: { additions: number; deletions: number }[] }) {
   const additions = createMemo(() => props.changes.reduce((total, diff) => total + diff.additions, 0))
   const deletions = createMemo(() => props.changes.reduce((total, diff) => total + diff.deletions, 0))
+
   const colors = createMemo(() => {
     const added = additions()
     const deleted = deletions()
+
     if (added === 0 && deleted === 0) return Array(5).fill("var(--icon-weak-base)")
 
     if (added + deleted < 5) {
@@ -127,13 +131,17 @@ function MessageDiffBars(props: { changes: { additions: number; deletions: numbe
     const colored = total < 20 || ratio < 4 ? 4 : 5
     const addedRaw = (added / total) * colored
     const deletedRaw = (deleted / total) * colored
+
     const addedBars =
       added === 0 ? 0 : Math.min(added <= 5 ? 1 : added <= 10 ? 2 : colored, Math.max(1, Math.round(addedRaw)))
+
     const deletedBars =
       deleted === 0 ? 0 : Math.min(deleted <= 5 ? 1 : deleted <= 10 ? 2 : colored, Math.max(1, Math.round(deletedRaw)))
+
     const overflow = Math.max(0, addedBars + deletedBars - colored)
     const adjustedAdded = overflow > 0 && addedRaw > deletedRaw ? addedBars - overflow : addedBars
     const adjustedDeleted = overflow > 0 && addedRaw <= deletedRaw ? deletedBars - overflow : deletedBars
+
     return [
       ...Array(adjustedAdded).fill("var(--icon-diff-add-base)"),
       ...Array(adjustedDeleted).fill("var(--icon-diff-delete-base)"),

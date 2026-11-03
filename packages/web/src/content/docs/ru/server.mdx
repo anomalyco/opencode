@@ -157,8 +157,6 @@ For example, `http://localhost:4096/doc`. Use the spec to generate clients or in
 | `POST`   | `/session/:id/init`                      | Анализ приложения и создание `AGENTS.md` | body: `{ messageID, providerID, modelID }`, возвращает `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | Ответвление сессии от сообщения          | body: `{ messageID? }`, возвращает <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Прервать запущенную сессию               | Возвращает `boolean`                                                                  |
-| `POST`   | `/session/:id/share`                     | Поделиться сессией                       | Возвращает <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | Отменить общий доступ к сессии           | Возвращает <a href={typesUrl}><code>Session</code></a>                                |
 | `GET`    | `/session/:id/diff`                      | Получить diff для этой сессии            | query: `messageID?`, возвращает <a href={typesUrl}><code>FileDiff[]</code></a>        |
 | `POST`   | `/session/:id/summarize`                 | Суммировать сессию                       | body: `{ providerID, modelID }`, возвращает `boolean`                                 |
 | `POST`   | `/session/:id/revert`                    | Отменить сообщение                       | body: `{ messageID, partID? }`, возвращает `boolean`                                  |

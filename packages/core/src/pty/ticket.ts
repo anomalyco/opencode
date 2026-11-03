@@ -2,7 +2,7 @@ export * as PtyTicket from "./ticket.js"
 
 import type { Workspace } from "@opencode/schema/workspace"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
-import { PtyID } from "./schema.js"
+import type { Pty } from "@opencode/schema/pty"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
@@ -11,8 +11,18 @@ const CAPACITY = 10_000
 
 export const ConnectToken = PtyTicket.ConnectToken
 
-export type Scope = {
-  readonly ptyID: PtyID
+// A ticket authorizes one upgrade to one target: a PTY, or a client MCP connection by client name.
+export type Target =
+  | { readonly ptyID: Pty.ID; readonly mcpClient?: never }
+  | { readonly mcpClient: string; readonly ptyID?: never }
+
+export type Scope = Target & {
+  readonly directory?: string
+  readonly workspaceID?: Workspace.ID
+}
+
+type Stored = {
+  readonly target: string
   readonly directory?: string
   readonly workspaceID?: Workspace.ID
 }
@@ -24,9 +34,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PtyTicket") {}
 
-function matches(record: Scope, input: Scope) {
+function stored(scope: Scope): Stored {
+  return {
+    target: scope.ptyID !== undefined ? `pty:${scope.ptyID}` : `mcp:${scope.mcpClient}`,
+    directory: scope.directory,
+    workspaceID: scope.workspaceID,
+  }
+}
+
+function matches(record: Stored, input: Stored) {
   return (
-    record.ptyID === input.ptyID && record.directory === input.directory && record.workspaceID === input.workspaceID
+    record.target === input.target && record.directory === input.directory && record.workspaceID === input.workspaceID
   )
 }
 
@@ -37,16 +55,16 @@ const noLookup = () => Effect.die(new Error("PtyTicket cache must be used via se
 // Visible for tests so the TTL can be shortened. Production uses `layer` with the default TTL.
 export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
   Effect.gen(function* () {
-    const cache = yield* Cache.make<string, Scope>({ capacity: CAPACITY, lookup: noLookup, timeToLive: ttl })
+    const cache = yield* Cache.make<string, Stored>({ capacity: CAPACITY, lookup: noLookup, timeToLive: ttl })
     const expiresIn = Math.max(1, Math.round(Duration.toSeconds(Duration.fromInputUnsafe(ttl))))
     return Service.of({
       issue: Effect.fn("PtyTicket.issue")(function* (input) {
         const ticket = crypto.randomUUID()
-        yield* Cache.set(cache, ticket, input)
+        yield* Cache.set(cache, ticket, stored(input))
         return { ticket, expires_in: expiresIn }
       }),
       consume: Effect.fn("PtyTicket.consume")(function* (input) {
-        return yield* Cache.invalidateWhen(cache, input.ticket, (stored) => matches(stored, input))
+        return yield* Cache.invalidateWhen(cache, input.ticket, (record) => matches(record, stored(input)))
       }),
     })
   })

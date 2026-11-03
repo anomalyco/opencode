@@ -3,6 +3,7 @@ export function resolveSessionComposerSelection(
   metadata: Record<string, unknown> | undefined,
 ) {
   const model = metadata?.model
+
   const historical =
     model &&
     typeof model === "object" &&
@@ -17,6 +18,7 @@ export function resolveSessionComposerSelection(
           variant: "variant" in model && typeof model.variant === "string" ? model.variant : undefined,
         }
       : undefined
+
   return {
     agent: info?.agent ?? (typeof metadata?.agent === "string" ? metadata.agent : undefined),
     model: info?.model

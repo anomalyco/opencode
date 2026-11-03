@@ -1,15 +1,17 @@
 import path from "node:path"
 import { parseArgs } from "node:util"
 import { createMockServerHandler } from "../utils/mock-server"
-import { fixture } from "./timeline/session-timeline-stress.fixture"
-import { messages } from "./timeline/session-tab-switch.fixture"
+import { fixture } from "../utils/session-fixture"
+import { messages } from "../utils/markdown-sessions"
 import { createReviewDiffs } from "./timeline/timeline-test-helpers"
 
 const args = parseArgs({
   args: Bun.argv.slice(2),
   options: { port: { type: "string", default: "4639" }, dist: { type: "string", default: "dist" } },
 })
+
 const directory = path.resolve(args.values.dist)
+
 const api = createMockServerHandler({
   directory: fixture.directory,
   project: fixture.project,
@@ -18,12 +20,14 @@ const api = createMockServerHandler({
   pageMessages: (sessionID) => ({ items: messages[sessionID] ?? [] }),
   vcsDiff: createReviewDiffs(),
 })
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(args.values.port),
   idleTimeout: 0,
   async fetch(request) {
     const url = new URL(request.url)
+
     if (url.pathname === "/api/event") {
       return new Response(
         new ReadableStream({
@@ -36,12 +40,16 @@ const server = Bun.serve({
         { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } },
       )
     }
+
     if (url.pathname.startsWith("/api/")) {
       const response = await api.handler(request)
       response.headers.set("cache-control", "no-store")
+
       return response
     }
+
     const file = Bun.file(path.join(directory, url.pathname))
+
     if (!url.pathname.endsWith("/") && (await file.exists())) {
       return new Response(file, {
         headers: {
@@ -49,13 +57,18 @@ const server = Bun.serve({
         },
       })
     }
+
     return new Response(Bun.file(path.join(directory, "index.html")), { headers: { "cache-control": "no-cache" } })
   },
 })
+
 console.log(`Tab fixture: ${server.url} (${directory})`)
+
 const close = async () => {
   await server.stop(true)
   await api.dispose()
 }
+
 process.once("SIGINT", close)
+
 process.once("SIGTERM", close)

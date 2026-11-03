@@ -1,19 +1,16 @@
-import { Component, Show } from "solid-js"
-import { Select } from "@opencode/ui/select"
+import { Component } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
 
-const tabLayoutOptions: ("horizontal" | "vertical")[] = ["horizontal", "vertical"]
+export const experimentalSettingsAvailable = true
 
 export const SettingsExperimental: Component = () => {
   const language = useLanguage()
   const settings = useSettings()
-  const platform = usePlatform()
 
   return (
     <>
@@ -32,69 +29,41 @@ export const SettingsExperimental: Component = () => {
         <div class="settings-section">
           <SettingsList>
             <SettingsRow
-              title={language.t("settings.appearance.row.tabs.title")}
-              description={language.t("settings.appearance.row.tabs.description")}
+              title={language.t("settings.experimental.row.newIcons.title")}
+              description={language.t("settings.experimental.row.newIcons.description")}
             >
-              <Select
-                data-action="settings-tab-layout"
-                options={tabLayoutOptions}
-                current={tabLayoutOptions.find((option) => option === settings.appearance.tabLayout())}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) =>
-                  option === "horizontal"
-                    ? language.t("settings.appearance.row.tabs.horizontal")
-                    : language.t("settings.appearance.row.tabs.vertical")
-                }
-                onSelect={(option) => option && settings.appearance.setTabLayout(option)}
-              />
-            </SettingsRow>
-            <Show when={platform.browserPane}>
-              <SettingsRow
-                title={language.t("settings.general.row.browserPane.title")}
-                description={language.t("settings.general.row.browserPane.description")}
-              >
-                <div data-action="settings-experimental-browser">
-                  <Switch
-                    checked={settings.general.experimentalBrowser()}
-                    onChange={settings.general.setExperimentalBrowser}
-                    hideLabel
-                  >
-                    {language.t("settings.general.row.browserPane.title")}
-                  </Switch>
-                </div>
-              </SettingsRow>
-            </Show>
-            <SettingsRow
-              title={language.t("settings.appearance.row.projectName.title")}
-              description={language.t("settings.appearance.row.projectName.description")}
-            >
-              <div data-action="settings-show-project-name">
+              <div data-action="settings-new-icons">
                 <Switch
-                  checked={settings.appearance.showProjectName()}
-                  onChange={settings.appearance.setShowProjectName}
+                  checked={settings.general.newIcons()}
+                  onChange={(checked) => settings.general.setNewIcons(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.foldUserMessages.title")}
+              description={language.t("settings.experimental.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.newQuestionUI.title")}
+              description={language.t("settings.experimental.row.newQuestionUI.description")}
+            >
+              <div data-action="settings-new-question-ui">
+                <Switch
+                  checked={settings.general.newQuestionUI()}
+                  onChange={(checked) => settings.general.setNewQuestionUI(checked)}
                   hideLabel
                 >
-                  {language.t("settings.appearance.row.projectName.title")}
+                  {language.t("settings.experimental.row.newQuestionUI.title")}
                 </Switch>
               </div>
             </SettingsRow>
-            <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
-              <SettingsRow
-                title={language.t("settings.general.row.showProjectIcon.title")}
-                description={language.t("settings.general.row.showProjectIcon.description")}
-              >
-                <div data-action="settings-show-project-icon">
-                  <Switch
-                    checked={settings.general.showProjectIcon()}
-                    onChange={settings.general.setShowProjectIcon}
-                    hideLabel
-                  >
-                    {language.t("settings.general.row.showProjectIcon.title")}
-                  </Switch>
-                </div>
-              </SettingsRow>
-            </Show>
           </SettingsList>
         </div>
       </div>

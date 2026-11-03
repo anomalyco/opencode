@@ -5,7 +5,7 @@ import * as path from "node:path"
 import * as prompts from "@clack/prompts"
 import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import * as ProviderShared from "../src/protocols/shared"
 import { CloudflareAIGateway } from "../src/providers/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
@@ -103,6 +103,64 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     note: "OpenAI-compatible xAI chat endpoint",
     vars: [{ name: "XAI_API_KEY" }],
     validate: (env) => validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY)),
+  },
+  {
+    id: "runway",
+    label: "Runway",
+    tier: "canary",
+    note: "Runway task video recorded tests",
+    vars: [{ name: "RUNWAYML_API_SECRET" }],
+    validate: (env) =>
+      validateBearer("https://api.dev.runwayml.com/v1/organization", Redacted.make(env.RUNWAYML_API_SECRET), {
+        "X-Runway-Version": "2024-11-06",
+      }),
+  },
+  {
+    id: "elevenlabs",
+    label: "ElevenLabs",
+    tier: "canary",
+    note: "ElevenLabs text-to-speech recorded tests",
+    vars: [{ name: "ELEVENLABS_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.elevenlabs.io/v1/models").pipe(
+        HttpClientRequest.setHeader("xi-api-key", Redacted.value(Redacted.make(env.ELEVENLABS_API_KEY))),
+        executeRequest,
+      ),
+  },
+  {
+    id: "cartesia",
+    label: "Cartesia",
+    tier: "canary",
+    note: "Cartesia text-to-speech recorded tests",
+    vars: [{ name: "CARTESIA_API_KEY" }],
+    validate: (env) =>
+      validateBearer("https://api.cartesia.ai/voices?limit=1", Redacted.make(env.CARTESIA_API_KEY), {
+        "Cartesia-Version": "2026-08-14",
+      }),
+  },
+  {
+    id: "deepgram",
+    label: "Deepgram",
+    tier: "canary",
+    note: "Deepgram Aura text-to-speech and Nova transcription recorded tests",
+    vars: [{ name: "DEEPGRAM_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.deepgram.com/v1/projects").pipe(
+        HttpClientRequest.setHeader("authorization", `Token ${Redacted.value(Redacted.make(env.DEEPGRAM_API_KEY))}`),
+        executeRequest,
+      ),
+  },
+  {
+    id: "assemblyai",
+    label: "AssemblyAI",
+    tier: "canary",
+    note: "AssemblyAI queued transcription recorded tests",
+    vars: [{ name: "ASSEMBLYAI_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.assemblyai.com/v2/transcript?limit=1").pipe(
+        HttpClientRequest.setHeader("authorization", Redacted.value(Redacted.make(env.ASSEMBLYAI_API_KEY))),
+        executeRequest,
+      ),
   },
   {
     id: "cloudflare-ai-gateway",
@@ -278,7 +336,7 @@ const readEnvFile = Effect.fn("RecordingEnv.readFile")(function* () {
 })
 
 const readConfigString = (provider: ConfigProvider.ConfigProvider, name: string) =>
-  Config.string(name)
+  Config.String(name)
     .parse(provider)
     .pipe(
       Effect.match({

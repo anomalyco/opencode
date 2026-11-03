@@ -32,23 +32,6 @@ export function waitForTool(registry: Tool.Interface, name: string, remaining = 
   })
 }
 
-export function waitForCodeModeTool(
-  registry: Tool.Interface,
-  path: string,
-  remaining = 1000,
-): Effect.Effect<Tool.Snapshot, Error> {
-  return Effect.gen(function* () {
-    const toolSet = yield* registry.snapshot()
-    if (toolSet.codeModeCatalog && codeModeListings(toolSet.codeModeCatalog).some((tool) => tool.path === path))
-      return toolSet
-    if (remaining === 0) {
-      return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
-    }
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* waitForCodeModeTool(registry, path, remaining - 1)
-  })
-}
-
 /**
  * Registers a core tool plugin's tools against the real registry without booting the
  * full plugin host. Only the tool domain is live; focused tool tests exercise
@@ -60,6 +43,7 @@ export const registerToolPlugin = <R>(
     readonly effect: (context: Context) => Effect.Effect<void, never, R>
   },
   overrides: Parameters<typeof host>[0] = {},
+  hook?: Context["tool"]["hook"],
 ): Effect.Effect<void, never, R | Tool.Service | Scope.Scope> =>
   Effect.gen(function* () {
     const tools = yield* Tool.Service
@@ -73,7 +57,7 @@ export const registerToolPlugin = <R>(
         transform: tools.transform,
         reload: tools.reload,
         list: tools.list,
-        hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
+        hook: hook ?? (() => Effect.die("registerToolPlugin does not support tool hooks")),
       },
     })
     yield* plugin.effect(context)

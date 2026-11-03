@@ -11,6 +11,15 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Session.
   sessionID: SessionSchema.ID,
 }) {}
 
+export class InvalidListCursorError extends Schema.TaggedError<InvalidListCursorError>()(
+  "Session.InvalidListCursorError",
+  {},
+) {
+  override get message() {
+    return "Invalid cursor"
+  }
+}
+
 export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundError>()("Session.MessageNotFoundError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
@@ -47,15 +56,6 @@ export class StepFailedError extends Schema.TaggedError<StepFailedError>()("Sess
 }) {
   override get message() {
     return this.error.message
-  }
-}
-
-export class UserInterruptedError extends Schema.TaggedError<UserInterruptedError>()(
-  "Session.UserInterruptedError",
-  {},
-) {
-  override get message() {
-    return "Session interrupted by user"
   }
 }
 

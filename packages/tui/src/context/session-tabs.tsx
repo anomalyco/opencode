@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
@@ -12,7 +13,9 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
-import { createSessionRetention } from "./session-retention"
+import { createSessionRetention } from "@opencode/client/solid"
+import { createProgramStatus, type PendingSession } from "./program-status"
+import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -39,8 +42,8 @@ type PersistedState = {
   cwd: Record<string, TabsState>
 }
 
-type ScrollAnchor = {
-  messageID: string
+export type ScrollAnchor = {
+  target: AnchorTarget
   screenY: number
 }
 
@@ -78,7 +81,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
-    let closedTabs: ClosedSessionTab[] = []
+    const [closedTabs, setClosedTabs] = createSignal<ClosedSessionTab[]>([])
     // Storage mutations apply against the on-disk draft under a file lock, so
     // a registration queued by the route effect can land AFTER a removal that
     // ran while the write was still in flight — resurrecting a tab that was
@@ -87,6 +90,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // the mark.
     const cancelledTabs = new Set<string>()
     const scrollAnchors = new Map<string, ScrollAnchor>()
+    const [expandedGroups, setExpandedGroups] = createStore<Record<string, Record<string, boolean> | undefined>>({})
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
@@ -123,7 +127,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const family = (sessionID: string) => {
       const session = root(sessionID)
       const members = data.session.family(session)
-      return members.length > 0 ? members : [session]
+      return members.includes(session) ? members : [session, ...members]
     }
     const normalize = (value: TabsState) => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
@@ -172,6 +176,29 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         renaming: data.session.title.pending(session),
       }
     }
+
+    createProgramStatus({
+      renderer,
+      sessions: () => {
+        const viewed = route.data.type === "session" && route.data.sessionID !== "dummy" ? current() : undefined
+        const tabs = enabled() ? state().tabs.map((tab) => tab.sessionID) : []
+        return Array.from(new Set(viewed ? [...tabs, viewed] : tabs)).flatMap((sessionID): PendingSession[] => {
+          const session = status(sessionID)
+          if (session.attention)
+            return [
+              {
+                id: sessionID,
+                title: title(sessionID),
+                state: "blocked",
+                kind: session.attention,
+                message: session.attention === "permission" ? "Permission needs input" : "Input needs response",
+              },
+            ]
+          if (session.busy) return [{ id: sessionID, title: title(sessionID), state: "working" }]
+          return []
+        })
+      },
+    })
 
     // Shared storage updates must not re-admit a tab unless this client changes route or scope.
     createEffect(
@@ -314,7 +341,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     onCleanup(
       event.on("session.deleted", (evt) => {
         const target = root(evt.data.sessionID)
-        closedTabs = closedTabs.filter((entry) => entry.tab.sessionID !== target)
+        setClosedTabs((entries) => entries.filter((entry) => entry.tab.sessionID !== target))
         remove(evt.data.sessionID, enabled())
       }),
     )
@@ -322,7 +349,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
-      family(target).forEach((id) => scrollAnchors.delete(id))
+      family(target).forEach((id) => {
+        scrollAnchors.delete(id)
+        setExpandedGroups(id, undefined)
+      })
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -348,6 +378,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs() {
         return state().tabs
       },
+      recentlyClosed() {
+        return closedTabs()
+          .filter((entry) => !state().tabs.some((tab) => tab.sessionID === entry.tab.sessionID))
+          .toReversed()
+          .map((entry) => ({
+            ...entry.tab,
+            title: data.session.get(entry.tab.sessionID)?.title ?? entry.tab.title,
+          }))
+      },
       newTab() {
         return newTab()
       },
@@ -365,8 +404,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           return
         }
         const current = scrollAnchors.get(sessionID)
-        if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
+        if (current && anchorKey(current.target) === anchorKey(anchor.target) && current.screenY === anchor.screenY)
+          return
         scrollAnchors.set(sessionID, anchor)
+      },
+      groupExpanded(sessionID: string, groupID: string) {
+        return expandedGroups[sessionID]?.[groupID]
+      },
+      setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
+        setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
       },
       select(sessionID: string) {
         if (!enabled()) return
@@ -407,13 +453,13 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         }
         const index = state().tabs.findIndex((tab) => tab.sessionID === target)
         const tab = state().tabs[index]
-        if (tab) closedTabs = recordClosedSessionTab(closedTabs, tab, index)
+        if (tab) setClosedTabs((entries) => recordClosedSessionTab(entries, tab, index))
         remove(target, true)
       },
-      reopen() {
+      reopen(sessionID?: string) {
         if (!enabled()) return
-        const result = reopenSessionTab(closedTabs, state().tabs)
-        closedTabs = result.stack
+        const result = reopenSessionTab(closedTabs(), state().tabs, sessionID)
+        setClosedTabs(result.stack)
         const tabs = result.tabs
         if (!tabs || !result.sessionID) return
         cancelledTabs.delete(result.sessionID)

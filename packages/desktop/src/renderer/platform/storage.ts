@@ -11,17 +11,22 @@ import { onBeforeDispose } from "../ipc-client"
 export function createDesktopStorage(api: ElectronAPI) {
   const namespaces = new Map<string, NamespaceStorage>()
   const driver = { items: api.storeItems, update: api.storeUpdate, clear: api.storeClear }
+
   const storage: NonNullable<Platform["storage"]> = (name = "default.dat") => {
     const cached = namespaces.get(name)
+
     if (cached) return cached
     const next = createNamespaceStorage(driver, name)
     namespaces.set(name, next)
+
     return next
   }
+
   // Dirty stores must serialize into their namespaces before the namespaces are sent; the app's
   // own pagehide listener registers after the IPC client's, so it cannot be relied on here.
   const flush = () => {
     flushPersisted()
+
     return Promise.all([...namespaces.values()].map((namespace) => namespace.flush()))
   }
 

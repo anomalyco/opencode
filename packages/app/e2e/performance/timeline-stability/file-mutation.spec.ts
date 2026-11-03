@@ -16,12 +16,13 @@ import {
   toolPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("adds patch files incrementally without resetting outer expansion", async ({ page }, testInfo) => {
   const patchID = "prt_incremental_01_patch"
   const followingID = "prt_incremental_02_following"
   const first = patchFile("src/a.ts", "modified")
+
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -37,14 +38,17 @@ test("adds patch files incrementally without resetting outer expansion", async (
     cpuRate: 4,
     seedHistory: true,
   })
+
   const trigger = page
     .locator(`[data-timeline-part-id="${renderedPartID(patchID)}"] [data-slot="collapsible-trigger"]`)
     .first()
+
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await waitForVisualSettle(page, [
     `[data-timeline-part-id="${renderedPartID(patchID)}"]`,
     `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
   ])
+
   const regions = defineVisualRegions({
     patch: {
       selector: `[data-timeline-part-id="${renderedPartID(patchID)}"]`,
@@ -55,6 +59,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   const second = patchFile("src/b.ts", "added")
   const third = patchFile("src/old.ts", "deleted")
@@ -110,6 +115,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
 function patchFile(file: string, status: "added" | "modified" | "deleted") {
   const before = status === "added" ? "" : source(false)
   const after = status === "deleted" ? "" : source(true)
+
   return {
     file,
     status,

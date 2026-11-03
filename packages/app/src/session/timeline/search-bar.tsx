@@ -27,22 +27,30 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
                 if (event.key === "Escape") {
                   event.preventDefault()
                   c.query.close()
+
                   return
                 }
+
                 if (event.altKey || event.metaKey || event.ctrlKey) return
+
                 if (event.key === "Enter" && !event.isComposing) {
                   event.preventDefault()
                   c.result.move(event.shiftKey ? -1 : 1)
+
                   return
                 }
+
                 if (event.key === "ArrowDown" && !event.isComposing) {
                   event.preventDefault()
                   c.result.move(1)
+
                   return
                 }
+
                 if (event.key === "ArrowUp" && !event.isComposing) {
                   event.preventDefault()
                   c.result.move(-1)
+
                   return
                 }
               }}

@@ -23,9 +23,11 @@ export async function installTimelineSearchProbe(page: Page, input: { targetPart
   await page.evaluate(({ targetPartID }) => {
     const search = document.querySelector<HTMLElement>('[data-component="timeline-search-bar"]')
     const field = search?.querySelector<HTMLInputElement>('[data-slot="text-input-v2-input"]')
+
     const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
       element.querySelector("[data-timeline-row]"),
     )
+
     if (!search || !field || !root) throw new Error("missing timeline search benchmark nodes")
 
     const samples: TimelineSearchSample[] = []
@@ -37,8 +39,10 @@ export async function installTimelineSearchProbe(page: Page, input: { targetPart
 
     const visibleInRoot = (rect: DOMRect) => {
       const viewport = root.getBoundingClientRect()
+
       return rect.width > 0 && rect.height > 0 && rect.bottom > viewport.top && rect.top < viewport.bottom
     }
+
     const sample = () => {
       if (!running || startedAt === undefined) return
       frame = requestAnimationFrame(() => {
@@ -51,6 +55,7 @@ export async function installTimelineSearchProbe(page: Page, input: { targetPart
           const ranges = highlight ? [...highlight] : []
           const active = ranges.find((range): range is Range => range instanceof Range)
           const activeRect = active?.getBoundingClientRect()
+
           const activeElement =
             active?.startContainer instanceof Element ? active.startContainer : active?.startContainer.parentElement
 
@@ -70,15 +75,18 @@ export async function installTimelineSearchProbe(page: Page, input: { targetPart
         }, 0)
       })
     }
+
     const onInputCapture = (event: Event) => {
       if (event.target !== field || startedAt !== undefined) return
       startedAt = performance.now()
       sample()
     }
+
     const onInput = (event: Event) => {
       if (event.target !== field || startedAt === undefined || handlerDurationMs !== undefined) return
       handlerDurationMs = performance.now() - startedAt
     }
+
     document.addEventListener("input", onInputCapture, { capture: true })
     document.addEventListener("input", onInput)
     ;(window as Window & { __timelineSearchBenchmark?: TimelineSearchProbe }).__timelineSearchBenchmark = {
@@ -91,6 +99,7 @@ export async function installTimelineSearchProbe(page: Page, input: { targetPart
         running = false
         document.removeEventListener("input", onInputCapture, { capture: true })
         document.removeEventListener("input", onInput)
+
         if (frame !== undefined) cancelAnimationFrame(frame)
       },
     }
@@ -105,10 +114,14 @@ export async function waitForStableTimelineSearch(
     ({ counter, targetPartID }) => {
       const samples = (window as Window & { __timelineSearchBenchmark?: TimelineSearchProbe }).__timelineSearchBenchmark
         ?.samples
+
       if (!samples) return false
+
       return samples.some((_, index) => {
         const stable = samples.slice(index, index + 3)
+
         if (stable.length !== 3) return false
+
         return stable.every(
           (sample, sampleIndex) =>
             sample.counter === counter &&
@@ -130,18 +143,24 @@ export async function waitForStableTimelineSearch(
 export async function collectTimelineSearchMetrics(page: Page, input: { counter: string; targetPartID: string }) {
   const result = await page.evaluate(() => {
     const probe = (window as Window & { __timelineSearchBenchmark?: TimelineSearchProbe }).__timelineSearchBenchmark
+
     if (!probe) throw new Error("missing timeline search benchmark probe")
     probe.stop()
+
     return {
       samples: probe.samples,
       handlerDurationMs: probe.handlerDurationMs,
       initialScrollTopPx: probe.initialScrollTopPx,
     }
   })
+
   const first = (predicate: (sample: TimelineSearchSample) => boolean) => result.samples.find(predicate)?.observedAtMs
+
   const stable = result.samples.findIndex((_, index) => {
     const samples = result.samples.slice(index, index + 3)
+
     if (samples.length !== 3) return false
+
     return samples.every(
       (sample, sampleIndex) =>
         sample.counter === input.counter &&
@@ -154,6 +173,7 @@ export async function collectTimelineSearchMetrics(page: Page, input: { counter:
             Math.abs((sample.targetTopPx ?? Infinity) - (samples[sampleIndex - 1]!.targetTopPx ?? -Infinity)) <= 1)),
     )
   })
+
   const final = result.samples.at(-1)
 
   return {

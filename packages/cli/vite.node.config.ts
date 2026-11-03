@@ -3,12 +3,12 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
-import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
+import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset } from "./src/node/target"
 import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
 
-function rawTextPlugin(): Plugin {
+function rawTextPlugin(modelsSnapshot?: string): Plugin {
   return {
     name: "opencode:raw-text",
     // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
@@ -18,12 +18,17 @@ function rawTextPlugin(): Plugin {
     enforce: "pre",
     async load(id) {
       if (!id.endsWith(".md") && !id.endsWith(".txt")) return
-      return `export default ${JSON.stringify(await readFile(id, "utf8"))}`
+      const text =
+        modelsSnapshot && /models-dev[/\\]snapshot\.txt$/.test(id) ? modelsSnapshot : await readFile(id, "utf8")
+      return `export default ${JSON.stringify(text)}`
     },
   }
 }
 
-function appAssetsPlugin(archive: string): Plugin {
+/** The web UI archive's SEA asset key. The prelude leaves it in place, and the server reads it from SEA memory. */
+export const appArchiveAsset = "app-archive.bin"
+
+function appAssetsPlugin(): Plugin {
   return {
     name: "opencode:app-assets",
     resolveId(id) {
@@ -31,7 +36,13 @@ function appAssetsPlugin(archive: string): Plugin {
     },
     load(id) {
       if (id !== "\0virtual:opencode-app-assets") return
-      return `export default ${archive}`
+      return `import { readFileSync } from "node:fs"
+import path from "node:path"
+import { getRawAsset, isSea } from "node:sea"
+export default () =>
+  isSea()
+    ? new Uint8Array(getRawAsset(${JSON.stringify(appArchiveAsset)}))
+    : readFileSync(path.join(process.env.OPENCODE_NODE_ASSETS_DIR, ${JSON.stringify(appArchiveAsset)}))`
     },
   }
 }
@@ -205,6 +216,7 @@ const __ocPersistentPty = ${JSON.stringify(opencodePtyAsset)}
 if (__ocIsSea()) {
   const __ocPtySpawnHelper = ${JSON.stringify(nodePtySpawnHelper)}
   for (const __ocKey of __ocAssetKeys()) {
+    if (__ocKey === ${JSON.stringify(appArchiveAsset)}) continue
     const __ocTarget = __ocPath.join(__ocAssetRoot, __ocKey)
     if (__ocExists(__ocTarget)) continue
     __ocMkdir(__ocPath.dirname(__ocTarget), { recursive: true })
@@ -225,9 +237,6 @@ process.env.OTUI_ASSET_ROOT = __ocAssetRoot
 process.env.OPENCODE_NODE_PTY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.nodePtyEntryAsset)})
 process.env.OPENCODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.parcelWatcherAsset)})
 process.env.OPENCODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
-process.env.OPENCODE_TREE_SITTER_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.runtime)})
-process.env.OPENCODE_TREE_SITTER_BASH_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.bash)})
-process.env.OPENCODE_TREE_SITTER_POWERSHELL_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.powershell)})
 process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
 process.env.OPENCODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
 if (__ocPersistentPty && !process.env.OPENCODE_PTY_BIN) process.env.OPENCODE_PTY_BIN = __ocPath.join(__ocAssetRoot, __ocPersistentPty)
@@ -241,17 +250,18 @@ if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 export type NodeBuildInput = {
   readonly version: string
   readonly channel: string
+  readonly highlights?: string
+  readonly modelsSnapshot?: string
   readonly assetHash: string
   readonly target: NodeTarget
-  readonly appArchive: string
 }
 
 export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
-      appAssetsPlugin(input.appArchive),
-      rawTextPlugin(),
+      appAssetsPlugin(),
+      rawTextPlugin(input.modelsSnapshot),
       runtimeRequirePlugin(),
       fffNodePlugin(),
       simulationGraphPlugin(),
@@ -269,6 +279,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_ARTIFACT: JSON.stringify("cli-node"),
+      ...(input.highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(input.highlights) } : {}),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
       "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),
@@ -292,5 +303,4 @@ export default mainConfig({
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
-  appArchive: "{}",
 })

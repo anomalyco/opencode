@@ -1,21 +1,23 @@
-import type { ToolDefinition } from "@opencode/ai"
+import { emptyInputJsonSchema, ToolFailure, type ToolDefinition } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import { Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
-const jsonSchemas = Effect.runSync(
-  Cache.make<JsonSchema.JsonSchema, Schema.Codec<unknown> | undefined>({
-    capacity: 100,
-    lookup: (schema) =>
-      Effect.try({
-        try: () => jsonSchema(schema),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(() => undefined)),
-  }),
-)
+// Codecs for raw JSON Schema inputs (mostly MCP tools), built once per schema object; schemas are not edited after
+// registration. Not an Effect `Cache`: each entry keeps its lookup fiber, which keeps the caller's stack frames and
+// through them the `Effect.fn` closures over its Location's services, so evicted Locations stayed alive.
+const jsonSchemas = new WeakMap<object, Schema.Codec<unknown> | undefined>()
+
+const codecFor = (schema: JsonSchema.JsonSchema) => {
+  if (jsonSchemas.has(schema)) return jsonSchemas.get(schema)
+  const codec = Result.try(() => jsonSchema(schema)).pipe(Result.getOrUndefined)
+  jsonSchemas.set(schema, codec)
+  return codec
+}
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   type: "tool",
@@ -73,7 +75,7 @@ const validateInput = (
 ): Effect.Effect<StandardSchemaV1.Result<unknown>> => {
   if (isStandardSchema(schema)) return validateStandard(schema, value)
   return Effect.gen(function* () {
-    const codec = Schema.isSchema(schema) ? schema : yield* Cache.get(jsonSchemas, schema)
+    const codec = Schema.isSchema(schema) ? schema : codecFor(schema)
     if (codec === undefined) return { value }
     return yield* Schema.decodeUnknownEffect(codec)(value, { errors: "all" }).pipe(
       Effect.match({
@@ -155,7 +157,8 @@ const validateStandard = (
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
   if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
-  return Schema.isSchema(schema) ? toJsonSchema(schema) : schema
+  if (!Schema.isSchema(schema)) return schema
+  return emptyInputJsonSchema(schema) ?? toJsonSchema(schema)
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
@@ -170,7 +173,7 @@ const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "o
 }
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
-  const document = Schema.toJsonSchemaDocument(schema)
+  const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })
   // Effect emits valid JSON Schema that some inference providers handle poorly. Simplify it
   // without changing validation: `{ type: "integer", allOf: [{ minimum: 0 }] }` becomes
   // `{ type: "integer", minimum: 0 }` only when no keyword would be overwritten. Named schemas
@@ -189,15 +192,26 @@ const flattenAllOf = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(flattenAllOf)
   if (typeof value !== "object" || value === null) return value
 
-  const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, flattenAllOf(item)]))
+  // Effect adds the safe-integer range to every Schema.Int. Drop it so tool schemas don't change and
+  // bust prompt caches.
+  const integer = "type" in value && value.type === "integer"
+  const schema = Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        ([key, item]) =>
+          !integer ||
+          !(
+            (key === "minimum" && item === Number.MIN_SAFE_INTEGER) ||
+            (key === "maximum" && item === Number.MAX_SAFE_INTEGER)
+          ),
+      )
+      .map(([key, item]) => [key, flattenAllOf(item)]),
+  )
   if (!Array.isArray(schema.allOf) || !schema.allOf.every(isRecord) || !canFlattenAllOf(schema.allOf, schema))
     return schema
   const { allOf, ...rest } = schema
   return flattenAllOf({ ...Object.assign({}, ...allOf), ...rest })
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 const canFlattenAllOf = (allOf: ReadonlyArray<Record<string, unknown>>, parent: Record<string, unknown>) => {
   const keys = new Set(Object.keys(parent).filter((key) => key !== "allOf"))
@@ -220,8 +234,8 @@ const inlineLocalReferences = (
 
   const localDefinitions = definitions ?? (isRecord(value.$defs) ? value.$defs : undefined)
   if (typeof value.$ref === "string" && localDefinitions) {
-    const segment = value.$ref.match(/^#\/\$defs\/([^/]+)$/)?.[1]
-    const name = segment?.replaceAll("~1", "/").replaceAll("~0", "~")
+    const tokens = JsonPointer.parseUriFragment(value.$ref)
+    const name = tokens?.length === 2 && tokens[0] === "$defs" ? tokens[1] : undefined
     if (name && !seen.has(name)) {
       const target = localDefinitions[name]
       if (target) {
@@ -262,7 +276,7 @@ export const normalizeContent = (value: string | ReadonlyArray<Tool.Content> | u
   return [{ type: "text" as const, text: stringify(output) }]
 }
 
-const stringify = (value: unknown) => {
+export const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
     return JSON.stringify(value) ?? String(value)
@@ -271,9 +285,13 @@ const stringify = (value: unknown) => {
   }
 }
 
-export const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+export const normalizedName = (tool: Pick<Tool.Info, "name">) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-export const effectiveName = (tool: Tool.Info) =>
+export const effectiveName = (tool: Pick<Tool.Info, "name" | "options">) =>
   tool.options?.namespace === undefined
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
+
+/** For `Effect.mapError`: keep a `ToolFailure` as is, wrap anything else with `message`. */
+export const toolFailure = (message: string) => (error: unknown) =>
+  error instanceof ToolFailure ? error : new ToolFailure({ message, error })

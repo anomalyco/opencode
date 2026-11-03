@@ -16,11 +16,14 @@ export function LoadingSplash(props: {
   onMount(() => {
     if (!props.preview || !props.firstLaunch) return
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
+
     const start = () => {
       if (document.visibilityState !== "visible" || !document.hasFocus()) return
       setDrawing("started", true)
+
       if (motion.matches) props.onDrawEnd()
     }
+
     window.addEventListener("focus", start)
     document.addEventListener("visibilitychange", start)
     motion.addEventListener("change", start)
@@ -34,9 +37,12 @@ export function LoadingSplash(props: {
 
   const titlebarHeight = () => {
     const zoom = props.platform.webviewZoom?.() ?? 1
+
     if (props.platform.os === "macos") return `max(36px, ${36 / zoom}px)`
+
     if (props.platform.os === "windows")
       return `max(36px, env(titlebar-area-height, ${44 / Math.min(Math.max(zoom, 0.25), 1)}px))`
+
     return "36px"
   }
 

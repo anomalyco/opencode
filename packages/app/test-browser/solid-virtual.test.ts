@@ -5,6 +5,7 @@ import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
+
   const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>({
     count: 5,
     estimateSize: () => 50,
@@ -30,6 +31,7 @@ test("end anchoring survives consecutive resizes when the first scroll write is 
 test("start anchoring preserves a stable visible item across prepends", () => {
   const root = document.createElement("div")
   const writes: number[] = []
+
   const options = (keys: string[]) => ({
     count: keys.length,
     estimateSize: () => 50,
@@ -44,6 +46,7 @@ test("start anchoring preserves a stable visible item across prepends", () => {
       callback(50, false)
     },
   })
+
   const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["c", "d", "e"]))
   virtualizer._willUpdate()
   virtualizer.getVirtualItems()
@@ -61,6 +64,7 @@ test("start anchoring preserves a stable visible item across prepends", () => {
 test("prepend anchoring survives when the nearest keys are re-keyed", () => {
   const root = document.createElement("div")
   const writes: number[] = []
+
   const options = (keys: string[]) => ({
     count: keys.length,
     estimateSize: () => 50,
@@ -75,6 +79,7 @@ test("prepend anchoring survives when the nearest keys are re-keyed", () => {
       callback(50, false)
     },
   })
+
   // Viewport sits at offset 50: rows "orphan-c" (anchor) and "d" visible.
   const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["orphan-c", "d", "e"]))
   virtualizer._willUpdate()
@@ -92,6 +97,7 @@ test("prepend anchoring survives when the nearest keys are re-keyed", () => {
 test("reactive count updates preserve measured row sizes", () => {
   createRoot((dispose) => {
     const [count, setCount] = createSignal(2)
+
     const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
       get count() {
         return count()
@@ -168,6 +174,7 @@ test("clamps oversized offsets with scroll margin and padding changes", () => {
     observeElementRect: () => {},
     observeElementOffset: () => {},
   })
+
   const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(64))
 
   expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
@@ -180,6 +187,7 @@ test("stale pinned indexes do not produce missing virtual items after count shri
   createRoot((dispose) => {
     const [count, setCount] = createSignal(2)
     const pinned = [1]
+
     const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
       get count() {
         return count()
@@ -209,6 +217,7 @@ test("snapshots materialize only measured rows and restore their current geometr
     observeElementRect: () => {},
     observeElementOffset: () => {},
   }
+
   const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options)
   expect(virtualizer.getTotalSize()).toBe(6000)
   virtualizer.resizeItem(4, 100)
@@ -219,6 +228,7 @@ test("snapshots materialize only measured rows and restore their current geometr
     new Proxy(measurements, {
       get(target, key, receiver) {
         if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
+
         // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
         return Reflect.get(target, key, receiver)
       },

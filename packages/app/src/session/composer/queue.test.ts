@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptRows } from "./queue"
+import { extractPromptFromMessage } from "@/composer/prompt"
+import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
+import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt, type SentEdit } from "./queue"
 
 const queued = [
   {
@@ -21,35 +23,165 @@ const queued = [
   },
 ] satisfies SessionInboxInfo[]
 
+const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
+
+const later = { ...queued[0], id: "msg_later", payload: { text: "later" } }
+
+const laterCopy = { ...later, id: "msg_later_copy" }
+
+const sent = (change: Partial<SentEdit> = {}): SentEdit => ({
+  original: "msg_original",
+  delivery: "queue",
+  text: "edited",
+  attachments: 1,
+  moved: { msg_original: "msg_replacement", msg_later: "msg_later_copy" },
+  admitted: false,
+  ...change,
+})
+
+const row = (item: (typeof queued)[number], pending?: boolean) => ({
+  id: item.id,
+  text: item.payload.text,
+  attachments: 0,
+  pending,
+})
+
+const edited = (id: string) => ({ id, text: "edited", attachments: 1, pending: true })
+
+// One edit's life in the strip: sent from the composer, re-admitted by the server, its originals
+// cancelled last first, then settled once the server's queue reflects it, or rolled back on failure.
 describe("queuedPromptRows", () => {
-  test("keeps the edited prompt to one row while its replacement is admitted", () => {
-    expect(queuedPromptRows(queued, { original: "msg_original", replacement: "msg_replacement" })).toEqual([
-      { id: "msg_replacement", text: "edited", attachments: 0 },
+  const quote = { type: "quote" as const, text: "Earlier answer" }
+
+  const annotation = {
+    type: "note" as const,
+    origin: "browser",
+    label: "Save button",
+    icon: "select-element",
+    subject: 'the "Save" button',
+    comment: "",
+  }
+
+  const file = { path: "src/app.ts", comment: "Keep this" }
+
+  const files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri" as const, uri: "file:///repo/src/app.ts" },
+      name: "app.ts",
+    },
+  ]
+
+  test.each([
+    {
+      name: "text with a quote",
+      displayText: "Summarize this",
+      comments: [quote],
+      files: [],
+      visible: { text: "Summarize this", attachments: 1 },
+    },
+    {
+      name: "text with an annotation without a comment",
+      displayText: "Inspect this",
+      comments: [annotation],
+      files: [],
+      visible: { text: "Inspect this", attachments: 1 },
+    },
+    {
+      name: "quote-only context without model framing",
+      displayText: "",
+      comments: [quote],
+      files: [],
+      visible: { text: "", attachments: 1 },
+    },
+    {
+      name: "trimmed text with mixed comments without double counting the context file",
+      displayText: "  Check these\n",
+      comments: [quote, annotation, file],
+      files,
+      visible: { text: "Check these", attachments: 3 },
+    },
+    {
+      name: "pending edited text with the original preserved comments",
+      displayText: "Original text",
+      comments: [quote, annotation, file],
+      files,
+      pending: true,
+      visible: { text: "edited", attachments: 3 },
+    },
+    {
+      name: "pending context-only edit retains its raw edited text",
+      displayText: "",
+      comments: [quote],
+      files: [],
+      pending: true,
+      visible: { text: "edited", attachments: 1 },
+    },
+  ])("shows $name", ({ displayText, comments, files, pending, visible }) => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "Raw model-visible framing and context",
+        files: [...files],
+        metadata: { displayText, comments: [...comments] },
+      },
+    } satisfies SessionInboxInfo
+
+    expect(queuedPromptRows([item], pending ? [sent()] : [])).toStrictEqual([
+      { id: item.id, pending: pending || undefined, ...visible },
     ])
   })
 
-  test("keeps the original visible until its replacement appears", () => {
-    expect(queuedPromptRows([queued[0]], { original: "msg_original", replacement: "msg_replacement" })).toEqual([
-      { id: "msg_original", text: "original", attachments: 0 },
+  test.each([
+    [
+      "shows a sent edit on the original row and marks the rows it rewrites as pending",
+      [other, queued[0], later],
+      [sent()],
+      [row(other), edited("msg_original"), row(later, true)],
+    ],
+    [
+      "hides re-admitted copies while their originals are listed",
+      [other, queued[0], later, queued[1], laterCopy],
+      [sent()],
+      [row(other), edited("msg_original"), row(later, true)],
+    ],
+    [
+      "keeps the order as the originals are cancelled last first",
+      [other, queued[0], queued[1], laterCopy],
+      [sent({ admitted: true })],
+      [row(other), edited("msg_original"), row(laterCopy, true)],
+    ],
+    [
+      "shows the edit on its replacement once the original is gone",
+      [other, queued[1], laterCopy],
+      [sent({ admitted: true })],
+      [row(other), edited("msg_replacement"), row(laterCopy, true)],
+    ],
+    [
+      "drops the original row once a steered edit is admitted",
+      [queued[0], other],
+      [sent({ delivery: "steer", moved: { msg_original: "msg_replacement" }, admitted: true })],
+      [row(other)],
+    ],
+    ["shows the server's queue once the edit settles", [other, queued[1]], [], [row(other), row(queued[1])]],
+    ["restores the original row when a failed edit settles", [queued[0], other], [], [row(queued[0]), row(other)]],
+  ])("%s", (_name, items, edits, visible) => {
+    expect(queuedPromptRows(items, edits)).toEqual(visible)
+  })
+
+  test("shows each of several edits in flight on its own row", () => {
+    const second = sent({ original: "msg_other", text: "other edited", moved: { msg_other: "msg_other_copy" } })
+
+    expect(queuedPromptRows([queued[0], other, later], [sent(), second])).toEqual([
+      edited("msg_original"),
+      { id: "msg_other", text: "other edited", attachments: 1, pending: true },
+      row(later, true),
     ])
   })
 
-  test("retains unrelated queue entries", () => {
-    expect(queuedPromptRows(queued)).toEqual([
-      { id: "msg_original", text: "original", attachments: 0 },
-      { id: "msg_replacement", text: "edited", attachments: 0 },
-    ])
-  })
-
-  test("keeps other prompts visible while a mutation replaces the edited prompt", () => {
-    const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
-
-    expect(
-      queuedPromptRows([queued[0], other, queued[1]], { original: "msg_original", replacement: "msg_replacement" }),
-    ).toEqual([
-      { id: "msg_other", text: "other", attachments: 0 },
-      { id: "msg_replacement", text: "edited", attachments: 0 },
-    ])
+  test("hides prompts the server confirmed gone until its events catch up", () => {
+    expect(queuedPromptRows([queued[0], other], [], ["msg_original"])).toEqual([row(other)])
   })
 })
 
@@ -84,23 +216,77 @@ describe("queuedPromptAttachments", () => {
     ])
   })
 
-  test("leaves file mentions and context files in the payload", () => {
-    const item = {
-      ...queued[0],
-      payload: {
-        text: "see @src/a.ts",
-        files: [
-          {
-            data: "aGk=",
-            mime: "text/plain",
-            source: { type: "inline" as const },
-            mention: { start: 4, end: 13, text: "@src/a.ts" },
-          },
-          { data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///src/b.ts" } },
-        ],
-      },
-    } satisfies SessionInboxInfo
+  test("undoQueuedPrompt pins media:<hash> attachments locally before inbox.cancel sweeps the server blob", async () => {
+    const hash = "e".repeat(64)
+    const mediaUri = `media:${hash}`
+    const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    const pngBytes = Uint8Array.from(Buffer.from(pngBase64, "base64"))
+    const blobs = new Map<string, Uint8Array>([[hash, pngBytes]])
+    const events: string[] = []
 
-    expect(queuedPromptAttachments(item)).toEqual([])
+    const extracted = extractPromptFromMessage({
+      id: "msg_queued_media",
+      text: "queued with image",
+      files: [
+        {
+          uri: mediaUri,
+          mime: "image/png",
+          source: { type: "inline" },
+          width: 1,
+          height: 1,
+          bytes: pngBytes.byteLength,
+          name: "shot.png",
+        },
+      ],
+    })
+
+    expect(extracted.find((part) => part.type === "image")).toMatchObject({
+      blob: { id: `media:${hash}`, url: "" },
+    })
+    expect(JSON.stringify(extracted)).not.toContain("/api/")
+
+    // The server's media cache, as `client.tsx` registers it: a URL for the bytes while the server still has them.
+    setMediaBlobLoader("queue-test", async (uri) => {
+      events.push(`load:${uri}`)
+      const found = blobs.get(uri.slice("media:".length))
+
+      return found ? `data:image/png;base64,${Buffer.from(found).toString("base64")}` : undefined
+    })
+
+    try {
+      const pinned = await undoQueuedPrompt({
+        prompt: extracted,
+        cancelInboxItem: async () => {
+          events.push("cancelInboxItem")
+          // The cancel releases the item's blob refs and sweeps the blob nothing else references.
+          blobs.delete(hash)
+        },
+      })
+
+      expect(events).toEqual([`load:${mediaUri}`, "cancelInboxItem"])
+      expect(blobs.has(hash)).toBe(false)
+
+      const imagePart = pinned.find((part) => part.type === "image")
+      expect(imagePart?.type).toBe("image")
+
+      if (imagePart?.type !== "image") return
+      expect(imagePart.blob.id).not.toStartWith("media:")
+      expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(`data:image/png;base64,${pngBase64}`)
+
+      // Media nothing serves anymore fails the pin, so the item is never cancelled.
+      const cancels = events.length
+
+      await expect(
+        undoQueuedPrompt({
+          prompt: extracted,
+          cancelInboxItem: async () => {
+            events.push("cancelInboxItem")
+          },
+        }),
+      ).rejects.toBeInstanceOf(Error)
+      expect(events.slice(cancels)).toEqual([`load:${mediaUri}`])
+    } finally {
+      setMediaBlobLoader("queue-test", undefined)
+    }
   })
 })

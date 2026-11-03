@@ -1,10 +1,12 @@
 import { NodeServices } from "@effect/platform-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
-import { Effect, FileSystem, PlatformError, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { existsSync } from "node:fs"
+import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/process"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
 import { testEffect } from "../../core/test/lib/effect"
@@ -14,30 +16,50 @@ const it = testEffect(NodeServices.layer)
 declare const OPENCODE_CLI_NAME: string | undefined
 
 function fixture(
-  respond: (command: ChildProcess.StandardCommand) => Partial<AppProcess.RunResult> & {
+  respond: (command: {
+    readonly command: string
+    readonly args: ReadonlyArray<string>
+  }) => Partial<AppProcess.RunResult> & {
     error?: AppProcess.AppProcessError
   } = () => ({}),
   name = "@opencode/cli",
   failCleanup = false,
   releasePackage = name,
+  formula?: string,
+  executableOverride?: (root: string, home: string) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
-    const executable = path.join(root, "package", "bin", "opencode")
+    const execPath = process.execPath
+    const modules = path.join(root, "node_modules")
+    const executable = executableOverride
+      ? yield* executableOverride(root, path.join(root, "home"))
+      : formula
+        ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
+        : path.join(modules, "@opencode", "cli", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
-    yield* fs.writeFileString(
-      path.join(root, "package", "package.json"),
-      JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
-    )
+    yield* fs.writeFileString(executable, "binary")
+    if (!formula && !executableOverride)
+      yield* fs.writeFileString(
+        path.join(modules, "@opencode", "cli", "package.json"),
+        JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
+      )
+    const requests: string[] = []
     // The updater uses global fetch; scope this replacement to each install test.
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         spyOn(globalThis, "fetch").mockImplementation(
-          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: releasePackage } }), {
-            preconnect: fetch.preconnect,
-          }),
+          Object.assign(
+            async (input: string | URL | Request) => {
+              const url = input instanceof Request ? input.url : input.toString()
+              requests.push(url)
+              if (new URL(url).hostname === "formulae.brew.sh") return Response.json({ versions: { stable: "2.0.21" } })
+              return Response.json({ version: "2.3.4", metadata: { package: releasePackage } })
+            },
+            { preconnect: fetch.preconnect },
+          ),
         ),
       ),
       (request) => Effect.sync(() => request.mockRestore()),
@@ -53,9 +75,21 @@ function fixture(
       log: path.join(root, "log"),
       repos: path.join(root, "repos"),
     })
+    // Windows locates the installer's Git Bash through `git --exec-path`; answer it with a fixture install.
+    const git = path.join(root, "Git")
+    const bash = process.platform === "win32" ? path.join(git, "bin", "bash.exe") : "bash"
+    if (process.platform === "win32") {
+      yield* fs.makeDirectory(path.dirname(bash), { recursive: true })
+      yield* fs.writeFileString(bash, "bash")
+    }
     const commands: string[][] = []
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
+      Effect.provide(
+        LayerNode.compile(EffectFlock.node, {
+          replacements: [Global.node.replace(Layer.succeed(Global.Service, global))],
+        }),
+      ),
       Effect.provideService(Global.Service, global),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
@@ -70,7 +104,7 @@ function fixture(
                 }),
               )
             : fs.remove(target, options),
-        realPath: (input) => (input === process.execPath ? Effect.succeed(executable) : fs.realPath(input)),
+        realPath: (input) => (input === execPath ? fs.realPath(executable) : fs.realPath(input)),
       }),
       Effect.provideService(
         AppProcess.Service,
@@ -79,8 +113,12 @@ function fixture(
           run: (command) =>
             Effect.suspend(() => {
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
-              commands.push([command.command, ...command.args])
-              const result = respond(command)
+              const args = command.args.map(String)
+              const lookup = command.command === "git" && args[0] === "--exec-path"
+              if (!lookup) commands.push([command.command, ...args])
+              const result = lookup
+                ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
+                : respond({ command: command.command, args })
               if (result.error) return Effect.fail(result.error)
               return Effect.succeed({
                 command: command.command,
@@ -96,12 +134,18 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, global, fs }
+    return { updater, commands, requests, global, fs, executable, bash }
   })
 }
 
+const windows = process.platform === "win32" ? it.live : it.live.skip
+const unix = process.platform === "win32" ? it.live.skip : it.live
+
 const installs = [
-  { method: "npm", command: ["npm", "install", "--global", "--force", "@opencode/cli@2.3.4-beta.1"] },
+  {
+    method: "npm",
+    command: ["npm", "install", "--global", "--allow-scripts=@opencode/cli", "--force", "@opencode/cli@2.3.4-beta.1"],
+  },
   {
     method: "pnpm",
     command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
@@ -173,7 +217,11 @@ it.live("bun ignores install cache cleanup failures", () =>
         const installer = command.command === "curl" ? command.args[2] : command.args[0]
         expect(existsSync(path.dirname(installer))).toBe(true)
         return {
-          exitCode: command.command === (failure === "download" ? "curl" : failure === "install" ? "bash" : "") ? 1 : 0,
+          exitCode:
+            path.basename(command.command, ".exe") ===
+            (failure === "download" ? "curl" : failure === "install" ? "bash" : "")
+              ? 1
+              : 0,
           stderr: Buffer.from(`${failure} failed`),
         }
       })
@@ -182,7 +230,7 @@ it.live("bun ignores install cache cleanup failures", () =>
       expect(installer).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
         ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
-        ...(failure === "download" ? [] : [["bash", installer, "--version", "2.3.4-beta.1", "--no-modify-path"]]),
+        ...(failure === "download" ? [] : [[test.bash, installer, "--version", "2.3.4-beta.1", "--no-modify-path"]]),
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
       expect(result._tag).toBe(failure === "success" ? "None" : "Some")
@@ -268,6 +316,244 @@ it.live("vp detection ignores no-match output that repeats the package name", ()
   }),
 )
 
+it.live("Homebrew Core installs check and upgrade the Core formula", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode")
+    expect(yield* test.updater.method()).toBe("brew")
+    expect(yield* test.updater.latest()).toBe("2.0.21")
+    yield* test.updater.upgrade("brew", "2.0.21")
+    expect(test.commands).toEqual([["brew", "upgrade", "opencode"]])
+    // An explicitly selected method keeps its own release source.
+    expect(yield* test.updater.latest("npm")).toBe("2.3.4")
+    expect(test.requests).toEqual([
+      "https://formulae.brew.sh/api/formula/opencode.json",
+      "https://opencode.ai/update/api/local/cli/npm?current=local",
+    ])
+  }),
+)
+;["opencode-v2", "opencode-beta"].forEach((formula) => {
+  it.live(`Homebrew tap installs of ${formula} use the published tap formula`, () =>
+    Effect.gen(function* () {
+      const test = yield* fixture(() => ({}), "@opencode/cli", false, `anomalyco/tap/${formula}`, formula)
+      expect(yield* test.updater.method()).toBe("brew")
+      expect(yield* test.updater.latest()).toBe("2.3.4")
+      yield* test.updater.upgrade("brew", "2.3.4")
+      expect(test.commands).toEqual([["brew", "upgrade", `anomalyco/tap/${formula}`]])
+      expect(test.requests).toEqual([
+        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
+        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
+      ])
+    }),
+  )
+})
+
+const winget = (search: Partial<AppProcess.RunResult>) =>
+  fixture(
+    (command) => (command.args[0] === "search" ? search : {}),
+    "@opencode/cli",
+    false,
+    "@opencode/cli",
+    undefined,
+    (root) =>
+      Effect.succeed(
+        path.join(
+          root,
+          "AppData",
+          "Local",
+          "Microsoft",
+          "WinGet",
+          "Packages",
+          "Anomaly.OpenCode_Microsoft.Winget.Source_8wekyb3d8bbwe",
+          "opencode.exe",
+        ),
+      ),
+  )
+const wingetArgs = [
+  "--id",
+  "Anomaly.OpenCode",
+  "--exact",
+  "--source",
+  "winget",
+  "--accept-source-agreements",
+  "--disable-interactivity",
+]
+
+it.live("WinGet installs check, upgrade, and remove the version in the WinGet index", () =>
+  Effect.gen(function* () {
+    const test = yield* winget({
+      stdout: Buffer.from(
+        "Name     Id               Version\r\n------------------------------\r\nOpenCode Anomaly.OpenCode 2.0.28\r\n",
+      ),
+    })
+    expect(yield* test.updater.method()).toBe("winget")
+    expect(yield* test.updater.latest()).toBe("2.0.28")
+    yield* test.updater.upgrade("winget", "v2.0.28")
+    const removal = test.updater.removal("winget")
+    if (!removal) return yield* Effect.die("Expected winget removal command")
+    yield* removal.run
+    expect(test.commands).toEqual([
+      ["winget", "search", ...wingetArgs],
+      ["winget", "upgrade", ...wingetArgs, "--version", "2.0.28", "--silent", "--accept-package-agreements"],
+      ["winget", "uninstall", ...wingetArgs],
+    ])
+    // WinGet moderates submissions, so the OpenCode release service may list a version WinGet cannot install yet.
+    expect(test.requests).toEqual([])
+  }),
+)
+
+it.live("WinGet update checks report a missing package instead of a version", () =>
+  Effect.gen(function* () {
+    const test = yield* winget({
+      exitCode: -1978335212,
+      stdout: Buffer.from("No package found matching input criteria.\r\n"),
+    })
+    const error = yield* test.updater.latest().pipe(Effect.flip)
+    expect(error.message).toBe("No package found matching input criteria.")
+  }),
+)
+
+// Links are named opencode-upgrade-<pid>-<random>.exe; read them from inside the installer run.
+const links = (directory: string) =>
+  existsSync(directory) ? readdirSync(directory).filter((name) => name.startsWith("opencode-")) : []
+const upgradeLinks = (directory: string) =>
+  links(directory).filter((name) => name.startsWith(`opencode-upgrade-${process.pid}-`))
+
+windows("windows keeps a second link to the running binary in the cache while the installer runs", () =>
+  Effect.gen(function* () {
+    const layout = { executable: "", cache: "" }
+    const test = yield* fixture(() => {
+      expect(readFileSync(layout.executable, "utf8")).toBe("binary")
+      const held = upgradeLinks(layout.cache)
+      expect(held).toHaveLength(1)
+      expect(readFileSync(path.join(layout.cache, held[0]), "utf8")).toBe("binary")
+      return {}
+    })
+    layout.executable = test.executable
+    layout.cache = test.global.cache
+    yield* test.fs.makeDirectory(test.global.cache, { recursive: true })
+    // pid 999999999 does not exist; pid 4 is System, alive but not openable (EPERM).
+    yield* test.fs.writeFileString(path.join(test.global.cache, "opencode-upgrade-999999999-dead.exe"), "exited")
+    yield* test.fs.writeFileString(path.join(test.global.cache, "opencode-service-4-aa.exe"), "inaccessible")
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(test.commands).toHaveLength(1)
+    // The installed path never disappears; the extra link is released and only dead ones are swept.
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual(["opencode-service-4-aa.exe"])
+  }),
+)
+
+windows("windows releases the link when the installer fails", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(upgradeLinks(layout.cache)).toHaveLength(1)
+      return { exitCode: 1, stderr: Buffer.from("registry denied access") }
+    })
+    layout.cache = test.global.cache
+    const error = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+    expect(error.message).toBe("registry denied access")
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual([])
+  }),
+)
+
+windows("windows keeps the uninstall link in the temporary directory, not the removed cache", () =>
+  Effect.gen(function* () {
+    const layout = { tmp: "" }
+    const test = yield* fixture(() => {
+      expect(upgradeLinks(layout.tmp)).toHaveLength(1)
+      return {}
+    })
+    layout.tmp = test.global.tmp
+    yield* test.fs.makeDirectory(test.global.cache, { recursive: true })
+    const removal = test.updater.removal("bun")
+    if (!removal) return yield* Effect.die("Expected bun removal command")
+    yield* removal.run
+    expect(test.commands).toEqual([["bun", "remove", "--global", "@opencode/cli"]])
+    expect(links(test.global.cache)).toEqual([])
+    expect(links(test.global.tmp)).toEqual([])
+  }),
+)
+
+windows("windows links the curl binary before the installer replaces it", () =>
+  Effect.gen(function* () {
+    const layout = { executable: "", cache: "" }
+    const test = yield* fixture(
+      (command) => {
+        if (path.basename(command.command, ".exe") === "bash") {
+          expect(readFileSync(layout.executable, "utf8")).toBe("binary")
+          expect(upgradeLinks(layout.cache)).toHaveLength(1)
+        }
+        return {}
+      },
+      "@opencode/cli",
+      false,
+      "@opencode/cli",
+      undefined,
+      (_root, home) => Effect.succeed(path.join(home, ".opencode", "bin", "opencode.exe")),
+    )
+    layout.executable = test.executable
+    layout.cache = test.global.cache
+    const original = process.execPath
+    process.execPath = layout.executable
+    yield* Effect.addFinalizer(() => Effect.sync(() => (process.execPath = original)))
+    expect(yield* test.updater.method()).toBe("curl")
+    yield* test.updater.upgrade("curl", "2.3.4")
+    expect(test.commands.map((command) => command[0])).toEqual(["curl", test.bash])
+    expect(yield* test.fs.readFileString(layout.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual([])
+  }),
+)
+
+unix("curl method detection resolves symlinked home directories", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(
+      () => ({}),
+      "@opencode/cli",
+      false,
+      "@opencode/cli",
+      undefined,
+      (root, home) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem
+          const realHome = path.join(root, "real-home")
+          const bin = path.join(realHome, ".opencode", "bin", "opencode")
+          yield* fs.makeDirectory(path.dirname(bin), { recursive: true })
+          yield* fs.symlink(realHome, home)
+          return bin
+        }),
+    )
+    expect(yield* test.updater.method()).toBe("curl")
+    expect(test.commands).toEqual([])
+  }),
+)
+
+windows("windows leaves a source checkout's runtime alone", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(links(layout.cache)).toEqual([])
+      return {}
+    }, "not-opencode")
+    layout.cache = test.global.cache
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(test.commands).toHaveLength(1)
+  }),
+)
+
+unix("other platforms never link the running binary", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(links(layout.cache)).toEqual([])
+      return {}
+    })
+    layout.cache = test.global.cache
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+  }),
+)
+
 test("Node distribution honors the compile-time CLI name", async () => {
   const child = Bun.spawn(
     [
@@ -311,7 +597,7 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
         ["vp", "list", "-g", "--json", "@opencode/cli-node"],
-        ["npm", "install", "--global", "@opencode/cli-node@2.3.4"],
+        ["npm", "install", "--global", "--allow-scripts=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
         ["pnpm", "add", "--global", "--allow-build=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
         ["vp", "update", "-g", "@opencode/cli-node@2.3.4"],
       ])

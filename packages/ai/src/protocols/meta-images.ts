@@ -1,25 +1,29 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import type { HttpClientResponse } from "effect/http"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
 import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "meta-images"
-const NAME = "Meta Images"
-const PROVIDER = ProviderID.make("meta")
+const route = MediaProtocol.identity({ id: "meta-images", name: "Meta Images", provider: "meta" })
+export const DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-type OpenString<Known extends string> = Known | (string & {})
-
-/** Provider-native options. Common fields (`n`, `size`, `format`, `images`) live on the request. */
+/**
+ * Provider-native options. Common fields (`n`, `aspect`, `images`) live on the request; Meta picks its own output
+ * resolution (about 2.5 megapixels), so `resolution` is ignored.
+ */
 export type ImageOptions = {
+  /** `WIDTHxHEIGHT` aspect ratio hint; it replaces `aspect`, so setting both fails. */
+  readonly size?: string
+  readonly outputFormat?: OpenString<"webp" | "png" | "jpeg">
   readonly responseFormat?: OpenString<"b64_json" | "url">
   readonly reasoningStrength?: OpenString<"low" | "high">
   readonly toolEnablement?: {
@@ -30,7 +34,7 @@ export type ImageOptions = {
   readonly [key: string]: unknown
 }
 
-export type Request = ImageRequestFor<ImageOptions>
+export type Request = ImageRequest<ImageModel<ImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Request body and response schemas
@@ -70,17 +74,16 @@ const Response = Schema.Struct({
 
 const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
-const reference = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ image_url: inline.dataUrl })
-  const url = ProviderShared.mediaUrl(asset)
-  if (url) return Effect.succeed({ image_url: url })
-  return Effect.fail(ProviderShared.invalidRequest(`${NAME} accepts image bytes and URLs`))
-}
+// Meta has no file handles: refs are rejected even when they name this provider.
+const reference = (asset: Media.Asset) =>
+  ProviderShared.mediaReference(asset, undefined, route.name).pipe(Effect.map((item) => ({ image_url: item.value })))
 
 const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Request) {
   const images = yield* Effect.forEach(request.images ?? [], reference)
-  const { responseFormat, reasoningStrength, toolEnablement, ...native } = request.providerOptions ?? {}
+  const { outputFormat, responseFormat, reasoningStrength, toolEnablement, ...native } = request.providerOptions ?? {}
+  if (native.size !== undefined && request.aspect !== undefined)
+    return yield* ProviderShared.invalidRequest("Meta providerOptions.size replaces aspect; set one or the other")
+  const hint = request.aspect === undefined ? undefined : ImageSizing.fit({ aspect: request.aspect }, { multiple: 16 })
   const payload = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
     mergeJsonRecords(
       {
@@ -88,8 +91,8 @@ const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Requ
         prompt: request.prompt,
         images: images.length === 0 ? undefined : images,
         n: request.n,
-        size: request.size,
-        output_format: request.format,
+        size: hint === undefined ? undefined : `${hint.width}x${hint.height}`,
+        output_format: outputFormat,
         response_format: responseFormat,
         reasoning_strength: reasoningStrength,
         tool_enablement: toolEnablement,
@@ -105,36 +108,34 @@ const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Requ
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
+const decodeDocument = route.decodeJson(Response)
+
 const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
   context: MediaProtocol.DecodeContext<Request>,
 ) {
-  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, Response)(response)
+  const output = yield* decodeDocument(response)
   const decoded = output.value
   const requested = context.body.type === "json" ? context.body.value.output_format : undefined
   const format = decoded.output_format ?? (typeof requested === "string" ? requested : "webp")
   const mediaType = `image/${format}`
-  const images = yield* Effect.forEach(decoded.data, (item, index) => {
-    if (item.b64_json)
-      return MediaInput.decodedAsset(output.invalid, `${NAME} result ${index}`, item.b64_json, mediaType, {
-        info: { format },
-      })
-    if (item.url) return Effect.succeed(Media.url(item.url, { mediaType, info: { format } }))
-    return Effect.fail(output.invalid(`${NAME} result ${index} has neither image data nor a URL`))
-  })
-  if (images.length === 0) return yield* output.invalid(`${NAME} returned no images`)
+  const images = yield* Effect.forEach(decoded.data, (item, index) =>
+    MediaInput.imageOutput(output.invalid, `${route.name} result ${index}`, item, mediaType, {
+      info: { format },
+    }),
+  )
+  if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   return new ImageResponse({
     images,
     usage:
       decoded.usage === undefined
         ? undefined
-        : {
-            type: "tokens",
+        : tokenUsage({
             input: decoded.usage.input_tokens,
             output: decoded.usage.output_tokens,
             total: decoded.usage.total_tokens,
             details: { meta: decoded.usage },
-          },
+          }),
     providerMetadata: { meta: { outputFormat: format } },
   })
 })
@@ -143,20 +144,16 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, ImageResponse>({
-  id: ADAPTER,
-  name: NAME,
-  unsupported: ["mask", "aspectRatio", "seed"],
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
 
-export const model = (input: MediaRoute.ModelInput & { readonly baseURL: string }) =>
+export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<ImageOptions>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
+      baseURL: DEFAULT_BASE_URL,
       path: ({ request }) => `/images/${isEdit(request) ? "edits" : "generations"}`,
     },
     input,

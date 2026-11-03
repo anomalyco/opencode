@@ -13,8 +13,9 @@ const names = [
   "Big Pickle",
 ]
 
-function SelectModelWithoutProviders() {
+function SelectModelWithoutProviders(props) {
   const dialog = useDialog()
+
   const models = names.map((name, index) => ({
     id: name.toLowerCase().replaceAll(" ", "-"),
     name,
@@ -26,14 +27,17 @@ function SelectModelWithoutProviders() {
       input: { text: true, image: false, audio: false, video: false, pdf: false },
     },
   }))
+
   const [current, setCurrent] = createSignal(models[2])
+
   const model = {
-    list: () => models,
+    list: () => models.slice(0, props.count),
     current,
     set(value) {
       setCurrent(models.find((item) => item.id === value?.modelID))
     },
   }
+
   const open = () => dialog.show(() => <DialogSelectModelUnpaid model={model} />)
 
   onMount(open)
@@ -48,8 +52,10 @@ function SelectModelWithoutProviders() {
 export default {
   title: "App/Dialogs/Select Model",
   id: "app-dialog-select-model",
+  args: { count: names.length },
+  argTypes: { count: { control: { type: "range", min: 1, max: names.length, step: 1 } } },
 }
 
 export const WithoutProviders = {
-  render: () => <SelectModelWithoutProviders />,
+  render: (args) => <SelectModelWithoutProviders count={args.count} />,
 }

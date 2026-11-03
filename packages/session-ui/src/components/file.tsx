@@ -20,7 +20,17 @@ import {
 import { type PreloadFileDiffResult, type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createMediaQuery } from "@solid-primitives/media"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
+import {
+  ComponentProps,
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+} from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
@@ -42,12 +52,10 @@ import {
   readShadowLineSelection,
 } from "../pierre/file-selection"
 import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
-import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
+import { acquireVirtualizer, virtualizeLineThreshold, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
-
-const VIRTUALIZE_BYTES = 500_000
 
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
@@ -75,17 +83,17 @@ export type FileSearchControl = {
   register: (handle: FileSearchHandle | null) => void
 }
 
-export type TextFileProps<T = {}> = FileOptions<T> &
+export type TextFileProps<T = {}> = FileOptions<T, undefined> &
   SharedProps<T> & {
     mode: "text"
     file: FileContents
     annotations?: LineAnnotation<T>[]
-    preloadedDiff?: PreloadMultiFileDiffResult<T>
+    preloadedDiff?: PreloadMultiFileDiffResult<T, undefined>
   }
 
-type DiffPreload<T> = PreloadMultiFileDiffResult<T> | PreloadFileDiffResult<T>
+type DiffPreload<T> = PreloadMultiFileDiffResult<T, undefined> | PreloadFileDiffResult<T, undefined>
 
-type DiffBaseProps<T> = FileDiffOptions<T> &
+type DiffBaseProps<T> = FileDiffOptions<T, undefined> &
   SharedProps<T> & {
     mode: "diff"
     annotations?: DiffLineAnnotation<T>[]
@@ -126,6 +134,7 @@ const sharedKeys = [
 ] as const
 
 const textKeys = ["file", ...sharedKeys] as const
+
 const diffKeys = ["fileDiff", "before", "after", "virtualize", ...sharedKeys] as const
 
 // ---------------------------------------------------------------------------
@@ -189,6 +198,7 @@ function useFileViewer(config: ViewerConfig) {
       selectionFrame = undefined
       const finishing = pendingSelectionEnd
       config.updateSelection(finishing)
+
       if (!pendingSelectionEnd) return
       pendingSelectionEnd = false
       config.onLineSelectionEnd(lastSelection)
@@ -200,6 +210,7 @@ function useFileViewer(config: ViewerConfig) {
     dragFrame = requestAnimationFrame(() => {
       dragFrame = undefined
       const selected = config.buildDragSelection()
+
       if (selected) config.setSelectedLines(selected)
     })
   }
@@ -208,13 +219,17 @@ function useFileViewer(config: ViewerConfig) {
 
   const handleMouseDown = (event: MouseEvent) => {
     if (!config.enableLineSelection()) return
+
     if (event.button !== 0) return
 
     const hit = config.lineFromMouseEvent(event)
+
     if (hit.numberColumn) {
       bridge.begin(true, hit.line)
+
       return
     }
+
     if (hit.line === undefined) return
 
     bridge.begin(false, hit.line)
@@ -228,7 +243,9 @@ function useFileViewer(config: ViewerConfig) {
     if (!config.enableLineSelection()) return
 
     const hit = config.lineFromMouseEvent(event)
+
     if (bridge.track(event.buttons, hit.line)) return
+
     if (dragStart === undefined) return
 
     if ((event.buttons & 1) === 0) {
@@ -237,6 +254,7 @@ function useFileViewer(config: ViewerConfig) {
       dragMoved = false
       config.onDragReset()
       bridge.finish()
+
       return
     }
 
@@ -249,12 +267,15 @@ function useFileViewer(config: ViewerConfig) {
 
   const handleMouseUp = () => {
     if (!config.enableLineSelection()) return
+
     if (bridge.finish() === "numbers") return
+
     if (dragStart === undefined) return
 
     if (!dragMoved) {
       pendingSelectionEnd = false
       const selected = config.buildClickSelection()
+
       const next =
         selected &&
         lastSelection?.start === selected.start &&
@@ -263,12 +284,14 @@ function useFileViewer(config: ViewerConfig) {
         (lastSelection.endSide ?? lastSelection.side) === (selected.endSide ?? selected.side)
           ? null
           : selected
+
       if (next !== undefined) config.setSelectedLines(next)
       config.onLineSelectionEnd(next === undefined ? lastSelection : next)
       dragStart = undefined
       dragEnd = undefined
       dragMoved = false
       config.onDragReset()
+
       return
     }
 
@@ -284,8 +307,10 @@ function useFileViewer(config: ViewerConfig) {
 
   const handleSelectionChange = () => {
     if (!config.enableLineSelection()) return
+
     if (dragStart === undefined) return
     const selection = window.getSelection()
+
     if (!selection || selection.isCollapsed) return
     scheduleSelectionUpdate()
   }
@@ -300,13 +325,17 @@ function useFileViewer(config: ViewerConfig) {
     rendered()
     const ranges = config.commentedLines()
     const root = getRoot()
+
     if (!root) return
+
     if (ranges.length === 0) {
       config.markCommented(root, ranges)
+
       return
     }
 
     let frame: number | undefined
+
     const mark = () => {
       if (frame !== undefined) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
@@ -314,6 +343,7 @@ function useFileViewer(config: ViewerConfig) {
         config.markCommented(root, ranges)
       })
     }
+
     const observer = new MutationObserver(mark)
 
     observer.observe(root, { childList: true, subtree: true })
@@ -321,6 +351,7 @@ function useFileViewer(config: ViewerConfig) {
 
     onCleanup(() => {
       observer.disconnect()
+
       if (frame !== undefined) cancelAnimationFrame(frame)
     })
   })
@@ -342,6 +373,7 @@ function useFileViewer(config: ViewerConfig) {
     clearReadyWatcher(ready)
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
+
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
 
     selectionFrame = undefined
@@ -437,6 +469,7 @@ function useSearchHandle(opts: {
 }) {
   createEffect(() => {
     const search = opts.search()
+
     if (!search) return
 
     const handle = {
@@ -458,7 +491,9 @@ function createLineCallbacks(opts: {
   const select = (range: SelectedLineRange | null) => {
     if (!opts.normalize) return range
     const next = opts.normalize(range)
+
     if (next !== undefined) return next
+
     return range
   }
 
@@ -472,6 +507,7 @@ function createLineCallbacks(opts: {
       const next = select(range)
       opts.viewer.lastSelection = next
       opts.onLineSelectionEnd?.(next)
+
       if (!opts.viewer.bridge.consume(next)) return
       requestAnimationFrame(() => opts.onLineNumberSelectionEnd?.(next))
     },
@@ -487,11 +523,14 @@ function useAnnotationRerender<A>(opts: {
   createEffect(() => {
     opts.viewer.rendered()
     const active = opts.current()
+
     if (!active) return
     const annotations = opts.annotations()
+
     // renderViewer always draws with empty annotations, so skip the extra rerender
     // when this instance has nothing applied and nothing to apply.
     if (annotations.length === 0 && !applied.has(active)) return
+
     if (annotations.length === 0) applied.delete(active)
     else applied.add(active)
     active.setLineAnnotations(annotations)
@@ -528,8 +567,10 @@ function renderViewer<I extends RenderTarget>(opts: {
 }) {
   clearReadyWatcher(opts.viewer.ready)
   const reset = opts.reset === true && opts.current !== undefined
+
   if (reset) opts.current?.cleanUp()
   const next = reset || !opts.current ? opts.create() : opts.current
+
   if (reset || !opts.current) {
     opts.viewer.container.innerHTML = ""
     opts.assign(next)
@@ -546,9 +587,11 @@ function renderViewer<I extends RenderTarget>(opts: {
 
 function preserve(viewer: Viewer) {
   const root = scrollParent(viewer.wrapper)
+
   if (!root) return () => {}
 
   const high = viewer.container.getBoundingClientRect().height
+
   if (!high) return () => {}
 
   const top = viewer.wrapper.getBoundingClientRect().top - root.getBoundingClientRect().top
@@ -556,6 +599,7 @@ function preserve(viewer: Viewer) {
   viewer.container.style.minHeight = `${Math.ceil(high)}px`
 
   let done = false
+
   return () => {
     if (done) return
     done = true
@@ -563,14 +607,17 @@ function preserve(viewer: Viewer) {
 
     const next = viewer.wrapper.getBoundingClientRect().top - root.getBoundingClientRect().top
     const delta = next - top
+
     if (delta) root.scrollTop += delta
   }
 }
 
 function scrollParent(el: HTMLElement): HTMLElement | undefined {
   let parent = el.parentElement
+
   while (parent) {
     const style = getComputedStyle(parent)
+
     if (style.overflowY === "auto" || style.overflowY === "scroll") return parent
     parent = parent.parentElement
   }
@@ -590,20 +637,25 @@ function createLocalVirtualStrategy(host: () => HTMLDivElement | undefined, enab
     get: () => {
       if (!enabled()) {
         release()
+
         return
       }
+
       if (typeof document === "undefined") return
 
       const wrapper = host()
+
       if (!wrapper) return
 
       const next = scrollParent(wrapper) ?? document
+
       if (virtualizer && root === next) return virtualizer
 
       release()
       virtualizer = new Virtualizer()
       root = next
       virtualizer.setup(next, next instanceof Document ? undefined : wrapper)
+
       return virtualizer
     },
     cleanup: release,
@@ -622,26 +674,49 @@ function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined, ena
     get: () => {
       if (!enabled()) {
         release()
+
         return
       }
+
       if (shared) return shared.virtualizer
 
       const container = host()
+
       if (!container) return
 
       const result = acquireVirtualizer(container)
+
       if (!result) return
       shared = result
+
       return result.virtualizer
     },
     cleanup: release,
   }
 }
 
+// Pierre draws nothing until its worker pool initializes, and a virtualizer that first sees an empty file at the top
+// of its scroller anchors the file's bottom edge, then scrolls to the end once the rows arrive.
+function createPoolReady() {
+  const [settled, setSettled] = createSignal(false)
+
+  return (pool: ReturnType<typeof getWorkerPool>) => {
+    if (!pool || pool.isInitialized() || settled()) return true
+    void pool
+      .initialize()
+      .catch(() => undefined)
+      .then(() => setSettled(true))
+
+    return false
+  }
+}
+
 function parseLine(node: HTMLElement) {
   if (!node.dataset.line) return
   const value = parseInt(node.dataset.line, 10)
+
   if (Number.isNaN(value)) return
+
   return value
 }
 
@@ -659,7 +734,9 @@ function mouseHit(
     if (!(item instanceof HTMLElement)) continue
 
     numberColumn = numberColumn || item.dataset.columnNumber != null
+
     if (value === undefined) value = line(item)
+
     if (branch === undefined && side) branch = side(item)
 
     if (numberColumn && value !== undefined && (side == null || branch !== undefined)) break
@@ -674,15 +751,21 @@ function mouseHit(
 
 function diffMouseSide(node: HTMLElement) {
   const type = node.dataset.lineType
+
   if (type === "change-deletion") return "deletions" satisfies DiffSelectionSide
+
   if (type === "change-addition" || type === "change-additions") return "additions" satisfies DiffSelectionSide
+
   if (node.dataset.code == null) return
+
   return node.hasAttribute("data-deletions") ? "deletions" : "additions"
 }
 
 function diffSelectionSide(node: Node | null) {
   const el = findElement(node)
+
   if (!el) return
+
   return findDiffSide(el)
 }
 
@@ -738,86 +821,77 @@ function ViewerShell(props: {
 
 function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
+  let instanceVirtualizer: Virtualizer | undefined
   let viewer!: Viewer
 
   const [local, others] = splitProps(props, textKeys)
 
-  const text = () => {
-    const value = local.file.contents as unknown
-    if (typeof value === "string") return value
-    if (Array.isArray(value)) return value.join("\n")
-    if (value == null) return ""
-    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
-    return String(value)
-  }
-
   const lineCount = () => {
-    const value = text()
+    const value = local.file.contents
     const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
+
     return Math.max(1, total)
   }
 
-  const bytes = createMemo(() => {
-    const value = local.file.contents as unknown
-    if (typeof value === "string") return value.length
-    if (Array.isArray(value)) {
-      return value.reduce(
-        // oxlint-disable-next-line no-base-to-string -- array parts coerced intentionally
-        (sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
-        0,
-      )
-    }
-    if (value == null) return 0
-    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
-    return String(value).length
-  })
-
-  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
+  const virtual = createMemo(() => lineCount() > virtualizeLineThreshold)
 
   const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
+  const poolReady = createPoolReady()
 
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, parseLine)
 
   const applySelection = (range: SelectedLineRange | null) => {
     const current = instance
+
     if (!current) return false
 
     if (virtual()) {
       current.setSelectedLines(range)
+
       return true
     }
 
     const root = viewer.getRoot()
+
     if (!root) return false
 
     const total = lineCount()
+
     if (root.querySelectorAll("[data-line]").length < total) return false
 
     if (!range) {
       current.setSelectedLines(null)
+
       return true
     }
 
     const start = Math.min(range.start, range.end)
     const end = Math.max(range.start, range.end)
+
     if (start < 1 || end > total) {
       current.setSelectedLines(null)
+
       return true
     }
 
     if (!root.querySelector(`[data-line="${start}"]`) || !root.querySelector(`[data-line="${end}"]`)) {
       current.setSelectedLines(null)
+
       return true
     }
 
     const normalized = (() => {
       if (range.endSide != null) return { start: range.start, end: range.end }
+
       if (range.side !== "deletions") return range
+
       if (root.querySelector("[data-deletions]") != null) return range
+
       return { start: range.start, end: range.end }
     })()
 
     current.setSelectedLines(normalized)
+
     return true
   }
 
@@ -831,6 +905,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     setSelectedLines,
     updateSelection: (preserveTextSelection) => {
       const root = viewer.getRoot()
+
       if (!root) return
 
       const selected = readShadowLineSelection({
@@ -839,18 +914,22 @@ function TextViewer<T>(props: TextFileProps<T>) {
         sideForNode: findCodeSelectionSide,
         preserveTextSelection,
       })
+
       if (!selected) return
 
       setSelectedLines(selected.range)
+
       if (!preserveTextSelection || !selected.text) return
       restoreShadowTextSelection(root, selected.text)
     },
     buildDragSelection: () => {
       if (viewer.dragStart === undefined || viewer.dragEnd === undefined) return
+
       return { start: Math.min(viewer.dragStart, viewer.dragEnd), end: Math.max(viewer.dragStart, viewer.dragEnd) }
     },
     buildClickSelection: () => {
       if (viewer.dragStart === undefined) return
+
       return { start: viewer.dragStart, end: viewer.dragStart }
     },
     onDragStart: () => {},
@@ -887,6 +966,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
       viewer,
       isReady: (root) => {
         if (virtual()) return root.querySelector("[data-line]") != null
+
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
@@ -909,21 +989,28 @@ function TextViewer<T>(props: TextFileProps<T>) {
     const workerPool = getWorkerPool()
     const virtualizer = virtuals.get()
 
+    if (virtualizer && !poolReady(workerPool)) return
+    // An instance keeps the virtualizer it was built with; options and contents update in place.
+    const reset = instance !== undefined && instanceVirtualizer !== virtualizer
+    const forceRender = !reset && instance !== undefined && !areOptionsEqual(instance.options, opts)
+
     renderViewer({
       viewer,
       current: instance,
-      reset: instance !== undefined,
+      reset,
       create: () =>
         virtualizer
           ? new VirtualizedFile<T>(opts, virtualizer, codeMetrics, workerPool)
           : new PierreFile<T>(opts, workerPool),
+      update: (value) => value.setOptions(opts),
       assign: (value) => {
         instance = value
+        instanceVirtualizer = virtualizer
       },
       draw: (value) => {
-        const contents = text()
         value.render({
-          file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents },
+          file: local.file,
+          forceRender,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -935,7 +1022,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   useAnnotationRerender<LineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => local.annotations ?? [],
   })
 
   // -- cleanup --
@@ -943,6 +1030,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
+    instanceVirtualizer = undefined
     virtuals.cleanup()
   })
 
@@ -957,7 +1045,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   let instance: FileDiff<T> | undefined
   let instanceVirtualizer: Virtualizer | undefined
   let instanceWorkerPool: ReturnType<typeof getWorkerPool>
-  let instanceVirtualHunkSeparators: FileDiffOptions<T>["hunkSeparators"] | undefined
+  let instanceVirtualHunkSeparators: FileDiffOptions<T, undefined>["hunkSeparators"] | undefined
   let instanceFileDiff: FileDiffMetadata | undefined
   let instanceBefore: FileContents | undefined
   let instanceAfter: FileContents | undefined
@@ -971,13 +1059,23 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, findDiffLineNumber, diffMouseSide)
 
+  // Rows outside a virtualized window are not in the DOM yet; keep the range so Pierre applies it when they render.
+  const fixSelection = (range: SelectedLineRange | null) => {
+    const fixed = fixDiffSelection(viewer.getRoot(), range)
+
+    return fixed === null && instance instanceof VirtualizedFileDiff ? range : fixed
+  }
+
   const setSelectedLines = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
     const active = instance
+
     if (!active) return
 
-    const fixed = fixDiffSelection(viewer.getRoot(), range)
+    const fixed = fixSelection(range)
+
     if (fixed === undefined) {
       viewer.lastSelection = range
+
       return
     }
 
@@ -991,6 +1089,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     setSelectedLines,
     updateSelection: (preserveTextSelection) => {
       const root = viewer.getRoot()
+
       if (!root) return
 
       const selected = readShadowLineSelection({
@@ -999,10 +1098,12 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
         sideForNode: diffSelectionSide,
         preserveTextSelection,
       })
+
       if (!selected) return
 
       if (selected.text) {
         setSelectedLines(selected.range, { root, text: selected.text })
+
         return
       }
 
@@ -1011,14 +1112,19 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     buildDragSelection: () => {
       if (viewer.dragStart === undefined || viewer.dragEnd === undefined) return
       const selected: SelectedLineRange = { start: viewer.dragStart, end: viewer.dragEnd }
+
       if (dragSide) selected.side = dragSide
+
       if (dragEndSide && dragSide && dragEndSide !== dragSide) selected.endSide = dragEndSide
+
       return selected
     },
     buildClickSelection: () => {
       if (viewer.dragStart === undefined) return
       const selected: SelectedLineRange = { start: viewer.dragStart, end: viewer.dragStart }
+
       if (dragSide) selected.side = dragSide
+
       return selected
     },
     onDragStart: (hit) => {
@@ -1050,15 +1156,19 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     () => local.virtualize !== false,
   )
 
+  const poolReady = createPoolReady()
+
   const large = createMemo(() => {
     if (local.fileDiff) {
       const before = local.fileDiff.deletionLines.join("")
       const after = local.fileDiff.additionLines.join("")
+
       return Math.max(before.length, after.length) > 500_000
     }
 
-    const before = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const after = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const before = local.before?.contents ?? ""
+    const after = local.after?.contents ?? ""
+
     return Math.max(before.length, after.length) > 500_000
   })
 
@@ -1066,17 +1176,17 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     lineDiffType: "none",
     maxLineDiffLength: 0,
     tokenizeMaxLineLength: 1,
-  } satisfies Pick<FileDiffOptions<T>, "lineDiffType" | "maxLineDiffLength" | "tokenizeMaxLineLength">
+  } satisfies Pick<FileDiffOptions<T, undefined>, "lineDiffType" | "maxLineDiffLength" | "tokenizeMaxLineLength">
 
   const lineCallbacks = createLineCallbacks({
     viewer,
-    normalize: (range) => fixDiffSelection(viewer.getRoot(), range),
+    normalize: fixSelection,
     onLineSelected: (range) => local.onLineSelected?.(range),
     onLineSelectionEnd: (range) => local.onLineSelectionEnd?.(range),
     onLineNumberSelectionEnd: (range) => local.onLineNumberSelectionEnd?.(range),
   })
 
-  const options = createMemo<FileDiffOptions<T>>(() => {
+  const options = createMemo<FileDiffOptions<T, undefined>>(() => {
     const base = {
       ...createDefaultOptions(props.diffStyle),
       ...others,
@@ -1084,9 +1194,50 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     }
 
     const perf = large() ? { ...base, ...largeOptions } : base
+
     if (!mobile()) return perf
+
     return { ...perf, disableLineNumbers: props.disableLineNumbers ?? true }
   })
+
+  // A virtualized diff only renders rows near the viewport, so jumping to a selection must scroll it into range first.
+  let pendingReveal: SelectedLineRange | undefined
+
+  const revealSelection = () => {
+    const active = instance
+    const range = pendingReveal
+
+    if (!active || !range) return
+
+    if (!(active instanceof VirtualizedFileDiff) || !instanceVirtualizer) {
+      pendingReveal = undefined
+
+      return
+    }
+
+    const position = active.getLinePosition(Math.min(range.start, range.end), range.side)
+    const root = instanceVirtualizer.getRoot()
+
+    // Keep the request until the diff has a layout to measure; the next render retries it.
+    if (!position || !root) return
+    pendingReveal = undefined
+    const top = instanceVirtualizer.getOffsetInScrollContainer(viewer.container) + position.top
+    const scrollTop = instanceVirtualizer.getScrollTop()
+    const height = root instanceof Document ? window.innerHeight : root.clientHeight
+
+    if (top >= scrollTop && top + position.height <= scrollTop + height) return
+    instanceVirtualizer.scrollTo({ top: top - height / 2 })
+  }
+
+  createEffect(
+    on(
+      () => local.selectedLines,
+      (range) => {
+        pendingReveal = range ?? undefined
+        revealSelection()
+      },
+    ),
+  )
 
   const notify = (done?: VoidFunction) => {
     notifyRendered({
@@ -1096,6 +1247,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       onReady: () => {
         done?.()
         setSelectedLines(viewer.lastSelection)
+        revealSelection()
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
       },
@@ -1112,25 +1264,30 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   createEffect(() => {
     const opts = options()
     // Worker render options override per-viewer options, including the large-file fallback.
-    const workerPool = getWorkerPool(large() ? "none" : "word-alt")
+    const workerPool = getWorkerPool(large() ? "none" : "word-line")
     const virtualizer = virtuals.get()
-    const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+
+    if (virtualizer && !poolReady(workerPool)) return
+    const beforeContents = local.before?.contents ?? ""
+    const afterContents = local.after?.contents ?? ""
     const done = preserve(viewer)
 
     onCleanup(done)
 
     const cacheKey = (contents: string) => {
       if (!large()) return sampledChecksum(contents, contents.length)
+
       return sampledChecksum(contents)
     }
 
     const before = local.before
       ? { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) }
       : undefined
+
     const after = local.after
       ? { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) }
       : undefined
+
     const targetChanged =
       local.fileDiff !== undefined
         ? instanceFileDiff !== local.fileDiff
@@ -1141,6 +1298,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
           instanceAfter === undefined ||
           !areFilesEqual(instanceBefore, before) ||
           !areFilesEqual(instanceAfter, after)
+
     // Pierre beta virtualized instances retain their first diff target and resolve separator metrics at construction.
     // Plain timeline diffs can retain the instance as content streams; virtualized viewers reset only when that is unsafe.
     const reset =
@@ -1148,6 +1306,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       (instanceVirtualizer !== virtualizer ||
         instanceWorkerPool !== workerPool ||
         (virtualizer !== undefined && (instanceVirtualHunkSeparators !== opts.hunkSeparators || targetChanged)))
+
     const forceRender = !reset && instance !== undefined && !areOptionsEqual(instance.options, opts)
 
     renderViewer({
@@ -1176,6 +1335,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
             lineAnnotations: [],
             containerWrapper: viewer.container,
           })
+
           return
         }
 
@@ -1196,7 +1356,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   useAnnotationRerender<DiffLineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => local.annotations ?? [],
   })
 
   // -- cleanup --

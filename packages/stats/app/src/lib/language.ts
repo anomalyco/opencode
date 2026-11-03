@@ -19,6 +19,7 @@ export {
 } from "../../../../console/app/src/lib/language"
 
 export type { Locale } from "../../../../console/app/src/lib/language"
+export { prefersMarkdown } from "../../../../console/app/src/lib/content-negotiation"
 
 export const basePath = "/data"
 export const baseUrl = "https://opencode.ai"
@@ -45,4 +46,22 @@ export function route(locale: Locale, pathname: string) {
 
 export function localizedUrl(locale: Locale, pathname: string) {
   return `${baseUrl}${route(locale, pathname)}`
+}
+
+export function pageUrl(pathname: string) {
+  return `${baseUrl}${pathname}`
+}
+
+export function markdownUrl(pathname: string) {
+  return `${baseUrl}${formatPathname(pathname, "md")}`
+}
+
+export function jsonUrl(pathname: string) {
+  return `${baseUrl}${formatPathname(pathname, "json")}`
+}
+
+function formatPathname(pathname: string, extension: "md" | "json") {
+  const trimmed = pathname.replace(/\/+$/, "")
+  if (trimmed === basePath) return `${basePath}/index.${extension}`
+  return `${trimmed}.${extension}`
 }

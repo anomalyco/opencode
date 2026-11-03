@@ -1,3 +1,5 @@
+export * as Identifier from "./identifier.js"
+
 const length = 26
 const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 let lastTimestamp = 0

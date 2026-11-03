@@ -42,10 +42,10 @@ export class MediaIngestLimitError extends Schema.TaggedError<MediaIngestLimitEr
 
 export class OffsetOutOfRangeError extends Schema.TaggedError<OffsetOutOfRangeError>()(
   "ReadTool.OffsetOutOfRangeError",
-  { offset: Schema.Number },
+  { offset: Schema.Number, lines: Schema.Number },
 ) {
   override get message() {
-    return `Offset ${this.offset} is out of range`
+    return `Offset ${this.offset} is out of range for this file (${this.lines} ${this.lines === 1 ? "line" : "lines"})`
   }
 }
 
@@ -68,7 +68,7 @@ export type ReadError =
 
 export const PageInput = Schema.Struct({
   offset: Schema.optionalKey(NonNegativeInt),
-  limit: Schema.optionalKey(NonNegativeInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES))),
+  limit: Schema.optionalKey(NonNegativeInt),
 })
 export type PageInput = typeof PageInput.Type
 
@@ -119,12 +119,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
   resource: string,
   page: PageInput = {},
 ) {
+  const virtual = resource.startsWith("skill://")
   const first = yield* files.read(input, { offset: 0, length: FIRST_CHUNK }).pipe(
     Effect.catchTag("Environment.WrongKind", (error) => {
       if (error.actual !== "directory")
         return Effect.fail(new PathKindError({ resource, expected: "a file or directory" }))
       return files.list(input).pipe(
-        Effect.map((entries) => list(entries, page)),
+        Effect.map((entries) => list(entries, page, virtual ? "/" : path.sep)),
         Effect.catchTag("Environment.WrongKind", () =>
           Effect.fail(new PathKindError({ resource, expected: "a file or directory" })),
         ),
@@ -140,8 +141,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
     const whole = yield* readFile(files, input, resource)
     return {
       type: "file" as const,
-      uri: pathToFileURL(input).href,
-      name: path.basename(input),
+      uri: virtual ? resource : pathToFileURL(input).href,
+      name: virtual ? path.posix.basename(input) : path.basename(input),
       content: Buffer.from(whole.bytes).toString("base64"),
       encoding: "base64" as const,
       mime: media,
@@ -153,9 +154,9 @@ export const read = Effect.fn("ReadTool.read")(function* (
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
     return {
       type: "file" as const,
-      uri: pathToFileURL(input).href,
-      name: path.basename(input),
-      content: new TextDecoder().decode(first.bytes),
+      uri: virtual ? resource : pathToFileURL(input).href,
+      name: virtual ? path.posix.basename(input) : path.basename(input),
+      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
       encoding: "utf8" as const,
       mime: mimeType(input),
     }
@@ -164,7 +165,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
   if (first.bytes.length >= first.info.size) {
     const result = textPage(first.bytes, true, page)
     if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
-    return yield* makeTextPage(input, resource, result, first.bytes.subarray(0, result.consumed).includes(0))
+    return yield* makeTextPage(
+      input,
+      resource,
+      result,
+      first.bytes.subarray(0, result.consumed).includes(0),
+      lineCount(textLeaf(first.bytes).summary.lines, first.bytes.at(-1)),
+    )
   }
 
   const offset = page.offset || 1
@@ -201,7 +208,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           checked += leaf.summary.bytes
           return length > 0 && leaf.bytes.subarray(0, length).includes(0)
         })
-        return yield* makeTextPage(input, resource, translated, binary)
+        return yield* makeTextPage(input, resource, translated, binary, lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
       }
     }
 
@@ -234,10 +241,11 @@ const makeTextPage = Effect.fnUntraced(function* (
   resource: string,
   result: NonNullable<ReturnType<typeof textPage>>,
   binary: boolean,
+  lines: number,
 ) {
   if (binary) return yield* new BinaryFileError({ resource })
   if (result.entries.length === 0 && result.offset !== 1)
-    return yield* new OffsetOutOfRangeError({ offset: result.offset })
+    return yield* new OffsetOutOfRangeError({ offset: result.offset, lines })
   return new TextPage({
     type: "text-page",
     content: result.entries.join("\n"),
@@ -248,7 +256,7 @@ const makeTextPage = Effect.fnUntraced(function* (
   })
 })
 
-const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
+const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep) => {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const visible = items
@@ -257,7 +265,7 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
         ? []
         : [
             ListEntry.make({
-              path: RelativePath.make(item.name + (item.type === "directory" ? path.sep : "")),
+              path: RelativePath.make(item.name + (item.type === "directory" ? sep : "")),
               type: item.type,
             }),
           ],
@@ -298,7 +306,7 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
       next = line
       break
     }
-    const text = value.length > MAX_LINE_LENGTH ? value.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : value
+    const text = clampLine(value)
     const lineSize = Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
     if (size + lineSize > MAX_READ_BYTES) {
       next = line
@@ -315,6 +323,12 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const consumed = consumedLines === 0 ? 0 : (nthNewline(bytes, consumedLines) ?? bytes.length)
   return { entries, offset, next, consumed }
 }
+
+const clampLine = (line: string) =>
+  line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
+
+// A trailing newline ends the last line instead of starting an empty one.
+const lineCount = (newlines: number, last: number | undefined) => newlines + (last === undefined || last === 10 ? 0 : 1)
 
 type TextSummary = { readonly bytes: number; readonly lines: number }
 // Request-local augmented rope. Subtree byte and newline weights locate a line

@@ -22,6 +22,7 @@ const states: { label: string; connecting?: boolean; authenticationRequired?: bo
 ]
 
 export default { title: "App/Servers/Health indicator", id: "app-server-health" }
+
 export const States = {
   render: () => (
     <div class="flex flex-col gap-4">

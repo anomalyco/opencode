@@ -1,5 +1,6 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
@@ -58,7 +59,7 @@ const locations = Layer.effect(
         Layer.provide(client),
         Layer.provide(config),
         Layer.provide(models),
-      ) as unknown as Layer.Layer<LocationServices>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
   ),
 )
 const it = testEffect(

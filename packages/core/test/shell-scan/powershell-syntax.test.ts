@@ -52,6 +52,34 @@ describe("PowerShell practical syntax", () => {
     ["Write-Output '--%' ; git status", ["Write-Output '--%'", "git status"]],
     ["Write-Output prefix--% literal; git status", ["Write-Output prefix--% literal", "git status"]],
     ["git status |\n\n# comment\nOut-String", ["git status", "Out-String"]],
+    ["ssh user@'host'", ["ssh user@'host'"]],
+    ["git clone git@'github.com':org/repo", ["git clone git@'github.com':org/repo"]],
+    ["switch ($x) { default { git status } }", ["git status"]],
+    ["switch ('a#b') { a#b { git status } }", ["git status"]],
+    ["[Parameter(Mandatory=$true)] param([string]$x = (git status)) git diff", ["git status", "git diff"]],
+    ['@"\n$(Write-Output \'\n"@\'; git status)\n"@', ["Write-Output '\n\"@'", "git status"]],
+    ["class C { [int]$x = (git status); [void] M() { git diff } }", ["git status", "git diff"]],
+    ["enum Color { Red; Green = 2 }; git status", ["git status"]],
+    ["[IO.File]::Delete('C:\\victim')", ["[IO.File]::Delete('C:\\victim')"]],
+    [
+      '[scriptblock]::Create("Remove-Item victim").Invoke()',
+      ['[scriptblock]::Create("Remove-Item victim")', '[scriptblock]::Create("Remove-Item victim").Invoke()'],
+    ],
+    [
+      '([scriptblock]::Create("Remove-Item victim")).Invoke()',
+      ['[scriptblock]::Create("Remove-Item victim")', '([scriptblock]::Create("Remove-Item victim")).Invoke()'],
+    ],
+    [
+      '$ExecutionContext.InvokeCommand.InvokeScript("Remove-Item victim")',
+      ['$ExecutionContext.InvokeCommand.InvokeScript("Remove-Item victim")'],
+    ],
+    ["Write-Output $proc.Kill()", ["Write-Output $proc.Kill()", "$proc.Kill()"]],
+    ["$proc.'Kill'(); $proc.('Ki' + 'll')(); $proc?.Dispose()", ["$proc.'Kill'()", "$proc.('Ki' + 'll')()", "$proc?.Dispose()"]],
+    [
+      "[IO.File]::De`lete('x'); [IO.File]:: Delete('y'); $proc.\nKill()",
+      ["[IO.File]::De`lete('x')", "[IO.File]:: Delete('y')", "$proc.\nKill()"],
+    ],
+    ['"payload" >> ~/.bashrc; (git status) > out.txt', ['"payload" >> ~/.bashrc', "(git status) > out.txt", "git status"]],
   ] as const)("extracts command resources from %s", (source, resources) => {
     const result = ShellScan.scanPowerShell(source)
     expect(result.kind).toBe("scanned")
@@ -68,9 +96,13 @@ describe("PowerShell practical syntax", () => {
       })
       expect(ShellScan.scanPowerShell(`Write-Output left\`${newline}right`)).toMatchObject({
         kind: "scanned",
-        commands: [
-          { words: ["Write-Output", `left${newline}right`], rawWords: ["Write-Output", `left\`${newline}right`] },
-        ],
+        commands:
+          newline === "\r\n"
+            ? [
+                { words: ["Write-Output", "left\r"], rawWords: ["Write-Output", "left`\r"] },
+                { words: ["right"], rawWords: ["right"] },
+              ]
+            : [{ words: ["Write-Output", `left${newline}right`], rawWords: ["Write-Output", `left\`${newline}right`] }],
       })
     },
   )

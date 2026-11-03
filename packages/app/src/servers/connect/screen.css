@@ -74,6 +74,17 @@
     width: 100%;
   }
 
+  /* The method switch is a quiet inline link, not a full-width action. */
+  [data-component="server-connect-method"] button {
+    min-height: 28px;
+    width: auto;
+  }
+
+  .server-connect-hint {
+    font-size: 12px;
+    line-height: var(--line-height-compact);
+  }
+
   .server-connect-error {
     color: var(--v2-state-fg-danger);
   }

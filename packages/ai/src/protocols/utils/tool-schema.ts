@@ -1,6 +1,8 @@
-import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema/index.js"
+import { ToolDefinition, type JsonSchema, type LanguageModel, type LLMRequest } from "../../schema/index.js"
 import { isRecord } from "../../utils/record.js"
-import { GeminiToolSchema } from "./gemini-tool-schema.js"
+import { GeminiJsonSchema } from "./gemini-json-schema.js"
+
+const { SCHEMA_MAPS, VALUES, mapValues } = GeminiJsonSchema
 
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
@@ -9,21 +11,39 @@ const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   return { anyOf: projected }
 }
 
+// Moonshot rejects an `enum` without a sibling `type`. Its `type` may be one type, or one type plus "null".
+const enumType = (values: ReadonlyArray<unknown>) => {
+  const types = [
+    ...new Set(values.map((value) => (value === null ? "null" : Array.isArray(value) ? "array" : typeof value))),
+  ]
+  if (types.length === 1) return types[0]
+  if (types.length === 2 && types.includes("null")) return [...types.filter((type) => type !== "null"), "null"]
+  return undefined
+}
+
 const moonshotNode = (schema: unknown): unknown => {
   if (Array.isArray(schema)) return schema.map(moonshotNode)
   if (!isRecord(schema)) return schema
   if (typeof schema.$ref === "string") return { $ref: schema.$ref }
-  return Object.fromEntries(
-    Object.entries(schema).flatMap(([key, value]) => {
-      if (key === "items" && Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+  const type = schema.type === undefined && Array.isArray(schema.enum) ? enumType(schema.enum) : undefined
+  return Object.fromEntries([
+    ...(type === undefined ? [] : [["type", type]]),
+    ...Object.entries(schema).flatMap(([key, value]) => {
+      if (VALUES.has(key)) return [[key, value]]
+      if (SCHEMA_MAPS.has(key) && isRecord(value)) return [[key, mapValues(value, moonshotNode)]]
+      if (key === "items") {
+        if (Array.isArray(schema.prefixItems)) return []
+        if (Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+      }
       if (key === "prefixItems") {
-        if ("items" in schema) return []
-        return [["items", tupleItemsSchema(Array.isArray(value) ? value : [])]]
+        if (!Array.isArray(value)) return "items" in schema ? [] : [["items", {}]]
+        const rest = isRecord(schema.items) ? [schema.items] : Array.isArray(schema.items) ? schema.items : []
+        return [["items", tupleItemsSchema([...value, ...rest])]]
       }
       if (key === "unevaluatedItems") return []
       return [[key, moonshotNode(value)]]
     }),
-  )
+  ])
 }
 
 const moonshot = (schema: JsonSchema): JsonSchema => {
@@ -31,28 +51,65 @@ const moonshot = (schema: JsonSchema): JsonSchema => {
   return isRecord(projected) ? projected : {}
 }
 
-const openAI = (schema: JsonSchema): JsonSchema => schema
-const responses = openAI
+const gemini = GeminiJsonSchema.normalize
 
-const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
+const MODEL_NAMES = [
+  [/gemini/i, "gemini"],
+  [/kimi/i, "moonshot"],
+] as const
 
-const modelCompatibility = (
-  schema: JsonSchema,
-  compatibility: LanguageModelToolSchemaCompatibility | undefined,
-): JsonSchema => {
-  if (compatibility === undefined) return schema
-  switch (compatibility) {
+// Tool arguments are always a JSON object, and most providers reject a tool schema whose root does not
+// declare `type: "object"`, such as `{}` or a bare `properties` map. An object root makes Effect's
+// empty-struct markers redundant: `{ not: { type: "null" } }`, and `anyOf` object or array from older
+// releases. Both are dropped so the root is a plain object schema.
+const objectRoot = (schema: JsonSchema): JsonSchema => {
+  if (
+    (schema.type === undefined || schema.type === "object") &&
+    isRecord(schema.not) &&
+    schema.not.type === "null" &&
+    Object.keys(schema.not).length === 1
+  )
+    return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "not")) }
+  if (schema.type !== undefined) return schema
+  if (
+    Array.isArray(schema.anyOf) &&
+    schema.anyOf.some((branch) => isRecord(branch) && branch.type === "object" && Object.keys(branch).length === 1)
+  )
+    return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")) }
+  return { type: "object", ...schema }
+}
+
+// Every tool schema gets an object root. Then an explicit `sanitizer` wins, and `none` opts out.
+// Otherwise the protocol's own default applies (the Gemini API always uses Gemini's rules), then the
+// model name selects the family's rules so models reached through gateways and OpenAI-compatible
+// endpoints get the same handling.
+const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
+  const root = objectRoot(schema)
+  switch (
+    model.compatibility?.sanitizer ??
+    model.route.sanitizer ??
+    MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]
+  ) {
     case "gemini":
-      return gemini(schema)
+      return gemini(root)
     case "moonshot":
-      return moonshot(schema)
+      return moonshot(root)
+    case "none":
+    case undefined:
+      return root
   }
 }
 
+// Applied once to every request before any protocol builds its body, including tools in namespaces.
+const tools = (entries: LLMRequest["tools"], model: LanguageModel): LLMRequest["tools"] =>
+  entries.map((tool) =>
+    tool.type === "tool"
+      ? new ToolDefinition({ ...tool, inputSchema: modelCompatibility(tool.inputSchema, model) })
+      : { ...tool, tools: tools(tool.tools, model) },
+  )
+
 export const ToolSchemaProjection = {
   gemini,
-  modelCompatibility,
   moonshot,
-  openAI,
-  responses,
+  tools,
 } as const

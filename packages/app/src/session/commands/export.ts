@@ -13,17 +13,21 @@ export async function fetchSessionExport(input: {
 }): Promise<SessionExportData> {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }),
+    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }, { mediaRefs: false }),
   ])
+
   const pages = [first]
 
   while (pages.at(-1)?.cursor.next) {
     pages.push(
-      await input.api.message.list({
-        sessionID: input.sessionID,
-        limit: 200,
-        cursor: pages.at(-1)!.cursor.next ?? undefined,
-      }),
+      await input.api.message.list(
+        {
+          sessionID: input.sessionID,
+          limit: 200,
+          cursor: pages.at(-1)!.cursor.next ?? undefined,
+        },
+        { mediaRefs: false },
+      ),
     )
   }
 
@@ -35,14 +39,16 @@ export async function fetchSessionExport(input: {
 
 export function sessionExportFilename(session: { id: string; title?: string; slug?: string }) {
   const name = session.title || session.slug || session.id
+
   const clean = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
+
   return `${clean || session.id}.json`
 }
 
-export function downloadSessionExport(filename: string, data: unknown) {
+export function downloadSessionExport(filename: string, data: SessionExportData) {
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
@@ -57,12 +63,14 @@ export function downloadSessionExport(filename: string, data: unknown) {
 
 export async function saveSessionExport(
   filename: string,
-  data: unknown,
+  data: SessionExportData,
   platform: Pick<Platform, "saveFile">,
 ) {
   if (!platform.saveFile) {
     downloadSessionExport(filename, data)
+
     return true
   }
+
   return platform.saveFile({ defaultPath: filename }, JSON.stringify(data, null, 2))
 }
