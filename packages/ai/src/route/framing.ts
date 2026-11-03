@@ -25,6 +25,11 @@ export interface Definition<Frame> {
   readonly body?: (frame: Frame) => string | undefined
   /** Provider value exposed as a `raw` event when framing adds fields of its own. Defaults to the frame. */
   readonly raw?: (frame: Frame) => unknown
+  /**
+   * What resets the HTTP `chunkTimeout`. `frames` suits framings that drop keep-alives, which then no longer hide a
+   * stalled provider. `bytes`, the default, suits framings that emit their only frame once the body ends.
+   */
+  readonly progress?: "bytes" | "frames"
 }
 
 /**
@@ -79,19 +84,25 @@ export const sseFraming = (
     ),
   )
 
+// SSE framings time out on emitted events: comments such as DeepSeek's `: keep-alive` while a request is queued, or
+// OpenRouter's `: OPENROUTER PROCESSING`, are not provider progress. Keep-alives sent as data events, such as
+// Anthropic's `ping`, still count.
+
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */
-export const sse: Definition<string> = { id: "sse", frame: sseFraming }
+export const sse: Definition<string> = { id: "sse", frame: sseFraming, progress: "frames" }
 
 /** Server-Sent Events framing that retains the conventional `[DONE]` sentinel. */
 export const sseWithDone: Definition<string> = {
   id: "sse",
   frame: (bytes) => sseFraming(bytes, undefined, true),
+  progress: "frames",
 }
 
 /** SSE framing restricted to protocol-recognized event names. */
 export const sseEvents = (events: ReadonlySet<string>): Definition<string> => ({
   id: "sse",
   frame: (bytes) => sseFraming(bytes, events),
+  progress: "frames",
 })
 
 export const lines: Definition<string> = {
