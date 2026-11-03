@@ -949,7 +949,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
 - **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
-- **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
+- **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.

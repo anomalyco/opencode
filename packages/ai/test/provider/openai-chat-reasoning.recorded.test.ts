@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LanguageModel, LLMEvent, LLMResponse } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse, Model } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
 import { LLMClient } from "../../src/route.js"
@@ -11,7 +11,7 @@ import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop
 const cases = [
   {
     name: "OpenRouter",
-    model: LanguageModel.update(
+    model: Model.with(
       OpenRouter.configure({
         apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
         providerOptions: { reasoning: { max_tokens: 1024 } },
@@ -24,7 +24,7 @@ const cases = [
   },
   {
     name: "Vercel AI Gateway",
-    model: LanguageModel.update(
+    model: Model.with(
       OpenAICompatible.configure({
         provider: "vercel-ai-gateway",
         baseURL: "https://ai-gateway.vercel.sh/v1",

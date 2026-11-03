@@ -916,7 +916,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 })
 
 // The model-ID checks below are fallbacks for models that leave `capabilities.reasoning.updates`,
-// `capabilities.systemUpdates` and `compatibility.supportsThinkingBlockBinding` unset.
+// `capabilities.systemUpdates` and `compatibility.thinkingBlockBinding` unset.
 const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.

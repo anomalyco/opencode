@@ -7,7 +7,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   CacheHint,
-  type LanguageModel,
   LLMEvent,
   Media,
   Message,
@@ -16,6 +15,7 @@ import {
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
+  Model,
 } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -115,7 +115,7 @@ const noAmbientAWS = {
   AWS_EC2_METADATA_DISABLED: "true",
 }
 
-const captureHeaders = (target: LanguageModel) =>
+const captureHeaders = (target: Model<"chat">) =>
   Effect.gen(function* () {
     const seen: Array<Headers> = []
     yield* LLMClient.generate({ ...baseRequest, model: target }).pipe(

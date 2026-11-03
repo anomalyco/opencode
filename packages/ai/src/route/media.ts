@@ -28,8 +28,7 @@ export type Execute = Interface["execute"]
 export type MediaRequest = BaseRequest<{
   readonly id: string
   readonly provider: ProviderID
-  readonly http?: HttpOptions
-  readonly providerOptions?: ProviderOptions
+  readonly options?: { readonly http?: HttpOptions; readonly providerOptions?: ProviderOptions }
 }>
 
 /** What every HTTP exchange of one generation shares. */
@@ -345,7 +344,7 @@ const makeTransport = <Request extends MediaRequest>(
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */
-    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers, http: model.http }),
+    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers, http: model.options?.http }),
     /** POST the protocol body to the route endpoint. */
     submit: Effect.fn("MediaRoute.submit")(function* (
       request: Request,
@@ -357,9 +356,9 @@ const makeTransport = <Request extends MediaRequest>(
       execute: Execute,
     ) {
       yield* rejectUnsupported(input.protocol.id, input.protocol.provider, request, protocol.unsupported)
-      const { headers: merged, http } = mergeTransport({ headers: input.headers, http: request.model.http }, request)
+      const { headers: merged, http } = mergeTransport({ headers: input.headers, http: request.model.options?.http }, request)
       const exchange = { headers: merged, http, fetch: request.fetch }
-      const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
+      const providerOptions = mergeProviderOptions(request.model.options?.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(merged)
       const prepared =
         protocol.prepare === undefined

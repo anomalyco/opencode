@@ -3,9 +3,9 @@ import {
   ai,
   CompactionCheckpointResponse,
   CompactionResponse,
-  LanguageModel,
   LLMClient,
   type LLMRequest,
+  Model,
 } from "../../src/effect.js"
 import {
   Anthropic,
@@ -46,8 +46,8 @@ for (const selected of [
   model,
   OpenAI.model("fixture", {}),
   model.route.with({ headers: { fixture: "test" } }).model({ id: "fixture" }),
-  LanguageModel.make(LanguageModel.input(model)),
-  LanguageModel.update(model, { options: { maxTokens: 100 } }),
+  Model.make(model),
+  Model.with(model, { options: { maxTokens: 100 } }),
 ]) {
   ai.compact(ai.request({ model: selected, prompt: "Hello" }), { mechanism: "trigger" })
 }
@@ -95,7 +95,7 @@ ai.compact(unsupported.xai, { mechanism: "trigger" })
 ai.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.
 ai.compact({ ...request, model: azure }, { mechanism: "trigger" })
-ai.compact(ai.request({ model: LanguageModel.update(model, { route: azure.route }), prompt: "Hello" }), {
+ai.compact(ai.request({ model: Model.with(model, { route: azure.route }), prompt: "Hello" }), {
   // @ts-expect-error Changing the route replaces its capability.
   mechanism: "trigger",
 })

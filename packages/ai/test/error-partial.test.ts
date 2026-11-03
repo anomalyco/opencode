@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
-import { ai, LanguageModel, LLMEvent, ProviderInternalError, tool } from "../src/effect.js"
+import { ai, LLMEvent, ProviderInternalError, tool, Model } from "../src/effect.js"
 import { AI, AIError } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { OpenAI } from "../src/providers.js"
@@ -10,7 +10,7 @@ import { testEffect } from "./lib/effect.js"
 import { handlerLayer } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
-const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
+const model = Model.make({ type: "chat", id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
 const it = testEffect(TestLLM.testLayer())
 const overloaded = new AIError({ reason: new ProviderInternalError({ message: "Overloaded" }) })
 

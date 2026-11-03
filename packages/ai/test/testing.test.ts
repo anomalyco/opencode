@@ -5,13 +5,13 @@ import {
   CompactionCheckpointResponse,
   CompactionPart,
   CompactionResponse,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   type LLMRequest,
   Message,
   ProviderID,
   RateLimitError,
+  Model,
 } from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
@@ -20,7 +20,7 @@ import { Effect, Fiber, Latch, Stream } from "effect"
 import { testEffect } from "./lib/effect.js"
 
 const request = ai.request({
-  model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
+  model: Model.make({ type: "chat", id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
   prompt: "Say hello",
 })
 const it = testEffect(TestLLM.testLayer())

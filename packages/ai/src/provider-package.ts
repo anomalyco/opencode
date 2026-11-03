@@ -1,4 +1,5 @@
-import type { LanguageModel, ProviderOptions } from "./schema/index.js"
+// `Model` below names the loader type, so the model class is imported under another name.
+import type { Model as AIModel, ProviderOptions } from "./schema/index.js"
 import type { CompactionOperations } from "./route/client.js"
 
 /**
@@ -16,7 +17,7 @@ export interface Definition<
   Options extends ProviderOptions = ProviderOptions,
   Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
 > {
-  readonly model: (modelID: string, settings: ProviderSettings) => LanguageModel<Options, Compact>
+  readonly model: (modelID: string, settings: ProviderSettings) => AIModel<"chat", Options, Compact>
 }
 
 /** A provider's `model` export. Settings are optional when every key is optional. */
@@ -27,6 +28,6 @@ export type Model<
 > = (
   modelID: string,
   ...settings: {} extends ProviderSettings ? [settings?: ProviderSettings] : [settings: ProviderSettings]
-) => LanguageModel<Options, Compact>
+) => AIModel<"chat", Options, Compact>
 
 export * as ProviderPackage from "./provider-package.js"

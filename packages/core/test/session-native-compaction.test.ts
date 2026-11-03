@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai/effect"
+import { LLMClient, Message, ToolDefinition, Model } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -142,7 +142,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const native = OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("gpt-5.4-mini")
   const model = SessionRunnerModel.resolved(
     endpoint
-      ? LanguageModel.update(native, {
+      ? Model.with(native, {
           route: native.route.with({ compact: { endpoint: native.route.compact.endpoint } }),
         })
       : native,

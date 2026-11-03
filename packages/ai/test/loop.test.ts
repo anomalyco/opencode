@@ -1,21 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import {
-  ai,
-  AIError,
-  LanguageModel,
-  type LLM,
-  LLMEvent,
-  ProviderInternalError,
-  tool,
-  ToolFailure,
-} from "../src/effect.js"
+import { ai, AIError, type LLM, LLMEvent, ProviderInternalError, tool, ToolFailure, Model } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
 
-const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
+const model = Model.make({ type: "chat", id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
 const it = testEffect(TestLLM.testLayer())
 
 const read_file = tool({

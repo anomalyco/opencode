@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ai, LanguageModel, Message } from "@opencode/ai/effect"
+import { ai, Message, Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -757,7 +757,7 @@ describe("ModelResolver", () => {
           }),
           credential,
         )
-        const authorize = (resolved: LanguageModel) =>
+        const authorize = (resolved: AIModel<"chat">) =>
           resolved.route.auth.apply({
             request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
@@ -968,7 +968,7 @@ describe("ModelResolver", () => {
                   headers: { "x-package": "header" },
                   body: { custom: true },
                 })
-                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", route: native.route })
               },
             })
           },
@@ -1015,7 +1015,7 @@ describe("ModelResolver", () => {
                 expect(settings).not.toHaveProperty("server")
                 expect(settings).not.toHaveProperty("orgID")
                 expect(settings).not.toHaveProperty("orgName")
-                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", route: native.route })
               },
             }),
         }),
@@ -1138,7 +1138,7 @@ describe("ModelResolver", () => {
                     body: { custom: true },
                     ...providerOptions,
                   })
-                  return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
+                  return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", route: native.route })
                 },
               })
             },
@@ -1184,7 +1184,7 @@ describe("ModelResolver", () => {
             loadPackage: (specifier) => {
               expect(specifier).toBe(nativePackage)
               return Effect.succeed({
-                model: (id) => LanguageModel.make({ id, provider: "native-provider", route: OpenAIChat.route }),
+                model: (id) => AIModel.make({ type: "chat", id, provider: "native-provider", route: OpenAIChat.route }),
               })
             },
             loadAISDK: () => Effect.die(`AI SDK loader called for ${catalogPackage}`),
@@ -1229,7 +1229,7 @@ describe("ModelResolver", () => {
                   thinking: { type: "adaptive", display: "summarized" },
                   effort: "high",
                 })
-                return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", route: native.route })
               },
             })
           },
@@ -1265,7 +1265,7 @@ describe("ModelResolver", () => {
                 transforms: ["middle-out"],
                 provider: { sort: "price", only: ["anthropic"] },
               })
-              return LanguageModel.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
+              return AIModel.make({ type: "chat", id: modelID, provider: "openrouter", route: OpenAIChat.route })
             },
           }),
       },
@@ -1295,7 +1295,7 @@ describe("ModelResolver", () => {
                 factory: true,
                 custom: { source: true, catalog: true },
               })
-              return LanguageModel.make({ id: modelID, provider: "mistral", route: OpenAIChat.route })
+              return AIModel.make({ type: "chat", id: modelID, provider: "mistral", route: OpenAIChat.route })
             },
           }),
       },
@@ -1428,7 +1428,8 @@ describe("ModelResolver", () => {
                 body: { custom: true },
               })
               expect(runtime.settings).not.toHaveProperty("accountId")
-              return LanguageModel.make({
+              return AIModel.make({
+                type: "chat",
                 id: runtime.modelID ?? runtime.id,
                 provider: runtime.providerID,
                 route: native.route,

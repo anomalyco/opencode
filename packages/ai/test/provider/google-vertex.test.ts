@@ -4,7 +4,7 @@ import { HttpClientRequest } from "effect/http"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { ai, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, Message, ToolCallPart, Model } from "../../src/effect.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -486,7 +486,7 @@ describe("Google Vertex providers", () => {
       const tunedModel = GoogleVertex.configure(vertex).model("endpoints/1234567890")
       const tuned = yield* request(tunedModel)
       expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(normalized)
-      const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { sanitizer: "none" } }))
+      const optedOut = yield* request(Model.with(tunedModel, { compatibility: { sanitizer: "none" } }))
       expect(optedOut.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
       const geminiChat = yield* request(GoogleVertexChat.configure(vertex).model("google/gemini-3.8-flash"))
       expect(geminiChat.body.tools?.[0]?.function.parameters).toEqual(normalized)

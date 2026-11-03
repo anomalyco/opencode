@@ -4,8 +4,8 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
+import { mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { VideoResponse, type VideoRequest, videoModel } from "../video.js"
 import { ProviderShared, optionalArray } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "google-video", name: "Google Veo", provider: "google" })
@@ -22,7 +22,7 @@ export type GoogleVideoOptions = {
   readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
 
-export type Request = VideoRequest<VideoModel<GoogleVideoOptions>>
+export type Request = VideoRequest<Model<"video", GoogleVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -213,7 +213,7 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(rout
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<GoogleVideoOptions, Token>(
+  videoModel<GoogleVideoOptions, Token>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

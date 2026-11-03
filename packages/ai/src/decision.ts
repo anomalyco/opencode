@@ -5,9 +5,8 @@ import { tryRequest } from "./media-model.js"
 import {
   AIError,
   type BaseRequest,
-  type HttpOptions,
-  ModelID,
-  ProviderID,
+  Model,
+  type ModelProviderOptions,
   ProviderMetadata,
   ProviderOptions,
   type OpenString,
@@ -161,7 +160,7 @@ export type AnswersFor<Questions extends DecisionQuestions> = {
 }
 
 // ---------------------------------------------------------------------------
-// Model
+// SelectedModel
 // ---------------------------------------------------------------------------
 
 export type DecisionOptions = Record<string, unknown>
@@ -169,85 +168,18 @@ export type DecisionOptions = Record<string, unknown>
 /** What a decision model's route does; `DecisionRoute.make(...).model(...)` builds one from a protocol. */
 export interface DecisionModelRoute<Options extends DecisionOptions = DecisionOptions> {
   readonly id: string
-  generate(request: DecisionRequest<DecisionModel<Options>>, execute: Execute): Effect.Effect<DecisionResponse, AIError>
+  generate(
+    request: DecisionRequest<Model<"decision", Options>>,
+    execute: Execute,
+  ): Effect.Effect<DecisionResponse, AIError>
 }
-
-/** Host quirks a protocol adapts to, like `LanguageModelCompatibility` for language models. */
-export class DecisionModelCompatibility extends Schema.Class<DecisionModelCompatibility>("Decision.ModelCompatibility")(
-  {
-    /**
-     * Where a System One host reads media, from models.dev `[api.systemone] compatibility.media_input`, named after
-     * where the media goes in the body: `assets` (TypeSafe's assets map, referenced from the state), `state` (items
-     * inside a state list) or `root` (one top-level list per kind: `images`, `audio`, `videos`).
-     */
-    mediaInput: Schema.optional(Schema.Literals(["assets", "state", "root"])),
-  },
-) {}
-
-export namespace DecisionModelCompatibility {
-  export type Input = DecisionModelCompatibility | ConstructorParameters<typeof DecisionModelCompatibility>[0]
-
-  export const make = (input: Input) =>
-    input instanceof DecisionModelCompatibility ? input : new DecisionModelCompatibility(input)
-}
-
-export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
-  declare protected readonly _Options: Options
-  readonly id: ModelID
-  readonly provider: ProviderID
-  readonly route: DecisionModelRoute<Options>
-  readonly http?: HttpOptions
-  readonly compatibility?: DecisionModelCompatibility
-  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
-  readonly providerOptions?: ProviderOptions
-
-  constructor(input: DecisionModel.Input<Options>) {
-    this.id = input.id
-    this.provider = input.provider
-    this.route = input.route
-    this.http = input.http
-    this.compatibility = input.compatibility
-    this.providerOptions = input.providerOptions
-  }
-
-  static make<Options extends DecisionOptions = DecisionOptions>(input: DecisionModel.MakeInput<Options>) {
-    return new DecisionModel<Options>({
-      ...input,
-      id: ModelID.make(input.id),
-      provider: ProviderID.make(input.provider),
-    })
-  }
-}
-
-export namespace DecisionModel {
-  export interface Input<Options extends DecisionOptions = DecisionOptions> {
-    readonly id: ModelID
-    readonly provider: ProviderID
-    readonly route: DecisionModelRoute<Options>
-    readonly http?: HttpOptions
-    readonly compatibility?: DecisionModelCompatibility
-    readonly providerOptions?: ProviderOptions
-  }
-
-  export interface MakeInput<Options extends DecisionOptions = DecisionOptions>
-    extends Omit<Input<Options>, "id" | "provider"> {
-    readonly id: string | ModelID
-    readonly provider: string | ProviderID
-  }
-}
-
-export const DecisionModelSchema = Schema.declare((value): value is DecisionModel => value instanceof DecisionModel, {
-  expected: "Decision.Model",
-})
-
-export type DecisionModelOptions<Model> = Model extends DecisionModel<infer Options> ? Options : never
 
 // ---------------------------------------------------------------------------
 // Request and response
 // ---------------------------------------------------------------------------
 
 const DecisionRequestSchema = Schema.Struct({
-  model: DecisionModelSchema,
+  model: Model.schema("decision"),
   input: Schema.Array(DecisionPart),
   questions: DecisionQuestionList,
   providerOptions: Schema.optional(ProviderOptions),
@@ -255,18 +187,18 @@ const DecisionRequestSchema = Schema.Struct({
 
 /** A normalized decision request, the plain object `ai.decision.request(...)` returns. */
 export interface DecisionRequest<
-  Model extends DecisionModel = DecisionModel,
+  SelectedModel extends Model<"decision"> = Model<"decision">,
   Questions extends DecisionQuestions = DecisionQuestions,
-> extends BaseRequest<Model, DecisionModelOptions<Model>> {
+> extends BaseRequest<SelectedModel, ModelProviderOptions<SelectedModel>> {
   readonly input: ReadonlyArray<DecisionPart>
   readonly questions: Questions
 }
 
 /** Input accepted by `ai.decision.request` and `generate`. A `DecisionRequest` is also a valid input. */
 export interface DecisionRequestInput<
-  Model extends DecisionModel = DecisionModel,
+  SelectedModel extends Model<"decision"> = Model<"decision">,
   Questions extends DecisionQuestions = DecisionQuestions,
-> extends BaseRequest<Model, NoInfer<DecisionModelOptions<Model>>> {
+> extends BaseRequest<SelectedModel, NoInfer<ModelProviderOptions<SelectedModel>>> {
   readonly input: DecisionInput
   readonly questions: Questions
 }
@@ -295,9 +227,9 @@ export type DecisionResponseFor<Questions extends DecisionQuestions> = Omit<Deci
 // ---------------------------------------------------------------------------
 
 /** Normalize decision request input into a plain `DecisionRequest`; a plain object `input` becomes one `json` part. */
-export const request = <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
-  input: DecisionRequestInput<Model, Questions>,
-): DecisionRequest<Model, Questions> => ({
+export const request = <const SelectedModel extends Model<"decision">, const Questions extends DecisionQuestions>(
+  input: DecisionRequestInput<SelectedModel, Questions>,
+): DecisionRequest<SelectedModel, Questions> => ({
   ...input,
   input: isParts(input.input) ? input.input.map(decisionPart) : [{ type: "json", value: input.input }],
 })
@@ -313,8 +245,8 @@ const decisionPart = (part: DecisionPartInput): DecisionPart => {
   return { ...rest, media: Media.make(part.media, mediaType) }
 }
 
-export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
-  input: DecisionRequestInput<Model, Questions>,
+export function generate<const SelectedModel extends Model<"decision">, const Questions extends DecisionQuestions>(
+  input: DecisionRequestInput<SelectedModel, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service>
 export function generate(input: DecisionRequestInput) {
   return tryRequest(() => {

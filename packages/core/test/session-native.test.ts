@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CompactionPart, LanguageModel, Message, ToolCallPart, Media } from "@opencode/ai/effect"
+import { CompactionPart, Message, ToolCallPart, Media, Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIResponses } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
@@ -36,7 +36,7 @@ const decode = (checkpoint: { readonly native: { readonly messages: unknown } })
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
 
 const model = SessionRunnerModel.resolved(
-  LanguageModel.make({ id: "deployment", provider: "openai", route: OpenAIResponses.route }),
+  AIModel.make({ type: "chat", id: "deployment", provider: "openai", route: OpenAIResponses.route }),
   {
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     cost: [],

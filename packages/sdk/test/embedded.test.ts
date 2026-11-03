@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { LanguageModel, LLMClient } from "@opencode/ai/effect"
+import { LLMClient, Model } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -469,7 +469,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     const createRelease = yield* Deferred.make<void>()
     const modelStarted = yield* Deferred.make<void>()
     yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
-    const model = LanguageModel.make({ id: "workspace-test", provider: "test", route: OpenAIChat.route })
+    const model = Model.make({ type: "chat",  id: "workspace-test", provider: "test", route: OpenAIChat.route })
     const client = TestLLM.testLayer({
       fallback: TestLLM.text("ready", "answer"),
       transformRequest: (request) => {
@@ -567,7 +567,7 @@ it.live(
         const createStarted = yield* Deferred.make<void>()
         const createRelease = yield* Deferred.make<void>()
         yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
-        const model = LanguageModel.make({ id: "workspace-tool-test", provider: "test", route: OpenAIChat.route })
+        const model = Model.make({ type: "chat",  id: "workspace-tool-test", provider: "test", route: OpenAIChat.route })
         // The first tool-advertising request selects the shell tool; everything else
         // (including title generation, which carries no tools) answers with text.
         let toolIssued = false

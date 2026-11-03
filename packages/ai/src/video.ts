@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
-import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
+import { type MediaModel, composeRoute, mediaOptions, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import {
   AIError,
@@ -10,50 +10,51 @@ import {
   ProviderOptions,
   type OpenString,
   type BaseRequest,
+  Model,
+  type ModelProviderOptions,
 } from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
-// Model
+// SelectedModel
 // ---------------------------------------------------------------------------
 
 export type VideoOptions = MediaModel.Options
 
 export type VideoRoute = MediaRoute.AnyRoute<VideoRequest, VideoEvent, VideoResponse>
 
-export class VideoModel<Options extends VideoOptions = VideoOptions> extends MediaModel<VideoRoute, Options> {
-  declare protected readonly _VideoModel: void
-
-  /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
-  static fromRoute<Options extends VideoOptions>(
-    route: MediaModel.InlineRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Frame, State>(
-    route: MediaModel.StreamRouteInput<VideoRequest<VideoModel<Options>>, VideoEvent, Frame, State>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Token>(
-    route: MediaModel.QueuedRouteInput<VideoRequest<VideoModel<Options>>, VideoResponse, Token>,
-    input: MediaRoute.ModelInput,
-  ): VideoModel<Options>
-  static fromRoute<Options extends VideoOptions, Frame, State, Token>(
-    route: MediaModel.AnyRouteInput<VideoRequest<VideoModel<Options>>, VideoEvent, VideoResponse, Frame, State, Token>,
-    input: MediaRoute.ModelInput,
-  ) {
-    return new VideoModel<Options>({
-      id: input.id,
-      provider: route.protocol.provider,
-      http: input.http,
-      providerOptions: input.providerOptions,
-      route: composeRoute(route, input, collectResponse) as VideoRoute,
-    })
-  }
+/** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
+export function videoModel<Options extends VideoOptions>(
+  route: MediaModel.InlineRouteInput<VideoRequest<Model<"video", Options>>, VideoResponse>,
+  input: MediaRoute.ModelInput,
+): Model<"video", Options>
+export function videoModel<Options extends VideoOptions, Frame, State>(
+  route: MediaModel.StreamRouteInput<VideoRequest<Model<"video", Options>>, VideoEvent, Frame, State>,
+  input: MediaRoute.ModelInput,
+): Model<"video", Options>
+export function videoModel<Options extends VideoOptions, Token>(
+  route: MediaModel.QueuedRouteInput<VideoRequest<Model<"video", Options>>, VideoResponse, Token>,
+  input: MediaRoute.ModelInput,
+): Model<"video", Options>
+export function videoModel<Options extends VideoOptions, Frame, State, Token>(
+  route: MediaModel.AnyRouteInput<
+    VideoRequest<Model<"video", Options>>,
+    VideoEvent,
+    VideoResponse,
+    Frame,
+    State,
+    Token
+  >,
+  input: MediaRoute.ModelInput,
+) {
+  return Model.make<"video", Options>({
+    type: "video",
+    id: input.id,
+    provider: route.protocol.provider,
+    options: mediaOptions(input),
+    route: composeRoute(route, input, collectResponse) as VideoRoute,
+  })
 }
-
-export const VideoModelSchema = Schema.declare((value): value is VideoModel => value instanceof VideoModel, {
-  expected: "Video.Model",
-})
 
 // ---------------------------------------------------------------------------
 // Request
@@ -72,7 +73,7 @@ export const VideoFrames = Schema.Struct({
 export type VideoFrames = Schema.Schema.Type<typeof VideoFrames>
 
 const VideoRequestSchema = Schema.Struct({
-  model: VideoModelSchema,
+  model: Model.schema("video"),
   prompt: Schema.String,
   frames: Schema.optional(VideoFrames),
   /** Style or subject references that guide the output without pinning a frame. */
@@ -91,17 +92,18 @@ const VideoRequestSchema = Schema.Struct({
 })
 
 /** A normalized video request, the plain object `Video.request(...)` returns. */
-export type VideoRequest<Model extends VideoModel = VideoModel> = Omit<
+export type VideoRequest<SelectedModel extends Model<"video"> = Model<"video">> = Omit<
   typeof VideoRequestSchema.Type,
   "model" | "providerOptions" | "resolution"
 > &
-  BaseRequest<Model, VideoModelOptions<Model>> & { readonly resolution?: VideoResolution }
-
-export type VideoModelOptions<Model> = Model extends VideoModel<infer Options> ? Options : never
+  BaseRequest<SelectedModel, ModelProviderOptions<SelectedModel>> & { readonly resolution?: VideoResolution }
 
 /** Input accepted by `Video.request` and the calls; a `VideoRequest` is also a valid input. */
-export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<VideoRequest<Model>, "providerOptions"> & {
-  readonly providerOptions?: NoInfer<VideoModelOptions<Model>>
+export type VideoRequestInput<SelectedModel extends Model<"video"> = Model<"video">> = Omit<
+  VideoRequest<SelectedModel>,
+  "providerOptions"
+> & {
+  readonly providerOptions?: NoInfer<ModelProviderOptions<SelectedModel>>
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +163,9 @@ const collectResponse = (events: ReadonlyArray<VideoEvent>): Effect.Effect<Video
 // ---------------------------------------------------------------------------
 
 /** Normalize video request input into a plain `VideoRequest`. */
-export const request = <const Model extends VideoModel>(input: VideoRequestInput<Model>): VideoRequest<Model> => ({
+export const request = <const SelectedModel extends Model<"video">>(
+  input: VideoRequestInput<SelectedModel>,
+): VideoRequest<SelectedModel> => ({
   ...input,
 })
 
@@ -174,15 +178,15 @@ const requestEffect = (input: VideoRequestInput) =>
     return normalized
   })
 
-export function start<const Model extends VideoModel>(
-  input: VideoRequestInput<Model>,
+export function start<const SelectedModel extends Model<"video">>(
+  input: VideoRequestInput<SelectedModel>,
 ): Effect.Effect<Generation<VideoResponse>, AIError, Service>
 export function start(input: VideoRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => VideoClient.start(request)))
 }
 
-export function generate<const Model extends VideoModel>(
-  input: VideoRequestInput<Model>,
+export function generate<const SelectedModel extends Model<"video">>(
+  input: VideoRequestInput<SelectedModel>,
   options?: AwaitOptions,
 ): Effect.Effect<VideoResponse, AIError, Service>
 export function generate(input: VideoRequestInput, options?: AwaitOptions) {
@@ -190,11 +194,13 @@ export function generate(input: VideoRequestInput, options?: AwaitOptions) {
 }
 
 /** Rebuild a generation handle from a persisted `Generation.token`, refreshing its status once. */
-export const resume = (model: VideoModel, token: unknown): Effect.Effect<Generation<VideoResponse>, AIError, Service> =>
-  VideoClient.resume(model, token)
+export const resume = (
+  model: Model<"video">,
+  token: unknown,
+): Effect.Effect<Generation<VideoResponse>, AIError, Service> => VideoClient.resume(model, token)
 
-export function stream<const Model extends VideoModel>(
-  input: VideoRequestInput<Model>,
+export function stream<const SelectedModel extends Model<"video">>(
+  input: VideoRequestInput<SelectedModel>,
   options?: AwaitOptions,
 ): Stream.Stream<VideoEvent, AIError, Service>
 export function stream(input: VideoRequestInput, options?: AwaitOptions) {

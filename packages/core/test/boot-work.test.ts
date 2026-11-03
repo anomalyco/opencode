@@ -7,7 +7,7 @@ import path from "path"
 import whichPkg from "which"
 import { Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/process"
-import { LanguageModel } from "@opencode/ai/effect"
+import { Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -124,7 +124,7 @@ const it = testEffect(
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "boot", provider: "test", route: OpenAIChat.route }),
+                AIModel.make({ type: "chat", id: "boot", provider: "test", route: OpenAIChat.route }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

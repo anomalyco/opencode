@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode/ai/effect"
+import { Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"
@@ -61,7 +61,9 @@ describe("Provider and Model", () => {
               : undefined,
             {
               loadAISDK: () =>
-                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+                Effect.succeed(
+                  AIModel.make({ type: "chat", id: modelID, provider: providerID, route: OpenAIChat.route }),
+                ),
             },
           )
 

@@ -1,16 +1,8 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import {
-  DecisionModel,
-  DecisionModelCompatibility,
-  DecisionModelSchema,
-  ImageModel,
-  ImageModelSchema,
-  LanguageModel,
-  ProviderConfigurationError,
-  type ProviderPackage,
-} from "@opencode/ai/effect"
+// Core has its own `Model` namespace, so the AI package model is imported as `AIModel`.
+import { Model as AIModel, ProviderConfigurationError, type ProviderPackage } from "@opencode/ai/effect"
 import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -118,7 +110,7 @@ export type Error =
 
 export interface Resolved {
   /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
-  readonly model: LanguageModel
+  readonly model: AIModel<"chat">
   /** Selected catalog identity. Durable records and displays must use this, never the API model id. */
   readonly ref: Ref
   /** Catalog capabilities used to shape requests before provider lowering. */
@@ -149,9 +141,9 @@ export interface Interface {
   readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
   /** An enabled image model by ref, or undefined when no image model has that ref. */
-  readonly resolveImage: (ref: Ref) => Effect.Effect<ImageModel | undefined, MediaError>
+  readonly resolveImage: (ref: Ref) => Effect.Effect<AIModel<"image"> | undefined, MediaError>
   /** An enabled decision model by ref, or undefined when no decision model has that ref. */
-  readonly resolveDecision: (ref: Ref) => Effect.Effect<DecisionModel | undefined, MediaError>
+  readonly resolveDecision: (ref: Ref) => Effect.Effect<AIModel<"decision"> | undefined, MediaError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
@@ -189,7 +181,7 @@ export const withVariant = (
 
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<ProviderPackage.Definition, Provider.LoadError>
-  readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<LanguageModel, AISDK.InitError>
+  readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<AIModel<"chat">, AISDK.InitError>
 }
 
 export const fromCatalogModel = (
@@ -197,7 +189,7 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ): Effect.Effect<
-  LanguageModel,
+  AIModel<"chat">,
   | UnsupportedPackageError
   | ModelConfigurationError
   | ModelInitializationError
@@ -245,13 +237,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
-      return LanguageModel.update(runtime, {
+      return AIModel.with(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
         capabilities: resolved.compatibility
           ? capabilities(runtime.capabilities, resolved.compatibility)
           : runtime.capabilities,
         compatibility: resolved.compatibility
-          ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
+          ? Object.assign({}, runtime.compatibility, compatibility(resolved.compatibility))
           : runtime.compatibility,
         // Timeouts and body encoding are transport policy, so they land on the model's options instead of package settings.
         options: {
@@ -270,7 +262,15 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 // Config `compatibility` keys the AI package reads as model capabilities.
 const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates"] as const
 
-const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
+// Config `compatibility` keys the AI package names differently.
+const compatibility = (config: Compatibility) => {
+  const rest = Struct.omit(config, [...CAPABILITY_KEYS, "supportsThinkingBlockBinding"])
+  return "supportsThinkingBlockBinding" in config
+    ? { ...rest, thinkingBlockBinding: config.supportsThinkingBlockBinding }
+    : rest
+}
+
+const capabilities = (base: AIModel["capabilities"], compatibility: Compatibility) => ({
   ...base,
   ...("supportsPromptCacheKey" in compatibility ? { promptCacheKey: compatibility.supportsPromptCacheKey } : {}),
   ...("streamUsage" in compatibility ? { streamUsage: compatibility.streamUsage } : {}),
@@ -321,11 +321,8 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   // Catalog and config compatibility tell a decision route how its host takes media, as chat does above.
   const mediaInput = resolved.compatibility?.mediaInput
   const adapted =
-    runtime instanceof DecisionModel && mediaInput !== undefined
-      ? new DecisionModel({
-          ...runtime,
-          compatibility: DecisionModelCompatibility.make({ ...runtime.compatibility, mediaInput }),
-        })
+    AIModel.is("decision")(runtime) && mediaInput !== undefined
+      ? AIModel.with(runtime, { compatibility: { ...runtime.compatibility, mediaInput } })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
   return adapted
@@ -341,8 +338,8 @@ const constructionError = (model: RuntimeInfo, cause: unknown) =>
       })
     : initialization(model, "construct", cause)
 
-const isImageModel = Schema.is(ImageModelSchema)
-const isDecisionModel = Schema.is(DecisionModelSchema)
+const isImageModel = Schema.is(AIModel.schema("image"))
+const isDecisionModel = Schema.is(AIModel.schema("decision"))
 
 function prepareRuntimeModel(model: RuntimeInfo) {
   if (model.settings?.apiKey !== "") return model
@@ -351,8 +348,8 @@ function prepareRuntimeModel(model: RuntimeInfo) {
 
 function validateProviderVariables(
   model: RuntimeInfo,
-  resolved: LanguageModel,
-): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
+  resolved: AIModel<"chat">,
+): Effect.Effect<AIModel<"chat">, UnresolvedProviderVariablesError> {
   const baseURL = resolved.route.endpoint.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(resolved)
   const failure = unresolvedProviderVariables(model, baseURL)
@@ -488,7 +485,7 @@ export const layer = Layer.effect(
         credential === undefined &&
         !hasConfiguredAuth(runtimeInfo) &&
         usesAPIKeyAuth(runtimeInfo.package)
-          ? LanguageModel.update(model, { route: model.route.with({ auth: Auth.none }) })
+          ? AIModel.with(model, { route: model.route.with({ auth: Auth.none }) })
           : model
       return {
         model: runtime,

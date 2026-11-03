@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
+import { ai, LLMEvent, Model } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -69,7 +69,7 @@ for (const fixture of [
         .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
         .run()
       const model = SessionRunnerModel.resolved(
-        LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+        Model.make({ type: "chat", id: "test-model", provider: "test", route: OpenAIChat.route }),
         {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           limit: { context: 100_000, output: 1_000 },
@@ -182,7 +182,7 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
       .run()
     const model = SessionRunnerModel.resolved(
-      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      Model.make({ type: "chat", id: "test-model", provider: "test", route: OpenAIChat.route }),
       {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         limit: { context: 100_000, output: 1_000 },

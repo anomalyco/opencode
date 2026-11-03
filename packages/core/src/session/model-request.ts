@@ -6,7 +6,6 @@ import {
   type ContentPart,
   GENERATION_KEYS,
   type GenerationOptionsFields,
-  LanguageModel,
   type LLM,
   type LLMRequest,
   type Media,
@@ -16,6 +15,8 @@ import {
   ToolMessage,
   type ToolResultPart,
   UserMessage,
+  // Core has its own `Model` namespace, so the AI package model is imported as `AIModel`.
+  Model as AIModel,
 } from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
@@ -346,7 +347,7 @@ export const layer = Layer.effect(
           : base.model.route
       const request = {
         ...base,
-        model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
+        model: route === base.model.route ? base.model : AIModel.with(base.model, { route }),
         headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
       }
       const hasHttpHooks =

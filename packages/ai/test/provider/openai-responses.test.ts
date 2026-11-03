@@ -5,7 +5,6 @@ import {
   ai,
   AIError,
   HttpContext,
-  LanguageModel,
   LLMEvent,
   Media,
   Message,
@@ -15,6 +14,7 @@ import {
   ToolResultPart,
   TransportError,
   Usage,
+  Model,
 } from "../../src/effect.js"
 import {
   Auth,
@@ -1485,7 +1485,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate({
         ...request,
-        model: LanguageModel.update(model, {
+        model: Model.with(model, {
           route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
         }),
       }).pipe(
@@ -2233,7 +2233,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
+          model: Model.with(model, { capabilities: { promptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "request_cache",
         }),

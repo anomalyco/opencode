@@ -3,8 +3,8 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
+import { AIError, mergeJsonRecords, type OpenString, type Model } from "../schema/index.js"
+import { type SpeechEvent, type SpeechRequest, speechModel } from "../speech.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -33,7 +33,7 @@ export type CartesiaSpeechOptions = {
   readonly pronunciation_dict_id?: string
 } & Record<string, unknown>
 
-export type Request = SpeechRequest<SpeechModel<CartesiaSpeechOptions>>
+export type Request = SpeechRequest<Model<"speech", CartesiaSpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -166,7 +166,7 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  SpeechModel.fromRoute<CartesiaSpeechOptions, string | Uint8Array, State>(
+  speechModel<CartesiaSpeechOptions, string | Uint8Array, State>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

@@ -1,19 +1,20 @@
 import { Effect } from "effect"
 import type { HttpClientResponse } from "effect/http"
+import { type DecisionOptions, type DecisionPart, type DecisionRequest, type DecisionResponse } from "../decision.js"
 import {
-  DecisionModel,
-  DecisionModelCompatibility,
-  type DecisionOptions,
-  type DecisionPart,
-  type DecisionRequest,
-  type DecisionResponse,
-} from "../decision.js"
-import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
+  ProviderID,
+  type HttpOptions,
+  type AIError,
+  type ProviderOptions,
+  type Compatibility,
+  Model,
+} from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService } from "./executor-service.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { MediaRoute, type Execute } from "./media.js"
+import { mediaOptions } from "../media-model.js"
 
 /** One decision API: how a request becomes its JSON body and how its response becomes a `DecisionResponse`. */
 export interface Protocol {
@@ -55,9 +56,9 @@ export interface Route {
   readonly with: (patch: Patch) => Route
   readonly model: <Options extends DecisionOptions = DecisionOptions>(input: {
     readonly id: string
-    readonly compatibility?: DecisionModelCompatibility.Input
+    readonly compatibility?: Compatibility
     readonly providerOptions?: ProviderOptions
-  }) => DecisionModel<Options>
+  }) => Model<"decision", Options>
 }
 
 export interface MakeInput extends Omit<Patch, "endpoint"> {
@@ -94,17 +95,16 @@ export const make = (input: MakeInput): Route => {
       }),
     model: <Options extends DecisionOptions>(model: {
       readonly id: string
-      readonly compatibility?: DecisionModelCompatibility.Input
+      readonly compatibility?: Compatibility
       readonly providerOptions?: ProviderOptions
     }) => {
       const send = transport(route)
-      return DecisionModel.make<Options>({
+      return Model.make<"decision", Options>({
         id: model.id,
         provider,
-        http: route.http,
-        providerOptions: model.providerOptions,
-        compatibility:
-          model.compatibility === undefined ? undefined : DecisionModelCompatibility.make(model.compatibility),
+        type: "decision",
+        options: mediaOptions({ http: route.http, providerOptions: model.providerOptions }),
+        compatibility: model.compatibility,
         route: { id: route.id, generate: send },
       })
     },

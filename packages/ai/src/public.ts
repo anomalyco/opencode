@@ -2,6 +2,7 @@ export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./prov
 export {
   ProtocolID,
   RouteID,
+  Model,
   ModelID,
   ProviderID,
   ResponseID,
@@ -15,9 +16,6 @@ export {
   GENERATION_KEYS,
   ReasoningEfforts,
   ReasoningEffort,
-  LanguageModelCompatibility,
-  LanguageModel,
-  LanguageModelSchema,
   CacheTTL,
   CacheHint,
   CachePolicyObject,
@@ -90,12 +88,17 @@ export {
 } from "./schema/index.js"
 export type {
   BaseRequest,
+  Compatibility,
   ContentPartInput,
   GenerationOptionsFields,
   HttpOptions,
+  Capabilities,
+  Limit,
+  Modalities,
+  Modality,
   RequestOptions,
-  LanguageModelInput,
-  LanguageModelProviderOptions,
+  ModelProviderOptions,
+  ModelType,
   LLMRequest,
   MediaPartInput,
   RequestTimeout,
@@ -107,15 +110,8 @@ export type {
   TransportOptions,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
-export type {
-  ImageModelOptions,
-  ImageOptions,
-  ImageRequest,
-  ImageRequestInput,
-  ImageResolution,
-  ImageRoute,
-} from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageResponse } from "./image.js"
+export type { ImageOptions, ImageRequest, ImageRequestInput, ImageResolution, ImageRoute } from "./image.js"
 export {
   ChoiceAnswer,
   ChoiceQuestion,
@@ -123,9 +119,6 @@ export {
   DecisionAnswer,
   DecisionJsonPart,
   DecisionMediaPart,
-  DecisionModel,
-  DecisionModelCompatibility,
-  DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
   DecisionResponse,
@@ -143,7 +136,6 @@ export type {
   AnswersFor,
   DecisionInput,
   DecisionMediaPartInput,
-  DecisionModelOptions,
   DecisionOptions,
   DecisionPartInput,
   DecisionQuestions,

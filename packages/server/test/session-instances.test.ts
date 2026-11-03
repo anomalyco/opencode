@@ -22,7 +22,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
 import { Context, Duration, Effect, Layer, LayerMap, RcMap, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
-import { LanguageModel, LLMClient } from "../../ai/src/effect"
+import { LLMClient, Model } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
 import { TestLLM } from "../../ai/src/testing"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
@@ -44,7 +44,7 @@ it.live(
       const commands: Session.ID[] = []
       const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
       const model = SessionRunnerModel.resolved(
-        LanguageModel.make({ id: "instance-model", provider: "test", route: OpenAIChat.route }),
+        Model.make({ type: "chat",  id: "instance-model", provider: "test", route: OpenAIChat.route }),
         {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           cost: [],

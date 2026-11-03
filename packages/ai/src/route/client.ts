@@ -12,7 +12,12 @@ import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
-import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
+import {
+  type LanguageModelSanitizerCompatibility,
+  type ProtocolID,
+  type ProviderOptions,
+  Model,
+} from "../schema/index.js"
 import type { LLMRequestInput } from "../llm.js"
 import {
   AIError,
@@ -21,7 +26,6 @@ import {
   AIErrorReason,
   LLMResponse,
   ResponseFold,
-  LanguageModel,
   Message,
   LLMEvent,
   InvalidProviderOutputError,
@@ -77,7 +81,7 @@ export interface Route<
   }
   readonly model: <Options extends ProviderOptions = ProviderOptions>(
     input: RouteMappedLanguageModelInput,
-  ) => LanguageModel<Options, Compact>
+  ) => Model<"chat", Options, Compact>
   readonly prepareTransport: (
     body: Body,
     request: LLMRequest,
@@ -101,9 +105,9 @@ export type AnyRoute<Compact extends CompactionOperations | undefined = Compacti
   Compact
 >
 
-export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "route">
+export type RouteLanguageModelInput = Omit<Model.Input<"chat">, "type" | "provider" | "route">
 
-export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
+export type RouteRoutedLanguageModelInput = Omit<Model.Input<"chat">, "type" | "route">
 
 export interface RoutePatch<Body, Prepared> extends RequestOptions {
   readonly compact?: CompactionOperations
@@ -128,8 +132,9 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
       provider: ProviderID.make(provider),
       message: `Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`,
     })
-  return LanguageModel.make<Options, Compact>({
+  return Model.make<"chat", Options, Compact>({
     ...mapped,
+    type: "chat",
     provider,
     route,
   })
@@ -181,8 +186,8 @@ export interface TriggerCompactOptions extends StreamOptions {
   readonly mechanism: "trigger"
 }
 
-type EndpointModel = LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
-type TriggerModel = LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
+type EndpointModel = Model<"chat", ProviderOptions, { readonly endpoint: CompactOperation }>
+type TriggerModel = Model<"chat", ProviderOptions, { readonly trigger: TriggerCompactOperation }>
 
 /** A text request whose model supports explicit compaction. */
 export type CompactionRequest = LLMRequestInput & { readonly model: EndpointModel }
@@ -201,33 +206,33 @@ export interface CompactMethod<R = never> {
 }
 
 /** Whether a model, or a text request's model, supports compaction through the given mechanism. */
-export function canCompact<Model extends LanguageModel>(
-  model: Model,
+export function canCompact<SelectedModel extends Model<"chat">>(
+  model: SelectedModel,
   options: { readonly mechanism: "trigger" },
-): model is Model & TriggerModel
-export function canCompact<Request extends { readonly model: LanguageModel }>(
+): model is SelectedModel & TriggerModel
+export function canCompact<Request extends { readonly model: Model<"chat"> }>(
   request: Request,
   options: { readonly mechanism: "trigger" },
 ): request is Request & { readonly model: TriggerModel }
-export function canCompact<Model extends LanguageModel>(
-  model: Model,
+export function canCompact<SelectedModel extends Model<"chat">>(
+  model: SelectedModel,
   options?: { readonly mechanism?: "endpoint" },
-): model is Model & EndpointModel
-export function canCompact<Request extends { readonly model: LanguageModel }>(
+): model is SelectedModel & EndpointModel
+export function canCompact<Request extends { readonly model: Model<"chat"> }>(
   request: Request,
   options?: { readonly mechanism?: "endpoint" },
 ): request is Request & { readonly model: EndpointModel }
 export function canCompact(
-  target: LanguageModel | { readonly model: LanguageModel },
+  target: Model<"chat"> | { readonly model: Model<"chat"> },
   options?: { readonly mechanism?: string },
 ) {
-  const model = target instanceof LanguageModel ? target : target.model
+  const model = target instanceof Model ? target : target.model
   if (options?.mechanism === "trigger") return model.route.compact?.trigger !== undefined
   if (options?.mechanism !== undefined && options.mechanism !== "endpoint") return false
   return model.route.compact?.endpoint !== undefined
 }
 
-const unsupportedCompaction = (model: LanguageModel, mechanism: string | undefined) => {
+const unsupportedCompaction = (model: Model<"chat">, mechanism: string | undefined) => {
   if (mechanism !== undefined && mechanism !== "endpoint" && mechanism !== "trigger")
     return ProviderShared.invalidRequest(`Unknown compaction mechanism: ${mechanism}`)
   return ProviderShared.unsupportedOperation({

@@ -7,11 +7,11 @@ import {
   DecisionClient,
   Generation,
   ImageClient,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   Media,
   RawEvent,
+  Model,
 } from "@opencode/ai/effect"
 import { AI } from "@opencode/ai"
 import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
@@ -71,7 +71,7 @@ describe("public exports", () => {
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
-    expect(LanguageModel.make).toBeFunction()
+    expect(Model.make).toBeFunction()
     expect(Media.bytes).toBeFunction()
     expect(ai.image.generate).toBeFunction()
     expect(Video.start).toBeFunction()

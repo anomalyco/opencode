@@ -4,11 +4,11 @@ import {
   InvalidRequestError,
   LLMClient,
   LLMEvent,
-  LanguageModel,
   Message,
   SystemPart,
   TransportError,
   type LLMRequest,
+  Model as AIModel,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/core/agent"
@@ -42,16 +42,8 @@ let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
 let selectedPrimary: Model.Info | undefined
 let selections: Array<Session.Info["model"]> = []
-const model = LanguageModel.make({
-  id: "title-model",
-  provider: "test",
-  route: OpenAIChat.route,
-})
-const smallModel = LanguageModel.make({
-  id: "title-small",
-  provider: "test",
-  route: OpenAIChat.route,
-})
+const model = AIModel.make({ type: "chat", id: "title-model", provider: "test", route: OpenAIChat.route })
+const smallModel = AIModel.make({ type: "chat", id: "title-small", provider: "test", route: OpenAIChat.route })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

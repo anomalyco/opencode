@@ -1,7 +1,7 @@
 import type { HttpRecorder } from "@opencode/http-recorder"
 import { describe } from "bun:test"
 import { Effect } from "effect"
-import type { LanguageModel } from "../src/effect.js"
+import type { Model } from "../src/effect.js"
 import {
   goldenScenarioTags,
   goldenScenarioTitle,
@@ -28,7 +28,7 @@ type ScenarioInput =
 
 type TargetInput = {
   readonly name: string
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly transport?: Transport

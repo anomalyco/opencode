@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LanguageModel, Message } from "../../src/effect.js"
+import { ai, Message, Model } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { Groq } from "../../src/providers/groq.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -26,7 +26,7 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
 
 it.effect("Groq lowers its own options for custom catalog identities and endpoints", () =>
   Effect.gen(function* () {
-    const model = LanguageModel.update(
+    const model = Model.with(
       Groq.model("qwen/qwen3.6-27b", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",

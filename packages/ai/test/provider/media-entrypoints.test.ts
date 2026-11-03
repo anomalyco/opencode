@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { ai, DecisionClient, type DecisionModel, ImageClient, type ImageModel } from "../../src/effect.js"
+import { ai, DecisionClient, ImageClient, Model } from "../../src/effect.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, observe, type Call } from "../lib/http.js"
 
@@ -10,7 +10,7 @@ const shared = { headers: { "x-test": "yes" }, body: { extra: true } }
 const record = (calls: Array<Call>) =>
   dynamicResponse((input) => observe(calls, input).pipe(Effect.as(input.respond("{}", { status: 400 }))))
 
-const sentImage = (model: ImageModel) =>
+const sentImage = (model: Model<"image">) =>
   Effect.gen(function* () {
     const calls: Array<Call> = []
     yield* ai.image
@@ -19,7 +19,7 @@ const sentImage = (model: ImageModel) =>
     return calls
   })
 
-const sentDecision = (model: DecisionModel) =>
+const sentDecision = (model: Model<"decision">) =>
   Effect.gen(function* () {
     const calls: Array<Call> = []
     yield* ai.decision
@@ -45,7 +45,7 @@ interface Case<Model> {
   readonly bodyInInput?: boolean
 }
 
-const expectRequest = (calls: ReadonlyArray<Call>, model: ImageModel | DecisionModel, entry: Case<unknown>) => {
+const expectRequest = (calls: ReadonlyArray<Call>, model: Model<"image"> | Model<"decision">, entry: Case<unknown>) => {
   expect(calls).toHaveLength(1)
   const call = calls[0]
   expect(call.url).toBe(entry.url)
@@ -58,7 +58,7 @@ const expectRequest = (calls: ReadonlyArray<Call>, model: ImageModel | DecisionM
   if (entry.provider) expect<string>(model.provider).toBe(entry.provider)
 }
 
-const images: ReadonlyArray<Case<ImageModel>> = [
+const images: ReadonlyArray<Case<Model<"image">>> = [
   {
     name: "openai-compatible",
     load: async () => {
@@ -206,7 +206,7 @@ const images: ReadonlyArray<Case<ImageModel>> = [
   },
 ]
 
-const decisions: ReadonlyArray<Case<DecisionModel>> = [
+const decisions: ReadonlyArray<Case<Model<"decision">>> = [
   {
     name: "typesafe-ai",
     load: async () => {

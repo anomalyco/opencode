@@ -4,8 +4,8 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
+import { mergeJsonRecords, type Model } from "../schema/index.js"
+import { VideoResponse, type VideoRequest, videoModel } from "../video.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "xai-video", name: "xAI Video", provider: "xai" })
@@ -28,7 +28,7 @@ export type XAIVideoOptions = {
   readonly reference_audios?: ReadonlyArray<{ readonly voice_id: string }>
 } & Record<string, unknown>
 
-export type Request = VideoRequest<VideoModel<XAIVideoOptions>>
+export type Request = VideoRequest<Model<"video", XAIVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -200,7 +200,7 @@ const startPath = (request: Request) => {
 }
 
 export const model = (input: MediaRoute.ModelInput) =>
-  VideoModel.fromRoute<XAIVideoOptions, Token>(
+  videoModel<XAIVideoOptions, Token>(
     {
       protocol,
       baseURL: DEFAULT_BASE_URL,

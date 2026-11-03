@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
+import { Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -162,7 +162,7 @@ const completionIt = testEffect(
         resolve: () =>
           Effect.succeed(
             SessionRunnerModel.resolved(
-              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+              AIModel.make({ type: "chat", id: "child", provider: "test", route: OpenAIChat.route }),
               {
                 capabilities: { tools: true, input: ["text"], output: ["text"] },
                 cost: [],

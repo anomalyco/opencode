@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
+import { Model as AIModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -35,7 +35,12 @@ const it = testEffect(
           resolve: (session) =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                LanguageModel.make({ id: session.model?.id ?? "parent", provider: "test", route: OpenAIChat.route }),
+                AIModel.make({
+                  type: "chat",
+                  id: session.model?.id ?? "parent",
+                  provider: "test",
+                  route: OpenAIChat.route,
+                }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

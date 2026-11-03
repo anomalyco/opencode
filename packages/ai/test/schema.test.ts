@@ -11,7 +11,6 @@ import {
   InvalidProviderOutputError,
   InvalidRequestError,
   LLMEvent,
-  LanguageModel,
   ModelID,
   ProviderID,
   ProviderInternalError,
@@ -24,12 +23,14 @@ import {
   UnknownProviderError,
   UnsupportedOperationError,
   Usage,
+  Model,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
 import { Framing } from "../src/route/framing.js"
 import { it } from "./lib/effect.js"
 
-const model = new LanguageModel({
+const model = Model.make({
+  type: "chat",
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: OpenAIChat.route,

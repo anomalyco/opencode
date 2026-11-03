@@ -4,7 +4,6 @@ import {
   ai,
   type AssistantMessage,
   type FinishReason,
-  type LanguageModel,
   type LLM,
   LLMEvent,
   type LLMRequest,
@@ -13,6 +12,7 @@ import {
   Message,
   ToolChoice,
   ToolDefinition,
+  Model,
 } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { tool } from "../src/tool.js"
@@ -55,7 +55,7 @@ export const weatherRuntimeTool = tool({
 
 export const weatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
   readonly system?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -72,7 +72,7 @@ export const weatherToolLoopRequest = (input: {
 
 export const goldenWeatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
@@ -125,7 +125,7 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
 
 export interface GoldenScenarioContext {
   readonly id: string
-  readonly model: LanguageModel
+  readonly model: Model<"chat">
   readonly prompt?: string
   readonly maxTokens?: number
   readonly temperature?: number | false

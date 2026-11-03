@@ -2,12 +2,12 @@ import { Effect } from "effect"
 import {
   ai,
   CompactionPart,
-  LanguageModel,
   LLMClient,
   LLMEvent,
   type LLMRequest,
   Message,
   ProviderID,
+  Model,
 } from "../../src/effect.js"
 import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers.js"
 
@@ -25,8 +25,8 @@ for (const model of [
   Azure.responsesModel("fixture", { resourceName: "test" }),
   XAI.model("fixture", {}),
   openai.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
-  LanguageModel.update(openai, { options: { maxTokens: 100 } }),
-  LanguageModel.make(LanguageModel.input(openai)),
+  Model.with(openai, { options: { maxTokens: 100 } }),
+  Model.make(openai),
 ]) {
   ai.compact(ai.request({ model, prompt: "hello" }))
 }
@@ -66,12 +66,12 @@ ai.compact({ ...switched, model: openai })
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
   ai.request({
-    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
+    model: Model.with(openai, { route: Anthropic.configure().model("fixture").route }),
     prompt: "Hello",
   }),
 )
 
-declare const dynamicModel: LanguageModel
+declare const dynamicModel: Model<"chat">
 declare const dynamicPatch: Partial<LLMRequest>
 const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.

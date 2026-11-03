@@ -235,7 +235,7 @@ const trace = [
 export async function session(snapshots: "on" | "off", ttft: number) {
   // Loaded here, not at the top: the snapshot cases then load at git refs whose session and model
   // APIs differ, and the first session call (a warmup run) pays for the import.
-  const { ai, LanguageModel } = await import("@opencode/ai/effect")
+  const { ai, Model } = await import("@opencode/ai/effect")
   const { OpenAIChat } = await import("@opencode/ai/protocols/openai-chat")
   const { TestLLM } = await import("@opencode/ai/testing")
   const { LayerNode } = await import("@opencode/util/effect/layer-node")
@@ -254,7 +254,7 @@ export async function session(snapshots: "on" | "off", ttft: number) {
   const { ToolOutput } = await import("../src/tool-output")
 
   const model = SessionRunnerModel.resolved(
-    LanguageModel.make({ id: "bench-model", provider: "test", route: OpenAIChat.route }),
+    Model.make({ type: "chat", id: "bench-model", provider: "test", route: OpenAIChat.route }),
     {
       capabilities: { tools: true, input: ["text"], output: ["text"] },
       limit: { context: 100_000, output: 1_000 },

@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { MediaModel, tryRequest } from "../media-model.js"
+import { type MediaModel, tryRequest } from "../media-model.js"
 import { RequestExecutor } from "../route/executor.js"
 import type { MediaRoute } from "../route/media.js"
 import {
@@ -9,6 +9,8 @@ import {
   Usage,
   type BaseRequest,
   type OpenString,
+  Model,
+  type ModelProviderOptions,
 } from "../schema/index.js"
 
 // ---------------------------------------------------------------------------
@@ -96,30 +98,19 @@ export type ExtractionField = typeof ExtractionFieldSchema.Type & { readonly typ
 export type ExtractionFields = Readonly<Record<string, ExtractionField>>
 
 // ---------------------------------------------------------------------------
-// Model
+// SelectedModel
 // ---------------------------------------------------------------------------
 
 export type ExtractionOptions = MediaModel.Options
 
 export type ExtractionRoute = MediaRoute.InlineRoute<ExtractionRequest, ExtractionResponse>
 
-export class ExtractionModel<Options extends ExtractionOptions = ExtractionOptions> extends MediaModel<
-  ExtractionRoute,
-  Options
-> {
-  declare protected readonly _ExtractionModel: void
-}
-
-export type ExtractionModelOptions<Model> = Model extends ExtractionModel<infer Options> ? Options : never
-
 // ---------------------------------------------------------------------------
 // Request and response
 // ---------------------------------------------------------------------------
 
 const ExtractionRequestSchema = Schema.Struct({
-  model: Schema.declare((value): value is ExtractionModel => value instanceof ExtractionModel, {
-    expected: "Extraction.Model",
-  }),
+  model: Model.schema("extraction"),
   input: Schema.String,
   fields: Schema.Record(Schema.String, ExtractionFieldSchema).pipe(
     Schema.refine((x): x is typeof x => Object.keys(x).length > 0, { message: "Extraction fields must not be empty" }),
@@ -130,9 +121,9 @@ const ExtractionRequestSchema = Schema.Struct({
 
 /** A normalized extraction request, the plain object `Extraction.request(...)` returns. */
 export interface ExtractionRequest<
-  Model extends ExtractionModel = ExtractionModel,
+  SelectedModel extends Model<"extraction"> = Model<"extraction">,
   Fields extends ExtractionFields = ExtractionFields,
-> extends BaseRequest<Model, ExtractionModelOptions<Model>> {
+> extends BaseRequest<SelectedModel, ModelProviderOptions<SelectedModel>> {
   /** The text to read; text answers carry spans into it. */
   readonly input: string
   readonly fields: Fields
@@ -142,10 +133,10 @@ export interface ExtractionRequest<
 
 /** Input accepted by `Extraction.request` and `generate`; an `ExtractionRequest` is also a valid input. */
 export type ExtractionRequestInput<
-  Model extends ExtractionModel = ExtractionModel,
+  SelectedModel extends Model<"extraction"> = Model<"extraction">,
   Fields extends ExtractionFields = ExtractionFields,
-> = Omit<ExtractionRequest<Model, Fields>, "providerOptions"> & {
-  readonly providerOptions?: NoInfer<ExtractionModelOptions<Model>>
+> = Omit<ExtractionRequest<SelectedModel, Fields>, "providerOptions"> & {
+  readonly providerOptions?: NoInfer<ModelProviderOptions<SelectedModel>>
 }
 
 export class ExtractionResponse extends Schema.Class<ExtractionResponse>("Extraction.Response")({
@@ -163,14 +154,14 @@ export type ExtractionResponseFor<Fields extends ExtractionFields> = Omit<Extrac
 // ---------------------------------------------------------------------------
 
 /** Normalize extraction request input into a plain `ExtractionRequest`. */
-export const request = <const Model extends ExtractionModel, const Fields extends ExtractionFields>(
-  input: ExtractionRequestInput<Model, Fields>,
-): ExtractionRequest<Model, Fields> => ({ ...input })
+export const request = <const SelectedModel extends Model<"extraction">, const Fields extends ExtractionFields>(
+  input: ExtractionRequestInput<SelectedModel, Fields>,
+): ExtractionRequest<SelectedModel, Fields> => ({ ...input })
 
 const validate = Schema.decodeUnknownSync(ExtractionRequestSchema)
 
-export function generate<const Model extends ExtractionModel, const Fields extends ExtractionFields>(
-  input: ExtractionRequestInput<Model, Fields>,
+export function generate<const SelectedModel extends Model<"extraction">, const Fields extends ExtractionFields>(
+  input: ExtractionRequestInput<SelectedModel, Fields>,
 ): Effect.Effect<ExtractionResponseFor<Fields>, AIError, RequestExecutor.Service>
 export function generate(input: ExtractionRequestInput) {
   return Effect.gen(function* () {

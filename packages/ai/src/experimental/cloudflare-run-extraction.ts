@@ -1,10 +1,11 @@
 import { Effect, Schema } from "effect"
-import { ExtractionAnswers, ExtractionModel, ExtractionResponse, type ExtractionRequest } from "./extraction.js"
+import { mediaOptions } from "../media-model.js"
+import { ExtractionAnswers, ExtractionResponse, type ExtractionRequest } from "./extraction.js"
 import { JsonObject, ProviderShared } from "../protocols/shared.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { Usage, mergeJsonRecords } from "../schema/index.js"
+import { Usage, mergeJsonRecords, Model } from "../schema/index.js"
 
 const route = MediaProtocol.identity({
   id: "cloudflare-run-extraction",
@@ -96,10 +97,11 @@ export const protocol = MediaProtocol.inline<ExtractionRequest, ExtractionRespon
 
 /** `baseURL` is the Run API base, `.../client/v4/accounts/{account}/ai/run`. */
 export const model = (input: MediaRoute.ModelInput) =>
-  new ExtractionModel({
+  Model.make({
+    type: "extraction",
     id: input.id,
     provider: route.provider,
-    http: input.http,
+    options: mediaOptions(input),
     route: MediaRoute.inline({
       protocol,
       endpoint: Endpoint.path<MediaProtocol.Body, ExtractionRequest>(({ request }) => `/${request.model.id}`, {

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
-import { LanguageModel, LLMClient } from "@opencode/ai/effect"
+import { LLMClient, Model } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -16,7 +16,7 @@ import { AbsolutePath, Agent, Location, OpenCode } from "../src/effect"
 const it = testEffect(Layer.empty)
 const metadata = Schema.decodeUnknownSync(Schema.Struct({ threadID: Schema.String }))
 const model = SessionRunnerModel.resolved(
-  LanguageModel.make({ id: "instance-model", provider: "test", route: OpenAIChat.route }),
+  Model.make({ type: "chat",  id: "instance-model", provider: "test", route: OpenAIChat.route }),
   {
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     cost: [],

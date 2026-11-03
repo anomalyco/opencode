@@ -20,7 +20,6 @@ import {
   FinishReason,
   LLMEvent,
   AIError,
-  LanguageModel,
   ProviderID,
   ProviderMetadata,
   TransportError,
@@ -31,6 +30,7 @@ import {
   type ToolDefinition,
   type ToolMessage,
   type UsageInput,
+  Model,
 } from "@opencode/ai/effect"
 import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
 import { isRecord } from "@opencode/util/record"
@@ -249,7 +249,7 @@ export interface Interface {
   readonly runSDK: (event: SDKEvent) => Effect.Effect<SDKEvent>
   readonly runLanguage: (event: LanguageEvent) => Effect.Effect<LanguageEvent>
   readonly language: (model: RuntimeInfo) => Effect.Effect<LanguageModelV3, InitError>
-  readonly model: (model: RuntimeInfo) => Effect.Effect<LanguageModel, InitError>
+  readonly model: (model: RuntimeInfo) => Effect.Effect<Model<"chat">, InitError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AISDK") {}
@@ -405,12 +405,13 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     },
     with: () => route,
     model: (input) =>
-      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
+      Model.make({ type: "chat", ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
       streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
   }
-  return LanguageModel.make({
+  return Model.make({
+    type: "chat",
     id: info.modelID ?? info.id,
     provider: providerID,
     route,

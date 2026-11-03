@@ -1,14 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import {
-  ai,
-  type Freeform,
-  type LanguageModel,
-  LLMEvent,
-  Message,
-  toDefinitions,
-  ToolCallPart,
-} from "../../src/effect.js"
+import { ai, type Freeform, LLMEvent, Message, toDefinitions, ToolCallPart, Model } from "../../src/effect.js"
 import * as AmazonBedrockMantle from "../../src/providers/amazon-bedrock-mantle.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -43,7 +35,7 @@ const lark = tools({ type: "lark", grammar: GRAMMAR })
 // The same tool without `freeform`, as a caller declares it for a model without custom tools.
 const plain = tools()
 
-const body = (model: LanguageModel, freeform = lark) =>
+const body = (model: Model<"chat">, freeform = lark) =>
   compileRequest(ai.request({ model, prompt: "Run it.", tools: freeform, toolChoice: "run" })).pipe(
     Effect.map((prepared) => prepared.body),
   )
@@ -275,7 +267,7 @@ describe("freeform tools", () => {
         { type: "function_call_output", call_id: "call_1", output: '"ok"' },
       ])
 
-      const messages = (model: LanguageModel, declared = lark) =>
+      const messages = (model: Model<"chat">, declared = lark) =>
         compileRequest(ai.request({ model, messages: history(custom), tools: declared })).pipe(
           Effect.map((prepared) => prepared.body.messages.slice(1)),
         )

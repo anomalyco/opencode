@@ -4,7 +4,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   AIError,
-  LanguageModel,
   LLMEvent,
   LLMResponse,
   Media,
@@ -12,6 +11,7 @@ import {
   ToolCallPart,
   ToolDefinition,
   Usage,
+  Model,
 } from "../../src/effect.js"
 import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
@@ -67,7 +67,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
+          model: Model.with(model, { capabilities: { streamUsage: false } }),
           prompt: "Hello",
         }),
       )
@@ -88,7 +88,7 @@ describe("OpenAI Chat route", () => {
       )
       const optedIn = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(compatible.model("compatible-model"), {
+          model: Model.with(compatible.model("compatible-model"), {
             capabilities: { store: true },
           }),
           prompt: "Hello",
@@ -203,7 +203,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
+          model: Model.with(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
           messages: [
             Message.assistant([
               {
@@ -229,7 +229,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
+          model: Model.with(model, { compatibility: { requireReasoning: true } }),
           messages: [
             Message.assistant([
               {
@@ -255,7 +255,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, {
+          model: Model.with(model, {
             compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
           }),
           messages: [
@@ -279,7 +279,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "content" } }),
+          model: Model.with(model, { compatibility: { reasoningField: "content" } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
         }),
       ).pipe(Effect.flip)
@@ -478,7 +478,7 @@ describe("OpenAI Chat route", () => {
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate({
       ...request,
-      model: LanguageModel.update(model, {
+      model: Model.with(model, {
         route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
       }),
     }).pipe(
@@ -727,7 +727,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          model: Model.with(model, { compatibility: { requireAssistantAfterTool: true } }),
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
             Message.tool({
@@ -1285,7 +1285,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
     Effect.gen(function* () {
-      const selected = LanguageModel.update(model, {
+      const selected = Model.with(model, {
         route: { ...model.route, providerMetadataKey: "vendor" },
       })
       const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
@@ -1319,7 +1319,7 @@ describe("OpenAI Chat route", () => {
   it.effect("falls back to the selected provider for the metadata namespace", () =>
     Effect.gen(function* () {
       const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
-      const selected = LanguageModel.update(compatible, {
+      const selected = Model.with(compatible, {
         route: { ...compatible.route, providerMetadataKey: undefined },
       })
       const response = yield* LLMClient.generate({ ...request, model: selected }).pipe(
@@ -1349,7 +1349,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
-      const custom = LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
+      const custom = Model.with(model, { compatibility: { reasoningField: "vendor_reasoning" } })
       const response = yield* LLMClient.generate({ ...request, model: custom }).pipe(
         Effect.provide(
           fixedResponse(
@@ -2235,7 +2235,7 @@ describe("OpenAI Chat route", () => {
       )
       const input = {
         ...request,
-        model: LanguageModel.update(model, { compatibility: { requireFinishReason: false } }),
+        model: Model.with(model, { compatibility: { requireFinishReason: false } }),
         tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       }
       const response = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)))

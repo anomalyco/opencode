@@ -4,10 +4,10 @@ import {
   InvalidRequestError,
   LLMClient,
   LLMEvent,
-  LanguageModel,
   Message,
   ToolDefinition,
   type LLMRequest,
+  Model as AIModel,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
@@ -52,11 +52,7 @@ let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
 let reject: ((request: LLMRequest) => boolean) | undefined
-const model = LanguageModel.make({
-  id: "summary-model",
-  provider: "test",
-  route: OpenAIChat.route,
-})
+const model = AIModel.make({ type: "chat", id: "summary-model", provider: "test", route: OpenAIChat.route })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

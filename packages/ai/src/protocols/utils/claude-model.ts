@@ -12,7 +12,7 @@ export const claudeVersion = (id: string) => {
 }
 
 export const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsThinkingBlockBinding
+  const override = model.compatibility?.thinkingBlockBinding
   if (override !== undefined) return override
   const version = claudeVersion(model.id)
   return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
