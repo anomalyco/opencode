@@ -129,9 +129,19 @@ export function hostFailure(message) {
 // six ASCII bytes. One request shares its budget across all its arguments.
 class Boundary {
   bytes = 1024 * 1024
+  constructor(vm) {
+    this.vm = vm
+  }
   charge(n) {
     this.bytes -= n
     if (this.bytes < 0) throw new LuaFault("InvalidDataValue", "Lua JSON exceeds the boundary byte limit")
+    // Core progress can retain each admitted call's input. Charge every copy,
+    // even when the guest reuses the very same value or callable path.
+    this.vm.traffic -= n
+    if (this.vm.traffic < 0) throw limit("Lua cumulative host traffic limit exceeded")
+  }
+  string(value) {
+    this.charge(Buffer.byteLength(JSON.stringify(value)))
   }
 }
 
@@ -162,7 +172,9 @@ function table(v) {
 class Sandbox {
   fuel = 500_000
   slice = 256
+  nativeFuel = Infinity
   bytes = 8 * 1024 * 1024
+  traffic = 4 * 1024 * 1024
   frameLimit = 96
   globals = new Table(this)
   protected = new Set()
@@ -171,6 +183,8 @@ class Sandbox {
   charge(work) {
     this.fuel -= work
     this.slice -= work
+    this.nativeFuel -= work
+    if (this.nativeFuel < 0) throw limit("Lua native call work limit exceeded")
     if (this.fuel < 0) throw limit("Lua execution work limit exceeded")
   }
   poll(node) {
@@ -302,14 +316,32 @@ class Sandbox {
         this.frames.length = base
       }
     }
-    if (fn instanceof Native) return fn.run(args)
+    if (fn instanceof Native) {
+      // These synchronous allowlisted functions never call back into Lua.
+      // Individually bounded inputs can still multiply (e.g. 1,024 large
+      // numeric strings supplied to math.max) inside a single scheduler step.
+      this.nativeFuel = 32768
+      try {
+        return fn.run(args)
+      } finally {
+        this.nativeFuel = Infinity
+      }
+    }
     if (!(fn instanceof Host)) throw failure(`Cannot call Lua ${type(fn)}`)
+    // Even empty calls cause host admission and progress bookkeeping.
+    this.charge(256)
     const data = []
-    const budget = new Boundary()
+    const budget = new Boundary(this)
+    budget.charge(2 + Math.max(0, args.length - 1) + 2 + Math.max(0, fn.path.length - 1))
+    for (const name of fn.path) budget.string(name)
     for (const arg of args) data.push(yield* this.export(arg, new Set(), 0, budget))
     const reply = yield { type: "call", path: fn.path.slice(), args: data, protected: this.barriers > 0 }
-    if (reply instanceof LuaHostFailure) throw failure(reply.message)
-    return [yield* this.import(reply, 0)]
+    const inbound = new Boundary(this)
+    if (reply instanceof LuaHostFailure) {
+      inbound.string(reply.message)
+      throw failure(reply.message)
+    }
+    return [yield* this.import(reply, 0, inbound)]
   }
   encode(s) {
     if (s.length > stringLimit) throw limit("Lua string exceeds the size limit")
@@ -325,12 +357,18 @@ class Sandbox {
       throw invalid("Lua byte string is not valid UTF-8")
     }
   }
-  *import(v, depth) {
+  *import(v, depth, budget) {
     if (this.poll()) yield checkpoint
     if (depth > depthLimit) throw new LuaFault("InvalidDataValue", "Lua input exceeds the depth limit")
-    if (v === undefined || typeof v === "boolean" || Number.isFinite(v)) return v
-    if (v === null) return jsonNull
-    if (typeof v === "string") return this.encode(v)
+    if (v === undefined || v === null || typeof v === "boolean" || Number.isFinite(v)) {
+      budget.charge(v === undefined ? 4 : String(v).length)
+      return v === null ? jsonNull : v
+    }
+    if (typeof v === "string") {
+      const value = this.encode(v)
+      budget.string(v)
+      return value
+    }
     if (typeof v !== "object") throw invalid("Expected JSON data")
     const array = Array.isArray(v)
     const result = new Table(this, array)
@@ -338,10 +376,17 @@ class Sandbox {
     // us. Never put the host container or function itself into the Lua heap.
     if (array) {
       if (v.length > entriesLimit) throw new LuaFault("InvalidDataValue", "Lua input exceeds the entry limit")
-      for (let i = 0; i < v.length; i++) result.set(i + 1, yield* this.import(v[i], depth + 1))
+      budget.charge(2 + Math.max(0, v.length - 1))
+      for (let i = 0; i < v.length; i++) result.set(i + 1, yield* this.import(v[i], depth + 1, budget))
     } else {
-      for (const key in v)
-        if (Object.hasOwn(v, key)) result.set(this.encode(key), yield* this.import(v[key], depth + 1))
+      budget.charge(2)
+      for (const key in v) {
+        if (!Object.hasOwn(v, key)) continue
+        const name = this.encode(key)
+        budget.string(key)
+        budget.charge(result.data.size ? 2 : 1)
+        result.set(name, yield* this.import(v[key], depth + 1, budget))
+      }
     }
     return result
   }
@@ -354,7 +399,7 @@ class Sandbox {
     }
     if (typeof v === "string") {
       const value = this.decode(v)
-      budget.charge(Buffer.byteLength(JSON.stringify(value)))
+      budget.string(value)
       return value
     }
     if (!(v instanceof Table)) throw invalid(`Cannot pass Lua ${type(v)} as JSON`)
@@ -375,7 +420,8 @@ class Sandbox {
       } else {
         if (typeof k !== "string" || k === "__proto__") throw invalid("Invalid Lua JSON object key")
         const key = this.decode(k)
-        budget.charge(1 + Buffer.byteLength(JSON.stringify(key)))
+        budget.charge(1)
+        budget.string(key)
         out[key] = yield* this.export(item, seen, depth + 1, budget)
       }
     }
@@ -437,9 +483,23 @@ function install(vm) {
       throw raised(value)
     },
     pairs: ([v]) => {
-      vm.charge(table(v).data.size)
-      const iterator = table(v).data.entries()
-      return [new Native(() => iterator.next().value ?? []), v]
+      const seq = table(v)
+      vm.charge(seq.data.size)
+      // Iterating a live JS Map across arbitrary guest mutations can retain
+      // its deleted slots. Snapshot at most entriesLimit keys and skip deletes.
+      const keys = [...seq.data.keys()]
+      let i = 0
+      return [
+        new Native(() => {
+          while (i < keys.length) {
+            const key = keys[i++]
+            const value = seq.get(key)
+            if (value !== undefined) return [key, value]
+          }
+          return []
+        }),
+        v,
+      ]
     },
     ipairs: ([v]) => {
       const seq = table(v)
@@ -550,10 +610,14 @@ export function* evaluateLua(source, options) {
   const program = new Closure(proto, null)
   program.env = vm.globals
   const run = (function* () {
-    for (const name of Object.keys(options.bindings ?? {}))
-      global(vm.encode(name), yield* vm.import(options.bindings[name], 0))
+    const budget = new Boundary(vm)
+    for (const name of Object.keys(options.bindings ?? {})) {
+      const key = vm.encode(name)
+      budget.string(name)
+      global(key, yield* vm.import(options.bindings[name], 0, budget))
+    }
     const values = yield* runFrames(vm, vm.frames, new Call(program, []))
-    return yield* vm.export(values[0], new Set(), 0, new Boundary())
+    return yield* vm.export(values[0], new Set(), 0, new Boundary(vm))
   })()
   try {
     let step = run.next()

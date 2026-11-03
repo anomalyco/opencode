@@ -49,6 +49,37 @@ test("cancellation at either checkpoint cannot run the next statement", () => {
   assert.equal(parked.next("late reply").done, true)
 })
 
+test("reused arguments and replies cannot reset the cumulative host traffic budget", () => {
+  // JSON escapes each control byte to six characters. Every individual call
+  // fits under 1 MiB; the sixth copy (third reply) crosses the run-wide cap.
+  const payload = "\0".repeat(125000)
+  const vm = evaluateLua("local s=string.rep('\\000',125000); for i=1,10 do pcall(tools.save,s) end", options)
+  for (let i = 0; i < 3; i++) {
+    const call = resume(vm, i ? payload : undefined).value
+    assert.equal(call.type, "call")
+    assert.equal(call.args[0], payload)
+  }
+  assert.throws(() => resume(vm, payload), /cumulative host traffic limit/)
+})
+
+test("empty numeric and native generic loops yield repeatedly after entering the loop", () => {
+  for (const loop of ["for i=1,4096 do end", "for k,v in ipairs(t) do end"]) {
+    const vm = evaluateLua(`tools.start(); ${loop}; return 1`, { ...options, bindings: { t: Array(4096).fill(1) } })
+    assert.equal(resume(vm).value.type, "call")
+    for (let i = 0; i < 3; i++) assert.equal(vm.next().value.type, "tick")
+    assert.equal(vm.return().done, true)
+  }
+})
+
+test("length and iterator setup charge table work, not the magnitude of numeric keys", () => {
+  assert.equal(run("local t={[2^52]='sparse'}; local n=0; for k in pairs(t) do n=n+1 end; return #t+n"), 1)
+  fault("return {[2^52]=42}", "InvalidDataValue", /contiguous/)
+  const t = Array(4096).fill(true)
+  for (const expr of ["#t", "pairs(t)"])
+    assert.throws(() => run(`for i=1,200 do local n=${expr} end`, { t }), /work limit/)
+  assert.equal(run("local t={1,2,3}; local n=0; for k in pairs(t) do n=n+1; t[2]=nil; t[4]=4 end; return n"), 2)
+})
+
 test("protected host calls unwind on ordinary errors, not interruption; errors keep Lua identity", () => {
   const vm = evaluateLua(
     `local function f() return tools.fail() end
@@ -85,6 +116,7 @@ test("growing tables, strings and native operations charge before materializatio
     ["local s='a' for i=1,22 do s=s..s end", /size limit/],
     ["return table.concat({}, '', 1, 2^50)", /concat range/],
     ["local s=string.rep('x',200000); for i=1,64 do string.lower(s) end", /allocation limit/],
+    ["local n=string.rep('0',240000)..'1'; return math.max(n,n,n,n,n)", /native call work limit/],
     ["local t=tools; for i=1,64 do t=t.x end", /path exceeds/],
   ])
     fault(`return pcall(function() ${source} end)`, "ExecutionFailure", msg)
