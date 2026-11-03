@@ -32,8 +32,18 @@ export class DatabaseConfig extends Context.Service<DatabaseConfig, DatabaseSett
   )
 }
 
+// Each request is one statement (a transaction is several), so this bounds a
+// single upsert chunk, not a whole write. A 500-row upsert normally finishes in
+// seconds; without a bound, a hung request holds the step until its 30-minute timeout.
+const DATABASE_REQUEST_TIMEOUT_MS = 60_000
+
 function makeDrizzle(settings: DatabaseSettings) {
-  return drizzle({ client: new Client({ url: settings.url }) })
+  return drizzle({
+    client: new Client({
+      url: settings.url,
+      fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(DATABASE_REQUEST_TIMEOUT_MS) }),
+    }),
+  })
 }
 
 export type Drizzle = ReturnType<typeof makeDrizzle>
@@ -49,13 +59,22 @@ export class DatabaseError extends Error {
   readonly _tag = "DatabaseError"
 
   constructor(input: { cause: unknown }) {
-    super("Database operation failed", { cause: input.cause })
+    const reason = rootCause(input.cause)
+    super(reason instanceof Error ? `Database operation failed: ${reason.toString()}` : "Database operation failed", {
+      cause: input.cause,
+    })
     this.name = "DatabaseError"
   }
 
   static make(input: { cause: unknown }) {
     return new DatabaseError(input)
   }
+}
+
+// Drizzle wraps the driver's error in one whose message holds the whole query and
+// its parameters, which for an upsert chunk is hundreds of rows. Name the driver's error.
+function rootCause(cause: unknown): unknown {
+  return cause instanceof Error && cause.cause !== undefined ? rootCause(cause.cause) : cause
 }
 
 export const catchDbError = Effect.mapError((cause) => DatabaseError.make({ cause }))

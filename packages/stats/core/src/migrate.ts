@@ -1,4 +1,4 @@
-import { migrate as drizzleMigrate } from "drizzle-orm/planetscale-serverless/migrator"
+import { migrate } from "drizzle-orm/planetscale-serverless/migrator"
 import { Config, ConfigProvider, Effect } from "effect"
 import { DrizzleClient, layer } from "./database"
 
@@ -13,14 +13,14 @@ class MigrationError extends Error {
   }
 }
 
-const migrate = Effect.fn("Database.migrate")(function* () {
+const applyMigrations = Effect.fn("Database.migrate")(function* () {
   const migrationsDir = yield* Config.NonEmptyString("DATABASE_MIGRATIONS_DIR")
     .pipe(Config.withDefault("./migrations"))
     .parse(ConfigProvider.fromEnv())
   const db = yield* DrizzleClient
   yield* Effect.logInfo("applying database migrations").pipe(Effect.annotateLogs({ migrationsDir }))
   const result = yield* Effect.tryPromise({
-    try: () => drizzleMigrate(db, { migrationsFolder: migrationsDir }),
+    try: () => migrate(db, { migrationsFolder: migrationsDir }),
     catch: (cause) => new MigrationError({ message: "Failed to apply database migrations", cause }),
   })
   if (result)
@@ -32,4 +32,4 @@ const migrate = Effect.fn("Database.migrate")(function* () {
   yield* Effect.logInfo("database migrations complete").pipe(Effect.annotateLogs({ migrationsDir }))
 })
 
-await Effect.runPromise(migrate().pipe(Effect.provide(layer)))
+await Effect.runPromise(applyMigrations().pipe(Effect.provide(layer)))
