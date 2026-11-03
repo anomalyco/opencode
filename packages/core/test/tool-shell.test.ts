@@ -795,7 +795,7 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("returns both parallel CodeMode shell results", () =>
+  it.live("returns both sequential Code Mode shell results", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -805,16 +805,17 @@ describe("ShellTool", () => {
               tool.options = { ...tool.options, codemode: true }
             }),
           )
-          const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
-          const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+          const calls = ["one", "two"].map(
+            (text) => `tools.shell({ command = ${JSON.stringify(helloCommand.replace("hello", text))} })`,
+          )
           const result = yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
             call: {
               type: "tool-call",
-              id: "call-parallel-shells",
+              id: "call-shells",
               name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              input: { code: `return {${calls.join(", ")}}` },
             },
           }).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")

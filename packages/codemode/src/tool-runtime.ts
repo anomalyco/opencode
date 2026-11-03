@@ -5,11 +5,12 @@ import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
-  identifierSegment,
+  type Language,
+  member,
   inputProperties,
-  inputTypeScript,
+  inputType,
   isEmptyInput,
-  outputTypeScript,
+  outputType,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
@@ -98,6 +99,15 @@ const SearchInput = Schema.Struct({
   limit: Schema.optionalKey(PositiveInt),
   offset: Schema.optionalKey(NonNegativeInt),
 })
+// A guest query is ranked against the entire host catalog before the VM can yield again.
+const luaSearchLength = 512
+const luaSearchText = Schema.String.check(Schema.isMaxLength(luaSearchLength))
+const LuaSearchInput = Schema.Struct({
+  query: Schema.optionalKey(luaSearchText),
+  namespace: Schema.optionalKey(luaSearchText),
+  limit: Schema.optionalKey(PositiveInt.check(Schema.isLessThanOrEqualTo(50))),
+  offset: Schema.optionalKey(NonNegativeInt),
+})
 const SearchItem = Schema.Struct({
   path: Schema.String,
   description: Schema.String,
@@ -108,11 +118,11 @@ const SearchOutput = Schema.Struct({
   remaining: NonNegativeInt,
   next: Schema.NullOr(Schema.Struct({ offset: NonNegativeInt })),
 })
-export const toolExpression = (path: string) =>
+export const toolExpression = (path: string, language: Language = "javascript") =>
   "tools" +
   path
     .split(".")
-    .map((segment) => (identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`))
+    .map((segment) => member(segment, language))
     .join("")
 
 export class ToolReference {
@@ -169,7 +179,7 @@ const flattenTools = <R>(
   ]
 }
 
-const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
+const describeTool = <R>(visible: VisibleTool<R>, language: Language): ToolDescription => {
   let signature: string | undefined
   return {
     path: visible.path,
@@ -177,17 +187,14 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
     get signature() {
       // Search ranks paths and descriptions first; only returned matches need their schemas rendered.
       // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
-      return (signature ??= [
-        toolExpression(visible.path),
-        isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
-        `: Promise<${outputTypeScript(visible.tool, true)}>`,
-      ].join(""))
+      return (signature ??= signatureOf(toolExpression(visible.path, language), visible.tool, language))
     },
   }
 }
 
 /** Tools indexed once per runtime, with discovery materialized on demand. */
 export type Prepared<R = never> = {
+  readonly language: Language
   readonly root: ToolNode<R>
   readonly catalog: ReadonlyArray<ToolDescription>
   readonly searchIndex: ReadonlyArray<SearchEntry>
@@ -214,8 +221,9 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
-const rank = (entries: ReadonlyArray<SearchEntry>, query: string): Array<SearchEntry> => {
-  const terms = tokenize(query).map(termForms)
+const rank = (entries: ReadonlyArray<SearchEntry>, query: string, language: Language): Array<SearchEntry> => {
+  const words = tokenize(query)
+  const terms = (language === "lua" ? words.slice(0, 16) : words).map(termForms)
   return entries
     .map((entry) => {
       const path = entry.description.path.toLowerCase()
@@ -240,10 +248,10 @@ const rank = (entries: ReadonlyArray<SearchEntry>, query: string): Array<SearchE
     .map(({ entry }) => entry)
 }
 
-const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
+const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>, language: Language): Tool => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
-  input: SearchInput,
+  input: language === "lua" ? LuaSearchInput : SearchInput,
   output: SearchOutput,
   execute: (input) =>
     Effect.sync(() => {
@@ -265,12 +273,13 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
         pathQuery === ""
           ? undefined
           : scoped.find(
-              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+              (entry) =>
+                entry.description.path === pathQuery || toolExpression(entry.description.path, language) === trimmed,
             )
-      const ranked = exact !== undefined ? [exact] : rank(scoped, query)
+      const ranked = exact !== undefined ? [exact] : rank(scoped, query, language)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
-        path: toolExpression(description.path),
+        path: toolExpression(description.path, language),
       }))
       const remaining = Math.max(0, ranked.length - offset - items.length)
       return {
@@ -281,14 +290,24 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
     }),
 })
 
-/** Exact callable signature of the built-in `search` function, for host-owned instructions. */
-export const searchSignature = (() => {
-  const tool = makeSearchTool([])
-  return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
-})()
+function signatureOf<R>(name: string, tool: Tool<R>, language: Language, global = false) {
+  const input = isEmptyInput(tool) ? "" : inputType(tool, true, language)
+  const output = outputType(tool, true, language)
+  return [
+    name,
+    "(",
+    input,
+    ")",
+    language === "lua" ? ` -> ${output}` : global ? `: ${output}` : `: Promise<${output}>`,
+  ].join("")
+}
 
-const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
-  description: describeTool(visible),
+/** Exact callable signatures of the built-in `search` function, for host-owned instructions. */
+export const searchSignature = signatureOf("search", makeSearchTool([], "javascript"), "javascript", true)
+export const luaSearchSignature = signatureOf("search", makeSearchTool([], "lua"), "lua", true)
+
+const toSearchEntry = <R>(visible: VisibleTool<R>, language: Language): SearchEntry => ({
+  description: describeTool(visible, language),
   pathWords: tokenize(visible.path),
   searchText: [
     visible.path,
@@ -302,11 +321,12 @@ const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
     .toLowerCase(),
 })
 
-export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
+export const prepare = <R>(tools: Tools<R>, language: Language = "javascript"): Prepared<R> => {
   const root = toolTrie(tools)
   let searchIndex: ReadonlyArray<SearchEntry> | undefined
   let catalog: ReadonlyArray<ToolDescription> | undefined
   return {
+    language,
     root,
     get catalog() {
       return (catalog ??= this.searchIndex.map((entry) => entry.description))
@@ -316,7 +336,7 @@ export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
       // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
       return (searchIndex ??= flattenTools(root)
         .sort((left, right) => compareText(left.path, right.path))
-        .map(toSearchEntry))
+        .map((visible) => toSearchEntry(visible, language)))
     },
   }
 }
@@ -333,20 +353,26 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
-const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
+const resolve = <R>(prepared: Prepared<R>, path: ReadonlyArray<string>): Tool<R> => {
   const segments = canonicalSegments(path)
-  const node = lookup(root, segments)
+  const node = lookup(prepared.root, segments)
   if (node === undefined) {
     const name = segments.join(".")
-    const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
+    if (prepared.language === "lua" && name.length > luaSearchLength)
+      throw new ToolRuntimeError("UnknownTool", "Unknown tool (path too long for suggestions).", [
+        "Use search to find available tools.",
+      ])
+    const ns = segments.length > 1 && prepared.root.children.has(segments[0]) ? segments[0] : undefined
+    const index = prepared.searchIndex
     const closest = rank(
       ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
       ns ? segments.slice(1).join(" ") : name,
+      prepared.language,
     )[0]
     throw new ToolRuntimeError(
       "UnknownTool",
       closest
-        ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
+        ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path, prepared.language)}?`
         : `Unknown tool '${name}'.`,
       ["Use search to find available tools."],
     )
@@ -357,6 +383,12 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
   return node.tool
 }
 
+// Errors can be observed by hooks before the Lua driver sees them. Keep the
+// budget marker outside the value so rewriting an error can't make it catchable.
+const budgetFailures = new WeakSet<object>()
+export const isBudgetFailure = (error: unknown) =>
+  typeof error === "object" && error !== null && budgetFailures.has(error)
+
 export class ToolRuntimeError extends Error {
   constructor(
     readonly kind: Extract<
@@ -365,15 +397,19 @@ export class ToolRuntimeError extends Error {
     >,
     message: string,
     readonly suggestions: ReadonlyArray<string> = [],
+    fatal = false,
   ) {
     super(message)
     this.name = "ToolRuntimeError"
+    if (fatal || kind === "ToolCallLimitExceeded") budgetFailures.add(this)
   }
 }
 
 /** The tool bridge of one execution. Arguments arrive and results leave as JSON; program values never enter. */
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
+  /** Charge a non-tool host capability against this execution's call budget. */
+  readonly admit: () => void
   readonly hooks: Hooks<R>
   readonly execute: (
     path: ReadonlyArray<string>,
@@ -388,15 +424,21 @@ export const make = <R>(
   prepared: Prepared<R>,
   maxToolCalls: number | undefined,
   hooks: Hooks<R> = {},
+  boundary?: {
+    copy: (value: unknown) => Json | undefined
+    message: (error: unknown, fallback?: string) => string
+    isLimit: (error: unknown) => boolean
+  },
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   const root = prepared.root
 
-  const recordCall = (call: ToolCall): void => {
-    if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
+  let admitted = 0
+  const admit = (): void => {
+    if (maxToolCalls !== undefined && admitted >= maxToolCalls) {
       throw new ToolRuntimeError("ToolCallLimitExceeded", `Execution exceeded its tool-call limit of ${maxToolCalls}.`)
     }
-    calls.push(call)
+    admitted++
   }
 
   const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
@@ -409,19 +451,26 @@ export const make = <R>(
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",
-            `Invalid input for tool '${name}': ${String(cause)}`,
+            `Invalid input for tool '${name}': ${boundary ? boundary.message(cause, "Value does not match the input schema.") : String(cause)}`,
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
-      yield* Effect.sync(() => recordCall({ name }))
+      if (!boundary) admit()
+      calls.push({ name })
+      const after = hooks["tool.after"]
       return yield* hooked(
         { name, input },
         hooks["tool.before"],
-        hooks["tool.after"],
+        // Do not give a hook a reference to data the suspended Lua VM will import.
+        boundary && after
+          ? (call, result) =>
+              after(call, result.status === "success" ? { ...result, value: boundary.copy(result.value) } : result)
+          : after,
         Effect.gen(function* () {
           const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
             Effect.catchCause((cause) => {
-              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              if (boundary ? Cause.hasInterrupts(cause) : Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              if (boundary) return Effect.fail(toolError(boundary.message(Cause.squash(cause))))
               return Effect.fail(
                 toolError(
                   Cause.prettyErrors(cause)
@@ -431,13 +480,22 @@ export const make = <R>(
               )
             }),
           )
-          // The same round trip a tool result would take through text: exact JSON.stringify semantics.
           return yield* Effect.try({
             try: (): Json | undefined => {
+              // A schema decoder can traverse the entire value (and may transform it).
+              // Confined Lua requires bounded plain data on both sides of that decoder.
+              if (boundary) return boundary.copy(decodeToolOutput(tool, boundary.copy(raw)))
+              // Preserve the JavaScript bridge's JSON.stringify semantics.
               const text = JSON.stringify(decodeToolOutput(tool, raw))
               return text === undefined ? undefined : JSON.parse(text)
             },
-            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
+            catch: (cause) =>
+              new ToolRuntimeError(
+                "InvalidToolOutput",
+                `Invalid output from tool '${name}': ${boundary ? boundary.message(cause, "Value does not match the output schema.") : String(cause)}`,
+                [],
+                boundary?.isLimit(cause),
+              ),
           })
         }),
       )
@@ -445,16 +503,23 @@ export const make = <R>(
 
   return {
     calls,
+    admit,
     hooks,
     keys: (path) => namespaceKeys(root, path),
-    search: (args) => Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args)),
+    search: (args) =>
+      Effect.suspend(() => {
+        if (boundary) admit()
+        return executeTool("search", makeSearchTool(prepared.searchIndex, prepared.language), args)
+      }),
     execute: (path, args) =>
       Effect.suspend(() => {
+        // Even a failed lookup ranks the catalog. In Lua, pcall can repeat it.
+        if (boundary) admit()
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args)
-        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
+          return executeTool("search", makeSearchTool(prepared.searchIndex, prepared.language), args)
+        return executeTool(segments.join("."), resolve(prepared, path), args)
       }),
   }
 }

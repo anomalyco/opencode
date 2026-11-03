@@ -111,7 +111,7 @@ const directionalSpec = (openapi: string): Document => ({
 })
 
 describe("OpenAPI.fromSpec", () => {
-  test("covers a representative API from generation through execution", async () => {
+  test.each(["javascript", "lua"] as const)("runs authenticated generated tools in %s", async (language) => {
     const resolutions: Array<string> = []
     const client = recordingClient((request) => {
       const url = Option.getOrElse(HttpClientRequest.toUrl(request), () => new URL(request.url))
@@ -162,9 +162,19 @@ describe("OpenAPI.fromSpec", () => {
     expect(outputTypeScript(remove)).toBe("null")
 
     const result = await Effect.runPromise(
-      CodeMode.make({ tools: { api: api.tools } })
+      CodeMode.make({ language, tools: { api: api.tools } })
         .execute(
-          `
+          language === "lua"
+            ? `
+          local user = tools.api.users.get({
+            userId = "user-1", include = {"profile", "permissions"}, verbose = true, ["X-Trace-ID"] = "trace-1"
+          })
+          local created = tools.api.users.create({ name = "Grace", email = "grace@example.test", role = "admin" })
+          local summary = tools.api.search.run({ filter = { query = "effect", page = 2 }, tags = {"typescript", "runtime"} })
+          local removed = tools.api.users.remove({ userId = user.id })
+          return { user = user, created = created, summary = summary, removed = removed }
+        `
+            : `
           const user = await tools.api.users.get({
             userId: "user-1",
             include: ["profile", "permissions"],

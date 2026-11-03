@@ -167,7 +167,7 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
 }
 
 // Warnings have a separate budget so result data cannot starve diagnostics.
-const boundOutput = (result: Result, maxOutputBytes: number): Result => {
+export const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   let truncated = false
 
   let value: DataValue = null

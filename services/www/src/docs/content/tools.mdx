@@ -224,18 +224,30 @@ Permission: `subagent` with the selected agent ID as its resource.
 
 ### Execute
 
-`execute` runs JavaScript in Code Mode so the agent can call and combine tools
-from the catalog. It is useful for parallel independent calls and for processing
-results without adding every intermediate value to the model context.
+`execute` runs Lua 5.1 so the agent can combine catalog tools without adding every
+intermediate value to the model context. Calls run in order. Use `return` to send
+the first result back, and use 1-based indices for arrays.
 
-```text
-Read package.json and README.md in parallel, then return their relevant setup details.
+```lua
+local result = tools.opencode.worktree_list()
+return result.worktrees[1]
 ```
 
-The runtime has no direct filesystem access, imports, or timers. It provides
-`fetch` for HTTP requests; everything else goes through tools in its catalog.
-Denying `execute` with resource `*` removes Code Mode and every tool reached only
-through it, including MCP tools from servers that do not set `codemode: false`.
+Use `search({ namespace = "opencode" })` to discover tools omitted from a partial
+catalog. Copy the returned path exactly, including any bracket notation.
+Scheduled Code Mode checks still use JavaScript, not Lua.
+
+The runtime has no direct filesystem access, imports, or timers. `fetch` accepts
+an HTTP(S) URL and an optional table with `method`, `headers`, and a text `body`.
+The response body is text and the header names are lower-case.
+
+```lua
+local response = fetch("https://example.com")
+return { status = response.status, body = response.body }
+```
+
+Denying `execute` with resource `*` removes Code Mode; otherwise eligible tools
+are exposed directly instead.
 Nested built-in and MCP tools still enforce their own permissions, and plugin
 tools enforce the permissions they assert.
 

@@ -126,7 +126,7 @@ const call = (path: string, sessionID = Session.ID.make("ses_client_mcp")) =>
         type: "tool-call",
         id: "call_client_mcp",
         name: "execute",
-        input: { code: `return await tools.${path}({})` },
+        input: { code: `return tools.${path}({})` },
       },
     })
   })

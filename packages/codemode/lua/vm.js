@@ -5,15 +5,61 @@ import {
   LuaError,
   LuaTable,
   NativeFunction,
+  arith,
+  compare,
+  concat,
   getMetatable,
+  index,
+  len,
+  luaToNumber,
+  newindex,
   shortSrc,
+  truthy,
   typeName,
 } from "v8lua/src/runtime.js"
-import { Call, Frame } from "./evaluate.js"
+import { Call, runFrames } from "./evaluate.js"
 
 const boundaryError = "attempt to yield across metamethod/C-call boundary"
 
 export class VM {
+  ops = {
+    table: () => new LuaTable(),
+    closure: (...args) => new LuaClosure(...args),
+    error: (message) => new LuaError(message),
+    stackOverflow: () => new LuaError("stack overflow"),
+    number: luaToNumber,
+    truthy,
+    index: (a, b) => this.atomic(index(a, b)),
+    newindex: (a, b, c) => this.atomic(newindex(a, b, c)),
+    len: (a) => this.atomic(len(a)),
+    arith: (op, a, b) => this.atomic(arith(op, a, b)),
+    compare: (op, a, b) => this.atomic(compare(op, a, b)),
+    concat: (a, b) => this.atomic(concat(a, b)),
+  }
+  poll() {
+    return false
+  }
+  charge() {}
+  *iterate(fn, args) {
+    return this.atomic(this.invoke(fn, args))
+  }
+  frameLimit = 20000
+  isClosure(fn) {
+    return fn instanceof LuaClosure
+  }
+  resolveCall(call) {
+    const fn = call.fn
+    if (fn instanceof LuaClosure || fn instanceof NativeFunction) return call
+    const handler = getMetatable(fn)?.get("__call")
+    if (!(handler instanceof LuaClosure || handler instanceof NativeFunction))
+      throw new LuaError(`attempt to call a ${typeName(fn)} value`)
+    return new Call(handler, [fn, ...call.args])
+  }
+  *native(fn, args) {
+    if (fn !== this.yieldFn) return this.atomic(fn.fn(this, args)) ?? []
+    if (this.thread === this.main || this.thread.barriers) throw new LuaError(boundaryError)
+    return yield args
+  }
   globals = new LuaTable()
   main = { frames: [], barriers: 0 }
   thread = this.main
@@ -61,49 +107,8 @@ export class VM {
     const thread = this.thread
     const frames = thread.frames
     const base = frames.length
-    let call = new Call(fn, args)
-    let values
     try {
-      for (;;) {
-        if (call) {
-          let { fn, args } = call
-          if (!(fn instanceof LuaClosure || fn instanceof NativeFunction)) {
-            const handler = getMetatable(fn)?.get("__call")
-            if (!(handler instanceof LuaClosure || handler instanceof NativeFunction))
-              throw new LuaError(`attempt to call a ${typeName(fn)} value`)
-            args = [fn, ...args]
-            fn = handler
-          }
-          if (fn instanceof LuaClosure) {
-            if (frames.length > base && frames.at(-1).tail) frames.pop()
-            if (frames.length >= 20000) throw new LuaError("stack overflow")
-            frames.push(new Frame(this, fn, args))
-            values = undefined
-          } else if (fn === this.yieldFn) {
-            if (thread === this.main || thread.barriers) throw new LuaError(boundaryError)
-            values = yield args
-          } else {
-            values = this.atomic(fn.fn(this, args)) ?? []
-          }
-          call = undefined
-        }
-
-        if (frames.length === base) return values
-        const frame = frames.at(-1)
-        if (frame.tail) {
-          frames.pop() // a tail-called native just returned
-          continue
-        }
-        const step = frame.code.next(values)
-        if (step.value instanceof Call) {
-          frame.tail = step.done
-          call = step.value
-          continue
-        }
-        if (!step.done) throw new Error("invalid Lua frame suspension")
-        values = step.value ?? []
-        frames.pop()
-      }
+      return yield* runFrames(this, frames, new Call(fn, args))
     } catch (e) {
       const err = e instanceof RangeError ? new LuaError("stack overflow") : e
       if (err instanceof LuaError && !err.positioned && frames.length > base) {

@@ -1641,7 +1641,7 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         })
 
       // The SDK walks every page, so one call returns the full catalog.
-      const listed = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
+      const listed = yield* run('return tools.opencode.list_mcp_resources({ server = "resources" })')
       expect(JSON.parse(listed.output.output)).toEqual({
         resources: [
           { server: "resources", name: "Guide", uri: "docs://guide" },
@@ -1656,7 +1656,7 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
 
       // Omitting the server lists every server, so the model can find which one owns a URI.
       assertion = yield* Deferred.make<Permission.AssertInput>()
-      const everywhere = yield* run("return await tools.opencode.list_mcp_resources({})")
+      const everywhere = yield* run("return tools.opencode.list_mcp_resources({})")
       expect(yield* Deferred.await(assertion)).toMatchObject({
         action: "opencode_list_mcp_resources",
         resources: ["resources"],
@@ -1675,7 +1675,7 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
 
       // A server may declare resources without implementing template listing.
       server.state.templatesUnsupported = true
-      const untemplated = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
+      const untemplated = yield* run('return tools.opencode.list_mcp_resources({ server = "resources" })')
       expect(JSON.parse(untemplated.output.output)).toEqual({
         resources: [
           { server: "resources", name: "Guide", uri: "docs://guide" },
@@ -1687,7 +1687,12 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
 
       assertion = yield* Deferred.make<Permission.AssertInput>()
       const read = yield* run(
-        'const resource = await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://readme" }); return resource.contents.filter(part => part.type === "text").map(part => part.text).join("\\n")',
+        `local resource = tools.opencode.read_mcp_resource({ server = "resources", uri = "docs://readme" })
+        local lines = {}
+        for _, part in ipairs(resource.contents) do
+          if part.type == "text" then table.insert(lines, part.text) end
+        end
+        return table.concat(lines, "\\n")`,
       )
       expect(read.content).toEqual([
         { type: "text", text: "hello" },
@@ -1711,9 +1716,11 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource" },
       })
 
-      server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
+      // Exercise outer tool-output truncation without exceeding the Lua result's own byte budget.
+      const fullText = "line\n".repeat(ToolOutput.MAX_LINES + 1)
+      server.state.contents = [{ uri: "docs://readme", text: fullText, mimeType: "text/plain" }]
       const large = yield* run(
-        'const resource = await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://readme" }); return resource.contents[0].text',
+        'return tools.opencode.read_mcp_resource({ server = "resources", uri = "docs://readme" }).contents[1].text',
       )
       const bounded = yield* ToolOutput.Service.use((output) => output.truncate(large)).pipe(
         Effect.provide(AppNodeBuilder.build(ToolOutput.node)),
@@ -1723,23 +1730,23 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
       const outputPath = bounded.metadata?.outputPath
       expect(typeof outputPath).toBe("string")
       if (typeof outputPath !== "string") throw new Error("Missing full resource output")
-      expect(yield* Effect.promise(() => Bun.file(outputPath).text())).toBe("line\n".repeat(20_000))
+      expect(yield* Effect.promise(() => Bun.file(outputPath).text())).toBe(fullText)
 
       // An empty contents array means the resource exists without content, not that it is missing.
       server.state.contents = []
       const empty = yield* run(
-        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://empty" })',
+        'return tools.opencode.read_mcp_resource({ server = "resources", uri = "docs://empty" })',
       )
       expect(empty.metadata?.error).toBeUndefined()
       expect(JSON.parse(empty.output.output)).toEqual({ server: "resources", uri: "docs://empty", contents: [] })
       server.state.missing = ["docs://gone"]
       const gone = yield* run(
-        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://gone" })',
+        'return tools.opencode.read_mcp_resource({ server = "resources", uri = "docs://gone" })',
       )
       expect(gone.metadata?.error).toBe(true)
       expect(gone.output.output).toContain("Resource not found")
       const missing = yield* run(
-        'return await tools.opencode.read_mcp_resource({ server: "missing", uri: "docs://readme" })',
+        'return tools.opencode.read_mcp_resource({ server = "missing", uri = "docs://readme" })',
       )
       expect(missing.metadata?.error).toBe(true)
       expect(missing.output.output).toContain("MCP server not found: missing")
@@ -1749,7 +1756,7 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         new Permission.BlockedError({ rules: [], permission: "opencode_read_mcp_resource", resources: ["*"] }),
       )
       const denied = yield* run(
-        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://denied" })',
+        'return tools.opencode.read_mcp_resource({ server = "resources", uri = "docs://denied" })',
       )
       expect(denied.metadata?.error).toBe(true)
       expect(server.state.resourceReads).toHaveLength(reads)
@@ -2690,7 +2697,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "execute",
     ])
     expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).toContain(
-      "ok: boolean",
+      "ok = boolean",
     )
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
@@ -2734,7 +2741,7 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
         type: "tool-call",
         id: "call_mcp_codemode",
         name: "execute",
-        input: { code: "return await tools.demo.search({})" },
+        input: { code: "return tools.demo.search({})" },
       },
     })
     expect(invocations[1]).toEqual({
@@ -2764,7 +2771,7 @@ it.effect("returns content-only MCP results through Code Mode", () =>
         type: "tool-call",
         id: "call_mcp_content_only",
         name: "execute",
-        input: { code: "return await tools.demo.status({})" },
+        input: { code: "return tools.demo.status({})" },
       },
     })
 
@@ -2793,9 +2800,9 @@ it.effect("parses JSON text results from MCP tools without an output schema", ()
         })
         .pipe(Effect.map((execution) => execution.output.output))
 
-    expect(yield* run("return (await tools.demo.issues({})).issues[0].id")).toBe("1")
-    expect(yield* run("return typeof (await tools.demo.count({}))")).toBe("string")
-    expect(yield* run("return typeof (await tools.demo.typed({}))")).toBe("string")
+    expect(yield* run("return tools.demo.issues({}).issues[1].id")).toBe("1")
+    expect(yield* run("return type(tools.demo.count({}))")).toBe("string")
+    expect(yield* run("return type(tools.demo.typed({}))")).toBe("string")
 
     // Outside Code Mode the content the model reads is the original text.
     expect(
@@ -2909,7 +2916,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
           type: "tool-call",
           id: "call_mcp_permission",
           name: "execute",
-          input: { code: 'return await tools.demo.search({ query: "open issues" })' },
+          input: { code: 'return tools.demo.search({ query = "open issues" })' },
         },
       })
       .pipe(Effect.forkScoped)
@@ -2959,7 +2966,7 @@ it.effect("does not call MCP when permission is blocked", () =>
         type: "tool-call",
         id: "call_mcp_blocked",
         name: "execute",
-        input: { code: "return await tools.demo.search({})" },
+        input: { code: "return tools.demo.search({})" },
       },
     })
     expect(execution.content).toEqual([{ type: "text", text: "Search is disabled in this workspace" }])
@@ -2998,7 +3005,7 @@ it.effect("returns permission feedback instead of calling MCP", () =>
         type: "tool-call",
         id: "call_mcp_corrected",
         name: "execute",
-        input: { code: "return await tools.demo.search({})" },
+        input: { code: "return tools.demo.search({})" },
       },
     })
     expect(execution.content).toEqual([{ type: "text", text: "Search the docs folder instead" }])

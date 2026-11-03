@@ -147,7 +147,7 @@ it.effect("repairs namespaced inner tool input called from Code Mode", () =>
         type: "tool-call",
         id: "call-codemode-repair",
         name: "execute",
-        input: { code: 'return await tools.example.count({ count: "3" })' },
+        input: { code: 'return tools.example.count({ count = "3" })' },
       },
     })
     expect(executed).toEqual([{ count: 3 }])

@@ -33,6 +33,12 @@ const ExecuteCall = Schema.Struct({
 
 type ExecuteCall = typeof ExecuteCall.Type
 
+const ExecuteInput = Schema.Struct({
+  code: Schema.String.annotate({
+    description: "Lua program (up to 32 KiB). Use an explicit return to send back a result.",
+  }),
+})
+
 const ExecuteOutput = Schema.Struct({
   output: Schema.String,
   toolCalls: Schema.Array(ExecuteCall),
@@ -73,12 +79,11 @@ export type Inventory = {
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  "Run a confined subset of Lua 5.1 in Code Mode. Calls finish before the next statement; use `local` for variables and `return` to send the first returned value back.",
+  'Only call tools listed in the Code Mode catalog or returned by `search`. Copy their exact paths, e.g. `return tools.ns["tool-name"]({ id = "123" })`. Call tools outside the catalog directly, never here.',
+  "Use `ipairs` for 1-based arrays and `pairs` for objects. Use `json.array()` for an empty array, `{}` for an empty object and `json.null` for JSON null.",
+  '`fetch(url[, init])` accepts HTTP(S) and an optional table with method (string), headers (string keys and values), and body (string). It returns a table with status, ok, url, statusText, redirected, lower-case headers, and body (text). Example: `return fetch("https://example.com").body`.',
+  "No direct filesystem access, imports, or timers. All other external access goes through catalog tools.",
 ].join("\n")
 
 export const create = (
@@ -89,7 +94,7 @@ export const create = (
   return {
     name: "execute",
     description,
-    input: CodeMode.Input,
+    input: ExecuteInput,
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -268,9 +273,10 @@ function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
   const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.luaExtension]>({
+    language: "lua",
     tools,
-    extensions: [CodeModeFetch.extension],
+    extensions: [CodeModeFetch.luaExtension],
     hooks: runHooks,
   })
   runtimes.set(inventory, created)
@@ -287,7 +293,7 @@ export const check = (
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
-  CodeMode.make({ tools: inventoryTools(inventory), hooks: runHooks, limits })
+  CodeMode.make({ language: "javascript", tools: inventoryTools(inventory), hooks: runHooks, limits })
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {
