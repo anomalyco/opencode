@@ -88,6 +88,7 @@ const layer = Layer.effect(
     const exists = (file: string) => Environment.exists(files, file)
     const location = yield* Location.Service
     const permission = yield* Permission.Service
+    const fsutil = yield* FSUtil.Service
 
     /**
      * Resolve symlinks in the longest existing prefix of `absolute`, keeping the not-yet-existing
@@ -97,16 +98,16 @@ const layer = Layer.effect(
       const missing: string[] = []
       let current = absolute
       while (true) {
-        const stat = yield* fs
-          .stat(current)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
-        if (stat) break
+        // existsSafe follows the final symlink: a dangling link counts as
+        // missing, so the walk stops at its parent and realpath resolves the rest.
+        const found = yield* fsutil.existsSafe(current)
+        if (found) break
         const parent = path.dirname(current)
         if (parent === current) break
         missing.unshift(path.basename(current))
         current = parent
       }
-      const real = yield* fs.resolve(current)
+      const real = yield* fsutil.resolve(current)
       return missing.length === 0 ? real : path.join(real, ...missing)
     })
 
@@ -192,5 +193,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Location.node, Permission.node],
+  deps: [Environment.node, Location.node, Permission.node, FSUtil.node],
 })

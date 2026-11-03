@@ -73,7 +73,10 @@ const layer = Layer.effect(
     ) {
       yield* permission.assert({
         action: "edit",
-        resources: [target.resource],
+        // #58638: match edit rules against both the written path and the
+        // symlink-resolved real path — permission.assert already takes the
+        // stricter result across resources.
+        resources: target.ruleResources,
         save: ["*"],
         metadata: preview ? { files: [preview] } : undefined,
         ...Permission.invocation(context),
