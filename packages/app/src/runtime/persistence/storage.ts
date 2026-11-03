@@ -381,10 +381,10 @@ function serverWorkspaceTarget(scope: ServerScope, dir: string, key: string): Pe
   return { storage: workspaceStorage(pathKey(dir)), workspaceStorageAliases: workspaceStorageAliases(dir), key }
 }
 
-function localStorageWithPrefix(prefix: string): SyncStorage {
-  const base = `${prefix}:`
-  const scope = `prefix:${prefix}`
-  const item = (key: string) => base + key
+/** A localStorage view whose keys are `<prefix>:<key>`, or bare keys without a prefix. */
+function localStorageView(prefix?: string): SyncStorage {
+  const scope = prefix ? `prefix:${prefix}` : "direct"
+  const item = (key: string) => (prefix ? `${prefix}:${key}` : key)
 
   return {
     getItem: (key) => {
@@ -438,55 +438,11 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
   }
 }
 
-function localStorageDirect(): SyncStorage {
-  const scope = "direct"
+/** Desktop's named storage, or the matching localStorage view in a browser. */
+function openStorage(platform: Platform | undefined, name?: string): SyncStorage | AsyncStorage {
+  if (platform?.platform === "desktop" && platform.storage) return platform.storage(name)
 
-  return {
-    getItem: (key) => {
-      const cached = cacheGet(key)
-
-      if (fallbackDisabled(scope)) return cached ?? null
-
-      const stored = (() => {
-        try {
-          return localStorage.getItem(key)
-        } catch {
-          fallbackSet(scope)
-
-          return null
-        }
-      })()
-
-      if (stored === null) return cached ?? null
-      cacheSet(key, stored)
-
-      return stored
-    },
-    setItem: (key, value) => {
-      if (fallbackDisabled(scope)) return
-
-      try {
-        if (write(localStorage, key, value)) return
-      } catch {
-        fallbackSet(scope)
-
-        return
-      }
-
-      fallbackSet(scope)
-    },
-    removeItem: (key) => {
-      cacheDelete(key)
-
-      if (fallbackDisabled(scope)) return
-
-      try {
-        localStorage.removeItem(key)
-      } catch {
-        fallbackSet(scope)
-      }
-    },
-  }
+  return localStorageView(name)
 }
 
 const DRAFT_PERSISTED_KEYS = ["prompt", "comments", "file-view", "layout"]
@@ -562,24 +518,16 @@ export function removePersisted(
     void platform.draftStore.removeItem(`${target.storage ?? "default"}:${target.key}`)
   }
 
-  const desktop = platform?.platform === "desktop" ? platform.storage : undefined
-
-  const open = (name: string | undefined): SyncStorage | AsyncStorage | undefined => {
-    if (desktop) return desktop(name)
-
-    return name ? localStorageWithPrefix(name) : localStorageDirect()
-  }
-
   const copies = target.copyFrom ?? []
 
-  if (copies.some((copy) => copy.pick)) void open(target.storage)?.setItem(target.key, "null")
-  else void open(target.storage)?.removeItem(target.key)
-  target.workspaceStorageAliases?.forEach((name) => void open(name)?.removeItem(target.key))
+  if (copies.some((copy) => copy.pick)) void openStorage(platform, target.storage).setItem(target.key, "null")
+  else void openStorage(platform, target.storage).removeItem(target.key)
+  target.workspaceStorageAliases?.forEach((name) => void openStorage(platform, name).removeItem(target.key))
   copies.forEach((copy) => {
     if (copy.pick) return
-    void open(copy.storage ?? target.storage)?.removeItem(copy.key)
+    void openStorage(platform, copy.storage ?? target.storage).removeItem(copy.key)
 
-    if (target.storage) void open(undefined)?.removeItem(copy.key)
+    if (target.storage) void openStorage(platform).removeItem(copy.key)
   })
 }
 
@@ -620,11 +568,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
       } satisfies AsyncStorage
     }
 
-    if (isDesktop) return platform.storage?.(config.storage)
-
-    if (!config.storage) return localStorageDirect()
-
-    return localStorageWithPrefix(config.storage)
+    return openStorage(platform, config.storage)
   })()
 
   const workspaceAliases = config.workspaceStorageAliases ?? []
@@ -635,11 +579,11 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
       const current = currentStorage as SyncStorage
 
       const sources: RelocationSource<SyncStorage>[] = [
-        ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
-        ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
+        ...workspaceAliases.map((storage) => ({ storage: localStorageView(storage) })),
+        ...(config.previousKey ? [{ storage: localStorageView(), key: config.previousKey }] : []),
         ...(config.copyFrom ?? []).flatMap((copy) => [
-          { storage: copy.storage ? localStorageWithPrefix(copy.storage) : current, key: copy.key, pick: copy.pick },
-          ...(config.storage ? [{ storage: localStorageDirect(), key: copy.key, pick: copy.pick }] : []),
+          { storage: copy.storage ? localStorageView(copy.storage) : current, key: copy.key, pick: copy.pick },
+          ...(config.storage ? [{ storage: localStorageView(), key: copy.key, pick: copy.pick }] : []),
         ]),
       ]
 
@@ -670,35 +614,13 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     // SAFETY: with desktop storage or a draft store, `currentStorage` is that asynchronous storage.
     const current = currentStorage as AsyncStorage
 
-    const previousDraftStorage = draft
-      ? isDesktop
-        ? platform.storage?.(config.storage)
-        : config.storage
-          ? localStorageWithPrefix(config.storage)
-          : localStorageDirect()
-      : undefined
-
-    const previousStorage = config.previousKey ? (isDesktop ? platform.storage?.() : localStorageDirect()) : undefined
-
     const relocationSources = [
-      previousDraftStorage ? { storage: previousDraftStorage } : undefined,
-      ...workspaceAliases.map((name) => ({
-        storage: isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name),
-      })),
-      previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
+      draft ? { storage: openStorage(platform, config.storage) } : undefined,
+      ...workspaceAliases.map((name) => ({ storage: openStorage(platform, name) })),
+      config.previousKey ? { storage: openStorage(platform), key: config.previousKey } : undefined,
       ...(config.copyFrom ?? []).flatMap((copy) => [
-        {
-          storage: copy.storage
-            ? isDesktop
-              ? platform.storage?.(copy.storage)
-              : localStorageWithPrefix(copy.storage)
-            : current,
-          key: copy.key,
-          pick: copy.pick,
-        },
-        config.storage
-          ? { storage: isDesktop ? platform.storage?.() : localStorageDirect(), key: copy.key, pick: copy.pick }
-          : undefined,
+        { storage: copy.storage ? openStorage(platform, copy.storage) : current, key: copy.key, pick: copy.pick },
+        config.storage ? { storage: openStorage(platform), key: copy.key, pick: copy.pick } : undefined,
       ]),
     ].flatMap((source): RelocationSource<AsyncStorage>[] =>
       source?.storage ? [{ ...source, storage: toAsyncStorage(source.storage) }] : [],
