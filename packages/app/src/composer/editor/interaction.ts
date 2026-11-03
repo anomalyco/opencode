@@ -572,6 +572,7 @@ export function createComposerEditor(input: {
     state,
     view: input.view,
     suggestions,
+    commandSuggestions: input.commands,
     dispatch,
     onKeyDown,
     value() {

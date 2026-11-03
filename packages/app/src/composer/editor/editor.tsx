@@ -45,6 +45,7 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
 import { QuoteCommentEditor } from "./quote-comment"
+import { clearComposerSlashCommandHighlight, updateComposerSlashCommandHighlight } from "./slash-command-highlight"
 import "../attachments/attachments.css"
 import "./editor.css"
 import "@/shell/palette-menu.css"
@@ -177,6 +178,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
     }
 
     renderComposerEditor(editor, parts)
+  })
+
+  createEffect(() => {
+    props.controller.parts()
+    const commands = props.controller.commandSuggestions()
+
+    if (!editor) return
+
+    updateComposerSlashCommandHighlight(editor, state.mode === "normal" ? commands : [])
+  })
+
+  onCleanup(() => {
+    if (editor) clearComposerSlashCommandHighlight(editor)
   })
 
   // Kept out of JSX: an inline ternary prop compiles to a memo created on every read, and the popover reads

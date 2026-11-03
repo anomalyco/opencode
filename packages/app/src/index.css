@@ -146,6 +146,11 @@
       background-color: var(--v2-icon-icon-accent);
       color: var(--v2-background-bg-deep);
     }
+
+    :root::highlight(composer-slash-command) {
+      background-color: color-mix(in srgb, var(--v2-text-text-accent) 14%, transparent);
+      color: var(--v2-text-text-accent);
+    }
   }
 
   @supports not selector(:host-context(*)) {
@@ -156,6 +161,11 @@
     ::highlight(timeline-search-hit-active) {
       background-color: var(--v2-icon-icon-accent);
       color: var(--v2-background-bg-deep);
+    }
+
+    ::highlight(composer-slash-command) {
+      background-color: color-mix(in srgb, var(--v2-text-text-accent) 14%, transparent);
+      color: var(--v2-text-text-accent);
     }
   }
 
