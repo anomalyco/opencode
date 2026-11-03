@@ -1462,7 +1462,8 @@ story(
       })
 
       await until(() => host.status("acme") === "active")
-      const options = host.options()
+      const names = host.options().map((option: { name: string }) => option.name)
+      const index = names.indexOf("Midnight")
       host.select("acme:midnight")
       await until(() => root.dataset.theme === "acme:midnight")
 
@@ -1480,12 +1481,12 @@ story(
       const restored = host.selected()
       host.unmount()
 
-      return { first: options[0], last: options.at(-1), withdrawn, restored }
+      return { neighbors: names.slice(index - 1, index + 2), withdrawn, restored }
     }, fixture)
 
     expect(result).toEqual({
-      first: { id: "amoled", name: "AMOLED" },
-      last: { id: "acme:midnight", name: "Midnight" },
+      // Alphabetical among the app's themes, not appended after them.
+      neighbors: ["Mercury", "Midnight", "Monokai"],
       withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
       restored: "acme:midnight",
     })

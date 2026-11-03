@@ -264,17 +264,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       props.onThemeApplied?.(mode, scheme)
     }
 
-    const ids = () => {
-      const extra = Object.keys(store.themes)
-        .filter((id) => !knownThemes().has(id))
-        .sort()
+    const name = (id: string) => store.themes[id]?.name ?? names.get(id) ?? id
 
-      const all = themeIDs()
-
-      if (extra.length === 0) return all
-
-      return [...all, ...extra]
-    }
+    // Bundled and registered themes in one list, alphabetical by name.
+    const ids = () =>
+      [...themeIDs(), ...Object.keys(store.themes).filter((id) => !knownThemes().has(id))].toSorted((a, b) =>
+        name(a).localeCompare(name(b), undefined, { sensitivity: "base" }),
+      )
 
     const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
 
@@ -388,12 +384,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       colorScheme: () => store.colorScheme,
       mode: () => store.mode,
       ids,
-      name: (id: string) => store.themes[id]?.name ?? names.get(id) ?? id,
+      name,
       loadThemes,
       themes: () => store.themes,
       setTheme,
       setColorScheme,
-      /** Lists a theme after the bundled ones until the returned function withdraws it. */
+      /** Lists a theme beside the bundled ones until the returned function withdraws it. */
       registerTheme: (theme: DesktopTheme) => {
         setStore("themes", theme.id, theme)
 
