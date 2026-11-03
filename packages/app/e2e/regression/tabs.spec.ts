@@ -469,6 +469,74 @@ for (const row of [
   })
 }
 
+test.describe("mobile tab gestures", () => {
+  test.use({ viewport: { width: 390, height: 720 }, hasTouch: true, isMobile: true })
+
+  test("swipes scroll the session drawer and a held tab can still be reordered", async ({ page }) => {
+    const sessions = Array.from({ length: 14 }, (_, index) => ({
+      id: `ses_drawer_${index}`,
+      title: `Drawer session ${index}`,
+    }))
+
+    await openSession(page, { name: "DrawerTabs", sessions })
+    await page.locator('[data-slot="mobile-tabs-trigger"]').tap()
+
+    const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
+    const scroll = drawer.locator('[data-slot="vertical-tabs-scroll"]')
+    const titles = drawer.locator("[data-titlebar-tab-title]")
+    const order = sessions.map((session) => session.title)
+    await expect(titles).toHaveText(order)
+    await expect(scroll).toBeInViewport({ ratio: 1 })
+    await expect(page.getByRole("dialog", { name: "Tabs", exact: true })).not.toHaveAttribute("data-transitioning", "")
+    await expect
+      .poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight))
+      .toBeGreaterThan(0)
+
+    const touch = await page.context().newCDPSession(page)
+    const bounds = (await scroll.boundingBox())!
+    const start = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - 40 }
+    const before = await scroll.evaluate((element) => element.scrollTop)
+    // Leave the finger at rest before release so inertia cannot move the next drag target.
+    const swipeTimestamp = () => (Date.now() - 100) / 1000
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [start],
+      timestamp: swipeTimestamp(),
+    })
+
+    for (const distance of [30, 60, 90, 120, 150]) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: start.x, y: start.y - distance }],
+        timestamp: swipeTimestamp(),
+      })
+    }
+
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [], timestamp: Date.now() / 1000 })
+    await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(before)
+    await expect(titles).toHaveText(order)
+
+    const source = drawer
+      .locator("[data-titlebar-tab]")
+      .filter({ has: page.getByRole("link", { name: /Drawer session 7$/ }) })
+
+    const destination = drawer.getByText("Drawer session 6", { exact: true })
+    await expect(source).toBeInViewport()
+    await expect(destination).toBeInViewport()
+    const from = (await source.boundingBox())!
+    const to = (await destination.boundingBox())!
+    const point = { x: from.x + from.width / 2, y: from.y + from.height / 2 }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
+    await expect(source).toHaveAttribute("data-dragging", "true")
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: point.x, y: to.y + to.height / 2 }],
+    })
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+    await expect(titles).toHaveText(order.toSpliced(6, 2, "Drawer session 7", "Drawer session 6"))
+  })
+})
+
 test("icon-only inactive tabs retain their avatar and attention badge instead of showing a close overlay", async ({
   page,
 }) => {

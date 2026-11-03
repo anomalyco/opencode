@@ -519,10 +519,14 @@ export function TitlebarTabStrip(props: {
         <DragDropProvider
           sensors={[
             PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
+              activationConstraints: (event) => {
+                // Let vertical swipes scroll until the user holds a tab to move it.
+                if (vertical() && event.pointerType === "touch") {
+                  return [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
+                }
+
+                return [new PointerActivationConstraints.Distance({ value: event.pointerType === "touch" ? 8 : 4 })]
+              },
               preventActivation: (event) =>
                 event.target instanceof Element &&
                 !!event.target.closest(
