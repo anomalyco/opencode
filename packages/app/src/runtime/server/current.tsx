@@ -14,7 +14,9 @@ const context = createSimpleContext({
     return {
       conn,
       key,
-      isLocal: ServerConnection.local(props.conn),
+      get isLocal() {
+        return props.ctx.isLocal
+      },
       ctx: props.ctx,
       get health() {
         return global.servers.health[key]

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.1",
+  "version": "2.2.5",
   "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
@@ -38,6 +38,7 @@
     "./providers/azure": "./src/providers/azure.ts",
     "./providers/azure/chat": "./src/providers/azure/chat.ts",
     "./providers/azure/images": "./src/providers/azure/images.ts",
+    "./providers/azure/messages": "./src/providers/azure/messages.ts",
     "./providers/azure/responses": "./src/providers/azure/responses.ts",
     "./providers/baseten": "./src/providers/baseten.ts",
     "./providers/baseten/decisions": "./src/providers/baseten/decisions.ts",

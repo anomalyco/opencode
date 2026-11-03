@@ -71,7 +71,7 @@ ownership deadline is due, or a two-second safety net elapses. Windows still
 polls every 25 ms.
 
 The Windows named-pipe backend keeps protocol 7 and the registration fields
-`instance_id`, `pid`, `protocol`, `socket`, and `token`. Treat `socket` as an opaque
+`instance_id`, `pid`, `protocol`, `socket`, `token`, and `features`. Treat `socket` as an opaque
 local endpoint: on Windows it is `\\.\pipe\opencode-pty-<instance_id>`, not a
 filesystem socket. A random per-instance name, exclusive first pipe instance,
 current-user access control, and rejection of remote clients protect the endpoint;

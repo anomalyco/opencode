@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient } from "../../src/effect.js"
+import { ai, ImageClient } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -9,7 +9,7 @@ import { dynamicResponse, fixedResponse } from "../lib/http.js"
 describe("Z.ai Images", () => {
   it.effect("generates through the Z.ai Images API", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: ZAI.configure({
           apiKey: "test",
           baseURL: "https://api.z.ai.test/api/paas/v4",
@@ -84,53 +84,57 @@ describe("Z.ai Images", () => {
   )
 
   it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
-    Image.generate({
-      model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image(
-        "model",
-      ),
-      prompt: "A red circle \uD800 on a white background \u{1F600}",
-    }).pipe(
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(
-            dynamicResponse((input) => {
-              expect(JSON.parse(input.text)).toMatchObject({
-                prompt: "A red circle \uFFFD on a white background \u{1F600}",
-                metadata: { source: "default\uFFFD" },
-              })
-              return Effect.succeed(
-                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
-                  headers: { "content-type": "application/json" },
-                }),
-              )
-            }),
+    ai.image
+      .generate({
+        model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image(
+          "model",
+        ),
+        prompt: "A red circle \uD800 on a white background \u{1F600}",
+      })
+      .pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(
+              dynamicResponse((input) => {
+                expect(JSON.parse(input.text)).toMatchObject({
+                  prompt: "A red circle \uFFFD on a white background \u{1F600}",
+                  metadata: { source: "default\uFFFD" },
+                })
+                return Effect.succeed(
+                  input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                    headers: { "content-type": "application/json" },
+                  }),
+                )
+              }),
+            ),
           ),
         ),
       ),
-    ),
   )
 
   it.effect("lets raw native options override aliases", () =>
-    Image.generate({
-      model: ZAI.configure({ apiKey: "test" }).image("model"),
-      prompt: "test",
-      providerOptions: { quality: "future-quality", userID: "x", user_id: "raw-user" },
-    }).pipe(
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(
-            dynamicResponse((input) => {
-              expect(JSON.parse(input.text)).toMatchObject({ quality: "future-quality", user_id: "raw-user" })
-              return Effect.succeed(
-                input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
-                  headers: { "content-type": "application/json" },
-                }),
-              )
-            }),
+    ai.image
+      .generate({
+        model: ZAI.configure({ apiKey: "test" }).image("model"),
+        prompt: "test",
+        providerOptions: { quality: "future-quality", userID: "x", user_id: "raw-user" },
+      })
+      .pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(
+              dynamicResponse((input) => {
+                expect(JSON.parse(input.text)).toMatchObject({ quality: "future-quality", user_id: "raw-user" })
+                return Effect.succeed(
+                  input.respond(JSON.stringify({ data: [{ url: "https://example.test/image.jpg" }] }), {
+                    headers: { "content-type": "application/json" },
+                  }),
+                )
+              }),
+            ),
           ),
         ),
       ),
-    ),
   )
 
   it.effect("rejects invalid response structures", () =>
@@ -145,7 +149,7 @@ describe("Z.ai Images", () => {
       ]
 
       yield* Effect.forEach(payloads, (payload) =>
-        Image.generate({ model, prompt: "test" }).pipe(
+        ai.image.generate({ model, prompt: "test" }).pipe(
           Effect.provide(
             ImageClient.layer.pipe(
               Layer.provide(

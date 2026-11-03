@@ -15,6 +15,7 @@ interface Props {
   headings: MarkdownHeading[]
   showTableOfContents?: boolean
   fullWidth?: boolean
+  noindex?: boolean
 }
 
 const section = getDocsSection(Astro.props.currentSlug)
@@ -29,6 +30,7 @@ const canonical = new URL(docsHref(Astro.props.currentSlug), "https://opencode.a
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    {Astro.props.noindex && <meta name="robots" content="noindex" />}
     <meta name="theme-color" content="#000000" />
     <script is:inline>
       const applyTheme = () => {
@@ -71,7 +73,11 @@ const canonical = new URL(docsHref(Astro.props.currentSlug), "https://opencode.a
               <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
             </aside>
             <main id="docs-content">
-              <article class="prose" data-pagefind-body data-pagefind-meta={`title:${Astro.props.title}`}>
+              <article
+                class="prose"
+                data-pagefind-body={Astro.props.noindex ? undefined : ""}
+                data-pagefind-meta={`title:${Astro.props.title}`}
+              >
                 <h1>
                   {Astro.props.title}
                   <button type="button" aria-label="Copy page as Markdown" data-copy-markdown data-pagefind-ignore>

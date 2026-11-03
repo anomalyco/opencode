@@ -8,7 +8,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
-import { createMemo, mapArray, type Accessor } from "solid-js"
+import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
   currentToolFailed,
@@ -157,7 +157,15 @@ export function createReactiveTimelineProjection(input: {
         .flatMap((message) =>
           message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
         ),
-    (content) => [content, createMemo(() => !!content.text.trim())] as const,
+    (content) => {
+      // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
+      // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
+      // notifies only when visibility actually flips.
+      const [visible, setVisible] = createSignal(false)
+      createComputed(() => setVisible(!!content.text.trim()))
+
+      return [content, visible] as const
+    },
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))

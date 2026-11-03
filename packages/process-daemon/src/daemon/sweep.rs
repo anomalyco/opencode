@@ -106,7 +106,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::protocol::PROTOCOL_VERSION;
+    use crate::protocol::{PROTOCOL_VERSION, features};
 
     fn random_id() -> String {
         format!("{:032x}", rand::random::<u128>())
@@ -135,6 +135,7 @@ mod tests {
                     protocol: PROTOCOL_VERSION,
                     socket: PathBuf::from("/nonexistent.sock"),
                     token: random_id(),
+                    features: features(),
                 };
                 fs::write(
                     directory.join(REGISTRATION_FILE),

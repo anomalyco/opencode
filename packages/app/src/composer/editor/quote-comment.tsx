@@ -1,4 +1,4 @@
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -6,6 +6,15 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery } from "../adapter"
+
+const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+const sendLabels = {
+  queue: "session.quote.queue",
+  steer: "session.quote.steer",
+  send: "session.quote.send",
+} as const
 
 const GAP = 8
 
@@ -19,6 +28,11 @@ export function QuoteCommentEditor(props: {
   mention: (query: string) => Promise<string[]>
   onSubmit: (comment: string) => void
   onClose: (focus?: boolean) => void
+  send?: {
+    available: boolean
+    delivery: ComposerDelivery | undefined
+    onSubmit: (comment: string) => Promise<boolean>
+  }
 }) {
   const language = useLanguage()
 
@@ -30,6 +44,8 @@ export function QuoteCommentEditor(props: {
     revision: 0,
     height: 0,
     openingHeight: 0,
+    sending: false,
+    failed: false,
   })
 
   const width = () => Math.min(WIDTH, state.viewport - GAP * 2)
@@ -47,6 +63,8 @@ export function QuoteCommentEditor(props: {
 
   let frame: number | undefined
 
+  let mounted = true
+
   const schedule = () => {
     if (frame !== undefined) return
     frame = requestAnimationFrame(() => {
@@ -61,6 +79,8 @@ export function QuoteCommentEditor(props: {
   }
 
   onCleanup(() => {
+    mounted = false
+
     if (frame !== undefined) cancelAnimationFrame(frame)
   })
 
@@ -72,7 +92,7 @@ export function QuoteCommentEditor(props: {
 
     if (target instanceof Node && (element?.contains(target) || props.anchor.contains(target))) return
 
-    if (state.draft.trim() === props.comment.trim()) props.onClose()
+    if (!state.sending && state.draft.trim() === props.comment.trim()) props.onClose()
   })
 
   const left = () => Math.min(Math.max(source()?.left ?? state.rect.left, GAP), state.viewport - width() - GAP)
@@ -87,6 +107,28 @@ export function QuoteCommentEditor(props: {
 
   const availableHeight = () => Math.max(0, bottom() - GAP)
   const top = () => Math.max(GAP, bottom() - state.height)
+
+  const alternateSubmit = createMemo(() => {
+    const send = props.send
+
+    if (!send) return
+
+    return {
+      label: language.t(sendLabels[send.delivery ?? "send"]),
+      keys: [IS_MAC ? "⌘" : language.t("common.key.ctrl"), "⏎"],
+      disabled: !send.available,
+      onSubmit: async (comment: string) => {
+        setState({ sending: true, failed: false })
+
+        const sent = await send.onSubmit(comment)
+
+        if (!mounted) return
+        setState({ sending: false, failed: !sent })
+
+        if (sent) props.onClose()
+      },
+    }
+  })
 
   return (
     <Portal>
@@ -125,6 +167,8 @@ export function QuoteCommentEditor(props: {
             onInput={(value) => setState("draft", value)}
             onCancel={() => props.onClose(true)}
             onSubmit={props.onSubmit}
+            submitting={state.sending}
+            alternateSubmit={alternateSubmit()}
             placeholder={language.t("session.quote.optionalCommentPlaceholder")}
             submitLabel={language.t(
               props.comment.trim()
@@ -137,6 +181,14 @@ export function QuoteCommentEditor(props: {
             mention={{ items: props.mention }}
             selection={<span dir="auto">{props.text}</span>}
           />
+          <Show when={state.failed}>
+            <p
+              role="alert"
+              class="rounded-b-[8px] bg-v2-background-bg-layer-01 px-3 pb-3 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-base"
+            >
+              {language.t("session.quote.sendFailed")}
+            </p>
+          </Show>
         </div>
       </div>
     </Portal>

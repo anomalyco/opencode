@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
+import { ai, CacheHint, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -13,7 +13,7 @@ const model = Anthropic.configure({
 // Two identical generations in a row. The first call writes the prefix into
 // Anthropic's cache; the second should report a cache read against the same
 // prefix. Cassette captures both interactions in order.
-const cacheRequest = LLM.request({
+const cacheRequest = ai.request({
   id: "recorded_anthropic_cache",
   model,
   system: [{ type: "text", text: LARGE_CACHEABLE_SYSTEM, cache: new CacheHint({ type: "ephemeral" }) }],
@@ -48,7 +48,7 @@ const longToolTurn = [
     ]
   }).flat(),
 ]
-const longToolTurnRequest = LLM.request({
+const longToolTurnRequest = ai.request({
   id: "recorded_anthropic_cache_long_tool_turn",
   model,
   system: LARGE_CACHEABLE_SYSTEM,
@@ -94,15 +94,14 @@ describe("Anthropic Messages cache recorded", () => {
       // write establishes that Anthropic recognized the cache boundary.
       expect(firstCached).toBeGreaterThan(0)
 
-      const second = yield* LLMClient.generate(
-        LLMRequest.update(longToolTurnRequest, {
-          messages: [
-            ...longToolTurn,
-            Message.assistant("The fixture lookups are complete."),
-            Message.user("Reply exactly: OK"),
-          ],
-        }),
-      )
+      const second = yield* LLMClient.generate({
+        ...longToolTurnRequest,
+        messages: [
+          ...longToolTurn,
+          Message.assistant("The fixture lookups are complete."),
+          Message.user("Reply exactly: OK"),
+        ],
+      })
       expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThanOrEqual(firstCached)
       expect(second.usage?.cacheWriteInputTokens ?? 0).toBeLessThan(firstCached)
     }),

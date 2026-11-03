@@ -53,7 +53,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       })
     }
 
-    for (const type of ["persistent-pty.added", "persistent-pty.removed"] as const) {
+    for (const type of ["persistent-pty.added", "persistent-pty.removed", "persistent-pty.updated"] as const) {
       onCleanup(
         event.on(type, (evt) => {
           if (!available() || !terminals[evt.data.sessionID]) return

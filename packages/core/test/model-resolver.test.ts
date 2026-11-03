@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM, LanguageModel, Message } from "@opencode/ai/effect"
+import { ai, LanguageModel, Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
@@ -13,6 +13,7 @@ import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
+import { withEnv } from "./fixture/env"
 import { it } from "./lib/effect"
 
 interface ModelOptions {
@@ -54,27 +55,6 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     modelID: info.modelID,
   })
   return Info.make(info)
-}
-
-function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
-      Object.entries(variables).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
 }
 
 function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effect.Effect<A, E, R>) {
@@ -166,7 +146,7 @@ describe("ModelResolver", () => {
         expect(String(selected.provider)).toBe(providerID)
         expect(selected.route.id).toBe(route)
         expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
-        const prepared = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
+        const prepared = yield* compileRequest(ai.request({ model: selected, prompt: "Hello" }))
         expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
         expect(prepared.body).not.toHaveProperty("apiKey")
       }
@@ -300,7 +280,7 @@ describe("ModelResolver", () => {
           http: { body: { custom_extension: { enabled: true } } },
         },
       })
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body.max_output_tokens).toBeUndefined()
       expect(JSON.stringify(prepared.body)).not.toContain("max_output_tokens")
     }),
@@ -313,7 +293,7 @@ describe("ModelResolver", () => {
           settings: { apiKey: "secret", baseURL: "https://openai.example/v1" },
         }),
       )
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
 
       expect(JSON.stringify(prepared.body)).not.toContain("apiKey")
       expect(JSON.stringify(prepared.body)).not.toContain("secret")
@@ -329,7 +309,7 @@ describe("ModelResolver", () => {
           }),
         )
         const headers = yield* resolved.route.auth.apply({
-          request: LLM.request({ model: resolved, prompt: "Hello" }),
+          request: ai.request({ model: resolved, prompt: "Hello" }),
           method: "POST",
           url: "https://openai.example/v1/responses",
           body: "{}",
@@ -428,7 +408,7 @@ describe("ModelResolver", () => {
           Effect.gen(function* () {
             const resolved = yield* resolver.resolveModel(selection)
             const headers = yield* resolved.model.route.auth.apply({
-              request: LLM.request({ model: resolved.model, prompt: "Hello" }),
+              request: ai.request({ model: resolved.model, prompt: "Hello" }),
               method: "POST",
               url: resolved.model.route.endpoint.baseURL ?? "",
               body: "{}",
@@ -457,7 +437,7 @@ describe("ModelResolver", () => {
         )
         const exit = yield* Effect.exit(
           resolved.route.auth.apply({
-            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
             url: "https://google.example.com/v1",
             body: "{}",
@@ -491,7 +471,7 @@ describe("ModelResolver", () => {
           body: {},
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
+      const request = ai.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
       const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
@@ -593,7 +573,7 @@ describe("ModelResolver", () => {
         reasoningSummary: "auto",
         include: ["reasoning.encrypted_content"],
       })
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body).toMatchObject({
         include: ["reasoning.encrypted_content"],
         reasoning: { effort: "xhigh", summary: "auto" },
@@ -613,7 +593,7 @@ describe("ModelResolver", () => {
         VariantID.make("high"),
         Credential.Key.make({ type: "key", key: "secret" }),
       )
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
 
       expect(resolved.route.id).toBe("xai-responses")
       expect(prepared.body).toMatchObject({
@@ -714,7 +694,7 @@ describe("ModelResolver", () => {
         }),
         Credential.Key.make({ type: "key", key: "secret" }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = ai.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -739,7 +719,7 @@ describe("ModelResolver", () => {
         credential,
       )
       const headers = yield* resolved.route.auth.apply({
-        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        request: ai.request({ model: resolved, prompt: "Hello" }),
         method: "POST",
         url: "https://openai.example/v1/responses",
         body: "{}",
@@ -779,7 +759,7 @@ describe("ModelResolver", () => {
         )
         const authorize = (resolved: LanguageModel) =>
           resolved.route.auth.apply({
-            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
             url: "https://cli-resource.openai.azure.com/openai/v1/responses",
             body: "{}",
@@ -862,7 +842,7 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({
+      const request = ai.request({
         model: resolved,
         system: [
           { type: "text", text: "Base instructions." },
@@ -948,7 +928,7 @@ describe("ModelResolver", () => {
           metadata: { accountID: "acct_123" },
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = ai.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",

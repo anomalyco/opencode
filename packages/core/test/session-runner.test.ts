@@ -5,7 +5,7 @@ import {
   CompactionCheckpointResponse,
   HttpContext,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   SystemPart,
   LanguageModel,
@@ -103,13 +103,14 @@ const testLLM = Layer.unwrap(
     return TestLLM.testLayer({
       fallback: [],
       transformRequest: (request) => {
-        const transformed = LLMRequest.update(request, {
+        const transformed = {
+          ...request,
           system: request.system.map((part) => ({
             ...part,
             text: part.text.replace(emptyCodeMode, ""),
           })),
           tools: request.tools.filter((tool) => tool.name !== "execute"),
-        })
+        }
         requests.push(transformed)
         return transformed
       },
@@ -683,6 +684,9 @@ const incompleteStream = () =>
 const INCOMPLETE_STREAM_CONTINUATION =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
+const providerRejected = (input: { readonly message: string; readonly classification?: "context-overflow" }) =>
+  new AIError({ reason: new InvalidRequestError(input) })
+
 const invalidRequest = () =>
   new AIError({
     reason: new InvalidRequestError({ message: "Invalid request" }),
@@ -1061,7 +1065,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Second prompt")
     const titleFailed = yield* Deferred.make<void>()
     yield* s.llm.push(
-      Stream.make(LLMEvent.providerError({ message: "Title provider unavailable" })).pipe(
+      Stream.fail(providerRejected({ message: "Title provider unavailable" })).pipe(
         Stream.ensuring(Deferred.succeed(titleFailed, undefined)),
       ),
       TestLLM.text("Recovered", "text-recovered"),
@@ -1110,7 +1114,7 @@ describe("SessionRunnerLLM", () => {
       { codemode: false },
     )
     yield* s.admit("Use application context")
-    yield* s.llm.push(TestLLM.tool("call-location", "location_context", { query: "hello" }), [])
+    yield* s.llm.push(TestLLM.toolCall("call-location", "location_context", { query: "hello" }), [])
 
     const progressFiber = yield* s.bus.subscribe(SessionEvent.Tool.Progress).pipe(
       Stream.filter((event) => event.data.sessionID === sessionID && event.data.id === "call-location"),
@@ -1149,7 +1153,7 @@ describe("SessionRunnerLLM", () => {
       }),
     )
     yield* s.admit("Use the renamed tool")
-    yield* s.llm.push(TestLLM.tool("call-renamed", "renamed_echo", { text: "renamed" }), [])
+    yield* s.llm.push(TestLLM.toolCall("call-renamed", "renamed_echo", { text: "renamed" }), [])
 
     yield* s.resume
 
@@ -1204,7 +1208,7 @@ describe("SessionRunnerLLM", () => {
     const idles: number[] = []
     yield* hooks.register("session", "experimental.idle", () => Effect.sync(() => idles.push(s.requests.length)))
     yield* s.admit("First")
-    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-done"))
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-done"))
 
     yield* s.resume
 
@@ -1383,7 +1387,7 @@ describe("SessionRunnerLLM", () => {
       { codemode: false },
     ).pipe(Scope.provide(scope))
     yield* s.admit("Use the reloaded tool")
-    yield* s.llm.push(TestLLM.tool("call-reloaded", "reloaded", {}), [])
+    yield* s.llm.push(TestLLM.toolCall("call-reloaded", "reloaded", {}), [])
 
     const run = yield* s.resumePaused
     yield* Scope.close(scope, Exit.void)
@@ -1427,7 +1431,7 @@ describe("SessionRunnerLLM", () => {
     const secondStarted = yield* Deferred.make<void>()
     const releaseSecond = yield* Deferred.make<void>()
     yield* s.llm.push(
-      Stream.fromIterable(TestLLM.tool("call-echo", "echo", { text: "background started" })),
+      Stream.fromIterable(TestLLM.toolCall("call-echo", "echo", { text: "background started" })),
       Stream.unwrap(
         Deferred.succeed(secondStarted, undefined).pipe(
           Effect.andThen(Deferred.await(releaseSecond)),
@@ -1615,7 +1619,7 @@ describe("SessionRunnerLLM", () => {
         }),
       )
       yield* s.admit("Echo before moving")
-      yield* s.llm.push(TestLLM.tool("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
+      yield* s.llm.push(TestLLM.toolCall("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
       const tools = yield* s.blockTools()
       const run = yield* s.resume.pipe(Effect.forkChild)
       yield* tools.started
@@ -1653,7 +1657,7 @@ describe("SessionRunnerLLM", () => {
   scenario("keeps queued input parked across a mid-turn move", function* (s) {
     yield* s.admit("Echo before moving")
     yield* s.llm.push(
-      TestLLM.tool("call-move", "echo", { text: "moving" }),
+      TestLLM.toolCall("call-move", "echo", { text: "moving" }),
       TestLLM.text("Done", "text-after-move"),
       TestLLM.text("Handled queue", "text-after-queue"),
     )
@@ -1687,7 +1691,7 @@ describe("SessionRunnerLLM", () => {
     const runner = yield* SessionRunner.Service
     yield* s.admit("Echo before moving")
     yield* s.llm.push(
-      TestLLM.tool("call-entry", "echo", { text: "moving" }),
+      TestLLM.toolCall("call-entry", "echo", { text: "moving" }),
       TestLLM.text("## Objective\n- Entry summary", "entry-summary"),
       TestLLM.text("Continued", "entry-continuation"),
     )
@@ -2187,6 +2191,15 @@ describe("SessionRunnerLLM", () => {
       fakeIdentity,
       ["Initial context", "", '<context key="deploy-target">', "production", "</context>"].join("\n"),
     ])
+    // Each source stays keyed, so a provider can leave out what its own harness already supplies.
+    // `testLLM` strips the empty Code Mode notice from the text only.
+    expect(s.requests[0]?.system.at(-1)?.metadata?.experimental).toEqual({
+      instructions: [
+        expect.objectContaining({ key: "core/codemode" }),
+        { key: "test/context", text: "Initial context" },
+        { key: "api/deploy-target", text: '<context key="deploy-target">\nproduction\n</context>' },
+      ],
+    })
 
     // Non-string JSON pretty-prints; the change narrates as a System update.
     yield* contextEntries.put({ sessionID, key: "deploy-target", value: { region: "us-east-1" } })
@@ -2414,7 +2427,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("waits for active tools before prioritizing compaction over pending steers", function* (s) {
     yield* s.llm.push(
-      TestLLM.tool("call-active", "echo", { text: "active" }),
+      TestLLM.toolCall("call-active", "echo", { text: "active" }),
       TestLLM.text("## Objective\n- Tool work checkpoint", "summary"),
       TestLLM.text("Steers complete", "steers"),
     )
@@ -2468,7 +2481,8 @@ describe("SessionRunnerLLM", () => {
       const second = yield* s.admit("STEER_B")
       const compact = yield* s.session.compact({ sessionID })
       if (outcome === "cancelled") yield* s.session.cancelInbox({ sessionID, inboxID: compact.id })
-      if (outcome === "failed") yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+      if (outcome === "failed")
+        yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "summary unavailable" })))
       yield* s.llm.push(TestLLM.text("Steers complete", "steers"))
       yield* active.finish
 
@@ -2477,7 +2491,7 @@ describe("SessionRunnerLLM", () => {
         expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
         expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({
           status: "failed",
-          error: { type: "provider.error", message: "summary unavailable" },
+          error: { type: "provider.invalid-request", message: "summary unavailable" },
         })
       }
       if (outcome === "cancelled") expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
@@ -2551,7 +2565,7 @@ describe("SessionRunnerLLM", () => {
   scenario("runs steers before queued compaction and later queued input", function* (s) {
     s.currentModel = recoveryModel
     yield* s.llm.push(
-      TestLLM.tool("call-active", "echo", { text: "active" }),
+      TestLLM.toolCall("call-active", "echo", { text: "active" }),
       TestLLM.text("Steer complete", "text-steer"),
       [LLMEvent.textDelta({ id: "summary", text: "## Objective\n- durable summary" })],
       TestLLM.text("Queue complete", "text-queue"),
@@ -2690,7 +2704,7 @@ describe("SessionRunnerLLM", () => {
   scenario("runs manual compaction before the continuation of an active tool turn", function* (s) {
     s.currentModel = recoveryModel
     yield* s.llm.push(
-      TestLLM.tool("call-active", "echo", { text: "active" }),
+      TestLLM.toolCall("call-active", "echo", { text: "active" }),
       [LLMEvent.textDelta({ id: "summary", text: "## Objective\n- durable summary" })],
       TestLLM.text("Continued", "text-continued-after-compact"),
     )
@@ -2713,14 +2727,14 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-provider-history"))
     yield* s.runPrompt("Earlier question")
 
-    yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+    yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "summary unavailable" })))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "failed",
-      error: { type: "provider.error", message: "summary unavailable" },
+      error: { type: "provider.invalid-request", message: "summary unavailable" },
     })
   })
 
@@ -2763,7 +2777,7 @@ describe("SessionRunnerLLM", () => {
           }),
         )
         yield* s.llm.push(
-          TestLLM.tool("call-prefix", "echo", { text: "x".repeat(4_000) }),
+          TestLLM.toolCall("call-prefix", "echo", { text: "x".repeat(4_000) }),
           TestLLM.textWithUsage("Earlier answer", "prefix-answer", 185_000),
           TestLLM.complete(
             {
@@ -2813,8 +2827,8 @@ describe("SessionRunnerLLM", () => {
         expect(stored).not.toHaveProperty("native")
 
         // Compare wire content without the cache breakpoints that move to the new final message.
-        const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
-        const after = yield* compileRequest(LLMRequest.update(compact, { cache: "none" }))
+        const before = yield* compileRequest({ ...normal, cache: "none" })
+        const after = yield* compileRequest({ ...compact, cache: "none" })
         const key = route === OpenAIResponses.route ? "input" : "messages"
         const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
         const prefix = input(before.body[key])
@@ -2836,7 +2850,7 @@ describe("SessionRunnerLLM", () => {
           s.requests.length = 0
           const invalid =
             response === "tools"
-              ? TestLLM.tool("call-summary", "echo", { text: "must not execute" })
+              ? TestLLM.toolCall("call-summary", "echo", { text: "must not execute" })
               : response === "reasoning"
                 ? TestLLM.stop(
                     LLMEvent.reasoningDelta({ id: "summary-reasoning", text: "## Objective\n- Not a summary" }),
@@ -2890,7 +2904,7 @@ describe("SessionRunnerLLM", () => {
       waits.push([s.requests.length, s.executions.length])
     })
     yield* s.llm.push(
-      TestLLM.tool("call-activation", "echo", { text: "echo" }),
+      TestLLM.toolCall("call-activation", "echo", { text: "echo" }),
       TestLLM.text("Done", "text-after-activation"),
     )
     yield* s.runPrompt("Question")
@@ -3177,6 +3191,38 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
+  scenario("does not resend a rejected conversation unchanged when compacting", function* (s) {
+    const filler = "context ".repeat(1_000)
+    // The provider counts far more than the characters suggest, so only its rejection shows the conversation is too long.
+    const answer = (index: number) =>
+      TestLLM.complete(
+        {
+          reason: { normalized: "stop" },
+          usage: { inputTokens: 60_000, nonCachedInputTokens: 60_000, outputTokens: 10 },
+        },
+        LLMEvent.textStart({ id: `answer-${index}` }),
+        LLMEvent.textDelta({ id: `answer-${index}`, text: `Answer ${index}` }),
+        LLMEvent.textEnd({ id: `answer-${index}` }),
+      )
+    yield* s.llm.push(...Array.from({ length: 4 }, (_, index) => answer(index)))
+    yield* Effect.forEach(
+      Array.from({ length: 4 }, (_, index) => index),
+      (index) => s.runPrompt(`Request ${index}: ${filler}`),
+    )
+    s.currentModel = recoveryModel
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
+      TestLLM.text("## Objective\n- Recovered", "summary"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[1]?.tools).toEqual([])
+    expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
+  })
+
   scenario("aims the first overflow compaction below the rejected context", function* (s) {
     const filler = "context ".repeat(1_000)
     yield* s.llm.push(...Array.from({ length: 4 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
@@ -3187,7 +3233,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = recoveryModel
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recovered", "summary"),
       TestLLM.text("Recovered", "recovered"),
     )
@@ -3225,7 +3271,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "Too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "Too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recovered", "summary"),
     )
     const compaction = yield* s.session.compact({ sessionID })
@@ -3467,7 +3513,7 @@ describe("SessionRunnerLLM", () => {
       })
     yield* s.llm.push(
       checkpoint("first"),
-      TestLLM.tool("echo-native", "echo", { text: "continue" }),
+      TestLLM.toolCall("echo-native", "echo", { text: "continue" }),
       TestLLM.text("No usage yet", "no-usage"),
     )
     yield* s.runPrompt("Second real request")
@@ -3515,7 +3561,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Before native checkpoint")
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       checkpoint("recovered-window"),
       TestLLM.text("Recovered", "recovered"),
     )
@@ -3551,7 +3597,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "Unsupported parameter: max_output_tokens" })],
+      TestLLM.failAfter(providerRejected({ message: "Unsupported parameter: max_output_tokens" })),
       TestLLM.text("Must not run", "text-after-failed-compaction"),
     )
     yield* s.admit("Recent exact request ".repeat(180))
@@ -3572,10 +3618,10 @@ describe("SessionRunnerLLM", () => {
   scenario("forces one compaction and retries after provider context overflow", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
         LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-      ],
+      ),
       TestLLM.text("## Objective\n- Recover overflow", "text-summary"),
       TestLLM.text("Recovered", "text-final"),
     )
@@ -3605,7 +3651,7 @@ describe("SessionRunnerLLM", () => {
     })
     yield* s.admit("Continue")
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Overflow summary", "overflow-summary"),
       TestLLM.text("Recovered", "overflow-recovered"),
       TestLLM.stop(),
@@ -3667,7 +3713,7 @@ describe("SessionRunnerLLM", () => {
     const compaction = yield* SessionCompaction.Service
     yield* compaction.transform((editor) => editor.configure({ auto: false }))
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("Must not compact", "text-unexpected-summary"),
       TestLLM.text("Must not retry", "text-unexpected-retry"),
     )
@@ -3692,7 +3738,7 @@ describe("SessionRunnerLLM", () => {
     yield* setupOverflowRecovery(s)
     s.currentModel = unknownContextModel
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recover unknown limit", "text-summary-unknown-limit"),
       TestLLM.text("Recovered", "text-final-unknown-limit"),
     )
@@ -3723,10 +3769,11 @@ describe("SessionRunnerLLM", () => {
 
   scenario("persists a second context overflow after one recovery", function* (s) {
     yield* setupOverflowRecovery(s)
-    const overflow = () => [
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-    ]
+    const overflow = () =>
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
+        LLMEvent.stepStart({ index: 0 }),
+      )
     yield* s.llm.push(overflow(), TestLLM.text("## Objective\n- Recover once", "text-summary"), overflow())
     yield* s.admit("Continue")
     expect((yield* s.resume.pipe(Effect.flip)).message).toBe("prompt too long")
@@ -3824,8 +3871,8 @@ describe("SessionRunnerLLM", () => {
   scenario("publishes the original overflow when recovery summarization fails", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
-      [LLMEvent.providerError({ message: "summary unavailable" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
+      TestLLM.failAfter(providerRejected({ message: "summary unavailable" })),
     )
     yield* s.admit("Continue")
     expect((yield* s.resume.pipe(Effect.flip)).message).toBe("prompt too long")
@@ -3837,7 +3884,7 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "failed",
         reason: "auto",
-        error: { type: "provider.error", message: "summary unavailable" },
+        error: { type: "provider.invalid-request", message: "summary unavailable" },
       }),
     )
     expect(context.slice(-3)).toMatchObject([
@@ -3850,7 +3897,7 @@ describe("SessionRunnerLLM", () => {
   scenario("interrupts overflow recovery while the summary provider is running", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Interrupted", "text-summary"),
     )
     const first = yield* s.llm.gate()
@@ -3918,7 +3965,6 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.toolInputDelta({ id: "call-error", name: "write", text: '{"path":"README.md"}' }),
         LLMEvent.toolInputEnd({ id: "call-error", name: "write" }),
         LLMEvent.toolCall({ id: "call-error", name: "write", input: { path: "README.md" }, providerExecuted: true }),
-        LLMEvent.toolError({ id: "call-error", name: "write", message: "Denied" }),
         LLMEvent.toolResult({ id: "call-error", name: "write", result: { type: "error", value: "Denied" } }),
         LLMEvent.toolCall({
           id: "call-provider",
@@ -3983,7 +4029,7 @@ describe("SessionRunnerLLM", () => {
   scenario("continues with reloaded history after durably settling one local tool call", function* (s) {
     yield* s.admit("Echo this")
 
-    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-final"))
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-final"))
 
     yield* s.resume
 
@@ -4014,7 +4060,7 @@ describe("SessionRunnerLLM", () => {
   scenario("reloads a model switch before a tool-driven continuation step", function* (s) {
     yield* s.admit("Echo this")
 
-    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop())
     const tools = yield* s.blockTools()
     const run = yield* Effect.forkChild(s.resume)
     yield* tools.started
@@ -4356,8 +4402,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Echo twice")
 
     yield* s.llm.push(
-      TestLLM.tool("tool_0", "echo", { text: "first" }),
-      TestLLM.tool("tool_0", "echo", { text: "second" }),
+      TestLLM.toolCall("tool_0", "echo", { text: "first" }),
+      TestLLM.toolCall("tool_0", "echo", { text: "second" }),
       [],
     )
 
@@ -4419,7 +4465,7 @@ describe("SessionRunnerLLM", () => {
   scenario("promotes queued input after continuation ends", function* (s) {
     yield* s.admit("Start working")
 
-    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
 
     const first = yield* s.resumePaused
     yield* s.session.prompt({
@@ -5129,7 +5175,7 @@ describe("SessionRunnerLLM", () => {
   scenario("durably settles local tool failures before continuing", function* (s) {
     yield* s.admit("Call missing")
 
-    yield* s.llm.push(TestLLM.tool("call-missing", "missing", {}), TestLLM.text("Recovered", "text-after-error"))
+    yield* s.llm.push(TestLLM.toolCall("call-missing", "missing", {}), TestLLM.text("Recovered", "text-after-error"))
     yield* s.resume
 
     expect(s.requests).toHaveLength(2)
@@ -5154,7 +5200,7 @@ describe("SessionRunnerLLM", () => {
   scenario("returns unexpected local tool defects to the model and continues", function* (s) {
     yield* s.admit("Call defect")
 
-    yield* s.llm.push(TestLLM.tool("call-defect", "defect", {}), TestLLM.text("Recovered", "text-after-defect"))
+    yield* s.llm.push(TestLLM.toolCall("call-defect", "defect", {}), TestLLM.text("Recovered", "text-after-defect"))
 
     yield* s.resume
 
@@ -5234,7 +5280,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Call blocked")
 
-    yield* s.llm.push(TestLLM.tool("call-blocked", "blocked", {}), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-blocked", "blocked", {}), TestLLM.stop())
 
     yield* s.resume
 
@@ -5329,7 +5375,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Call corrected")
 
-    yield* s.llm.push(TestLLM.tool("call-corrected", "corrected", {}), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-corrected", "corrected", {}), TestLLM.stop())
 
     yield* s.resume
 
@@ -5347,7 +5393,7 @@ describe("SessionRunnerLLM", () => {
     const registry = yield* Tool.Service
     yield* transformTools(registry, { permissionfail: permissionFail }, { codemode: false })
     yield* s.admit("Reject permission")
-    yield* s.llm.push(TestLLM.tool("call-permission", "permissionfail", {}), [
+    yield* s.llm.push(TestLLM.toolCall("call-permission", "permissionfail", {}), [
       LLMEvent.stepStart({ index: 0 }),
       LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
     ])
@@ -5390,7 +5436,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.admit("Ask then stop")
 
-    yield* s.llm.push(TestLLM.tool("call-question", "question", {}), [])
+    yield* s.llm.push(TestLLM.toolCall("call-question", "question", {}), [])
 
     const run = yield* s.resume.pipe(Effect.exit, Effect.forkChild)
     const exit = yield* Fiber.join(run)
@@ -5511,7 +5557,7 @@ describe("SessionRunnerLLM", () => {
   scenario("durably fails blocked local tools when interrupted while awaiting settlement", function* (s) {
     yield* s.admit("Interrupt tool settlement")
     const tools = yield* s.blockTools()
-    yield* s.llm.push(TestLLM.tool("call-await-interrupt", "echo", { text: "blocked" }))
+    yield* s.llm.push(TestLLM.toolCall("call-await-interrupt", "echo", { text: "blocked" }))
     const streamed = yield* s.bus.subscribe(SessionEvent.Step.Streamed).pipe(
       Stream.filter((event) => event.data.sessionID === sessionID),
       Stream.runHead,
@@ -5553,8 +5599,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Finish at the limit")
 
     yield* s.llm.push(
-      TestLLM.tool("call-terminal", "echo", { text: "done" }),
-      TestLLM.tool("call-forbidden", "echo", { text: "forbidden" }),
+      TestLLM.toolCall("call-terminal", "echo", { text: "done" }),
+      TestLLM.toolCall("call-forbidden", "echo", { text: "forbidden" }),
     )
 
     yield* s.resume
@@ -5586,8 +5632,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Start work")
 
     yield* s.llm.push(
-      TestLLM.tool("call-before-steer", "echo", { text: "before" }),
-      TestLLM.tool("call-after-steer", "echo", { text: "after" }),
+      TestLLM.toolCall("call-before-steer", "echo", { text: "before" }),
+      TestLLM.toolCall("call-after-steer", "echo", { text: "after" }),
       TestLLM.stop(),
     )
 
@@ -5603,26 +5649,28 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("projects provider errors as terminal assistant step failures", function* (s) {
-    yield* s.llm.push([LLMEvent.stepStart({ index: 0 }), LLMEvent.providerError({ message: "Provider unavailable" })])
+    yield* s.llm.push(
+      TestLLM.failAfter(providerRejected({ message: "Provider unavailable" }), LLMEvent.stepStart({ index: 0 })),
+    )
 
     expect((yield* s.runPrompt("Fail durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail durably"),
-      { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
+      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
     ])
   })
 
   scenario("projects provider errors emitted before assistant step start", function* (s) {
-    yield* s.llm.push([LLMEvent.providerError({ message: "Provider unavailable" })])
+    yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "Provider unavailable" })))
 
     expect((yield* s.runPrompt("Fail before step").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail before step"),
-      { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
+      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
     ])
   })
 
@@ -5724,13 +5772,15 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("does not recover context overflow after durable assistant output", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.textStart({ id: "text-partial" }),
-      LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
-      LLMEvent.textEnd({ id: "text-partial" }),
-      LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-partial" }),
+        LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-partial" }),
+      ),
+    )
     expect((yield* s.runPrompt("Fail after output").pipe(Effect.flip)).message).toBe("prompt too long")
 
     expect(s.requests).toHaveLength(1)
@@ -5943,6 +5993,26 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
+  scenario("compacts when the provider cuts an oversized prompt to its window and replies with nothing", function* (s) {
+    // Xiaomi MiMo answers an oversized prompt with HTTP 200, finish "length", no output, and a prompt count that fills
+    // the window instead of rejecting it.
+    s.currentModel = recoveryModel
+    yield* s.llm.push(
+      TestLLM.complete({ reason: { normalized: "length" }, usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 } }),
+      TestLLM.text("## Objective\n- summary", "summary"),
+      TestLLM.text("Done", "done"),
+    )
+
+    yield* s.runPrompt("Large prompt")
+
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect((yield* s.messages).filter((message) => message.type === "compaction")).toMatchObject([
+      { status: "completed" },
+    ])
+    expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({ finish: "stop" }, [Expected.text("Done")]))
+  })
+
   for (const tools of ["hosted", "unfinished"] as const) {
     scenario(`caps output token limit continuations and resets for new input (${tools})`, function* (s) {
       const toolEvents =
@@ -6144,7 +6214,7 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("lowers interrupted reasoning before continuing an incomplete stream", function* (s) {
+  scenario("drops interrupted reasoning before continuing an incomplete stream", function* (s) {
     yield* s.admit("Continue interrupted reasoning")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6162,19 +6232,10 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
-    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
-      role: "assistant",
-      content: [{ type: "text", text: "Partial thought" }],
-    })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: INCOMPLETE_STREAM_CONTINUATION,
-        },
-      ],
-    })
+    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue interrupted reasoning" }] },
+      { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
+    ])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.reasoning("Partial thought")]),
@@ -6408,7 +6469,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Retry without consuming a step")
     const failure = providerUnavailable()
     yield* s.llm.push(Stream.fail(failure))
-    yield* s.llm.push(TestLLM.tool("call-after-retry", "echo", { text: "recovered" }), TestLLM.stop())
+    yield* s.llm.push(TestLLM.toolCall("call-after-retry", "echo", { text: "recovered" }), TestLLM.stop())
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
@@ -6799,7 +6860,7 @@ describe("SessionRunnerLLM", () => {
       )
     yield* s.llm.push(
       malformed("call-first"),
-      TestLLM.tool("call-valid-between", "echo", { text: "valid" }),
+      TestLLM.toolCall("call-valid-between", "echo", { text: "valid" }),
       malformed("call-second"),
       TestLLM.stop(),
     )
@@ -6839,11 +6900,13 @@ describe("SessionRunnerLLM", () => {
   scenario("does not continue automatically after a provider error follows a local tool call", function* (s) {
     yield* s.admit("Do not continue failed provider")
     const tools = yield* s.blockTools()
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
+      ),
+    )
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
@@ -6863,11 +6926,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("durably fails a hosted tool when its provider errors before returning a result", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      hostedCall("call-hosted-provider-error", "effect"),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        hostedCall("call-hosted-provider-error", "effect"),
+      ),
+    )
 
     expect((yield* s.runPrompt("Fail hosted tool durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
@@ -6887,11 +6952,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("preserves a tool defect before provider failure settlement", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-defect-provider-error", name: "defect", input: {} }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-defect-provider-error", name: "defect", input: {} }),
+      ),
+    )
 
     expect((yield* s.runPrompt("Defect while provider fails").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
@@ -6916,11 +6983,13 @@ describe("SessionRunnerLLM", () => {
       }).pipe(Effect.andThen(Effect.die("tool output persistence failed")))
     })
     yield* s.admit("Storage fails while provider fails")
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-store-provider-error", name: "storefail", input: {} }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-store-provider-error", name: "storefail", input: {} }),
+      ),
+    )
 
     expect(yield* s.resume.pipe(Effect.exit)).toMatchObject({
       _tag: "Failure",
@@ -6928,7 +6997,7 @@ describe("SessionRunnerLLM", () => {
 
     expect(injected).toBe(true)
     expect(requireAssistant(yield* s.context)).toMatchObject({
-      error: { type: "provider.unknown", message: "Provider unavailable" },
+      error: { type: "provider.invalid-request", message: "Provider unavailable" },
     })
   })
 

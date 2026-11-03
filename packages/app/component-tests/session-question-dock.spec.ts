@@ -2,6 +2,70 @@ import type { Locator } from "@playwright/test"
 import type { MotionKnob } from "@opencode/ui/motion-tuning"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
+for (const variant of ["classic", "experimental"] as const) {
+  story(`${variant} answer cards allow text selection without changing answers`, async ({ mount, page }) => {
+    await page.addInitScript(
+      (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+      variant === "experimental",
+    )
+
+    const component = await mount("app-current-session-surface--question-request")
+
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+
+    const wide = question.getByRole("radio", { name: /Wide/ })
+
+    await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+    const drag = async (text: Locator) => {
+      await text.scrollIntoViewIfNeeded()
+
+      const box = await text.boundingBox()
+
+      expect(box).not.toBeNull()
+      await page.mouse.move(box!.x + 1, box!.y + box!.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box!.x + box!.width - 1, box!.y + box!.height / 2, { steps: 12 })
+      await page.mouse.up()
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(await text.innerText())
+    }
+
+    for (const slot of ["option-label", "option-description"]) {
+      await drag(wide.locator(`[data-slot="${slot}"] bdi`))
+      await expect(wide).not.toBeChecked()
+    }
+
+    await wide.locator('[data-slot="option-description"] bdi').click({ modifiers: ["Shift"] })
+    await expect(wide).not.toBeChecked()
+    await wide.click({ position: { x: 4, y: 4 } })
+    await expect(wide).toBeChecked()
+    await question.getByRole("radio", { name: /Focused/ }).click()
+    await drag(wide.locator('[data-slot="option-description"] bdi'))
+    await expect(wide).not.toBeChecked()
+
+    const mark = await wide.locator('[data-slot="question-option-check"]').boundingBox()
+
+    expect(mark).not.toBeNull()
+    await page.mouse.move(mark!.x + mark!.width / 2, mark!.y + mark!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(mark!.x + mark!.width / 2 + 1, mark!.y + mark!.height / 2)
+    await page.mouse.up()
+    await expect(wide).toBeChecked()
+    await question.getByRole("button", { name: "Next", exact: true }).click()
+
+    const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+
+    await expect(files).toBeFocused()
+    await files.click()
+    await expect(files).toBeChecked()
+    await drag(files.locator('[data-slot="option-label"] bdi'))
+    await expect(files).toBeChecked()
+    await files.click({ position: { x: 4, y: 4 } })
+    await expect(files).not.toBeChecked()
+  })
+}
+
 story(
   "uses the original question cards by default and submits selected and custom answers",
   async ({ mount, page }) => {
@@ -32,7 +96,9 @@ story(
     const submit = question.getByRole("button", { name: "Submit", exact: true })
     expect(await submit.evaluate((button) => button.getBoundingClientRect().width)).toBe(width)
     await expect(shortcuts).toHaveText(["1", "2", "3", "4"])
-    await files.click()
+    await page.keyboard.down(" ")
+    await page.keyboard.down(" ")
+    await page.keyboard.up(" ")
     await terminal.click()
     await expect(files).toBeChecked()
     await expect(terminal).toBeChecked()
@@ -78,6 +144,90 @@ story("keeps classic long answer lists inside the panel and scrolls them", async
   await expect(question.locator('[data-slot="question-option"][data-custom="true"]')).toBeInViewport({ ratio: 1 })
   await question.getByRole("button", { name: "Next", exact: true }).click()
   await expect(question.getByRole("radio", { name: "One pull request", exact: true })).toBeFocused()
+})
+
+story.describe("on a 393x852 mobile viewport", () => {
+  story.use({ hasTouch: true, isMobile: true, viewport: { width: 393, height: 852 } })
+
+  for (const experimental of [false, true]) {
+    story(
+      `keeps navigation visible and scrolls long prompts and 12 options (${experimental ? "experimental" : "classic"})`,
+      async ({ mount, page }) => {
+        if (experimental) {
+          await page.addInitScript(() =>
+            localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: true } })),
+          )
+        }
+
+        const component = await mount("session-question-switch--long-prompt")
+        expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
+        await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+        const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+        const dismiss = question.getByRole("button", { name: "Dismiss", exact: true })
+        const next = question.getByRole("button", { name: "Next", exact: true })
+        await expect(dismiss).toBeInViewport({ ratio: 1 })
+        await expect(next).toBeInViewport({ ratio: 1 })
+
+        const twelfth = question.getByRole("radio", { name: /12\. Clean slate rebuild/ })
+        await twelfth.scrollIntoViewIfNeeded()
+        await expect(twelfth).toBeInViewport({ ratio: 1 })
+        await twelfth.tap()
+        await expect(twelfth).toBeChecked()
+        await expect(next).toBeInViewport({ ratio: 1 })
+
+        await next.tap()
+
+        const back = question.getByRole("button", { name: "Back", exact: true })
+        const submit = question.getByRole("button", { name: "Submit", exact: true })
+        await expect(back).toBeInViewport({ ratio: 1 })
+        await expect(submit).toBeInViewport({ ratio: 1 })
+
+        const detailsSlot = experimental ? '[data-slot="question-details-frame"]' : '[data-slot="question-details"]'
+
+        const layout = await question.evaluate((root, selector) => {
+          const details = root.querySelector<HTMLElement>(selector)!
+          const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+          const footer = root.querySelector<HTMLElement>('[data-slot="question-footer"]')!
+          const detailsRect = details.getBoundingClientRect()
+          const optionsRect = options.getBoundingClientRect()
+          const footerRect = footer.getBoundingClientRect()
+
+          details.scrollTop = details.scrollHeight
+          const scrolledPrompt = details.scrollTop > 0
+
+          return {
+            promptScrollHeight: details.scrollHeight,
+            promptClientHeight: details.clientHeight,
+            scrolledPrompt,
+            optionsHeight: optionsRect.height,
+            optionsBelowPrompt: optionsRect.top >= detailsRect.bottom - 0.5,
+            footerBelowOptions: footerRect.top >= optionsRect.bottom - 9.5,
+            dockFitsViewport: root.getBoundingClientRect().bottom <= innerHeight + 0.5,
+          }
+        }, detailsSlot)
+
+        expect(layout.promptScrollHeight).toBeGreaterThan(852)
+        expect(layout.promptClientHeight).toBeGreaterThan(48)
+        expect(layout.promptScrollHeight).toBeGreaterThan(layout.promptClientHeight)
+        expect(layout.scrolledPrompt).toBe(true)
+        expect(layout.optionsHeight).toBeGreaterThan(80)
+        expect(layout.optionsBelowPrompt).toBe(true)
+        expect(layout.footerBelowOptions).toBe(true)
+        expect(layout.dockFitsViewport).toBe(true)
+
+        const lastOption = question.getByRole("radio", { name: /Export a diagnostic bundle/ })
+        await lastOption.scrollIntoViewIfNeeded()
+        await expect(lastOption).toBeInViewport({ ratio: 1 })
+        await lastOption.tap()
+        await expect(lastOption).toBeChecked()
+        await expect(submit).toBeInViewport({ ratio: 1 })
+
+        await submit.tap()
+        await expect(question).toBeHidden()
+      },
+    )
+  }
 })
 
 story(

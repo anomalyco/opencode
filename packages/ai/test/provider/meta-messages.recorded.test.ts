@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -21,7 +21,7 @@ for (const mode of ["adaptive", "enabled"] as const) {
     { tags: ["text", "reasoning", mode] },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model,
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 2048 },
@@ -60,7 +60,7 @@ recorded.effect.with(
   { tags: ["tool", "tool-loop", "reasoning"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model,
         prompt:
           "Look up the current weather in Paris using lookup_weather. After receiving the result, report Paris's weather in one short sentence.",
@@ -90,7 +90,8 @@ recorded.effect.with(
       const encrypted = first.message.content.find((part) => part.type === "reasoning")?.providerMetadata?.meta
         ?.redactedData
       expect(encrypted).toEqual(expect.stringMatching(/\S/))
-      const next = LLMRequest.update(request, {
+      const next = {
+        ...request,
         toolChoice: ToolChoice.make("none"),
         messages: [
           ...request.messages,
@@ -99,7 +100,7 @@ recorded.effect.with(
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny" } }),
           ),
         ],
-      })
+      }
       const replay = yield* compileRequest(next)
       expect(replay.body.messages[1].content).toEqual(
         expect.arrayContaining([
