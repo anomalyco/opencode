@@ -109,6 +109,30 @@ kernel(
         const child = f.run(policy, binary, ["child", "opencode-child-argument-canary"])
         expect({ exit: child.exitCode, stderr: child.stderr.toString() }).toMatchObject({ exit: 0 })
         expect(child.stdout.toString()).toBe("marker visible\n")
+        for (const args of [["-n", "hw.ncpu"], ["hw.ncpu"]]) {
+          const result = f.run(policy, "/usr/sbin/sysctl", args)
+          expect({ args, exit: result.exitCode, stderr: result.stderr.toString() }).toMatchObject({
+            exit: 0,
+            stderr: "",
+          })
+          expect(result.stdout.toString()).toMatch(args.length === 2 ? /^\d+\n$/ : /^hw\.ncpu: \d+\n$/)
+        }
+        // sysctl(8) may exit successfully with no output for a denied value.
+        expect(f.run(policy, "/usr/sbin/sysctl", ["-n", "kern.boottime"]).stdout.toString()).toBe("")
+        // Numeric metadata operations: 1=name, 2=next, 4=format, 5=description.
+        for (const [oid, key, allowed] of [
+          [1, "hw.ncpu", true],
+          [4, "hw.ncpu", true],
+          [1, "kern.procargs2", true],
+          [2, "hw.ncpu", false],
+          [5, "hw.ncpu", false],
+        ] as const) {
+          const control = Bun.spawnSync([binary, "metadata", String(oid), key])
+          expect({ oid, key, exit: control.exitCode, stderr: control.stderr.toString() }).toMatchObject({ exit: 0 })
+          const result = f.run(policy, binary, ["metadata", String(oid), key])
+          expect({ oid, key, exit: result.exitCode }).toMatchObject({ exit: allowed ? 0 : 1 })
+          if (!allowed) expect(result.stderr.toString()).toBe("query denied: 1\n")
+        }
       }
     }),
 )
@@ -155,9 +179,7 @@ nodeKernel("Node CPU discovery and worker threads work with the selective sysctl
         .on('message', (value) => { assert.equal(value, 42); console.log('runtime ready'); });
     `
     for (const fullDiskRead of [false, true]) {
-      const policy = yield* Effect.promise(() =>
-        MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }),
-      )
+      const policy = yield* Effect.promise(() => MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }))
       const result = f.run(policy, node, ["-e", program])
       expect({ exit: result.exitCode, signal: result.signalCode, stderr: result.stderr.toString() }).toMatchObject({
         exit: 0,
@@ -182,9 +204,7 @@ with ThreadPoolExecutor(max_workers=2) as executor:
 print("runtime ready")
 `
     for (const fullDiskRead of [false, true]) {
-      const policy = yield* Effect.promise(() =>
-        MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }),
-      )
+      const policy = yield* Effect.promise(() => MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }))
       const result = f.run(policy, python, ["-I", "-B", "-c", program])
       expect({ exit: result.exitCode, stderr: result.stderr.toString() }).toMatchObject({ exit: 0 })
       expect(result.stdout.toString()).toBe("runtime ready\n")
@@ -201,9 +221,7 @@ formatterKernel("installed clang-format runs with the selective sysctl policy", 
     for (const fullDiskRead of [false, true]) {
       const source = path.join(f.host.directory, "hello.c")
       yield* Effect.promise(() => fs.writeFile(source, "int main(){return 0;}\n"))
-      const policy = yield* Effect.promise(() =>
-        MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }),
-      )
+      const policy = yield* Effect.promise(() => MacSandbox.policy(f.host, { fullDiskRead, readableRoots: [runtime] }))
       const result = f.run(policy, formatter, ["--style=LLVM", "-i", source])
       expect({ exit: result.exitCode, stderr: result.stderr.toString() }).toMatchObject({ exit: 0 })
       expect(yield* Effect.promise(() => fs.readFile(source, "utf8"))).toBe("int main() { return 0; }\n")

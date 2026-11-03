@@ -88,6 +88,24 @@ int main(int argc, char **argv) {
         puts("query allowed");
         return 0;
     }
+    if (strcmp(argv[1], "metadata") == 0 && argc == 4) {
+        int target[CTL_MAXNAME];
+        size_t target_count = CTL_MAXNAME - 2;
+        if (sysctlnametomib(argv[3], target + 2, &target_count) != 0) {
+            fprintf(stderr, "target lookup failed: %d\n", errno);
+            return 1;
+        }
+        target[0] = 0;
+        target[1] = atoi(argv[2]);
+        char buffer[4096];
+        size_t size = sizeof(buffer);
+        if (sysctl(target, (unsigned int)target_count + 2, buffer, &size, NULL, 0) != 0) {
+            fprintf(stderr, "query denied: %d\n", errno);
+            return 1;
+        }
+        puts("query allowed");
+        return 0;
+    }
     int mib[4];
     unsigned int count = 0;
     if (strcmp(argv[1], "procargs") == 0 && argc == 4) {

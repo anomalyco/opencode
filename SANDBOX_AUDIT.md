@@ -60,7 +60,7 @@ The Seatbelt profile shares runtime allowances across commands, file helpers, se
 
 | Allowance | Policy and rationale |
 | --- | --- |
-| `sysctl-read` | Allows specific CPU, OS, and resource-query names and the `hw.optional.` and `hw.perflevel` feature and topology prefixes. These queries can disclose machine characteristics, hostname, and load. Process and routing-table prefixes are not granted; unknown keys remain denied. |
+| `sysctl-read` | Allows specific CPU, OS, and resource-query names and the `hw.optional.` and `hw.perflevel` feature and topology prefixes. These queries can disclose machine characteristics, hostname, and load. The `sysctl.name.` and `sysctl.oidfmt.` metadata prefixes enable ordinary `sysctl` command output, but can disclose some names and types of otherwise denied keys; partial name enumeration is possible. Description and next-entry metadata are not granted. Process and routing-table values remain denied unless explicitly allowed. |
 | `process-info*` | Explicitly denies process inspection by default, with an allowance for processes in the same sandbox. The explicit denial is necessary because Seatbelt's default disposition can otherwise permit access to another same-user process's arguments and environment via numeric `KERN_PROCARGS2`. Self and child inspection remain available. |
 | `sysctl-write` | No grant. |
 | Execution, children, and signals | Allows process execution and fork, and signals and inspection within the sandbox. Descendants inherit confinement. Signals to processes outside the sandbox are denied. Process-count, CPU, and memory quotas are not implemented. |
@@ -70,3 +70,5 @@ The Seatbelt profile shares runtime allowances across commands, file helpers, se
 | Runtime file reads | Allows selected system and Homebrew roots. `/private/etc` and `/Library/Preferences` support runtime compatibility but are not guaranteed secret-free. Homebrew configuration and service-data roots do not receive default grants. |
 
 The native regression fixture uses canaries in a test-owned process and positive controls outside the sandbox. Tests cover named and numeric sysctl queries, host argument and environment inspection, host signals, self and child inspection, and sysctl writes in both read modes. Runtime tests also exercise compilation, account lookup, and supported language runtimes and formatters. Optional cases skip when their runtime or Seatbelt is unavailable; `bun run test:sandbox` in `packages/core` requires the enforcement cases to run without skips.
+
+Apple's [sysctl implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_newsysctl.c) identifies the metadata lookups as private interfaces and returns an entry's name, kind and format rather than its value. The policy relies on Seatbelt to distinguish these metadata requests from value reads; regression tests verify that distinction against the running kernel.

@@ -27,6 +27,8 @@ describe("macOS sandbox launch", () => {
     expect(expanded.args[1]).not.toContain("(allow sysctl-write")
     expect(expanded.args[1]).toContain('(sysctl-name "hw.ncpu")')
     expect(expanded.args[1]).toContain('(sysctl-name-prefix "hw.optional.")')
+    expect(expanded.args[1]).toContain('(sysctl-name-prefix "sysctl.name.")')
+    expect(expanded.args[1]).toContain('(sysctl-name-prefix "sysctl.oidfmt.")')
     expect(expanded.args[1]).not.toContain('(sysctl-name-prefix "kern.proc.')
     expect(expanded.args[1]).not.toContain('(sysctl-name-prefix "net.')
     expect(expanded.args[1]).toContain('(allow file-write* (subpath (param "WRITE_0")))')

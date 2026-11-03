@@ -205,6 +205,11 @@ for (const fullDiskRead of [false, true]) {
   const network = `BUN_BE_BUN=1 '${binary}' --config=/dev/null --no-env-file --no-addons --no-macros --eval 'fetch(${JSON.stringify(new URL("/probe", provider.url).href)}).then(() => { console.log("NETWORK_UNEXPECTED"); process.exitCode=1 }, () => console.log("NETWORK_BLOCKED"))'`
   await run(f, [
     { name: "shell", input: { command: 'test -z "$SMOKE_SECRET_TOKEN" && printf SHELL_OK' }, expect: "SHELL_OK" },
+    {
+      name: "shell",
+      input: { command: 'count=$(sysctl -n hw.ncpu) && test "$count" -gt 0 && printf SYSCTL_WORKS' },
+      expect: "SYSCTL_WORKS",
+    },
     { name: "write", input: { path: "sample.txt", content: "NATIVE_WRITE_CANARY\n" } },
     { name: "read", input: { path: "sample.txt" }, expect: "NATIVE_WRITE_CANARY" },
     { name: "edit", input: { path: "sample.txt", oldString: "NATIVE_WRITE_CANARY", newString: "NATIVE_EDIT_CANARY" } },

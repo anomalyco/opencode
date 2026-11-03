@@ -257,6 +257,10 @@ export function launch(
     // heterogeneous CPU/cache topology, not process or network state.
     '  (sysctl-name-prefix "hw.optional.")',
     '  (sysctl-name-prefix "hw.perflevel")',
+    // sysctl(8) looks up numeric OID names and formats before reading a value.
+    // These metadata queries can reveal names/types even when the value is denied.
+    '  (sysctl-name-prefix "sysctl.name.")',
+    '  (sysctl-name-prefix "sysctl.oidfmt.")',
     ")",
     '(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))',
     // These mutating fcntls bypass file-write checks even on a read-only descriptor.
