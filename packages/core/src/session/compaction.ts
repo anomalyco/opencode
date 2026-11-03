@@ -997,10 +997,6 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
     tools: context.tools,
     initial: context.initial,
     messages,
-    loadedSkills: SessionSkills.loaded(
-      messages,
-      Permission.merge(context.agent.info.permissions, context.session.permissions ?? []),
-    ),
   })
 
 /**

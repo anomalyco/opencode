@@ -42,7 +42,6 @@ import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
-import { SessionSkills } from "./skills.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
@@ -110,7 +109,6 @@ export const baseTranscript = (input: {
   readonly tools: Tool.Snapshot
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
-  readonly loadedSkills?: ReadonlyArray<SessionSkills.Loaded>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
@@ -125,7 +123,6 @@ export const baseTranscript = (input: {
         ...SystemPart.make(Instructions.join(input.initial)),
         metadata: { experimental: { instructions: input.initial } },
       },
-      ...(input.loadedSkills?.length ? [SystemPart.make(SessionSkills.render(input.loadedSkills))] : []),
     ].filter((part) => part.text.length > 0),
     messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
   }

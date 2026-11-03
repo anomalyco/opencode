@@ -1477,9 +1477,10 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests).toHaveLength(1)
-    const system = s.requests[0]?.system.map((part) => part.text).join("\n")
-    expect(system).toContain("<loaded_skills>")
-    expect(system).toContain("<skill>Effect</skill>")
+    // The reminder rides at the tail so the cached system prefix and earlier messages stay reusable.
+    expect(JSON.stringify(s.requests[0]?.messages.at(-1))).toContain("<loaded_skills>")
+    expect(JSON.stringify(s.requests[0]?.messages.at(-1))).toContain("<skill>Effect</skill>")
+    expect(s.requests[0]?.system.map((part) => part.text).join("\n")).not.toContain("<loaded_skills>")
   })
 
   scenario("marks the initial instruction sync as baseline metadata", function* (s) {

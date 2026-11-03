@@ -260,11 +260,14 @@ const layer = Layer.effect(
           tools: loaded.tools,
           initial: loaded.initial,
           messages: loaded.messages,
-          loadedSkills: SessionSkills.loaded(
+        })
+        const messages = SessionSkills.remind(
+          transcript.messages,
+          SessionSkills.loaded(
             loaded.messages,
             Permission.merge(loaded.agent.info.permissions, loaded.session.permissions ?? []),
           ),
-        })
+        )
         const prepared = yield* context.request
           .primary({
             session: loaded.session,
@@ -272,9 +275,7 @@ const layer = Layer.effect(
             model: loaded.model,
             tools: loaded.tools,
             system: transcript.system,
-            messages: stepLimitReached
-              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
-              : transcript.messages,
+            messages: stepLimitReached ? [...messages, Message.assistant(MAX_STEPS_PROMPT)] : messages,
             // Keep tool definitions on the final Step to preserve the provider's cached prefix.
             toolChoice: stepLimitReached ? "none" : undefined,
             webSocket: "session",

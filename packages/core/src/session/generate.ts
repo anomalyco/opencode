@@ -45,10 +45,6 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       initial: history.initial,
       messages: history.messages,
-      loadedSkills: SessionSkills.loaded(
-        history.messages,
-        Permission.merge(selection.agent.info.permissions, selection.session.permissions ?? []),
-      ),
     })
     const prepared = yield* context.request.generate({
       session: selection.session,
@@ -57,7 +53,13 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       system: transcript.system,
       messages: [
-        ...transcript.messages,
+        ...SessionSkills.remind(
+          transcript.messages,
+          SessionSkills.loaded(
+            history.messages,
+            Permission.merge(selection.agent.info.permissions, selection.session.permissions ?? []),
+          ),
+        ),
         ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
         Message.user(input.prompt),
       ],

@@ -363,7 +363,7 @@ it.effect(
 )
 
 it.effect(
-  "carries loaded skills in the generation system prompt",
+  "reminds the model about skills already in the conversation",
   () =>
     Effect.gen(function* () {
       requests.length = 0
@@ -381,9 +381,10 @@ it.effect(
         Effect.provideService(Instance.Service, instances),
       )
 
-      const system = requests[0]?.system.map((part) => part.text).join("\n")
-      expect(system).toContain("<loaded_skills>")
-      expect(system).toContain("<skill>Effect</skill>")
+      const reminder = requests[0]?.messages.find((message) =>
+        JSON.stringify(message).includes("<loaded_skills>"),
+      )
+      expect(JSON.stringify(reminder)).toContain("<skill>Effect</skill>")
     }),
   { timeout: 15_000 },
 )

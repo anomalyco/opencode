@@ -343,3 +343,60 @@ export const MediaInfo = Schema.Union([
   Idle,
 ]).annotate({ identifier: "Session.Message.MediaInfo" })
 export type MediaInfo = Exclude<Info, User> | MediaUser
+
+/** A skill already present in a conversation, either attached to a prompt or loaded by the `skill` tool. */
+export interface LoadedSkill {
+  readonly id: string
+  readonly name: string
+}
+
+/** The message fields the derivation reads, so stored messages and their unbranded client copies both fit. */
+type ConversationMessage = {
+  readonly type: string
+  readonly skill?: string
+  readonly name?: string
+  readonly skills?: ReadonlyArray<{ readonly id: string; readonly name: string }>
+  readonly content?: ReadonlyArray<{
+    readonly type: string
+    readonly name?: string
+    readonly state?: { readonly status: string; readonly input?: unknown; readonly metadata?: unknown }
+  }>
+}
+
+/**
+ * Skills a conversation already contains. Core and the TUI share this derivation so the model prompt and the sidebar
+ * cannot disagree. Subagents and compacted history only see the skills in their own messages.
+ */
+export const loadedSkills = (messages: ReadonlyArray<ConversationMessage>): LoadedSkill[] => {
+  const found = new Map<string, string>()
+  const add = (id: string, name: string) => {
+    if (!found.has(id)) found.set(id, name)
+  }
+  for (const message of messages) {
+    if (message.type === "skill" && message.skill !== undefined && message.name !== undefined) {
+      add(message.skill, message.name)
+      continue
+    }
+    if (message.type === "user") {
+      for (const skill of message.skills ?? []) add(skill.id, skill.name)
+      continue
+    }
+    if (message.type !== "assistant") continue
+    for (const item of message.content ?? []) {
+      if (item.type !== "tool" || item.name !== "skill" || item.state?.status !== "completed") continue
+      const skill = skillOf(item.state)
+      if (skill) add(skill.id, skill.name)
+    }
+  }
+  return Array.from(found, ([id, name]) => ({ id, name }))
+}
+
+/** A completed `skill` call names the skill in its input and its display name in its metadata. */
+const skillOf = (state: { readonly input?: unknown; readonly metadata?: unknown }): LoadedSkill | undefined => {
+  if (typeof state.input !== "object" || state.input === null || !("id" in state.input)) return
+  const id = state.input.id
+  if (typeof id !== "string") return
+  const metadata = state.metadata
+  const name = typeof metadata === "object" && metadata !== null && "name" in metadata ? metadata.name : undefined
+  return { id, name: typeof name === "string" && name.length > 0 ? name : id }
+}
