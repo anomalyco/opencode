@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:azure",
+      "provider:azure"
+    ],
+    "name": "azure/chat-streams-text-from-a-foundry-models-url",
+    "recordedAt": "2026-10-31T17:08:19.461Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://aiden-azury-group.services.ai.azure.com/models/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"Kimi-K2.5\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":null,\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"The\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" user wants me to\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" reply with exactly one\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" word: \\\"hello\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"\\\". This\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" is a simple\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" request\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\". I should just\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" output the\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" word \\\"hello\\\"\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" without any additional text\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\", punctuation, or\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" formatting.\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":null,\"content\":\"hello\"},\"logprobs\":null,\"finish_reason\":null,\"matched_stop\":null}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":null},\"logprobs\":null,\"finish_reason\":\"stop\",\"matched_stop\":163586}]}\n\ndata: {\"id\":\"a810eac469274a3886b0b40df2d8f1e5\",\"object\":\"chat.completion.chunk\",\"created\":1793466499,\"model\":\"Kimi-K2.5\",\"choices\":[],\"usage\":{\"prompt_tokens\":15,\"total_tokens\":57,\"completion_tokens\":42,\"prompt_tokens_details\":null,\"reasoning_tokens\":40}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

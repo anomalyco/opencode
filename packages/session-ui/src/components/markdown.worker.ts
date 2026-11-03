@@ -3,7 +3,12 @@
 import { codeToTokens, isSupportedLanguage, LiveTokenizer, type ThemedToken } from "@pierre/highlights"
 import { createMarkdownParser } from "@opencode/ui/context/marked-parser"
 import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
-import type { MarkdownToken, MarkdownWorkerRequest, MarkdownWorkerResponse } from "./markdown-worker-protocol"
+import {
+  diffProjectionBlocks,
+  type MarkdownToken,
+  type MarkdownWorkerRequest,
+  type MarkdownWorkerResponse,
+} from "./markdown-worker-protocol"
 import { createLatestWorkerQueue } from "./markdown-worker-queue"
 import { project, type Projection } from "./markdown-stream"
 
@@ -64,9 +69,15 @@ async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>)
 
 async function runProject(request: Extract<MarkdownWorkerRequest, { type: "project" }>) {
   try {
-    const projection = project(projections.get(request.key), request.text, request.live)
+    const previous = projections.get(request.key)
+    const projection = project(previous, request.text, request.live)
     projections.set(request.key, projection)
-    post({ type: "project", id: request.id, key: request.key, projection })
+    post({
+      type: "project",
+      id: request.id,
+      key: request.key,
+      ...diffProjectionBlocks(previous?.blocks, projection.blocks),
+    })
   } catch (error) {
     post({
       type: "error",
@@ -164,11 +175,7 @@ function token(value: ThemedToken): MarkdownToken {
 
   return [
     value.content,
-    [
-      value.color && `color:${value.color}`,
-      fontStyle & 1 && "font-style:italic",
-      fontStyle & 2 && "font-weight:bold",
-    ]
+    [value.color && `color:${value.color}`, fontStyle & 1 && "font-style:italic", fontStyle & 2 && "font-weight:bold"]
       .filter(Boolean)
       .join(";"),
   ]

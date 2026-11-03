@@ -2,7 +2,6 @@ export function createHistoryPrepend(input: {
   sessionID: () => string
   more: (sessionID: string) => boolean
   loadMore: (sessionID: string) => Promise<void>
-  height: () => number
   afterLayout: (continuation: () => void) => void
   active: (sessionID: string) => boolean
   scrollBy: (amount: number) => void
@@ -23,7 +22,6 @@ export function createHistoryPrepend(input: {
       if (!input.more(sessionID)) return false
       const current = { scrollBy, continuation }
       pending = current
-      const before = input.height()
       void input.loadMore(sessionID).then(
         () =>
           input.afterLayout(() => {
@@ -31,7 +29,7 @@ export function createHistoryPrepend(input: {
             const after = pending.after
             pending = undefined
             if (!input.active(sessionID)) return
-            input.scrollBy(input.height() - before + current.scrollBy)
+            input.scrollBy(current.scrollBy)
             current.continuation?.()
             after?.()
           }),
@@ -52,7 +50,7 @@ export function createHistoryPrepend(input: {
       },
       after(continuation: () => void) {
         if (!pending) return continuation()
-        // A jump supersedes deferred scrolling, but must wait for anchor compensation.
+        // A jump supersedes deferred scrolling, but must wait until the prepended page is laid out.
         pending.scrollBy = 0
         pending.after = continuation
       },

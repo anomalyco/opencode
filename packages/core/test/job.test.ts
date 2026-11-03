@@ -1,14 +1,20 @@
 import { describe, expect } from "bun:test"
+import { Database } from "@opencode/core/database/database"
+import jobMigration from "@opencode/core/database/migration/20261030054400_job"
 import { Job } from "@opencode/core/job"
-import { KV } from "@opencode/core/kv"
+import { JobTable } from "@opencode/core/job/sql"
+import { KVTable } from "@opencode/core/kv/sql"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { eq, like } from "drizzle-orm"
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, KV.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, Database.node, Global.node])))
 
 describe("Job", () => {
   it.live("tracks process-local work through explicit observation", () =>
@@ -448,6 +454,84 @@ describe("Job", () => {
       yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
       // The abandoned in-memory registry is not a durable observation channel.
       expect((yield* jobs.get(job.id))?.status).toBe("running")
+    }),
+  )
+
+  it.live("cancels running session jobs and removes unacknowledged SQLite job rows on cancelSession", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const db = (yield* Database.Service).db
+      const sessionID = SessionSchema.ID.make("ses_cleanup_owner")
+      const otherSessionID = SessionSchema.ID.make("ses_cleanup_other")
+      const interrupted = yield* Deferred.make<void>()
+
+      const owned = yield* jobs.start({
+        id: "job_cleanup_owned",
+        type: "shell",
+        recovery: { kind: "shell", sessionID, shellID: "job_cleanup_owned", command: "bun run dev" },
+        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
+      })
+      const other = yield* jobs.start({
+        id: "job_cleanup_other",
+        type: "shell",
+        recovery: { kind: "shell", sessionID: otherSessionID, shellID: "job_cleanup_other", command: "bun test" },
+        run: Effect.succeed("kept"),
+      })
+      yield* jobs.background(owned.id)
+      yield* jobs.background(other.id)
+      yield* jobs.wait({ id: other.id })
+
+      const cancelled = yield* jobs.cancelSession(sessionID)
+      expect(cancelled).toMatchObject([{ id: owned.id, status: "cancelled" }])
+      yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
+
+      expect(yield* db.select().from(JobTable).where(eq(JobTable.session_id, sessionID)).all()).toEqual([])
+      const remaining = yield* jobs.pendingBackground
+      expect(remaining).toMatchObject([{ id: other.id, status: "completed", output: "kept" }])
+      if (remaining[0]) yield* jobs.completeBackground(remaining[0].notificationID)
+    }),
+  )
+
+  it.live("migrates legacy kv job.background/* markers into the job table", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const jobs = yield* Job.Service
+      const notificationID = SessionMessage.ID.create()
+      const sessionID = SessionSchema.ID.make("ses_migrated")
+
+      yield* db.run("DROP TABLE `job`")
+      yield* db
+        .insert(KVTable)
+        .values({
+          key: `job.background/${notificationID}`,
+          value: {
+            id: "shell_legacy",
+            notificationID,
+            recovery: {
+              kind: "shell",
+              sessionID,
+              shellID: "shell_legacy",
+              command: "bun test",
+            },
+            status: "completed",
+            output: "all green",
+          },
+        })
+        .run()
+
+      yield* db.transaction((tx) => jobMigration.up(tx))
+
+      expect(yield* db.select().from(KVTable).where(like(KVTable.key, "job.background/%")).all()).toEqual([])
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        {
+          id: "shell_legacy",
+          notificationID,
+          status: "completed",
+          output: "all green",
+          recovery: { kind: "shell", sessionID, shellID: "shell_legacy", command: "bun test" },
+        },
+      ])
+      yield* jobs.completeBackground(notificationID)
     }),
   )
 })

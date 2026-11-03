@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
+import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { TodoTool } from "@opencode/core/tool/plugin/todo"
@@ -22,7 +23,9 @@ const todos = [
   { content: "Rewrite everything", status: "cancelled" },
 ] as const
 
-const it = testEffect(AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough)]))
+const it = testEffect(
+  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
+)
 
 const setup = (experimental: ConfigExperimental.Info | undefined) =>
   Effect.gen(function* () {

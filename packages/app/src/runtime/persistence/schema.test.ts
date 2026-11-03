@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Predicate, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { Persistence } from "./schema"
 
 describe("persistence schemas", () => {
@@ -87,7 +87,9 @@ describe("persistence schemas", () => {
     })
 
     const decode = Schema.decodeUnknownSync(schema)
-    expect(decode({ general: { expanded: true, theme: "dark", nested: { keep: true } }, other: { flag: true } })).toEqual({
+    expect(
+      decode({ general: { expanded: true, theme: "dark", nested: { keep: true } }, other: { flag: true } }),
+    ).toEqual({
       general: { mode: "full", theme: "dark", nested: { keep: true } },
       other: { flag: true },
     })
@@ -169,7 +171,7 @@ describe("persistence schemas", () => {
     first.changed = true
     expect(decode(undefined)).toEqual({})
 
-    const recover = Persistence.record(Persistence.optional(Schema.Boolean))
+    const recover = Persistence.record(Schema.Boolean.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))))
     const state = Schema.decodeUnknownSync(recover)({ valid: true, invalid: "true" })
     expect(state).toEqual({ valid: true })
     expect(Schema.encodeSync(recover)(state)).toEqual({ valid: true })

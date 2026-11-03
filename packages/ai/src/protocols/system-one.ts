@@ -6,7 +6,7 @@ import {
   type DecisionModelCompatibility,
   type DecisionPart,
   type DecisionQuestion,
-  type DecisionRequestFor,
+  type DecisionRequest,
 } from "../decision.js"
 import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
@@ -61,10 +61,7 @@ const ID = "system-one"
 const NAME = "System One"
 
 /** The System One body without `model`; media goes where the model's `mediaInput` says, else `fallback`. */
-export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
-  request: DecisionRequestFor,
-  fallback: MediaInput,
-) {
+export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (request: DecisionRequest, fallback: MediaInput) {
   const questions = yield* encodeQuestions(request.questions)
   const placed = yield* placeMedia(request, request.model.compatibility?.mediaInput ?? fallback)
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
@@ -105,7 +102,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     ] as const)
   }).pipe(Effect.map(Object.fromEntries))
 
-const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, mediaInput: MediaInput) {
+const placeMedia = Effect.fnUntraced(function* (request: DecisionRequest, mediaInput: MediaInput) {
   const parts = request.input
   const unsupported = (asset: Media.Asset, accepted: string) =>
     new AIError({
@@ -200,7 +197,7 @@ const stateItem = (
 /** Map System One's answers, keyed by question name, back to the request's question order. */
 export const toResponse = (
   data: Response,
-  request: DecisionRequestFor,
+  request: DecisionRequest,
   providerMetadataKey: string,
   invalid: (message: string) => AIError,
 ) => {

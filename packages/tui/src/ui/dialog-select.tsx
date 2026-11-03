@@ -20,7 +20,7 @@ import {
 } from "./dialog"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
-import { useConfig, useNewDesigns } from "../config"
+import { useConfig, useCursorStyle, useNewDesigns } from "../config"
 import { moveSelection, reconcileSelection } from "./select-controller"
 
 export interface DialogSelectProps<T> {
@@ -143,6 +143,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
+  const cursorStyle = useCursorStyle()
   const newDesigns = useNewDesigns()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const renderer = useRenderer()
@@ -653,6 +654,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const searchInTitle = () => newDesigns() && props.searchInTitle === true && props.renderFilter !== false
 
+  // Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
+  // placeholder's first letter. Until the user types, match the highlighted row so that letter shows through.
+  const searchCursorColor = () => {
+    if (!newDesigns()) return theme.text.formfield.focused
+    return store.filter.length > 0 ? theme.text.base : theme.background.action.primary.focused
+  }
+
   const searchInput = () => (
     <input
       flexGrow={1}
@@ -664,8 +672,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })
       }}
       focusedBackgroundColor={theme.background.formfield.focused}
-      cursorColor={newDesigns() ? theme.text.base : theme.text.formfield.focused}
-      cursorStyle={config.cursor}
+      cursorColor={searchCursorColor()}
+      cursorStyle={cursorStyle()}
       focusedTextColor={newDesigns() ? theme.text.formfield.base : theme.text.formfield.focused}
       ref={(r) => {
         input = r

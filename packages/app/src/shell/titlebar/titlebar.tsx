@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, Match, onCleanup, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
@@ -28,8 +28,9 @@ import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionTabTitle } from "./tab-title"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
-import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
@@ -52,12 +53,9 @@ const minTitlebarZoom = 0.25
 
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 
-const macTrafficLightsBaseWidth = 68
+const macTrafficLightsBaseWidth = 74
 
 const macTrafficLightsTopClearance = 28
-
-// Matches the desktop window's `trafficLightPosition`.
-const macTrafficLightsDefaultPosition = { x: 14, y: 14 }
 
 // iOS blurs page content just below the status bar in Home Screen web apps, so with a top safe area the phone
 // titlebar row stays 16px clear of it, as ChatGPT's phone header does. Without one, 8px matches the content gap below.
@@ -94,13 +92,41 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
-  // The vertical sidebar header's center line scales with zoom, so the 14pt traffic lights follow it. The horizontal
-  // titlebar stays at the window's default position.
+  let titlebarRow!: HTMLDivElement
+
+  // Native buttons stay 14pt tall while the renderer scales. The tabs center in the row's padded content box.
   createEffect(() => {
     if (!mac()) return
-    void platform.setTrafficLightsPosition?.(
-      macVerticalTabs() ? macVerticalTrafficLights(zoom()) : macTrafficLightsDefaultPosition,
-    )
+
+    const scale = zoom()
+
+    if (macVerticalTabs()) {
+      void platform.setTrafficLightsPosition?.(macVerticalTrafficLights(scale))
+
+      return
+    }
+
+    // The native buttons stay at the window's top edge when a narrow window moves the titlebar row to the bottom.
+    if (bottom()) {
+      void platform.setTrafficLightsPosition?.({ x: 14, y: 14 })
+
+      return
+    }
+
+    const frame = requestAnimationFrame(() => {
+      const bounds = titlebarRow.getBoundingClientRect()
+
+      const style = getComputedStyle(titlebarRow)
+
+      void platform.setTrafficLightsPosition?.({
+        x: 14,
+        y:
+          (bounds.top + (bounds.height + parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / 2) * scale -
+          7,
+      })
+    })
+
+    onCleanup(() => cancelAnimationFrame(frame))
   })
 
   const [history, setHistory] = createStore<{
@@ -450,19 +476,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   data-titlebar-tab-action
                   data-action="vertical-tabs-home"
                   data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
                   onClick={toggleHome}
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
                 >
                   <Icon name="grid-plus" class="shrink-0" />
                   <span class="min-w-0 truncate">{language.t("home.title")}</span>
-                  <span
-                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-                    aria-hidden="true"
-                  >
-                    <bdi dir="ltr">{command.keybind("home.toggle")}</bdi>
-                  </span>
+                  <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+                    <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" dir="ltr" />
+                  </div>
                 </button>
               </Show>
             )
@@ -497,17 +520,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   type="button"
                   data-titlebar-tab-action
                   data-action="vertical-tabs-search"
-                  class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
+                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint"
                   onClick={() => command.trigger("sessions.search")}
                 >
                   <Icon name="magnifying-glass" class="shrink-0" />
                   <span class="min-w-0 truncate">{language.t("command.session.search")}</span>
-                  <span
-                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-                    aria-hidden="true"
-                  >
-                    <bdi dir="ltr">{command.keybind("sessions.search")}</bdi>
-                  </span>
+                  <div class="ms-auto hidden shrink-0 group-hover:block group-focus-visible:block" aria-hidden="true">
+                    <Keybind keys={command.keybindParts("sessions.search")} variant="neutral" dir="ltr" />
+                  </div>
                 </button>
               </Show>
             )
@@ -528,6 +548,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 id: "sessions.search",
                 title: language.t("command.session.search"),
                 category: language.t("command.category.session"),
+                keybind: "mod+shift+f",
                 onSelect: async () => {
                   const { DialogSessionSearch } = await import("@/shell/commands/session-search")
                   void dialog.show(() => <DialogSessionSearch />)
@@ -583,6 +604,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
 
+            // The current tab's project avatar stays put; while it works, its activity ring shows beside the tab count.
+            const currentStatus = useSessionTabAvatarState(
+              () => currentTab()?.server,
+              () => session()?.id ?? "",
+              () => true,
+            )
+
             const currentProject = createMemo(() => {
               const tab = currentTab()
               const value = session()
@@ -615,13 +643,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             return (
               <div
+                ref={titlebarRow}
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows() && !mobileTop(),
                   "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
-                  "pl-4": macTrafficLights(),
-                  // Center the 20px app icon over the sidebar's 16px icon column.
-                  "ps-3.5": windows(),
+                  "pl-2.5": macTrafficLights(),
+                  // The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows.
+                  "ps-[calc(var(--sidebar-inset-start)-2px)]": windows() && !!props.verticalTabs,
+                  "ps-3.5": windows() && !props.verticalTabs,
                 }}
               >
                 <Show when={windows() || linux()}>
@@ -666,26 +696,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   tab().type === "draft" ? (
                                     <Icon name="edit" />
                                   ) : (
-                                    <Show
-                                      when={preparing()}
-                                      fallback={
-                                        <span
-                                          class="block size-4 rounded-[3px] border border-v2-border-border-muted"
-                                          aria-hidden="true"
-                                        />
-                                      }
-                                    >
-                                      <SessionProgressIndicatorV2 />
-                                    </Show>
+                                    <span
+                                      class="block size-4 rounded-[3px] border border-v2-border-border-muted"
+                                      aria-hidden="true"
+                                    />
                                   )
                                 }
                               >
                                 {(value) => (
-                                  <SessionTabAvatar
+                                  <SessionTabAvatarView
                                     project={currentProject()}
                                     directory={value().location.directory}
-                                    sessionId={value().id}
-                                    server={tab().server}
+                                    unread={currentStatus.unread() && !currentStatus.loading()}
                                   />
                                 )}
                               </Show>
@@ -695,6 +717,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         <span data-slot="mobile-tab-title" dir="auto" class="min-w-0 flex-1 truncate text-start">
                           {currentTitle()}
                         </span>
+                        <Show when={preparing() || currentStatus.loading()}>
+                          <ActivityRing />
+                        </Show>
                         <span class="shrink-0 text-v2-text-text-muted">{tabsStore.length}</span>
                       </MobileDrawerTrigger>
                       <MobileDrawerContent>
@@ -818,8 +843,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 data-home={homeInSidebarHeader() ? "" : undefined}
                                 class="flex w-full shrink-0 gap-2"
                                 classList={{
-                                  "items-start pt-2.5 pb-1": homeInSidebarHeader(),
-                                  "mb-2 h-12 items-center": !homeInSidebarHeader(),
+                                  "items-start pt-2.5 pb-[3px]": homeInSidebarHeader(),
+                                  "mb-0.5 h-12 items-center": !homeInSidebarHeader(),
                                 }}
                                 style={{
                                   "min-height": macVerticalTabs()
@@ -829,11 +854,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 data-tauri-drag-region
                               >
                                 <Show when={macTrafficLights()}>
-                                  {/* The sidebar's 18px start padding already covers part of the traffic lights. */}
+                                  {/* The sidebar's start padding already covers part of the traffic lights. */}
                                   <div
                                     class="shrink-0"
                                     style={{
-                                      width: `calc(${macVerticalTrafficLights(zoom()).width / zoom()}px - 18px)`,
+                                      width: `calc(${macVerticalTrafficLights(zoom()).width / zoom()}px - var(--sidebar-inset-start))`,
                                     }}
                                     aria-hidden="true"
                                   />
@@ -841,19 +866,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <Show when={homeInSidebarHeader()} fallback={<div class="flex-1" />}>
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
                                 </Show>
-                                {/* Optically aligns the toggle's glyph with the selected session's end edge. */}
-                                <div class="-me-0.5 flex shrink-0">
-                                  <SidebarToggle handoff="out" />
-                                </div>
+                                <SidebarToggle handoff="out" />
                               </div>
                             </Show>
-                            <div class="flex w-full shrink-0 flex-col gap-1">
+                            <div class="flex w-full shrink-0 flex-col gap-[3px]">
                               <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
                               {searchButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical
                                 onNewTab={openNewTab}
-                                keybind={command.keybind("tab.new")}
+                                keybind={command.keybindParts("tab.new")}
                               />
                             </div>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />

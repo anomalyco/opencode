@@ -48,7 +48,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { reviewGlyphFill, SessionReviewToggle } from "./header/session-header-actions"
 import { createTimelineCache } from "./timeline/cache"
-import { createPanelMotion, holdLandingWidth, panelOpacity } from "@/shell/panel-motion"
+import { createPanelMotion, holdLandingWidth, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 
 export function SessionScreenView(props: { session: SessionModel }) {
   // Link handling for the rest of the screen; each cached timeline provides its own for its session.
@@ -314,7 +314,7 @@ function SessionScreenContent(props: {
             pinned={timeline.view.pinned()}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
-            setContentRef={timeline.view.setContentRef}
+            onContentResize={timeline.view.contentResized}
             bottomInset={timeline.inset()}
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
@@ -322,6 +322,7 @@ function SessionScreenContent(props: {
             setRevealPart={timeline.view.setRevealPart}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
+            setPage={timeline.view.setPage}
             search={
               <Show when={active()}>
                 <TimelineSearchBar controller={timelineSearch} />
@@ -460,7 +461,7 @@ function SessionScreenContent(props: {
           {/* Keep the control outside panel animations. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
-              class="absolute end-3 top-0 z-30 h-12 flex items-center"
+              class="absolute end-[var(--session-header-inset-end,12px)] top-0 z-30 h-12 flex items-center"
               data-slot="session-review-toggle"
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
@@ -506,6 +507,7 @@ function SessionScreenContent(props: {
                   screen.size.touch()
                   session.layout.view().session.resize(width)
                 }}
+                onDraggingChange={setPanelResizing}
               />
             </div>
           </div>
@@ -567,6 +569,7 @@ function SessionScreenContent(props: {
                   screen.size.touch()
                   session.layout.view().bottom.resize(height)
                 }}
+                onDraggingChange={setPanelResizing}
               />
             </div>
             <section

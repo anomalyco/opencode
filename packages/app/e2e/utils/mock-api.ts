@@ -1,5 +1,6 @@
 import { Predicate, Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
+import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { Pty } from "@opencode/schema/pty"
 import { Worktree } from "@opencode/schema/worktree"
 
@@ -69,6 +70,18 @@ export class MockPtyNotFound extends Schema.TaggedError<MockPtyNotFound>()("PtyN
   message: Schema.String,
 }) {}
 
+// The server's error when a service it needs, such as the opencode-pty daemon, cannot run.
+export class MockServiceUnavailable extends Schema.TaggedError<MockServiceUnavailable>()("ServiceUnavailableError", {
+  message: Schema.String,
+  service: Schema.optional(Schema.String),
+}) {}
+
+// The server's error for a feature the connected opencode-pty daemon lacks, such as `rename`.
+export class MockPtyFeatureUnsupported extends Schema.TaggedError<MockPtyFeatureUnsupported>()(
+  "PtyFeatureUnsupportedError",
+  { feature: Schema.String, message: Schema.String },
+) {}
+
 // The server's error for a request without its password.
 export class MockUnauthorized extends Schema.TaggedError<MockUnauthorized>()("UnauthorizedError", {
   message: Schema.String,
@@ -81,7 +94,16 @@ export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("Mock
 
 const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
 
-const PtyMissing = [MockNotFound.pipe(HttpApiSchema.status(404)), MockPtyNotFound.pipe(HttpApiSchema.status(404))]
+const PersistentPtyUnavailable = MockServiceUnavailable.pipe(HttpApiSchema.status(503))
+
+const PersistentPtyMissing = [MockPtyNotFound.pipe(HttpApiSchema.status(404)), PersistentPtyUnavailable]
+
+// `PersistentPty.UpdateInput` once terminal renaming lands; the schema still requires `size`.
+const PersistentPtyUpdate = Schema.Struct({
+  attachmentID: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.Struct({ cols: Schema.Number, rows: Schema.Number })),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+})
 
 const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("info", "/api/info", { success: Json }))
@@ -250,45 +272,54 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.get("ptyList", "/api/pty", {
+    HttpApiEndpoint.get("persistentPtyList", "/api/experimental/session/:sessionID/terminal", {
+      params: SessionParams,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PersistentPtyUnavailable,
     }),
   )
   .add(
-    HttpApiEndpoint.post("ptyCreate", "/api/pty", {
-      payload: Pty.CreateInput,
+    HttpApiEndpoint.post("persistentPtyCreate", "/api/experimental/session/:sessionID/terminal", {
+      params: SessionParams,
+      payload: PersistentPty.CreateInput,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PersistentPtyUnavailable,
     }),
   )
   .add(
-    HttpApiEndpoint.get("ptyGet", "/api/pty/:ptyID", {
+    HttpApiEndpoint.get("persistentPtyGet", "/api/experimental/persistent-pty/:ptyID", {
       params: PtyParams,
       success: Json,
-      error: PtyMissing,
+      error: PersistentPtyMissing,
     }),
   )
   .add(
-    HttpApiEndpoint.put("ptyUpdate", "/api/pty/:ptyID", {
+    HttpApiEndpoint.put("persistentPtyUpdate", "/api/experimental/persistent-pty/:ptyID", {
       params: PtyParams,
-      payload: Pty.UpdateInput,
+      payload: PersistentPtyUpdate,
       success: Json,
-      error: PtyMissing,
+      error: [...PersistentPtyMissing, MockPtyFeatureUnsupported.pipe(HttpApiSchema.status(501))],
     }),
   )
   .add(
-    HttpApiEndpoint.delete("ptyRemove", "/api/pty/:ptyID", {
+    HttpApiEndpoint.delete("persistentPtyRemove", "/api/experimental/persistent-pty/:ptyID", {
       params: PtyParams,
       success: NoContent,
-      error: PtyMissing,
+      error: PersistentPtyMissing,
     }),
   )
   .add(
-    HttpApiEndpoint.post("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
+    HttpApiEndpoint.get("persistentPtySnapshot", "/api/experimental/persistent-pty/:ptyID/snapshot", {
       params: PtyParams,
       success: Json,
-      error: PtyMissing,
+      error: PersistentPtyMissing,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("persistentPtyConnectToken", "/api/experimental/persistent-pty/:ptyID/connect-token", {
+      params: PtyParams,
+      success: Json,
+      error: PersistentPtyMissing,
     }),
   )
   .add(
@@ -317,6 +348,18 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.delete("sessionRemove", "/api/session/:sessionID", {
+      params: SessionParams,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
+      params: SessionParams,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
       success: NoContent,
     }),

@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMResponse, Message, ToolDefinition, type LanguageModel, Media } from "../../src/effect.js"
+import { ai, type LanguageModel, LLMResponse, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
-import { Tool } from "../../src/tool.js"
+import { tool } from "../../src/tool.js"
 import { runTools } from "../lib/tool-runtime.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -89,9 +89,10 @@ const readPdf = ToolDefinition.make({
   description: "Read the attached PDF.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 })
-const readPdfRuntime = Tool.make({
+const readPdfRuntime = tool({
+  name: "read_pdf",
   description: readPdf.description,
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
   execute: () => Effect.succeed("PDF read successfully"),
   toModelOutput: () => [
@@ -124,7 +125,7 @@ describe("PDF recorded", () => {
       Effect.gen(function* () {
         expectCode(
           yield* LLMClient.generate(
-            LLM.request({
+            ai.request({
               id: `recorded_pdf_${target.id}_user_input`,
               model: target.model,
               cache: "none",
@@ -154,7 +155,7 @@ describe("PDF recorded", () => {
         if (target.id === "gemini") {
           const events = Array.from(
             yield* runTools({
-              request: LLM.request({
+              request: ai.request({
                 id: "recorded_pdf_gemini_tool_result",
                 model: target.model,
                 system:
@@ -163,7 +164,7 @@ describe("PDF recorded", () => {
                 cache: "none",
                 generation: { maxTokens: target.maxTokens, temperature: 0 },
               }),
-              tools: { read_pdf: readPdfRuntime },
+              tools: [readPdfRuntime],
             }).pipe(Stream.runCollect),
           )
           expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: "stop" } })
@@ -173,7 +174,7 @@ describe("PDF recorded", () => {
 
         expectCode(
           yield* LLMClient.generate(
-            LLM.request({
+            ai.request({
               id: `recorded_pdf_${target.id}_tool_result`,
               model: target.model,
               system: "Read the PDF returned by the tool and follow the user's response format exactly.",

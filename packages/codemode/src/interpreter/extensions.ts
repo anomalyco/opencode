@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 import { type Extension, isAsync } from "../extension.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
+import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
-import { createErrorValue, isErrorType } from "./intrinsics.js"
-import { MAX_VALUE_DEPTH } from "./limits.js"
-import { type AstNode, PendingThrow, Throw, typeError } from "./model.js"
+import { createErrorValue } from "./intrinsics.js"
+import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
+import { type AstNode, PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { fn } from "./native.js"
 import {
   define,
@@ -29,9 +30,9 @@ import {
 import { describeValue, isOpaque } from "./references.js"
 
 /**
- * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and
- * built-in wrappers are copied, a host function becomes a program function whose calls cross the same way, and a
- * host Promise or Effect becomes a program promise.
+ * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
+ * wrappers are copied, a host function becomes a program function whose calls cross the same way, and a host Promise
+ * or Effect becomes a program promise.
  */
 export const extensionGlobals = <R>(
   ctx: Interpreter<R>,
@@ -73,24 +74,37 @@ export const extensionGlobals = <R>(
     return copied
   }
 
-  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): Value => {
+  // `extension` is set while converting a global object, whose functions are entry points like globals and fire the hooks.
+  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), extension?: string): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
-    if (typeof value === "function") return wrap(value, label)
+    if (typeof value === "function")
+      return wrap(value, label, extension === undefined ? undefined : (args) => ({ extension, name: label, args }))
     if (value !== null && typeof value === "object") {
-      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen)
-      if (value instanceof Date) return new DateObj(builtins.Date, value.getTime())
+      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen, extension)
+      // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
+      // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
+      if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
-      if (value instanceof ArrayBuffer) return new Bytes(builtins.Uint8Array, new Uint8Array(value.slice(0)))
+      if (value instanceof ArrayBuffer) {
+        const view = new Uint8Array(value)
+        // Only a real buffer has bytes to view; anything else would be read as array-like and lose them silently.
+        if (view.buffer !== value)
+          throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
+        return new Bytes(builtins.Uint8Array, new Uint8Array(view))
+      }
       if (value instanceof Error) {
         if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
         seen.add(value)
-        const copied = createErrorValue(builtins[isErrorType(value.name) ? value.name : "Error"], value.message)
+        const copied = createErrorValue(builtins[errorType(value)], errorMessage(value))
         const fields = value as unknown as Record<string, unknown>
         for (const key of new Set(["cause", ...Object.keys(value)])) {
-          if (uncrossed.has(key) || !(key in value) || typeof fields[key] === "function") continue
-          const item = crossing(() => next(fields[key], `${label}.${key}`))
+          if (uncrossed.has(key) || !(key in value)) continue
+          // Read once: a getter could pass the check and then hand back a function.
+          const field = fields[key]
+          if (typeof field === "function") continue
+          const item = crossing(() => next(field, `${label}.${key}`))
           if (item === left) continue
           define(copied, key, item, key === "cause" ? hidden : undefined)
         }
@@ -115,12 +129,18 @@ export const extensionGlobals = <R>(
       if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
       seen.add(value)
       if (Array.isArray(value)) {
-        const copied = new Arr(
-          builtins.Array,
-          value.map((item, index) => next(item, `${label}[${index}]`)),
-        )
+        const length = value.length
+        if (length > MAX_ARRAY_LENGTH) {
+          throw rangeError(`${label} produced an array of ${length} items; at most ${MAX_ARRAY_LENGTH} can cross.`)
+        }
+        // Filled in order so the copy stays a dense array; holes stay holes, as a copy made with `map` would leave them.
+        const items: Array<Value> = []
+        for (let index = 0; index < length; index += 1) {
+          if (index in value) items[index] = next(value[index], `${label}[${index}]`)
+        }
+        items.length = length
         seen.delete(value)
-        return copied
+        return new Arr(builtins.Array, items)
       }
       const prototype = Object.getPrototypeOf(value)
       if (prototype === Object.prototype || prototype === null) {
@@ -133,33 +153,43 @@ export const extensionGlobals = <R>(
     throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
-  // A host function as a program function. Arguments cross in; for a global, the `extension.before` hook runs before
-  // the host function is called, so a call it denies never reaches the host. The host's result, or what it threw,
-  // crosses out so the program catches a copy, and `extension.after` sees how the call ended. Functions inside
-  // results are part of a value's API and skip the hooks.
-  const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) =>
-    fn(builtins, value.name, value.length, function* (_, values, site) {
-      const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-      const cross = (reason: unknown) => new Throw(fromHost(reason, label))
-      const call = describe?.(args)
-      const hooks = ctx.tools.hooks
-      const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
-      const after = call && hooks["extension.after"]
-      const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
-        (after ? hooked(call, undefined, after, effect) : effect).pipe(
-          Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
-        )
-      // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
-      if (isAsync(value))
-        return pending(
-          Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
-          site,
-        )
-      if (before) yield ctx.runner.blocking(before)
-      const host = callHost<R>(value, args)
-      if (host.async) return pending(settle(host.effect), site)
-      return (yield ctx.runner.blocking(settle(host.effect))) as Value
-    })
+  // A host function as a program function. Arguments cross in; for a global or a global object's function, the
+  // `extension.before` hook runs before the host function is called, so a call it denies never reaches the host. The
+  // host's result, or what it threw, crosses out so the program catches a copy, and `extension.after` sees how the
+  // call ended. Functions inside results are part of a value's API and skip the hooks.
+  const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) => {
+    // The host function's own `name` and `length` can be anything, even getters: each is read once, and only text
+    // and a count cross.
+    const name: unknown = value.name
+    const length: unknown = value.length
+    return fn(
+      builtins,
+      typeof name === "string" ? name : "",
+      typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
+      function* (_, values, site) {
+        const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
+        const cross = (reason: unknown) => new Throw(fromHost(reason, label))
+        const call = describe?.(args)
+        const hooks = ctx.tools.hooks
+        const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
+        const after = call && hooks["extension.after"]
+        const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
+          (after ? hooked(call, undefined, after, effect) : effect).pipe(
+            Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
+          )
+        // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+        if (isAsync(value))
+          return pending(
+            Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
+            site,
+          )
+        if (before) yield ctx.runner.blocking(before)
+        const host = callHost<R>(value, args)
+        if (host.async) return pending(settle(host.effect), site)
+        return (yield ctx.runner.blocking(settle(host.effect))) as Value
+      },
+    )
+  }
 
   // An asynchronous host call: the program holds a promise that settles when the host's work does.
   const pending = (work: Effect.Effect<Value, Throw, R>, site: AstNode | undefined) => {
@@ -175,7 +205,13 @@ export const extensionGlobals = <R>(
 
   return extensions.flatMap((extension) =>
     Object.entries(extension.globals).map(
-      ([name, value]) => [name, wrap(value, name, (args) => ({ extension: extension.name, name, args }))] as const,
+      ([name, value]) =>
+        [
+          name,
+          typeof value === "function"
+            ? wrap(value, name, (args) => ({ extension: extension.name, name, args }))
+            : fromHost(value, name, 0, new Set(), extension.name),
+        ] as const,
     ),
   )
 }
@@ -199,10 +235,11 @@ const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
 
 /**
  * An error crosses as its name, message, `cause`, and own enumerable fields, such as Node's `code`, `errno`,
- * `syscall`, and `path`. `stack` stays on its own side, and no field may shadow an Error method. A field that cannot
- * cross (a socket, a handle, a function) is left behind so the error itself always arrives.
+ * `syscall`, and `path`. `stack` stays on its own side, `message` crosses once as text, and no field may shadow an
+ * Error method. A field that cannot cross (a socket, a handle, a function) is left behind so the error itself always
+ * arrives.
  */
-const uncrossed = new Set(["stack", "constructor", "toString", "__proto__"])
+const uncrossed = new Set(["stack", "message", "constructor", "toString", "__proto__"])
 const left = Symbol("left behind")
 const crossing = <T>(convert: () => T): T | typeof left => {
   try {
@@ -233,5 +270,6 @@ const isPrimitive = (value: unknown): value is string | number | boolean | null 
 const describeHost = (value: unknown): string => {
   if (typeof value !== "object" || value === null) return `a ${typeof value}`
   const name = (value as { constructor?: { name?: string } }).constructor?.name
-  return name === undefined || name === "" ? "an object" : `a ${name}`
+  if (name === undefined || name === "") return "an object"
+  return `${/^[AEIO]/.test(name) ? "an" : "a"} ${name}`
 }

@@ -11,7 +11,11 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { Credential } from "@opencode/core/credential"
+import { ConfigIntegration } from "@opencode/core/config/integration"
+import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Schema } from "effect"
+import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { organizationPolicy } from "../fixture/policy"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -31,9 +35,35 @@ const tool = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.Info 
   effect,
 })
 
+const integration = (
+  action: "integration.connect" | "integration.use",
+  effect: ConfigPolicy.Effect,
+  resource: string,
+): ConfigPolicy.Info => ({ action, resource, effect })
+
+// The MDM policy that requires one Console organization, as an admin would deploy it.
+const orgID = "org_01M3CAP8H43Z49CER6NT0Y3ZF1"
+const lockdown = () =>
+  document(
+    integration("integration.connect", "deny", "*"),
+    integration("integration.connect", "allow", "opencode"),
+    integration("integration.use", "deny", "*"),
+    integration("integration.use", "allow", `opencode#${orgID}`),
+  )
+
+const consoleCredential = (org: string) =>
+  Credential.OAuth.make({
+    type: "oauth",
+    methodID: Integration.MethodID.make("device"),
+    access: "access",
+    refresh: "refresh",
+    expires: Number.MAX_SAFE_INTEGER,
+    metadata: { accountID: "acc_personal", orgID: org },
+  })
+
 const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
@@ -102,7 +132,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const bus = yield* Bus.Service
       const test = yield* Config.Test
       const plugin = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugin)
+      const host = yield* PluginHost.make(plugin, "test")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
       expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
@@ -210,7 +240,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       const catalog = yield* Provider.Service
       const bus = yield* Bus.Service
       const test = yield* Config.Test
-      const host = yield* PluginHost.make(yield* Plugin.Service)
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
       const opencode = Integration.ID.make("opencode")
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
       yield* ConfigPolicyPlugin.Plugin.effect(host)
@@ -227,10 +257,147 @@ describe("ConfigPolicyPlugin.Plugin", () => {
   )
 })
 
-const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    if (yield* condition) return
-    yield* Effect.sleep("10 millis")
-  }
-  return yield* Effect.die("Timed out waiting for policy reload")
+describe("integration policy", () => {
+  it.live("requires one Console organization through MDM policy alone", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const credentials = yield* Credential.Service
+      const websearch = yield* WebSearch.Service
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+      const search = (id: string) => ({
+        id: WebSearch.ID.make(id),
+        name: id,
+        execute: () => Effect.succeed([]),
+      })
+      yield* catalog.transform((catalog) => {
+        // The signed-out free tier enables OpenCode without any connection.
+        catalog.update(Provider.ID.opencode, (provider) => {
+          provider.activation = "enabled"
+        })
+        // An env API key: Anthropic's integration with no account.
+        catalog.update(Provider.ID.anthropic, (provider) => {
+          provider.activation = "enabled"
+        })
+        // A provider authored in opencode.json.
+        catalog.update(Provider.ID.make("my-llm"), (provider) => {
+          provider.activation = "enabled"
+        })
+        // A provider the Console organization supplies.
+        catalog.update(Provider.ID.make("acme-gateway"), (provider) => {
+          provider.integrationID = Integration.ID.make("opencode")
+        })
+      })
+      yield* websearch.transform((editor) => {
+        editor.add(search("opencode"))
+        editor.add(search("exa"))
+      })
+      yield* ConfigPolicyPlugin.Plugin.effect(host)
+      const available = () =>
+        catalog.all().pipe(Effect.map((providers) => providers.map((item): string => item.id).toSorted()))
+      const searches = () =>
+        websearch.providers().pipe(Effect.map((providers) => providers.map((item): string => item.id).toSorted()))
+
+      // Signed out: everything, including the free tier, is denied.
+      expect(yield* available()).toEqual([])
+      expect(yield* searches()).toEqual([])
+
+      // A personal Console account is a different account of the same integration.
+      const personal = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: consoleCredential("org_personal"),
+      })
+      expect(yield* available()).toEqual([])
+
+      // Only the required organization's connection works, and with it everything that organization supplies.
+      yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: consoleCredential(orgID) })
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length > 0)))
+      expect(yield* available()).toEqual(["acme-gateway", "opencode"])
+      expect(yield* searches()).toEqual(["opencode"])
+
+      // Switching back to the personal account revokes it again.
+      yield* credentials.activate(personal.id)
+      yield* waitUntil(available().pipe(Effect.map((ids) => ids.length === 0)))
+      expect(yield* searches()).toEqual([])
+    }).pipe(Effect.provide(Config.testLayer([lockdown()]))),
+  )
+
+  it.effect("keeps an integration's account out of a bare-ID allow", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: consoleCredential("org_other"),
+      })
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.opencode, () => {})
+        catalog.update(Provider.ID.anthropic, () => {})
+      })
+      yield* addPlugin([
+        document(
+          integration("integration.use", "deny", "*"),
+          integration("integration.use", "allow", "anthropic"),
+          integration("integration.use", "allow", "opencode"),
+        ),
+      ])
+      expect(yield* catalog.get(Provider.ID.anthropic)).toBeDefined()
+      // `opencode` names only account-less use; a connected account needs `opencode#*` or its own ID.
+      expect(yield* catalog.get(Provider.ID.opencode)).toBeUndefined()
+    }),
+  )
+
+  for (const effect of ["allow", "deny"] as const)
+    it.effect(`decides a well-known origin's providers by the origin: ${effect}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        const origin = Integration.ID.make("https://ai.acme.com")
+        yield* catalog.transform((catalog) => {
+          catalog.update(Provider.ID.make("acme-gateway"), (provider) => {
+            provider.activation = "enabled"
+          })
+          catalog.update(Provider.ID.make("my-llm"), (provider) => {
+            provider.activation = "enabled"
+          })
+        })
+        yield* addPlugin([
+          document(
+            integration("integration.use", "deny", "*"),
+            integration("integration.use", effect, "https://ai.acme.com"),
+          ),
+          new ConfigIntegration.WellKnownDocument({
+            type: "document",
+            integrationID: origin,
+            info: decode({
+              providers: { "acme-gateway": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+            }),
+          }),
+          new Document({
+            type: "document",
+            info: decode({
+              providers: { "my-llm": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+            }),
+          }),
+        ])
+        expect(yield* catalog.get(Provider.ID.make("acme-gateway"))).toEqual(
+          effect === "allow" ? expect.anything() : undefined,
+        )
+        expect(yield* catalog.get(Provider.ID.make("my-llm"))).toBeUndefined()
+      }),
+    )
+
+  it.effect("converts legacy statements in Console config before enforcement sees them", () =>
+    Effect.sync(() => {
+      const remote = Schema.decodeUnknownSync(ConfigIntegration.Remote)({
+        policies: [
+          { action: "integration.use", resource: "mcp:*", effect: "deny" },
+          { action: "integration.use", resource: "skill:deploy", effect: "deny" },
+          { action: "future.action", resource: "*", effect: "deny" },
+        ],
+      })
+      expect(remote.policies).toEqual([
+        { action: "mcp.use", resource: "*", effect: "deny" },
+        { action: "skill.use", resource: "deploy", effect: "deny" },
+      ])
+    }),
+  )
 })

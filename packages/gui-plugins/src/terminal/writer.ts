@@ -1,77 +1,62 @@
-export function terminalWriter(
-  write: (data: string, done?: VoidFunction) => void,
-  schedule: (flush: VoidFunction) => void = queueMicrotask,
-) {
-  let chunks: string[] | undefined
-  let waits: VoidFunction[] | undefined
+// Writes output and runs steps such as resizes in the order they were pushed. Consecutive output is written as one
+// chunk, and nothing after it starts until the terminal reports that chunk done.
+export function terminalWriter(write: (data: Uint8Array, done: VoidFunction) => void) {
+  const queue: (Uint8Array | VoidFunction)[] = []
   let scheduled = false
   let writing = false
 
-  const settle = () => {
-    if (scheduled || writing || chunks?.length) return
-    const list = waits
-
-    if (!list?.length) return
-    waits = undefined
-
-    for (const fn of list) {
-      fn()
-    }
+  const wake = () => {
+    if (scheduled) return
+    scheduled = true
+    queueMicrotask(run)
   }
 
   const run = () => {
-    if (writing) return
     scheduled = false
-    const items = chunks
 
-    if (!items?.length) {
-      settle()
+    while (!writing && queue.length) {
+      const next = queue[0]
 
-      return
-    }
+      if (!(next instanceof Uint8Array)) {
+        queue.shift()
+        next()
 
-    chunks = undefined
-    writing = true
-    write(items.join(""), () => {
-      writing = false
-
-      if (chunks?.length) {
-        if (scheduled) return
-        scheduled = true
-        schedule(run)
-
-        return
+        continue
       }
 
-      settle()
-    })
-  }
+      const end = queue.findIndex((item) => !(item instanceof Uint8Array))
 
-  const push = (data: string) => {
-    if (!data) return
+      const chunks = queue
+        .splice(0, end === -1 ? queue.length : end)
+        .filter((item): item is Uint8Array => item instanceof Uint8Array)
 
-    if (chunks) chunks.push(data)
-    else chunks = [data]
+      writing = true
+      write(concat(chunks), () => {
+        writing = false
 
-    if (scheduled || writing) return
-    scheduled = true
-    schedule(run)
-  }
-
-  const flush = (done?: VoidFunction) => {
-    if (!scheduled && !writing && !chunks?.length) {
-      done?.()
-
-      return
+        if (queue.length) wake()
+      })
     }
-
-    if (done) {
-      if (waits) waits.push(done)
-      else waits = [done]
-    }
-
-    run()
   }
 
-  return { push, flush }
+  const push = (item: Uint8Array | VoidFunction) => {
+    if (item instanceof Uint8Array && !item.length) return
+    queue.push(item)
+
+    if (!writing) wake()
+  }
+
+  return { push }
+}
+
+function concat(chunks: Uint8Array[]) {
+  if (chunks.length === 1) return chunks[0]
+  const data = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
+  chunks.reduce((offset, chunk) => {
+    data.set(chunk, offset)
+
+    return offset + chunk.length
+  }, 0)
+
+  return data
 }

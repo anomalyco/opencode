@@ -11,7 +11,7 @@
   max-width: calc(100dvw - 24px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   padding: 12px;
 
   background: var(--v2-background-bg-base);
@@ -48,7 +48,7 @@
   [data-slot="header"] {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     width: 100%;
   }
 
@@ -78,7 +78,7 @@
   [data-slot="detail"] {
     flex: 1 0 0;
     min-width: 0;
-    /* Wrap the full path onto the next line instead of clipping the end. */
+    /* Paths wrap after separators; a single folder name too long for the line still breaks instead of clipping. */
     overflow-wrap: anywhere;
     font-weight: 440;
     font-size: 13px;

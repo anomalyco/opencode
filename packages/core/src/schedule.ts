@@ -1,7 +1,8 @@
 export * as Schedule from "./schedule.js"
 
-import { and, asc, eq, gt, isNull, lte, min, or } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schema } from "effect"
+import { randomUUID } from "node:crypto"
+import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
+import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -23,6 +24,7 @@ import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
 import { Instance } from "./instance/service.js"
+import { KVTable } from "./kv/sql.js"
 import type { Permission } from "./permission.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -70,8 +72,9 @@ export interface Interface {
   /** Fires every schedule that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
   /**
-   * Runs `tick` whenever a schedule falls due, until interrupted. All state lives in the table, so exactly one
-   * process may run this: the managed server.
+   * Runs `tick` whenever a schedule falls due, until interrupted. Elects at most one active leader per SQLite
+   * database via a lease row, so auxiliary processes (`opencode acp`, `--standalone`) sharing a data directory
+   * never double-fire alongside a managed service.
    */
   readonly run: Effect.Effect<never>
 }
@@ -90,6 +93,8 @@ const DEFAULT_UNTIL_AFTER = 24 * HOUR
 const LATE_AFTER = 60_000
 /** The loop re-reads the table at least this often, so clock jumps and missed doorbells are caught. */
 const MAX_SLEEP = 30_000
+const LEADER_KEY = "schedule:leader"
+const LEADER_TTL = 2 * MAX_SLEEP
 /** How long a due schedule waits before its location's flag is read again, while schedules are off there. */
 const DISABLED_RETRY = HOUR
 /** How long a schedule whose prompt failed waits before trying again. */
@@ -98,6 +103,7 @@ const FAILED_RETRY = 5 * MINUTE
 const CHECK_FAILED_RETRY = MINUTE
 const MAX_CHECK_FAILURES = 3
 const TICK_CONCURRENCY = 4
+const UNSEEDED = { matched: false as const, state: null as Schema.Json, checks: 0 }
 
 const duration = (value: string) =>
   Option.match(durationMillis(value), {
@@ -283,126 +289,50 @@ const layer = Layer.effect(
       const late = now - due >= LATE_AFTER
       const next = following(row, now)
 
-      if (row.check !== null) {
-        const check = row.check
-        const outcome = yield* ScheduleCheck.evaluate(session, check, row.state ?? null).pipe(
-          instances.provide(session),
-        )
+      const check = row.check
+      const outcome: ScheduleCheck.Outcome =
+        check === null
+          ? { ok: true, wake: true, state: null }
+          : yield* ScheduleCheck.evaluate(session, check, row.state ?? null, {
+              messageID: SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`),
+              now,
+              checks: row.checks,
+            }).pipe(instances.provide(session))
 
-        if (!outcome.ok) {
-          const strikes = row.failures + 1
-          if (strikes < MAX_CHECK_FAILURES) {
-            yield* update(row, {
-              failures: strikes,
-              last_outcome: "failed",
-              retry_at: now + CHECK_FAILED_RETRY,
-              time_updated: now,
-            })
-            return
-          }
-          const run = row.run_count + 1
-          const id = yield* admitWake(
-            row,
-            session.id,
-            run,
-            due,
-            late,
-            `${row.action.prompt}\n\n[Schedule paused after ${strikes} failed checks: ${outcome.error}]`,
-            { error: outcome.error, failures: strikes },
-          )
-          yield* db
-            .update(ScheduleTable)
-            .set({
-              status: "paused",
-              failures: strikes,
-              run_count: run,
-              last_message_id: id,
-              last_fired_at: now,
-              last_outcome: "failed",
-              retry_at: null,
-              time_updated: now,
-            })
-            .where(eq(ScheduleTable.id, row.id))
-            .run()
-            .pipe(Effect.orDie)
-          return
-        }
-
-        if (!outcome.wake) {
-          const checks = row.checks + 1
-          const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
-          if (check.mode === "until" && ended) {
-            const run = row.run_count + 1
-            const id = yield* admitWake(
-              row,
-              session.id,
-              run,
-              due,
-              late,
-              `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
-              { expired: true },
-            )
-            yield* db
-              .update(ScheduleTable)
-              .set({
-                status: "done",
-                checks,
-                failures: 0,
-                state: outcome.state,
-                run_count: run,
-                last_message_id: id,
-                last_fired_at: now,
-                last_outcome: "expired",
-                next_due_at: null,
-                remaining_runs: 0,
-                retry_at: null,
-                time_updated: now,
-              })
-              .where(eq(ScheduleTable.id, row.id))
-              .run()
-              .pipe(Effect.orDie)
-            return
-          }
+      if (!outcome.ok) {
+        const strikes = row.failures + 1
+        if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
           yield* update(row, {
-            checks,
-            failures: 0,
-            state: outcome.state,
-            last_outcome: "checked",
-            retry_at: null,
-            ...(ended ? { status: "done" as const, next_due_at: null } : { next_due_at: next }),
+            failures: strikes,
+            last_outcome: "failed",
+            retry_at: now + CHECK_FAILED_RETRY,
             time_updated: now,
           })
           return
         }
-
         const run = row.run_count + 1
+        const note = outcome.invalid
+          ? `[Schedule paused after invalid check: ${outcome.error}]`
+          : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
         const id = yield* admitWake(
           row,
           session.id,
           run,
           due,
           late,
-          promptText(row.action.prompt, outcome.message),
-          outcome.message === undefined ? {} : { message: outcome.message },
+          `${row.action.prompt}\n\n${note}`,
+          { error: outcome.error, failures: strikes },
         )
-        const remaining =
-          check.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
-        const done = check.mode === "until" || finished(row, next, remaining)
-        // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
         yield* db
           .update(ScheduleTable)
           .set({
+            status: "paused",
+            failures: strikes,
             run_count: run,
-            checks: row.checks + 1,
-            failures: 0,
-            state: outcome.state,
             last_message_id: id,
             last_fired_at: now,
-            last_outcome: late ? "late" : "fired",
+            last_outcome: "failed",
             retry_at: null,
-            remaining_runs: remaining,
-            ...(done ? { status: "done" as const } : {}),
-            next_due_at: done ? null : next,
             time_updated: now,
           })
           .where(eq(ScheduleTable.id, row.id))
@@ -411,14 +341,71 @@ const layer = Layer.effect(
         return
       }
 
+      if (check !== null && !outcome.wake) {
+        const checks = row.checks + 1
+        const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
+        if (check.mode === "until" && ended) {
+          const run = row.run_count + 1
+          const id = yield* admitWake(
+            row,
+            session.id,
+            run,
+            due,
+            late,
+            `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
+            { expired: true },
+          )
+          yield* db
+            .update(ScheduleTable)
+            .set({
+              status: "done",
+              checks,
+              failures: 0,
+              state: outcome.state,
+              run_count: run,
+              last_message_id: id,
+              last_fired_at: now,
+              last_outcome: "expired",
+              next_due_at: null,
+              remaining_runs: 0,
+              retry_at: null,
+              time_updated: now,
+            })
+            .where(eq(ScheduleTable.id, row.id))
+            .run()
+            .pipe(Effect.orDie)
+          return
+        }
+        yield* update(row, {
+          checks,
+          failures: 0,
+          state: outcome.state,
+          last_outcome: "checked",
+          retry_at: null,
+          ...(ended ? { status: "done" as const, next_due_at: null } : { next_due_at: next }),
+          time_updated: now,
+        })
+        return
+      }
+
       const run = row.run_count + 1
-      const id = yield* admitWake(row, session.id, run, due, late, row.action.prompt)
-      const remaining = row.remaining_runs === null ? null : row.remaining_runs - 1
-      const done = finished(row, next, remaining)
+      const id = yield* admitWake(
+        row,
+        session.id,
+        run,
+        due,
+        late,
+        promptText(row.action.prompt, outcome.message),
+        check === null ? undefined : outcome.message === undefined ? {} : { message: outcome.message },
+      )
+      const remaining = check?.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
+      const done = check?.mode === "until" || finished(row, next, remaining)
+      // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
       yield* db
         .update(ScheduleTable)
         .set({
           run_count: run,
+          ...(check === null ? {} : { checks: row.checks + 1, failures: 0, state: outcome.state }),
           last_message_id: id,
           last_fired_at: now,
           last_outcome: late ? "late" : "fired",
@@ -436,6 +423,7 @@ const layer = Layer.effect(
     const step = Effect.fnUntraced(function* (row: Row, now: number) {
       const due = row.next_due_at
       if (due === null || row.session_id === null) return
+      if (!(yield* claimLeader(yield* Clock.currentTimeMillis))) return
       const session = yield* sessions.get(row.session_id)
       if (!(yield* settings(session)).enabled) {
         // Reading the flag boots the Session's location, so check again in an hour rather than every tick. The row
@@ -532,18 +520,98 @@ const layer = Layer.effect(
         ),
       )
 
+    const hasActiveRows = db
+      .select({ id: ScheduleTable.id })
+      .from(ScheduleTable)
+      .where(eq(ScheduleTable.status, "active"))
+      .limit(1)
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row !== undefined),
+      )
+
+    const ownerID = randomUUID()
+    let leading = false
+    let bootChecked = false
+
+    const claimLeader = Effect.fnUntraced(function* (now: number) {
+      const value = { owner: ownerID, until: now + LEADER_TTL }
+      const claimed = yield* db
+        .insert(KVTable)
+        .values({ key: LEADER_KEY, value, time_created: now, time_updated: now })
+        .onConflictDoUpdate({
+          target: KVTable.key,
+          set: { value, time_updated: now },
+          where: sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID} or json_extract(${KVTable.value}, '$.until') <= ${now}`,
+        })
+        .returning({ key: KVTable.key })
+        .get()
+        .pipe(Effect.orDie)
+      return claimed !== undefined
+    })
+
+    const releaseLeader = Effect.sync(() => {
+      leading = false
+    }).pipe(
+      Effect.andThen(
+        db
+          .delete(KVTable)
+          .where(and(eq(KVTable.key, LEADER_KEY), sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID}`))
+          .run()
+          .pipe(Effect.ignore),
+      ),
+    )
+
+    const heartbeat = Clock.currentTimeMillis.pipe(
+      Effect.flatMap(claimLeader),
+      Effect.ignore,
+      Effect.schedule(EffectSchedule.spaced(LEADER_TTL / 3)),
+    )
+
     const loop = Effect.gen(function* () {
       yield* doorbell.close
+      const active = yield* hasActiveRows
+      if (!active && bootChecked) {
+        if (leading) yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
       const now = yield* Clock.currentTimeMillis
-      yield* tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("schedule tick failed", { cause })))
+      const isLeader = yield* claimLeader(now)
+      if (!isLeader) {
+        leading = false
+        bootChecked = true
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
+      if (!leading) {
+        leading = true
+        bootChecked = true
+        yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })))
+      }
+      if (!active) {
+        yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
+      yield* Effect.scoped(
+        Effect.forkScoped(heartbeat).pipe(
+          Effect.andThen(
+            tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("schedule tick failed", { cause }))),
+          ),
+        ),
+      )
+      if (!(yield* hasActiveRows)) {
+        yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
       const wait = yield* nextWake(now)
       if (wait > 0) yield* doorbell.await.pipe(Effect.timeoutOption(wait))
     })
 
-    const run = rewake.pipe(
-      Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })),
-      Effect.andThen(Effect.forever(loop)),
-    )
+    const run = Effect.forever(loop).pipe(Effect.ensuring(releaseLeader))
 
     const resolveZone = (tz: string | undefined) => {
       if (tz === undefined) return Effect.succeed(DateTime.zoneMakeLocal())
@@ -609,10 +677,10 @@ const layer = Layer.effect(
     return Service.of({
       create: Effect.fn("Schedule.create")(function* (input) {
         const session = yield* sessions.get(input.sessionID)
+        const missingDirectory = () =>
+          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }))
         const config = yield* settings(session).pipe(
-          Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-            Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` })),
-          ),
+          Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
         )
         if (!config.enabled) return yield* new DisabledError()
         const check = yield* resolveStoredCheck(input)
@@ -628,71 +696,43 @@ const layer = Layer.effect(
         if (ends !== null && due > ends)
           return yield* new InvalidError({ reason: "The schedule ends before it first fires" })
 
+        const scheduleID = ID.create()
         const seeded =
           check === undefined
-            ? { matched: false as const, state: null as Schema.Json, checks: 0 }
+            ? UNSEEDED
             : yield* Effect.gen(function* () {
-                yield* ScheduleCheck.authorize(session, input.name, check).pipe(
+                yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
                   instances.provide(session),
                   Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
+                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
                 )
                 const shouldSeed =
-                  check.mode === "until" || (check.condition.type === "shell" && check.condition.changes === true)
-                if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
-                const init = yield* ScheduleCheck.evaluate(session, check, null).pipe(
+                  check.mode === "until" ||
+                  check.condition.type === "code" ||
+                  (check.condition.type === "shell" && check.condition.changes === true)
+                if (!shouldSeed) return UNSEEDED
+                const init = yield* ScheduleCheck.evaluate(session, check, null, {
+                  messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
+                  now,
+                  checks: 0,
+                }).pipe(
                   instances.provide(session),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
-                    Effect.fail(
-                      new InvalidError({ reason: `Session directory does not exist: ${session.location.directory}` }),
-                    ),
-                  ),
+                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
                 )
-                // A target that is not up yet (e.g. curl exiting 7 while a server boots) is "not yet", not an invalid schedule.
-                if (!init.ok) return { matched: false as const, state: null as Schema.Json, checks: 0 }
+                if (!init.ok) {
+                  // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
+                  if (init.invalid || check.condition.type === "code") return yield* new InvalidError({ reason: init.error })
+                  return UNSEEDED
+                }
                 if (check.mode === "until" && init.wake)
-                  return { matched: true as const, state: init.state, message: init.message }
+                  return { matched: true as const, state: init.state, checks: 1, message: init.message }
                 return { matched: false as const, state: init.state, checks: 1 }
               })
 
-        if (seeded.matched) {
-          const row = yield* db
-            .insert(ScheduleTable)
-            .values({
-              id: ID.create(),
-              session_id: session.id,
-              name: input.name ?? null,
-              check: check ?? null,
-              state: seeded.state,
-              checks: 1,
-              action: input.action,
-              when,
-              tz: DateTime.zoneToString(zone),
-              status: "done",
-              next_due_at: null,
-              ends_at: ends,
-              remaining_runs: 0,
-              run_count: 1,
-              last_fired_at: now,
-              last_outcome: "fired",
-              time_created: now,
-              time_updated: now,
-            })
-            .returning()
-            .get()
-            .pipe(Effect.orDie)
-          return toInfo(row, seeded.message)
-        }
-
-        const remaining = check?.mode === "until" ? 1 : (input.ends?.times ?? null)
         const row = yield* db
           .insert(ScheduleTable)
           .values({
-            id: ID.create(),
+            id: scheduleID,
             session_id: session.id,
             name: input.name ?? null,
             check: check ?? null,
@@ -703,13 +743,24 @@ const layer = Layer.effect(
             tz: DateTime.zoneToString(zone),
             next_due_at: due,
             ends_at: ends,
-            remaining_runs: remaining,
+            remaining_runs: check?.mode === "until" ? 1 : (input.ends?.times ?? null),
             time_created: now,
             time_updated: now,
+            ...(seeded.matched
+              ? {
+                  status: "done" as const,
+                  next_due_at: null,
+                  remaining_runs: 0,
+                  run_count: 1,
+                  last_fired_at: now,
+                  last_outcome: "fired" as const,
+                }
+              : {}),
           })
           .returning()
           .get()
           .pipe(Effect.orDie)
+        if (seeded.matched) return toInfo(row, seeded.message)
         yield* doorbell.open
         return toInfo(row)
       }),
