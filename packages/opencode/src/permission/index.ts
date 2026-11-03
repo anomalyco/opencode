@@ -96,13 +96,32 @@ const layer = Layer.effect(
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
-      pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
+      // Cancellation must remove both pending authority and the online client's
+      // approval card, including interruption during Asked publication. Register
+      // cleanup before publishing, and keep publication interruptible. Only this
+      // entry's owner may settle it; normal replies already notify clients, and
+      // an older ask must never remove or announce a replacement request.
+      return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
-          pending.delete(id)
+          const entry = { info, deferred }
+          pending.set(id, entry)
+          return entry
         }),
+        (entry) =>
+          Effect.gen(function* () {
+            yield* events.publish(Event.Asked, entry.info)
+            yield* Deferred.await(entry.deferred)
+          }),
+        (entry) =>
+          Effect.gen(function* () {
+            if (pending.get(id) !== entry) return
+            pending.delete(id)
+            yield* events.publish(Event.Replied, {
+              sessionID: entry.info.sessionID,
+              requestID: entry.info.id,
+              reply: "reject",
+            })
+          }),
       )
     })
 

@@ -3,7 +3,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { EffectBridge } from "../../src/effect/bridge"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Permission } from "../../src/permission"
@@ -35,8 +35,9 @@ function observe(block = false, name = "bash", id = input.id) {
     const replies: unknown[] = []
     const unsubscribe = yield* events.listen((event) => {
       if (event.type === Permission.Event.Replied.type) replies.push(event.data)
-      if (event.type !== Permission.Event.Asked.type || event.data.id !== id || event.data.permission !== name)
-        return Effect.void
+      if (event.type !== Permission.Event.Asked.type) return Effect.void
+      const request = Schema.decodeUnknownSync(Permission.Event.Asked.data)(event.data)
+      if (request.id !== id || request.permission !== name) return Effect.void
       return Deferred.succeed(asked, undefined).pipe(Effect.andThen(block ? Deferred.await(waiting) : Effect.void))
     })
     yield* Effect.addFinalizer(() => unsubscribe)
