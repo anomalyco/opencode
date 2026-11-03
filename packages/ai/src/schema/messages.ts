@@ -255,7 +255,6 @@ export class AssistantMessage extends Schema.Class<AssistantMessage>("LLM.Assist
   role: Schema.Literal("assistant"),
   content: Schema.Array(ContentPart),
   providerMetadata: Schema.optional(ProviderMetadata),
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 export class ToolMessage extends Schema.Class<ToolMessage>("LLM.ToolMessage")({

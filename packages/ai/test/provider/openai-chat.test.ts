@@ -1926,28 +1926,6 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("replays native scalar reasoning alongside native details", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.encrypted", data: "opaque", index: 0 }]
-      const replay = yield* compileRequest(
-        ai.request({
-          model,
-          messages: [
-            Message.make({
-              role: "assistant",
-              content: [{ type: "reasoning", text: "thinking" }],
-              native: { openaiCompatible: { reasoning_content: "thinking", reasoning_details: details } },
-            }),
-          ],
-        }),
-      )
-
-      expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "", reasoning_content: "thinking", reasoning_details: details },
-      ])
-    }),
-  )
-
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(
