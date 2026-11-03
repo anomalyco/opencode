@@ -5,7 +5,7 @@ import { ServerConnection } from "../../../services/server-connection"
 
 export const location = { directory: process.cwd() }
 
-export const createClient = Effect.fn("cli.auth.client")(function* (input: ServerConnection.Args) {
+export const createClient = Effect.fn("cli.auth.client")(function* (input: ServerConnection.Args = {}) {
   const server = yield* ServerConnection.resolve(input)
   return OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
 })

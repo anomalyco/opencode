@@ -72,6 +72,16 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* get(sessionID)
     yield* bus.publish(SessionEvent.Renamed, { sessionID, title: input.title })
   })
+  const archive = Effect.fn("Session.archive")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* get(sessionID)
+    if (session.time.archived) return
+    yield* bus.publish(SessionEvent.Archived, { sessionID })
+  })
+  const unarchive = Effect.fn("Session.unarchive")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* get(sessionID)
+    if (!session.time.archived) return
+    yield* bus.publish(SessionEvent.Unarchived, { sessionID })
+  })
   const setMetadata = Effect.fn("Session.setMetadata")(function* (
     sessionID: SessionSchema.ID,
     input: { metadata: SessionSchema.Metadata },
@@ -155,19 +165,22 @@ export const make = Effect.fn("Session.make")(function* () {
             delivery: input.delivery ?? "steer",
           })
           if (existing) return existing
-          const item = yield* restore(
-            SessionPrompt.prepare({ session, messageID, input }).pipe(
-              Effect.provideService(Instance.Service, instances),
-              Effect.provideService(FSUtil.Service, fs),
-            ),
+          // Preparation, the staged revert commit and admission share one acquisition of the session's location
+          // services, so projections see its config whoever called prompt.
+          return yield* Effect.gen(function* () {
+            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
+            // Commit a staged revert only after preparation succeeds, before admitting new work.
+            if (session.revert) yield* SessionRevert.commit(bus, session)
+            return yield* admission.admit({
+              id: messageID,
+              sessionID: session.id,
+              item,
+            })
+          }).pipe(
+            instances.provide(session),
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(FSUtil.Service, fs),
           )
-          // Commit a staged revert only after preparation succeeds, before admitting new work.
-          if (session.revert) yield* SessionRevert.commit(bus, session)
-          return yield* admission.admit({
-            id: messageID,
-            sessionID: session.id,
-            item,
-          })
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
@@ -293,7 +306,7 @@ export const make = Effect.fn("Session.make")(function* () {
               description: input.description,
               metadata: input.metadata,
             }),
-            delivery: SessionInbox.Delivery.make(input.delivery ?? "steer"),
+            delivery: input.delivery ?? "steer",
           } satisfies SessionInbox.Item
           const admitted = yield* admission
             .admit({
@@ -348,6 +361,8 @@ export const make = Effect.fn("Session.make")(function* () {
     message,
     view,
     rename,
+    archive,
+    unarchive,
     setMetadata,
     setPermissions,
     switchAgent,
@@ -372,6 +387,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const message = operations.message.bind(undefined, sessionID)
     const view = operations.view.bind(undefined, sessionID)
     const rename = operations.rename.bind(undefined, sessionID)
+    const archive = operations.archive.bind(undefined, sessionID)
+    const unarchive = operations.unarchive.bind(undefined, sessionID)
     const setMetadata = operations.setMetadata.bind(undefined, sessionID)
     const setPermissions = operations.setPermissions.bind(undefined, sessionID)
     const switchAgent = operations.switchAgent.bind(undefined, sessionID)
@@ -399,6 +416,8 @@ export const make = Effect.fn("Session.make")(function* () {
       message,
       view,
       rename,
+      archive,
+      unarchive,
       setMetadata,
       setPermissions,
       switchAgent,

@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/core/plugin"
 import { PluginUpdate } from "@opencode/core/plugin/update"
-import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { InvalidRequestError, PluginNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect, Exit } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
@@ -11,6 +11,18 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
     .handle("plugin.list", () =>
       Effect.gen(function* () {
         return yield* response(Plugin.Service.use((plugin) => plugin.list()))
+      }),
+    )
+    .handle("plugin.gui", (ctx) =>
+      Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const bundle = yield* plugins.gui(ctx.query.id)
+        if (!bundle)
+          return yield* new PluginNotFoundError({
+            pluginID: ctx.query.id,
+            message: `No active plugin with a ./gui-experimental bundle: ${ctx.query.id}`,
+          })
+        return yield* response(Effect.succeed(bundle))
       }),
     )
     .handle("plugin.check", (ctx) =>

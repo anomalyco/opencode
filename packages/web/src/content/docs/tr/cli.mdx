@@ -48,16 +48,6 @@ opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
 
 ---
 
-### agent
-
-opencode için agent'ları yönetin.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 `serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir opencode arka uç sunucusuna bir terminal ekleyin.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu çatalla (`--continue` veya `--session` ile kullanın)                    |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OPENCODE_SERVER_PASSWORD`)                      |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OPENCODE_SERVER_USERNAME` veya `opencode`) |
-
----
-
-#### create
-
-Özel yapılandırmaya sahip yeni bir agent oluşturun.
-
-```bash
-opencode agent create
-```
-
-Bu komut, özel sistem istemi ve araç yapılandırmasıyla yeni bir agent oluşturma konusunda size yol gösterecektir.
-
----
-
-#### list
-
-Mevcut tüm agent'ları listeleyin.
-
-```bash
-opencode agent list
-```
 
 ---
 

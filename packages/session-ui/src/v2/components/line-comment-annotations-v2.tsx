@@ -5,14 +5,14 @@ import {
   createLineCommentGutterRenderer,
   createLineCommentState,
   createManagedLineCommentAnnotationRenderer,
-  type LineCommentShape,
+  type SavedLineComment,
   type LineCommentStateProps,
 } from "../../components/line-comment-annotations"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { cloneSelectedLineRange, formatSelectedLineLabel } from "../../pierre/selection-bridge"
+import { cloneSelectedLineRange } from "../../pierre/selection-bridge"
 import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode/ui/line-comment"
 
-type LineCommentControllerV2Props<T extends LineCommentShape> = {
+type LineCommentControllerV2Props<T extends SavedLineComment> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
@@ -29,16 +29,15 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
 type CommentProps = {
   id?: string
   comment: JSX.Element
-  selection: JSX.Element
   actions?: JSX.Element
   editor?: DraftProps
+  onOpen?: VoidFunction
   onClick?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
 }
 
 type DraftProps = {
   value: string
-  selection: JSX.Element
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
@@ -59,14 +58,13 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onClick={view().onClick}
           onMouseEnter={view().onMouseEnter}
         >
-          <LineComment comment={view().comment} selection={view().selection} actions={view().actions} />
+          <LineComment comment={view().comment} actions={view().actions} onOpen={view().onOpen} />
         </div>
       }
     >
       <div data-prevent-autofocus="" data-comment-id={view().id} onMouseDown={(event) => event.stopPropagation()}>
         <LineCommentEditor
           value={view().editor!.value}
-          selection={view().editor!.selection}
           onInput={view().editor!.onInput}
           onCancel={view().editor!.onCancel}
           onSubmit={view().editor!.onSubmit}
@@ -84,7 +82,6 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
     <div data-prevent-autofocus="" onMouseDown={(event) => event.stopPropagation()}>
       <LineCommentEditor
         value={view().value}
-        selection={view().selection}
         onInput={view().onInput}
         onCancel={view().onCancel}
         onSubmit={view().onSubmit}
@@ -96,7 +93,7 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
   )
 }
 
-export function createLineCommentControllerV2<T extends LineCommentShape>(props: LineCommentControllerV2Props<T>) {
+export function createLineCommentControllerV2<T extends SavedLineComment>(props: LineCommentControllerV2Props<T>) {
   const i18n = useI18n()
   const note = createLineCommentState<string>(props.state)
 
@@ -124,7 +121,8 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       return {
         id: comment.id,
         comment: comment.comment,
-        selection: formatSelectedLineLabel(comment.selection, i18n.t),
+        // A comment with actions (its menu offers Edit) also opens its editor from a click on the card.
+        onOpen: props.renderCommentActions ? edit : undefined,
         get actions() {
           return props.renderCommentActions?.(comment, { edit, remove })
         },
@@ -134,7 +132,6 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
                 get value() {
                   return note.draft()
                 },
-                selection: formatSelectedLineLabel(comment.selection, i18n.t),
                 onInput: note.setDraft,
                 onCancel: note.cancelDraft,
                 onSubmit: (value: string) => {
@@ -156,7 +153,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
           note.hoverComment(comment.selection)
         },
         onClick: () => {
-          if (note.isEditing(comment.id)) return
+          if (props.renderCommentActions || note.isEditing(comment.id)) return
           note.toggleComment(comment.id, comment.selection)
         },
       }
@@ -165,7 +162,6 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       get value() {
         return note.draft()
       },
-      selection: formatSelectedLineLabel(range, i18n.t),
       onInput: note.setDraft,
       onCancel: () => {
         note.cancelDraft()

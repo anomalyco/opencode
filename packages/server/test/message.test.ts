@@ -24,7 +24,6 @@ const messages: SessionMessageInfo[] = [
     status: "completed",
     reason: "manual",
     summary: "Conversation summary",
-    recent: "",
     time: { created: 700 },
   },
   { id: "msg_x", type: "user", text: "Third request", time: { created: 600 } },
@@ -49,7 +48,7 @@ const setup = Effect.gen(function* () {
   })
   const session = yield* Effect.promise(async () => {
     const template = await api.session.create({ title: "Message filtering" })
-    return api.session.import({ info: { ...template, id: Session.ID.create() }, messages })
+    return api.experimental.session.import({ info: { ...template, id: Session.ID.create() }, messages })
   })
   return { api, handler, sessionID: session.id }
 })

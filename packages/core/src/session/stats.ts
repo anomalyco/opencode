@@ -1,6 +1,6 @@
 export * as SessionStats from "./stats.js"
 
-import { DateTime, Effect, Option, Schema } from "effect"
+import { DateTime, Effect, Option, Schema, type Types } from "effect"
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
@@ -12,7 +12,7 @@ import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { Database } from "../database/database.js"
 import { EventTable } from "../event/sql.js"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
 
 type Input = {
   readonly from?: number
@@ -22,12 +22,7 @@ type Input = {
   readonly tools?: ToolMode
 }
 
-type Tokens = {
-  input: number
-  output: number
-  reasoning: number
-  cache: { read: number; write: number }
-}
+type Tokens = Types.DeepMutable<TokenUsage.Info>
 
 type MessageRow = {
   sessionID: string
@@ -198,6 +193,17 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             .get<ToolSummaryRow>(
               sql`
             WITH calls AS MATERIALIZED (
+              SELECT json_extract(part.data, '$.state.status') AS status
+              FROM ${SessionPartTable} AS part
+              JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
+              JOIN ${SessionTable} AS session ON session.id = message.session_id
+              WHERE message.type = 'assistant'
+                AND message.time_created >= ${range.from}
+                AND message.time_created < ${range.to}
+                AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+                AND part.type = 'tool'
+                ${project}
+              UNION ALL
               SELECT json_extract(content.value, '$.state.status') AS status
               FROM ${SessionMessageTable} AS message
               JOIN ${SessionTable} AS session ON session.id = message.session_id,
@@ -206,6 +212,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 AND message.time_created >= ${range.from}
                 AND message.time_created < ${range.to}
                 AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+                AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
                 AND json_extract(content.value, '$.type') = 'tool'
                 ${project}
             )
@@ -234,6 +241,24 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           .all<ToolRow>(
             sql`
           SELECT
+            json_extract(part.data, '$.name') AS name,
+            json_extract(part.data, '$.state.status') AS status,
+            CASE
+              WHEN json_extract(part.data, '$.time.completed') IS NULL THEN NULL
+              ELSE json_extract(part.data, '$.time.completed')
+                - coalesce(json_extract(part.data, '$.time.ran'), json_extract(part.data, '$.time.created'))
+            END AS duration
+          FROM ${SessionPartTable} AS part
+          JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
+          JOIN ${SessionTable} AS session ON session.id = message.session_id
+          WHERE message.type = 'assistant'
+            AND message.time_created >= ${range.from}
+            AND message.time_created < ${range.to}
+            AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+            AND part.type = 'tool'
+            ${project}
+          UNION ALL
+          SELECT
             json_extract(content.value, '$.name') AS name,
             json_extract(content.value, '$.state.status') AS status,
             CASE
@@ -248,6 +273,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
             AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
+            AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
             AND json_extract(content.value, '$.type') = 'tool'
             ${project}
         `,
@@ -375,7 +401,7 @@ function emptyTokens(): Tokens {
   return { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 }
 
-function addTokens(target: Tokens, source: Tokens) {
+function addTokens(target: Tokens, source: TokenUsage.Info) {
   target.input += source.input
   target.output += source.output
   target.reasoning += source.reasoning

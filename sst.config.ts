@@ -11,6 +11,8 @@ export default $config({
         input.stage === "beta"
           ? {}
           : {
+              // Production state was written by 6.15.0; the default 6.13 provider can't read it back.
+              cloudflare: "6.15.0",
               aws: {
                 version: "7.30.0",
                 region: "us-east-1",

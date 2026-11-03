@@ -4,7 +4,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { LLMEvent, Usage, type FinishReasonDetails, type LLMRequest } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { JsonObject, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -49,7 +49,7 @@ const Body = Schema.Struct({
         function: Schema.Struct({
           name: Schema.String,
           description: Schema.optional(Schema.String),
-          parameters: Schema.Unknown,
+          parameters: JsonObject,
         }),
       }),
     ),
@@ -340,10 +340,6 @@ export const protocol = Protocol.make({
     initial: (): State => ({ lifecycle: Lifecycle.initial(), tools: ToolStream.empty(), finished: false }),
     step,
     terminal: (event) => event.type === "message-end",
-    onHalt: (state) =>
-      state.finished
-        ? Effect.succeed([])
-        : Effect.fail(ProviderShared.eventError(ADAPTER, "Cohere stream ended without message-end")),
   },
 })
 export const route = Route.make({

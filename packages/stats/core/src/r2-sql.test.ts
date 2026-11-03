@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { expect, test } from "bun:test"
 import { queryR2SqlPages, R2SqlQueryError, type R2SqlData } from "./r2-sql"
 
@@ -96,6 +97,54 @@ test("retries a transient timeout on the same page without repeating earlier row
   expect(calls[1]).toBe(calls[2])
   expect(calls[0]).not.toBe(calls[1])
 }, 10000)
+
+for (const [name, error] of [
+  [
+    "an intermittent 60104 response",
+    new R2SqlQueryError({ message: "Unprocessable Entity", status: 422, code: 60104 }),
+  ],
+  [
+    "a dropped connection",
+    new R2SqlQueryError({
+      message: "Failed to run R2 SQL stats query",
+      cause: new TypeError("The socket connection was closed unexpectedly"),
+    }),
+  ],
+] as const) {
+  test(`retries ${name} on the same page`, async () => {
+    const calls: string[] = []
+    const rows = await Effect.runPromise(
+      Effect.gen(function* () {
+        const running = yield* queryR2SqlPages("SELECT * FROM aggregates", undefined, (query) => {
+          calls.push(query)
+          return calls.length === 1 ? Effect.fail(error) : Effect.succeed([{ model: "a" }])
+        }).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Effect.yieldNow
+        yield* TestClock.adjust("5 seconds")
+        return yield* Fiber.join(running)
+      }).pipe(Effect.provide(TestClock.layer())),
+    )
+    expect(rows).toEqual([{ model: "a" }])
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toBe(calls[0])
+  })
+}
+
+test("does not retry the request timeout", async () => {
+  const calls: string[] = []
+  const error = new R2SqlQueryError({
+    message: "Failed to run R2 SQL stats query",
+    cause: new DOMException("The operation timed out.", "TimeoutError"),
+  })
+  const result = await Effect.runPromise(
+    queryR2SqlPages("SELECT * FROM aggregates", undefined, (query) => {
+      calls.push(query)
+      return Effect.fail(error)
+    }).pipe(Effect.flip),
+  )
+  expect(result).toBe(error)
+  expect(calls).toHaveLength(1)
+})
 
 test("bounds transient retries and preserves the final error", async () => {
   const calls: string[] = []

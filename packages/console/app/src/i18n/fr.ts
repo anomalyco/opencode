@@ -10,7 +10,7 @@ export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "Documentation",
   "nav.enterprise": "Entreprise",
-  "nav.zen": "Zen",
+  "nav.zen": "OpenCode Models",
   "nav.login": "Se connecter",
   "nav.free": "Télécharger",
   "nav.home": "Accueil",
@@ -31,6 +31,10 @@ export const dict = {
   "legal.brand": "Marque",
   "legal.privacy": "Confidentialité",
   "legal.terms": "Conditions",
+  "legal.status.operational": "Tous les systèmes sont opérationnels",
+  "legal.status.degraded": "Performances dégradées",
+  "legal.status.outage": "Interruption de service",
+  "legal.status.unknown": "État du système",
 
   "email.title": "Soyez le premier à être informé de nos nouveaux produits",
   "email.subtitle": "Inscrivez-vous à la liste d'attente pour un accès anticipé.",
@@ -70,12 +74,8 @@ export const dict = {
   "home.what.title": "Qu'est-ce que OpenCode ?",
   "home.what.body":
     "OpenCode est un agent open source qui vous aide à écrire du code dans votre terminal, IDE ou desktop.",
-  "home.what.lsp.title": "LSP activé",
-  "home.what.lsp.body": "Charge automatiquement les bons LSP pour le LLM",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Lancez plusieurs agents en parallèle sur le même projet",
-  "home.what.shareLinks.title": "Liens de partage",
-  "home.what.shareLinks.body": "Partagez un lien vers n'importe quelle session pour référence ou debug",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Connectez-vous avec GitHub pour utiliser votre compte Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -111,12 +111,11 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "En plus, vous pouvez utiliser des modèles populaires pour le code en créant un compte",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Nous encourageons l'utilisation de Zen, mais OpenCode fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
+    "Nous encourageons l'utilisation d'OpenCode Models, mais OpenCode fonctionne aussi avec les fournisseurs populaires comme OpenAI, Anthropic, xAI, etc.",
   "home.faq.a3.p4.beforeLocal": "Vous pouvez même connecter vos",
   "home.faq.a3.p4.localLink": "modèles locaux",
   "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec OpenCode ?",
-  "home.faq.a4.p1":
-    "Oui, OpenCode prend en charge les abonnements des principaux fournisseurs. Vous pouvez utiliser Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
+  "home.faq.a4.p1": "Oui, vous pouvez utiliser vos abonnements ChatGPT Plus/Pro ou GitHub Copilot.",
   "home.faq.q5": "Puis-je utiliser OpenCode uniquement dans le terminal ?",
   "home.faq.a5.beforeDesktop": "Plus maintenant ! OpenCode est désormais disponible en application pour",
   "home.faq.a5.desktop": "desktop",
@@ -138,25 +137,25 @@ export const dict = {
 
   "home.zenCta.title": "Accédez à des modèles fiables et optimisés pour les agents de code",
   "home.zenCta.body":
-    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
-  "home.zenCta.link": "En savoir plus sur Zen",
+    "OpenCode Models vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
+  "home.zenCta.link": "En savoir plus sur OpenCode Models",
 
-  "zen.title": "OpenCode Zen | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
+  "zen.title": "OpenCode Models | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
   "zen.hero.title": "Modèles fiables et optimisés pour les agents de code",
   "zen.hero.body":
-    "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
+    "OpenCode Models vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
 
-  "zen.faq.q1": "Qu'est-ce que OpenCode Zen ?",
+  "zen.faq.q1": "Qu'est-ce que OpenCode Models ?",
   "zen.faq.a1":
-    "Zen est un ensemble sélectionné de modèles d'IA testés et benchmarkés pour les agents de code, créé par l'équipe derrière OpenCode.",
-  "zen.faq.q2": "Qu'est-ce qui rend Zen plus précis ?",
+    "OpenCode Models est un ensemble sélectionné de modèles d'IA testés et benchmarkés pour les agents de code, créé par l'équipe derrière OpenCode.",
+  "zen.faq.q2": "Qu'est-ce qui rend OpenCode Models plus précis ?",
   "zen.faq.a2":
-    "Zen ne propose que des modèles testés et benchmarkés spécifiquement pour les agents de code. Vous n'utiliseriez pas un couteau à beurre pour couper un steak ; n'utilisez pas de mauvais modèles pour coder.",
-  "zen.faq.q3": "Zen est-il moins cher ?",
+    "OpenCode Models ne propose que des modèles testés et benchmarkés spécifiquement pour les agents de code. Vous n'utiliseriez pas un couteau à beurre pour couper un steak ; n'utilisez pas de mauvais modèles pour coder.",
+  "zen.faq.q3": "OpenCode Models est-il moins cher ?",
   "zen.faq.a3":
-    "Zen n'est pas à but lucratif. Zen vous facture au prix coûtant des fournisseurs de modèles. Plus Zen est utilisé, plus OpenCode peut négocier de meilleurs tarifs et vous les répercuter.",
-  "zen.faq.q4": "Combien coûte Zen ?",
-  "zen.faq.a4.p1.beforePricing": "Zen",
+    "OpenCode Models n'est pas à but lucratif. OpenCode Models vous facture au prix coûtant des fournisseurs de modèles. Plus OpenCode Models est utilisé, plus OpenCode peut négocier de meilleurs tarifs et vous les répercuter.",
+  "zen.faq.q4": "Combien coûte OpenCode Models ?",
+  "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "facture par requête",
   "zen.faq.a4.p1.afterPricing": "sans marge, vous payez donc exactement ce que facture le fournisseur du modèle.",
   "zen.faq.a4.p2.beforeAccount":
@@ -166,25 +165,25 @@ export const dict = {
     "Pour couvrir les coûts, OpenCode ajoute uniquement de petits frais de traitement de paiement de 1,23 $ par recharge de 20 $.",
   "zen.faq.q5": "Et pour les données et la confidentialité ?",
   "zen.faq.a5.beforeExceptions":
-    "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs appliquent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+    "Tous les modèles d'OpenCode Models sont hébergés aux États-Unis et dans l'UE. Les fournisseurs appliquent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.faq.a5.exceptionsLink": "exceptions suivantes",
   "zen.faq.q6": "Puis-je définir des limites de dépense ?",
   "zen.faq.a6": "Oui, vous pouvez définir des limites de dépense mensuelles dans votre compte.",
   "zen.faq.q7": "Puis-je annuler ?",
   "zen.faq.a7": "Oui, vous pouvez désactiver la facturation à tout moment et utiliser votre solde restant.",
-  "zen.faq.q8": "Puis-je utiliser Zen avec d'autres agents de code ?",
+  "zen.faq.q8": "Puis-je utiliser OpenCode Models avec d'autres agents de code ?",
   "zen.faq.a8":
-    "Zen fonctionne très bien avec OpenCode, mais vous pouvez utiliser Zen avec n'importe quel agent. Suivez les instructions de configuration dans votre agent préféré.",
+    "OpenCode Models fonctionne très bien avec OpenCode, mais vous pouvez utiliser OpenCode Models avec n'importe quel agent. Suivez les instructions de configuration dans votre agent préféré.",
   "zen.faq.q9": "Puis-je obtenir un remboursement ?",
   "zen.faq.a9":
     "Vous pourriez avoir droit à un remboursement si le paiement a été effectué au cours des 14 derniers jours et que vous n’avez pas utilisé le crédit de cet achat. {{contact}} pour demander un remboursement.",
 
-  "zen.cta.start": "Commencez avec Zen",
+  "zen.cta.start": "Commencez avec OpenCode Models",
   "zen.pricing.title": "Ajoutez 20 $ de solde Pay as you go",
   "zen.pricing.fee": "(+1,23 $ de frais de traitement de carte)",
   "zen.pricing.body":
     "Utilisez avec n'importe quel agent. Fixez des limites de dépenses mensuelles. Annulez à tout moment.",
-  "zen.problem.title": "Quel problème Zen résout-il ?",
+  "zen.problem.title": "Quel problème OpenCode Models résout-il ?",
   "zen.problem.body":
     "Il existe de nombreux modèles disponibles, mais seuls quelques-uns fonctionnent bien avec les agents de code. La plupart des fournisseurs les configurent différemment avec des résultats variables.",
   "zen.problem.subtitle":
@@ -192,23 +191,24 @@ export const dict = {
   "zen.problem.item1": "Test des modèles sélectionnés et consultation de leurs équipes",
   "zen.problem.item2": "Collaboration avec les fournisseurs pour garantir une livraison correcte",
   "zen.problem.item3": "Benchmark de toutes les combinaisons modèle-fournisseur que nous recommandons",
-  "zen.how.title": "Comment fonctionne Zen",
+  "zen.how.title": "Comment fonctionne OpenCode Models",
   "zen.how.body":
-    "Bien que nous vous suggérions d'utiliser Zen avec OpenCode, vous pouvez utiliser Zen avec n'importe quel agent.",
+    "Bien que nous vous suggérions d'utiliser OpenCode Models avec OpenCode, vous pouvez utiliser OpenCode Models avec n'importe quel agent.",
   "zen.how.step1.title": "Inscrivez-vous et ajoutez un solde de 20 $",
   "zen.how.step1.beforeLink": "suivez les",
   "zen.how.step1.link": "instructions de configuration",
-  "zen.how.step2.title": "Utilisez Zen avec une tarification transparente",
+  "zen.how.step2.title": "Utilisez OpenCode Models avec une tarification transparente",
   "zen.how.step2.link": "payez par requête",
   "zen.how.step2.afterLink": "sans marge",
   "zen.how.step3.title": "Recharge automatique",
-  "zen.how.step3.body": "lorsque votre solde atteint 5 $, nous ajouterons automatiquement 20 $",
+  "zen.how.step3.body":
+    "activez la recharge automatique facultative et choisissez le seuil de solde et le montant de la recharge",
   "zen.privacy.title": "Votre vie privée est importante pour nous",
   "zen.privacy.beforeExceptions":
-    "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+    "Tous les modèles d'OpenCode Models sont hébergés aux États-Unis et dans l'UE. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
-  "go.promo.step5": "Step 5 Preview est désormais disponible dans Go avec 4× d’utilisation pour une durée limitée.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro est désormais disponible dans Go.",
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
@@ -218,15 +218,26 @@ export const dict = {
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
 
   "go.cta.text": "S'abonner à Go",
+  "go.plans.audience": "Offres Go pour",
+  "go.plans.individuals": "Individuels",
+  "go.plans.teams": "Équipes",
   "go.plans.month": "par mois",
+  "go.plans.memberMonth": "par membre\net par mois",
   "go.plans.plus.cta": "S'abonner à Go Plus",
   "go.plans.plus.description": "Go Plus coûte 40 $/mois et offre des limites plus élevées.",
+  "go.plans.teams.cta": "S'abonner à Go Teams",
+  "go.plans.teams.description": "Go Teams coûte 20 $/membre/mois avec des limites pour chaque membre.",
   "go.plans.go.feature1": "Modèles sélectionnés et abordables",
   "go.plans.go.feature2": "Testés pour le codage agentique",
   "go.plans.go.feature3": "Limites généreuses et accès fiable",
   "go.plans.plus.feature1": "Tous les avantages de Go",
   "go.plans.plus.feature2": "Des limites plus élevées pour coder plus longtemps sans perdre le fil",
   "go.plans.plus.feature3": "Pour les projets plus vastes et exigeants",
+  "go.plans.teams.feature1": "Chaque membre dispose de ses propres limites Go",
+  "go.plans.teams.feature2": "Limites mensuelles généreuses pour chaque modèle",
+  "go.plans.teams.feature3": "Une seule facture pour tout l'espace de travail",
+  "go.plans.teams.feature4": "Utilisation supplémentaire avec budgets par membre",
+  "go.plans.teams.feature5": "Contrôles de confidentialité et de région des modèles",
   "go.plans.limits": "Limites",
   "go.plans.description": "Requêtes estimées par 5 heures et limites mensuelles par modèle",
   "go.plans.legend": "Offres",
@@ -265,9 +276,9 @@ export const dict = {
     "Go est un abonnement à faible coût qui vous donne un accès fiable à des modèles open source performants pour le codage agentique.",
   "go.faq.q2": "Quels modèles Go inclut-il ?",
   "go.faq.a2": "Go inclut les modèles ci-dessous, avec des limites généreuses et un accès fiable.",
-  "go.faq.q3": "Est-ce que Go est la même chose que Zen ?",
+  "go.faq.q3": "Est-ce que Go est la même chose que OpenCode Models ?",
   "go.faq.a3":
-    "Non. Zen est un paiement à l'utilisation, tandis que Go coûte 10 $/mois, avec des limites généreuses et un accès fiable à une sélection de modèles.",
+    "Non. OpenCode Models est un paiement à l'utilisation, tandis que Go coûte 10 $/mois, avec des limites généreuses et un accès fiable à une sélection de modèles.",
   "go.faq.q4": "Combien coûte Go ?",
   "go.faq.a4.p1.beforePricing": "Go coûte",
   "go.faq.a4.p1.pricingLink": "10 $/mois",
@@ -290,11 +301,9 @@ export const dict = {
     "Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours.",
   "go.faq.a5.museRetention":
     "Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta.",
-  "go.faq.a5.geminiRetention":
-    "Vos prompts et vos complétions peuvent être utilisés pour entraîner de futurs modèles Google.",
   "go.faq.a5.learnMore": "En savoir plus",
   "go.faq.a5.deepseekRetention":
-    "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 octobre 2026.",
+    "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 30 novembre 2026.",
 
   "go.faq.q6": "Puis-je recharger mon crédit ?",
   "go.faq.a6": "Si vous avez besoin de plus d'utilisation, vous pouvez recharger du crédit dans votre compte.",
@@ -305,7 +314,7 @@ export const dict = {
     "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
   "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
   "go.faq.a9":
-    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go propose une sélection de modèles avec des quotas de requêtes plus élevés sur des fenêtres glissantes : 20 % du quota mensuel par 5 heures, 50 % par semaine et 100 % par mois. Les quotas propres à chaque modèle peuvent varier (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là. Go propose une sélection de modèles avec des quotas de requêtes plus élevés sur des fenêtres glissantes : 20 % du quota mensuel par 5 heures, 50 % par semaine et 100 % par mois. Les quotas propres à chaque modèle peuvent varier (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
   "go.faq.q10": "Puis-je obtenir un remboursement ?",
   "go.faq.a10":
     "Vous pourriez avoir droit à un remboursement si le paiement a été effectué au cours des 14 derniers jours et que vous n’avez pas utilisé votre quota Go pendant cette période de facturation. {{contact}} pour demander un remboursement.",
@@ -373,6 +382,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Format d'e-mail invalide.",
   "enterprise.form.error.invalidInferenceSpend": "Sélectionnez une tranche de dépenses d'inférence valide.",
   "enterprise.form.error.internalServer": "Erreur interne du serveur.",
+  "enterprise.form.error.captcha": "La vérification captcha a échoué. Veuillez réessayer.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",
   "enterprise.faq.a1":
@@ -382,7 +392,7 @@ export const dict = {
     "Commencez simplement par un essai interne avec votre équipe. Par défaut, OpenCode ne stocke pas votre code ni vos données de contexte, ce qui facilite la prise en main. Ensuite, contactez-nous pour discuter des tarifs et des options de mise en œuvre.",
   "enterprise.faq.q3": "Comment fonctionne la tarification entreprise ?",
   "enterprise.faq.a3":
-    "Nous proposons une tarification entreprise par siège. Si vous avez votre propre passerelle LLM, nous ne facturons pas les tokens utilisés. Pour plus de détails, contactez-nous pour un devis sur mesure en fonction des besoins de votre organisation.",
+    "Si vous avez votre propre passerelle LLM, nous ne facturons pas les tokens utilisés. Pour plus de détails, contactez-nous pour un devis sur mesure en fonction des besoins de votre organisation.",
   "enterprise.faq.q4": "Mes données sont-elles sécurisées avec OpenCode Enterprise ?",
   "enterprise.faq.a4":
     "Oui. OpenCode ne stocke pas votre code ni vos données de contexte. Tout le traitement se fait localement ou via des appels API directs vers votre fournisseur d'IA. Avec une configuration centralisée et une intégration SSO, vos données restent sécurisées au sein de l'infrastructure de votre organisation.",

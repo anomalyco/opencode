@@ -9,7 +9,7 @@ export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
   "nav.enterprise": "Kurumsal",
-  "nav.zen": "Zen",
+  "nav.zen": "OpenCode Models",
   "nav.login": "Giriş",
   "nav.free": "İndir",
   "nav.home": "Ana sayfa",
@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Marka",
   "legal.privacy": "Gizlilik",
   "legal.terms": "Koşullar",
+  "legal.status.operational": "Tüm sistemler çalışıyor",
+  "legal.status.degraded": "Düşük performans",
+  "legal.status.outage": "Hizmet kesintisi",
+  "legal.status.unknown": "Sistem durumu",
 
   "email.title": "Yeni ürünler yayınladığımızda ilk siz haberdar olun",
   "email.subtitle": "Erken erişim için bekleme listesine katılın.",
@@ -70,12 +74,8 @@ export const dict = {
   "home.what.title": "OpenCode nedir?",
   "home.what.body":
     "OpenCode, terminalinizde, IDE'nizde veya masaüstünde kod yazmanıza yardım eden açık kaynaklı bir ajandır.",
-  "home.what.lsp.title": "LSP etkin",
-  "home.what.lsp.body": "LLM için doğru LSP'leri otomatik olarak yükler",
   "home.what.multiSession.title": "Çoklu oturum",
   "home.what.multiSession.body": "Aynı projede birden fazla ajanı paralel çalıştırın",
-  "home.what.shareLinks.title": "Paylaşım bağlantıları",
-  "home.what.shareLinks.body": "Referans veya hata ayıklama için herhangi bir oturumu bağlantı olarak paylaşın",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Copilot hesabınızı kullanmak için GitHub ile giriş yapın",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -109,12 +109,12 @@ export const dict = {
   "home.faq.a3.p1": "Şart değil. OpenCode, hesap açmadan kullanabileceğiniz ücretsiz modellerle gelir.",
   "home.faq.a3.p2.beforeZen": "Bunun dışında, popüler kodlama modellerini kullanmak için bir",
   "home.faq.a3.p2.afterZen": " hesabı oluşturabilirsiniz.",
-  "home.faq.a3.p3": "Zen'i öneriyoruz, ancak OpenCode OpenAI, Anthropic, xAI gibi popüler sağlayıcılarla da çalışır.",
+  "home.faq.a3.p3":
+    "OpenCode Models'i öneriyoruz, ancak OpenCode OpenAI, Anthropic, xAI gibi popüler sağlayıcılarla da çalışır.",
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
-  "home.faq.a4.p1":
-    "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
+  "home.faq.a4.p1": "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",
@@ -136,25 +136,25 @@ export const dict = {
 
   "home.zenCta.title": "Kodlama ajanları için güvenilir, optimize modeller",
   "home.zenCta.body":
-    "Zen, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
-  "home.zenCta.link": "Zen hakkında",
+    "OpenCode Models, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
+  "home.zenCta.link": "OpenCode Models hakkında",
 
-  "zen.title": "OpenCode Zen | Kodlama ajanları için güvenilir, optimize edilmiş modellerin seçilmiş seti",
+  "zen.title": "OpenCode Models | Kodlama ajanları için güvenilir, optimize edilmiş modellerin seçilmiş seti",
   "zen.hero.title": "Kodlama ajanları için güvenilir, optimize modeller",
   "zen.hero.body":
-    "Zen, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
+    "OpenCode Models, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
 
-  "zen.faq.q1": "OpenCode Zen nedir?",
+  "zen.faq.q1": "OpenCode Models nedir?",
   "zen.faq.a1":
-    "Zen, OpenCode ekibi tarafından oluşturulan ve kodlama ajanları için test edilip benchmark edilen seçilmiş bir AI model setidir.",
-  "zen.faq.q2": "Zen'i daha doğru yapan nedir?",
+    "OpenCode Models, OpenCode ekibi tarafından oluşturulan ve kodlama ajanları için test edilip benchmark edilen seçilmiş bir AI model setidir.",
+  "zen.faq.q2": "OpenCode Models'i daha doğru yapan nedir?",
   "zen.faq.a2":
-    "Zen yalnızca kodlama ajanları için özel olarak test edilip benchmark edilmiş modelleri sunar. Biftek kesmek için tereyağı bıçağı kullanmazsın; kodlama için kötü modeller kullanma.",
-  "zen.faq.q3": "Zen daha ucuz mu?",
+    "OpenCode Models yalnızca kodlama ajanları için özel olarak test edilip benchmark edilmiş modelleri sunar. Biftek kesmek için tereyağı bıçağı kullanmazsın; kodlama için kötü modeller kullanma.",
+  "zen.faq.q3": "OpenCode Models daha ucuz mu?",
   "zen.faq.a3":
-    "Zen kâr amaçlı değildir. Zen, model sağlayıcılarının maliyetlerini size yansıtır. Zen'in kullanımı arttıkça OpenCode daha iyi fiyatlar pazarlayabilir ve bunları size yansıtabilir.",
-  "zen.faq.q4": "Zen ne kadar?",
-  "zen.faq.a4.p1.beforePricing": "Zen",
+    "OpenCode Models kâr amaçlı değildir. OpenCode Models, model sağlayıcılarının maliyetlerini size yansıtır. OpenCode Models'in kullanımı arttıkça OpenCode daha iyi fiyatlar pazarlayabilir ve bunları size yansıtabilir.",
+  "zen.faq.q4": "OpenCode Models ne kadar?",
+  "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "istek başı ücret alır",
   "zen.faq.a4.p1.afterPricing":
     "ve hiçbir markup eklemez, yani model sağlayıcının ücretlendirdiği tutarı aynen ödersiniz.",
@@ -164,48 +164,49 @@ export const dict = {
     "Maliyetleri karşılamak için OpenCode, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
   "zen.faq.a5.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
+    "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.faq.a5.exceptionsLink": "istisnalarla",
   "zen.faq.q6": "Harcama limitleri ayarlayabilir miyim?",
   "zen.faq.a6": "Evet, hesabınızda aylık harcama limitleri ayarlayabilirsiniz.",
   "zen.faq.q7": "İptal edebilir miyim?",
   "zen.faq.a7":
     "Evet, istediğiniz zaman faturalandırmayı devre dışı bırakabilir ve kalan bakiyenizi kullanabilirsiniz.",
-  "zen.faq.q8": "Zen'i diğer kodlama ajanlarıyla kullanabilir miyim?",
+  "zen.faq.q8": "OpenCode Models'i diğer kodlama ajanlarıyla kullanabilir miyim?",
   "zen.faq.a8":
-    "Zen OpenCode ile harika çalışır, ama Zen'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
+    "OpenCode Models OpenCode ile harika çalışır, ama OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
   "zen.faq.q9": "Para iadesi alabilir miyim?",
   "zen.faq.a9":
     "Ücret son 14 gün içinde tahsil edildiyse ve bu satın alımdan gelen kredilerin hiçbirini kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
 
-  "zen.cta.start": "Zen'i kullanmaya başlayın",
+  "zen.cta.start": "OpenCode Models'i kullanmaya başlayın",
   "zen.pricing.title": "20$ Kullandıkça öde bakiyesi ekle",
   "zen.pricing.fee": "(+1,23$ kart işlem ücreti)",
   "zen.pricing.body":
     "Herhangi bir ajan ile kullanın. Aylık harcama limitlerini belirleyin. İstediğiniz zaman iptal edin.",
-  "zen.problem.title": "Zen hangi sorunu çözüyor?",
+  "zen.problem.title": "OpenCode Models hangi sorunu çözüyor?",
   "zen.problem.body":
     "Pek çok model mevcut ancak yalnızca birkaçı kodlama ajanlarıyla iyi çalışıyor. Çoğu sağlayıcı, bunları değişen sonuçlarla farklı şekilde yapılandırır.",
   "zen.problem.subtitle": "Bu sorunu yalnızca OpenCode kullanıcıları için değil, herkes için düzeltiyoruz.",
   "zen.problem.item1": "Seçilen modelleri test etme ve ekiplerine danışmanlık yapma",
   "zen.problem.item2": "Düzgün bir şekilde teslim edildiklerinden emin olmak için sağlayıcılarla çalışmak",
   "zen.problem.item3": "Önerdiğimiz tüm model-sağlayıcı kombinasyonlarının karşılaştırılması",
-  "zen.how.title": "Zen nasıl çalışır?",
-  "zen.how.body": "Zen'i OpenCode ile kullanmanızı önersek de, Zen'i herhangi bir ajan ile kullanabilirsiniz.",
+  "zen.how.title": "OpenCode Models nasıl çalışır?",
+  "zen.how.body":
+    "OpenCode Models'i OpenCode ile kullanmanızı önersek de, OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz.",
   "zen.how.step1.title": "Kaydolun ve 20$ bakiye ekleyin",
   "zen.how.step1.beforeLink": "takip edin",
   "zen.how.step1.link": "kurulum talimatları",
-  "zen.how.step2.title": "Şeffaf fiyatlandırmayla Zen kullanın",
+  "zen.how.step2.title": "Şeffaf fiyatlandırmayla OpenCode Models kullanın",
   "zen.how.step2.link": "istek başına ödeme",
   "zen.how.step2.afterLink": "sıfır işaretlemeyle",
   "zen.how.step3.title": "Otomatik yükleme",
-  "zen.how.step3.body": "bakiyeniz 5$'a ulaştığında otomatik olarak 20$ ekleyeceğiz",
+  "zen.how.step3.body": "isteğe bağlı otomatik yüklemeyi etkinleştirin, bakiye eşiğini ve yükleme tutarını seçin",
   "zen.privacy.title": "Gizliliğiniz bizim için önemlidir",
   "zen.privacy.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
+    "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
-  "go.promo.step5": "Step 5 Preview artık Go'da sınırlı bir süre için 4× kullanımla sunuluyor.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro artık Go'da kullanılabilir.",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
@@ -215,15 +216,26 @@ export const dict = {
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
   "go.cta.text": "Go'ya abone ol",
+  "go.plans.audience": "Go planları",
+  "go.plans.individuals": "Bireysel",
+  "go.plans.teams": "Ekipler",
   "go.plans.month": "aylık",
+  "go.plans.memberMonth": "üye başına\naylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
+  "go.plans.teams.cta": "Go Teams'e abone ol",
+  "go.plans.teams.description": "Go Teams üye başına ayda 20$'dır ve her üyeye kendi limitlerini sunar.",
   "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",
   "go.plans.go.feature2": "Ajan destekli kodlama için test edildi",
   "go.plans.go.feature3": "Cömert limitler ve güvenilir erişim",
   "go.plans.plus.feature1": "Go'daki her şey dahil",
   "go.plans.plus.feature2": "Daha uzun, odaklı kodlama oturumları için daha yüksek limitler",
   "go.plans.plus.feature3": "Daha büyük ve zorlu projeler için",
+  "go.plans.teams.feature1": "Her üyeye kendine ait Go limitleri",
+  "go.plans.teams.feature2": "Her model için cömert aylık limitler",
+  "go.plans.teams.feature3": "Tüm çalışma alanı için tek fatura",
+  "go.plans.teams.feature4": "Üye başına bütçelerle ekstra kullanım",
+  "go.plans.teams.feature5": "Model gizliliği ve bölge kontrolleri",
   "go.plans.limits": "Limitler",
   "go.plans.description": "Model başına 5 saatlik tahmini istek ve aylık kullanım limitleri",
   "go.plans.legend": "Planlar",
@@ -262,9 +274,9 @@ export const dict = {
     "Go, ajan tabanlı kodlama için yetenekli açık kaynaklı modellere güvenilir erişim sağlayan düşük maliyetli bir aboneliktir.",
   "go.faq.q2": "Go hangi modelleri içerir?",
   "go.faq.a2": "Go, aşağıda listelenen modelleri cömert limitler ve güvenilir erişimle sunar.",
-  "go.faq.q3": "Go, Zen ile aynı mı?",
+  "go.faq.q3": "Go, OpenCode Models ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde modelidir; Go ise ayda 10$'dır ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
+    "Hayır. OpenCode Models kullandıkça öde modelidir; Go ise ayda 10$'dır ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "ayda 10$",
@@ -285,11 +297,9 @@ export const dict = {
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention":
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
-  "go.faq.a5.geminiRetention":
-    "İstemleriniz ve tamamlamalarınız gelecekteki Google modellerini eğitmek için kullanılabilir.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Kasım 2026 tarihine kadar geçerlidir.",
   "go.faq.a5.museRetention":
     "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 
@@ -303,7 +313,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
   "go.faq.q10": "Para iadesi alabilir miyim?",
   "go.faq.a10":
     "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
@@ -370,6 +380,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
   "enterprise.form.error.invalidInferenceSpend": "Geçerli bir çıkarım harcaması aralığı seçin.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
+  "enterprise.form.error.captcha": "Captcha doğrulaması başarısız oldu. Lütfen tekrar deneyin.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "OpenCode Enterprise nedir?",
   "enterprise.faq.a1":
@@ -379,7 +390,7 @@ export const dict = {
     "Ekibinizle dahili bir deneme ile başlayın. OpenCode varsayılan olarak kodunuzu veya bağlam verilerinizi saklamaz, bu da başlamayı kolaylaştırır. Ardından fiyatlandırma ve uygulama seçeneklerini görüşmek için bize ulaşın.",
   "enterprise.faq.q3": "Kurumsal fiyatlandırma nasıl çalışır?",
   "enterprise.faq.a3":
-    "Kullanıcı başı (per-seat) kurumsal fiyatlandırma sunuyoruz. Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
+    "Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
   "enterprise.faq.q4": "OpenCode Enterprise ile verilerim güvende mi?",
   "enterprise.faq.a4":
     "Evet. OpenCode kodunuzu veya bağlam verilerinizi saklamaz. Tüm işleme yerel olarak ya da AI sağlayıcınıza doğrudan API çağrıları ile gerçekleştirilir. Merkezileştirilmiş konfigürasyon ve SSO entegrasyonu ile verileriniz kurumunuzun altyapısı içinde güvende kalır.",

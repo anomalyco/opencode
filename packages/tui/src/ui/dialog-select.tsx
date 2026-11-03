@@ -20,12 +20,16 @@ import {
 } from "./dialog"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
-import { useConfig, useNewDesigns } from "../config"
+import { useConfig, useCursorStyle, useNewDesigns } from "../config"
 import { moveSelection, reconcileSelection } from "./select-controller"
 
 export interface DialogSelectProps<T> {
   title: string
   titleView?: JSX.Element
+  /** Muted line below the title, under the "new-designs" experiment. Not shown with `searchInTitle`. */
+  description?: string
+  /** Blank rows above the footer under the "new-designs" experiment. Defaults to 1. */
+  footerGap?: number
   placeholder?: string
   footer?: JSX.Element
   emptyView?: JSX.Element
@@ -65,7 +69,8 @@ export interface DialogSelectProps<T> {
 
 type DialogSelectActionBase<T> = {
   command: string
-  title: string
+  /** A function title follows the selected option, e.g. "favorite" / "unfavorite". */
+  title: string | ((option: DialogSelectOption<T> | undefined) => string)
   bind?: string
   /** Footer placement while the "new-designs" experiment is off. */
   side?: "left" | "right"
@@ -98,6 +103,8 @@ export interface DialogSelectOption<T = any> {
   details?: string[]
   footer?: JSX.Element | string
   footerColor?: RGBA
+  /** Cells the footer extends into the row's right padding, e.g. 2 for a `DialogSelectChoice` so its value lines up with plain footers. */
+  footerOverhang?: number
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
@@ -106,6 +113,12 @@ export interface DialogSelectOption<T = any> {
   fg?: RGBA
   gutter?: (color: RGBA) => JSX.Element
   margin?: JSX.Element
+  /**
+   * Shown below the list while this option is selected, under the "new-designs" experiment. A string is shown in muted
+   * text. A function is called each time the option becomes selected, because a rendered element cannot be shown again
+   * once it is removed.
+   */
+  detail?: string | (() => JSX.Element)
   onSelect?: (ctx: DialogContext) => void
 }
 
@@ -130,6 +143,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const config = useConfig().data
+  const cursorStyle = useCursorStyle()
   const newDesigns = useNewDesigns()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const renderer = useRenderer()
@@ -249,19 +263,29 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const limit = createMemo(() => Math.floor(dimensions().height / 2) - 6)
   // Under new designs an overflowing list gives its last row to a "…" indicator.
   const overflows = createMemo(() => newDesigns() && rows() > limit())
-  const height = createMemo(() => Math.min(rows(), limit()) - (overflows() ? 1 : 0))
   // Computed once here so per-row details do not each call useTerminalDimensions(),
   // which registers one renderer resize listener per mounted row.
   const detailsWidth = createMemo(() =>
     dialogSelectContentWidth(Math.min(dialogWidth(dialog.size), dimensions().width)),
   )
   const [moreBelow, setMoreBelow] = createSignal(false)
+  // At the bottom of the list the "…" row hands its row back to the list, so the dialog keeps its height.
+  const ellipsis = () => overflows() && moreBelow()
+  const height = createMemo(() => Math.min(rows(), limit()) - (ellipsis() ? 1 : 0))
   function updateMoreBelow() {
     if (!scroll || scroll.isDestroyed) return
     setMoreBelow(scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight)
   }
 
   const selected = createMemo(() => flat()[store.selected])
+  const detailView = () => {
+    const detail = selected()?.detail
+    return typeof detail === "function" ? detail : undefined
+  }
+  const detailText = () => {
+    const detail = selected()?.detail
+    return typeof detail === "string" ? detail : undefined
+  }
 
   createEffect(
     on(
@@ -510,7 +534,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         ...visible.map((item) => ({
           id: item.command,
-          title: item.title,
+          // Resolved without a selection so moving through the list does not rebuild the layer.
+          title: typeof item.title === "function" ? item.title(undefined) : item.title,
           group: "Dialog",
           bind: item.bind,
           run: () => trigger(item),
@@ -589,7 +614,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         side: item.side,
         group: item.group ?? (item.selection === "none" ? "secondary" : "primary"),
         action: {
-          title: item.title,
+          title: actionTitle(item),
           key: item.label,
           disabled: isActionDisabled(item),
           onTrigger: () => trigger(item),
@@ -613,6 +638,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     item.onTrigger(option)
   }
 
+  function actionTitle(item: Action) {
+    return typeof item.title === "function" ? item.title(selected()) : item.title
+  }
+
   function isActionItem(item: VisibleAction): item is Action & { label: string } {
     return "onTrigger" in item
   }
@@ -625,6 +654,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const searchInTitle = () => newDesigns() && props.searchInTitle === true && props.renderFilter !== false
 
+  // Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
+  // placeholder's first letter. Until the user types, match the highlighted row so that letter shows through.
+  const searchCursorColor = () => {
+    if (!newDesigns()) return theme.text.formfield.focused
+    return store.filter.length > 0 ? theme.text.base : theme.background.action.primary.focused
+  }
+
   const searchInput = () => (
     <input
       flexGrow={1}
@@ -636,9 +672,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })
       }}
       focusedBackgroundColor={theme.background.formfield.focused}
-      cursorColor={newDesigns() ? theme.text.base : theme.text.formfield.focused}
-      cursorStyle={config.cursor}
-      focusedTextColor={theme.text.formfield.focused}
+      cursorColor={searchCursorColor()}
+      cursorStyle={cursorStyle()}
+      focusedTextColor={newDesigns() ? theme.text.formfield.base : theme.text.formfield.focused}
       ref={(r) => {
         input = r
         input.traits = { status: "FILTER" }
@@ -649,12 +685,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         }, 1)
       }}
       placeholder={(searchInTitle() ? props.titlePlaceholder : undefined) ?? props.placeholder ?? "Search"}
-      placeholderColor={newDesigns() ? theme.text.faint : theme.text.muted}
+      placeholderColor={theme.text.muted}
     />
   )
 
   return (
     <DialogLayout
+      footerGap={props.footerGap}
       header={
         // Rows reserve a gutter, so the header and footer line up with the list's inset rather than the layout's.
         <box paddingLeft={DIALOG_LIST_INSET - DIALOG_INSET} paddingRight={DIALOG_LIST_INSET - DIALOG_INSET}>
@@ -662,7 +699,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             when={searchInTitle()}
             fallback={
               <>
-                <DialogHeader title={props.title} titleView={props.titleView} onClose={props.onCancel} />
+                <DialogHeader
+                  title={props.title}
+                  titleView={props.titleView}
+                  description={props.description}
+                  onClose={props.onCancel}
+                />
                 <Show when={props.renderFilter !== false}>
                   <box paddingTop={1}>{searchInput()}</box>
                 </Show>
@@ -773,6 +815,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                               flatten() ? (option.searchFooter ?? option.category ?? option.footer) : option.footer
                             }
                             footerColor={option.footerColor}
+                            footerOverhang={option.footerOverhang}
                             titleWidth={option.titleWidth}
                             truncateTitle={option.truncateTitle}
                             description={option.description !== category ? option.description : undefined}
@@ -792,9 +835,25 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               )}
             </For>
           </scrollbox>
-          <Show when={overflows()}>
+          <Show when={ellipsis()}>
             <box paddingLeft={DIALOG_LIST_INSET} flexShrink={0}>
-              <text fg={theme.text.faint}>{moreBelow() ? "…" : " "}</text>
+              <text fg={theme.text.muted}>…</text>
+            </box>
+          </Show>
+          {/* Reserved whenever any option has a detail, so the dialog does not resize as the selection moves. */}
+          <Show when={newDesigns() && flat().some((option) => option.detail !== undefined)}>
+            <box paddingTop={1} paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET} flexShrink={0}>
+              <Show
+                when={detailView()}
+                keyed
+                fallback={
+                  <text fg={theme.surface("dialog.footer").text.muted} wrapMode="word">
+                    {detailText() || " "}
+                  </text>
+                }
+              >
+                {(render) => render()}
+              </Show>
             </box>
           </Show>
         </Show>
@@ -803,12 +862,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 }
 
+/**
+ * Trailing value of a row that can be changed, under the "new-designs" experiment. The selected row shows how:
+ * `‹ dark ›` cycles with ←/→, `opencode ↵` opens a picker. Other rows pad the value to the same width so it does
+ * not shift as the selection moves. Pass it with `footerOverhang: 2` so the value itself ends where plain footers do.
+ */
+export function DialogSelectChoice(props: { value: string; active: boolean; open?: boolean }) {
+  const theme = useTheme().surface("dialog")
+  const text = () => {
+    if (!props.active) return `  ${props.value}  `
+    return props.open ? `  ${props.value} ↵` : `‹ ${props.value} ›`
+  }
+  return <span style={{ fg: props.active ? theme.text.action.primary.focused : theme.text.muted }}>{text()}</span>
+}
+
 function DialogSelectCategory(props: { title: string; first: boolean }) {
   const theme = useTheme().surface("dialog")
   const newDesigns = useNewDesigns()
   return (
     <box paddingTop={props.first ? 0 : 1} paddingLeft={DIALOG_LIST_INSET - (newDesigns() ? 0 : 1)}>
-      <text fg={newDesigns() ? theme.text.faint : theme.hue.accent[200]} attributes={TextAttributes.BOLD}>
+      <text fg={newDesigns() ? theme.text.muted : theme.hue.accent[200]} attributes={TextAttributes.BOLD}>
         {props.title}
       </text>
     </box>
@@ -823,6 +896,7 @@ function DialogSelectRow(props: {
   current: boolean
   footer?: JSX.Element | string
   footerColor?: RGBA
+  footerOverhang?: number
   titleWidth?: number
   truncateTitle?: boolean | "left"
   gutter?: (color: RGBA) => JSX.Element
@@ -837,8 +911,11 @@ function DialogSelectRow(props: {
     if (props.current && !newDesigns()) return theme.text.formfield.selected
     return theme.text.base
   })
-  // Secondary text (description and footer) on the highlighted row.
-  const secondary = () => (newDesigns() ? theme.text.action.secondary.focused : text())
+  // Secondary text (description and footer).
+  const secondary = () => {
+    if (!newDesigns()) return props.active ? text() : theme.text.muted
+    return props.active ? theme.text.action.secondary.focused : theme.text.muted
+  }
 
   const row = () => (
     // A marker or gutter takes its cell plus the row gap out of the left padding,
@@ -881,12 +958,12 @@ function DialogSelectRow(props: {
               ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
               : Locale.truncate(props.title, props.titleWidth ?? 61))}
         <Show when={props.description}>
-          <span style={{ fg: props.active ? secondary() : theme.text.muted }}>{" " + props.description}</span>
+          <span style={{ fg: secondary() }}>{" " + props.description}</span>
         </Show>
       </text>
       <Show when={props.footer}>
-        <box flexShrink={0}>
-          <text fg={props.active ? secondary() : (props.footerColor ?? theme.text.muted)}>{props.footer}</text>
+        <box flexShrink={0} marginRight={props.footerOverhang ? -props.footerOverhang : undefined}>
+          <text fg={props.active || !props.footerColor ? secondary() : props.footerColor}>{props.footer}</text>
         </box>
       </Show>
     </box>

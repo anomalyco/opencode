@@ -1,13 +1,19 @@
 import { describe, expect } from "bun:test"
+import { asc, eq } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionMessageTable, SessionPartTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { Agent } from "@opencode/schema/agent"
 import { Event } from "@opencode/schema/event"
+import { Model } from "@opencode/schema/model"
 import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
@@ -185,6 +191,144 @@ describe("SessionStore", () => {
           cursor: { id: SessionMessage.ID.make("msg_foreign"), direction: "next" },
         }),
       ).toEqual([])
+    }),
+  )
+
+  it.effect("hydrates assistant parts from session_part when present and falls back to inline content", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_part_read_fallback")
+      yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const agent = Agent.ID.make("build")
+      const model = { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") }
+
+      const inlineOnlyID = SessionMessage.ID.make("msg_inline_only")
+      const splitID = SessionMessage.ID.make("msg_split_parts")
+
+      // 1. Assistant message with inline content only (no session_part rows) -> falls back to inline content
+      yield* database.db
+        .insert(SessionMessageTable)
+        .values({
+          id: inlineOnlyID,
+          session_id: sessionID,
+          seq: 10,
+          type: "assistant",
+          time_created: 10,
+          time_updated: 10,
+          data: {
+            agent,
+            model,
+            content: [{ type: "text", text: "inline fallback content" }],
+            time: { created: 10, completed: 11 },
+          },
+        })
+        .run()
+
+      // 2. Assistant message with session_part rows -> hydrates parts in ordinal order
+      yield* database.db
+        .insert(SessionMessageTable)
+        .values({
+          id: splitID,
+          session_id: sessionID,
+          seq: 20,
+          type: "assistant",
+          time_created: 20,
+          time_updated: 20,
+          data: {
+            agent,
+            model,
+            content: [],
+            time: { created: 20, completed: 25 },
+          },
+        })
+        .run()
+      yield* database.db
+        .insert(SessionPartTable)
+        .values([
+          {
+            message_id: splitID,
+            session_id: sessionID,
+            ordinal: 0,
+            type: "reasoning",
+            call_id: null,
+            time_created: 20,
+            time_updated: 21,
+            data: { type: "reasoning", text: "first reasoning", time: { created: 20, completed: 21 } },
+          },
+          {
+            message_id: splitID,
+            session_id: sessionID,
+            ordinal: 1,
+            type: "tool",
+            call_id: "call_read",
+            time_created: 21,
+            time_updated: 23,
+            data: {
+              type: "tool",
+              id: "call_read",
+              name: "read",
+              executed: true,
+              state: {
+                status: "completed",
+                input: { path: "src/index.ts" },
+                content: [{ type: "text", text: "export {}" }],
+              },
+              time: { created: 21, ran: 22, completed: 23 },
+            },
+          },
+          {
+            message_id: splitID,
+            session_id: sessionID,
+            ordinal: 2,
+            type: "text",
+            call_id: null,
+            time_created: 23,
+            time_updated: 25,
+            data: { type: "text", text: "hydrated from session_part" },
+          },
+        ])
+        .run()
+
+      expect(yield* store.message(inlineOnlyID)).toMatchObject({
+        sessionID,
+        message: {
+          id: inlineOnlyID,
+          content: [{ type: "text", text: "inline fallback content" }],
+        },
+      })
+      expect(yield* store.message(splitID)).toMatchObject({
+        sessionID,
+        message: {
+          id: splitID,
+          content: [
+            { type: "reasoning", text: "first reasoning" },
+            { type: "tool", id: "call_read", state: { status: "completed" } },
+            { type: "text", text: "hydrated from session_part" },
+          ],
+        },
+      })
+
+      const hydrated = yield* store.messages({ sessionID, order: "asc" })
+      expect(hydrated).toMatchObject([
+        { id: inlineOnlyID, content: [{ type: "text", text: "inline fallback content" }] },
+        {
+          id: splitID,
+          content: [
+            { type: "reasoning", text: "first reasoning" },
+            { type: "tool", id: "call_read", state: { status: "completed" } },
+            { type: "text", text: "hydrated from session_part" },
+          ],
+        },
+      ])
+
+      const rows = yield* database.db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .orderBy(asc(SessionMessageTable.seq))
+        .all()
+      expect(yield* SessionHistory.decodeMessageRows(database.db, rows)).toEqual(hydrated)
     }),
   )
 })

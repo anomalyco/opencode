@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { ResourceContext, RGBA } from "@opentui/core"
 import {
   generateSyntax,
   resolveTheme,
@@ -109,10 +109,15 @@ test("validates hue relationships in every provided mode while parsing", () => {
 
 test("generates syntax with one categorical hue", () => {
   const theme = resolveSource(complete("light", { categorical: ["red"] }), "light")
-  const syntax = generateSyntax(theme)
+  const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+  const syntax = generateSyntax(theme, owner)
 
-  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
-  syntax.destroy()
+  try {
+    expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  } finally {
+    syntax.destroy()
+    owner.destroy()
+  }
 })
 
 test("rejects incomplete themes instead of merging defaults", () => {
@@ -330,6 +335,23 @@ test("surface overrides rewire references and reset action states from their bas
   expect(raised.text.base.toInts()).toEqual([51, 51, 51, 255])
   expect(raised.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
   expect(raised.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
+})
+
+test("dialog footer overrides layer on the dialog surface", () => {
+  const theme = resolveTheme(
+    override(light, {
+      "@dialog": {
+        text: { base: "#333333" },
+        "@footer": { text: { muted: "#666666" } },
+      },
+    }),
+  )
+  const footer = theme.surface("dialog.footer")
+  expect(footer.text.muted.toInts()).toEqual([102, 102, 102, 255])
+  expect(footer.text.base.toInts()).toEqual([51, 51, 51, 255])
+  expect(theme.surface("dialog").text.muted.toInts()).not.toEqual([102, 102, 102, 255])
+  const plain = resolveTheme(light)
+  expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
 })
 
 test("rejects missing and circular references", () => {

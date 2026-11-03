@@ -3,7 +3,7 @@ import { AwsClient } from "aws4fetch"
 
 let client: AwsClient | undefined
 
-export async function sendEmail(input: { to: string; subject: string; body: string; replyTo?: string }) {
+export async function sendEmail(input: { to: string; subject: string; body: string; text?: string; replyTo?: string }) {
   client ??= new AwsClient({
     accessKeyId: Resource.AWS_SES_ACCESS_KEY_ID.value,
     secretAccessKey: Resource.AWS_SES_SECRET_ACCESS_KEY.value,
@@ -16,7 +16,7 @@ export async function sendEmail(input: { to: string; subject: string; body: stri
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      FromEmailAddress: `OpenCode Zen <contact@anoma.ly>`,
+      FromEmailAddress: `OpenCode <contact@anoma.ly>`,
       Destination: {
         ToAddresses: [input.to],
       },
@@ -30,7 +30,7 @@ export async function sendEmail(input: { to: string; subject: string; body: stri
           Body: {
             Text: {
               Charset: "UTF-8",
-              Data: input.body,
+              Data: input.text ?? input.body,
             },
             Html: {
               Charset: "UTF-8",

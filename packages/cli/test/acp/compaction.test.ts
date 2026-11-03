@@ -11,10 +11,10 @@ describe("acp standard compaction updates over the wire", () => {
   test("streams a /compact turn's summary and completes it with the full summary", async () => {
     const compacted = await compactTurn(
       (sessionID, id) => [
-        durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
+        durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: id }),
         ephemeralEvent("session.compaction.delta", { sessionID, text: "Summary of " }),
         ephemeralEvent("session.compaction.delta", { sessionID, text: "the earlier conversation" }),
-        durableEvent("session.compaction.ended", { sessionID, reason: "manual", text: summary, recent: "" }),
+        durableEvent("session.compaction.ended", { sessionID, reason: "manual", text: summary }),
       ],
       { compaction: {} },
     )
@@ -36,9 +36,9 @@ describe("acp standard compaction updates over the wire", () => {
   test("treats a null compaction capability as unsupported", async () => {
     const compacted = await compactTurn(
       (sessionID, id) => [
-        durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
+        durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: id }),
         ephemeralEvent("session.compaction.delta", { sessionID, text: summary }),
-        durableEvent("session.compaction.ended", { sessionID, reason: "manual", text: summary, recent: "" }),
+        durableEvent("session.compaction.ended", { sessionID, reason: "manual", text: summary }),
       ],
       { compaction: null },
     )
