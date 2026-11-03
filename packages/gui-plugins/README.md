@@ -252,6 +252,7 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 | [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                    |
 | [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
 | [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
+| [`Theme`](../plugin/src/gui/registries.ts)        | window  | A color theme in the app's theme file format, listed in Settings › Appearance › Theme                                                                               |
 | [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,

@@ -1424,6 +1424,111 @@ story("startup enable state does not wait for the manager, and live updates beat
   })
 })
 
+story(
+  "a plugin theme joins the theme picker and leaves it with its plugin, keeping the user's choice",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountThemes, until, Theme } = await import(fixture)
+      const root = document.documentElement
+
+      const variant = {
+        palette: {
+          neutral: "#101418",
+          ink: "#e6edf3",
+          primary: "#009fff",
+          success: "#3fb950",
+          warning: "#d29922",
+          error: "#f85149",
+          info: "#a371f7",
+        },
+      }
+
+      const host = mountThemes({
+        definitions: [
+          {
+            id: "acme",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Theme, {
+                  $schema: "https://opencode.ai/desktop-theme.json",
+                  name: "Midnight",
+                  id: "midnight",
+                  light: variant,
+                  dark: variant,
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => host.status("acme") === "active")
+      const names = host.options().map((option: { name: string }) => option.name)
+      const index = names.indexOf("Midnight")
+      host.select("acme:midnight")
+      await until(() => root.dataset.theme === "acme:midnight")
+
+      host.disable("acme")
+      await until(() => root.dataset.theme === "oc-2")
+
+      const withdrawn = {
+        listed: host.options().some((option: { id: string }) => option.id === "acme:midnight"),
+        selected: host.selected(),
+        stored: localStorage.getItem("opencode-theme-id"),
+      }
+
+      host.enable()
+      await until(() => root.dataset.theme === "acme:midnight")
+      const restored = host.selected()
+      host.unmount()
+
+      return { neighbors: names.slice(index - 1, index + 2), withdrawn, restored }
+    }, fixture)
+
+    expect(result).toEqual({
+      // Alphabetical among the app's themes, not appended after them.
+      neighbors: ["Mercury", "Midnight", "Monokai"],
+      withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
+      restored: "acme:midnight",
+    })
+  },
+)
+
+story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountThemes, until } = await import(fixture)
+    const root = document.documentElement
+    // The last run picked a theme whose plugin is now uninstalled, and cached its colors.
+    localStorage.setItem("opencode-theme-id", "gone:midnight")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#010203;")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#010203;")
+
+    const host = mountThemes({ definitions: [], pending: true })
+    // The window is ready to show on the cached colors while the plugin list is still on its way.
+    await until(() => host.applied() > 0)
+    const waiting = host.selected()
+    // The frame's own provider already shows the default theme; mark the root to see this provider apply it.
+    root.dataset.theme = "frame"
+
+    host.load()
+    await until(() => root.dataset.theme === "oc-2")
+
+    const settled = {
+      selected: host.selected(),
+      stored: localStorage.getItem("opencode-theme-id"),
+      cached: localStorage.getItem("opencode-theme-css-dark") ?? localStorage.getItem("opencode-theme-css-light"),
+    }
+
+    host.unmount()
+
+    return { waiting, settled }
+  }, fixture)
+
+  expect(result).toEqual({
+    waiting: "gone:midnight",
+    settled: { selected: "oc-2", stored: "gone:midnight", cached: null },
+  })
+})
+
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
