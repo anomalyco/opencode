@@ -806,6 +806,7 @@ Earlier work
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
       { type: "reasoning", text: "Think", providerMetadata: { provider: { signature: "sig_1" } } },
+      { type: "tool-call", id: "pending", name: "read", input: { path: "README.md" } },
       { type: "tool-call", id: "running", name: "read", input: { path: "README.md" } },
       {
         type: "tool-call",
@@ -1505,6 +1506,43 @@ Earlier work
       ["tool-result"],
     ])
     expect(failedWithCalls[0]?.content[1]).toMatchObject({ type: "tool-call", id: "malformed" })
+  })
+
+  test("replays tools migrated from V1, which never recorded when they ran", () => {
+    const migrated = (value: string, error?: SessionMessage.Assistant["error"]) =>
+      SessionMessage.Assistant.make({
+        id: id(value),
+        type: "assistant",
+        agent: build,
+        model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+        content: [
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: `${value}-read`,
+            name: "read",
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { path: "README.md" },
+              content: [{ type: "text", text: "Hello" }],
+            }),
+            time: { created, completed: created },
+          }),
+        ],
+        error,
+        finish: error === undefined ? "tool-calls" : "error",
+        time: { created, completed: created },
+      })
+    const messages = toLLMMessages(
+      [
+        migrated("finished"),
+        migrated("aborted", { type: "aborted", message: "Step interrupted" }),
+        migrated("failed", { type: "provider.unknown", message: "Stream dropped" }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(
+      messages.map((message) => message.content.map((part) => (part.type === "tool-call" ? part.id : part.type))),
+    ).toEqual([["finished-read"], ["tool-result"], ["aborted-read"], ["tool-result"], ["failed-read"], ["tool-result"]])
   })
 
   test("preserves assistant text provider state for the same model", () => {

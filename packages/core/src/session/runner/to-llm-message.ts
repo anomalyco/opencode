@@ -139,28 +139,32 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-// A call cut off before it ran (by Esc, a crash or a failed stream) is not replayed. Input
-// errors stay so the model can reissue the call.
-const isAbandonedTool = (item: SessionMessage.AssistantContent) =>
-  item.type === "tool" &&
-  item.time.ran === undefined &&
-  !(item.state.status === "error" && item.state.error.type.startsWith("tool.input"))
+// Sessions migrated from V1 never recorded `time.ran`, so a completed call also counts as run.
+const ranTool = (item: SessionMessage.AssistantContent) =>
+  item.type === "tool" && (item.time.ran !== undefined || item.state.status === "completed")
 
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   // A failed stream is retried from what had already happened: the calls that ran and everything before
   // them. The rest was cut off, and dropping it keeps the request from ending in a partial reply.
-  const ran = message.content.findLastIndex((item) => item.type === "tool" && item.time.ran !== undefined)
   const kept =
     message.error === undefined || message.error.type === "aborted"
       ? message.content
-      : message.content.slice(0, ran + 1)
-  const items = kept.filter((item) => !isAbandonedTool(item))
+      : message.content.slice(0, message.content.findLastIndex(ranTool) + 1)
   // A stream cut by Esc, a crash or a failure may end mid-block, so its last block's provider state is not
-  // replayed, and reasoning is only replayed once the model moved on to output.
+  // replayed, and reasoning is only replayed once the model moved on to output. Calls it cut off before
+  // they ran are dropped; input errors stay so the model can reissue the call.
   const cut = message.error !== undefined || message.finish === undefined
   const tail = cut ? message.content.at(-1) : undefined
+  const items = cut
+    ? kept.filter(
+        (item) =>
+          item.type !== "tool" ||
+          ranTool(item) ||
+          (item.state.status === "error" && item.state.error.type.startsWith("tool.input")),
+      )
+    : kept
   const content = items.flatMap((item, index): Array<AssistantMessage["content"][number]> => {
     if (item.type === "text")
       return [
