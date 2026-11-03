@@ -5,14 +5,12 @@ import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
-import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
-import { SessionSkills } from "./skills.js"
 import { ModelRetry } from "../model-retry.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
@@ -53,13 +51,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       system: transcript.system,
       messages: [
-        ...SessionSkills.remind(
-          transcript.messages,
-          SessionSkills.loaded(
-            history.messages,
-            Permission.merge(selection.agent.info.permissions, selection.session.permissions ?? []),
-          ),
-        ),
+        ...transcript.messages,
         ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
         Message.user(input.prompt),
       ],

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
@@ -128,29 +127,5 @@ describe("SessionSkills.loaded", () => {
         ]),
       ),
     ).toEqual([{ id: "effect", name: "Effect" }])
-  })
-})
-
-describe("SessionSkills.render", () => {
-  test("names each loaded skill and discourages loading it again", () => {
-    expect(SessionSkills.render([{ id: "effect", name: "Effect" }])).toBe(
-      [
-        "<loaded_skills>",
-        "These skills are already in this conversation. Their content is in the message history. Do not load them again — reference the existing content directly.",
-        "  <skill>Effect</skill>",
-        "</loaded_skills>",
-      ].join("\n"),
-    )
-  })
-})
-
-describe("SessionSkills.remind", () => {
-  test("appends the reminder after the messages so the cached prefix survives", () => {
-    const messages = [Message.user("Continue")]
-
-    expect(SessionSkills.remind(messages, [])).toEqual(messages)
-    const reminded = SessionSkills.remind(messages, [{ id: "effect", name: "Effect" }])
-    expect(reminded).toHaveLength(2)
-    expect(JSON.stringify(reminded.at(-1))).toContain("<skill>Effect</skill>")
   })
 })

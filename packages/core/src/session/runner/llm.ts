@@ -18,7 +18,6 @@ import { SessionModelRequest } from "../model-request.js"
 import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
-import { SessionSkills } from "../skills.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
@@ -33,7 +32,6 @@ import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
-import { Permission } from "../../permission.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -261,13 +259,6 @@ const layer = Layer.effect(
           initial: loaded.initial,
           messages: loaded.messages,
         })
-        const messages = SessionSkills.remind(
-          transcript.messages,
-          SessionSkills.loaded(
-            loaded.messages,
-            Permission.merge(loaded.agent.info.permissions, loaded.session.permissions ?? []),
-          ),
-        )
         const prepared = yield* context.request
           .primary({
             session: loaded.session,
@@ -275,7 +266,9 @@ const layer = Layer.effect(
             model: loaded.model,
             tools: loaded.tools,
             system: transcript.system,
-            messages: stepLimitReached ? [...messages, Message.assistant(MAX_STEPS_PROMPT)] : messages,
+            messages: stepLimitReached
+              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+              : transcript.messages,
             // Keep tool definitions on the final Step to preserve the provider's cached prefix.
             toolChoice: stepLimitReached ? "none" : undefined,
             webSocket: "session",
