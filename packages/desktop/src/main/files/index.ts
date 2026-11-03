@@ -1,7 +1,7 @@
 export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
-import { clipboard, dialog, nativeImage, shell } from "electron"
+import { app, clipboard, dialog, nativeImage, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
@@ -30,6 +30,12 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
 
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
+      yield* scoped("files", Effect.logInfo("directory picker opened", {
+        title: options?.title,
+        defaultPath: options?.defaultPath,
+        cwd: process.cwd(),
+        appPath: app.getAppPath(),
+      }))
       const result = yield* Effect.promise(() =>
         dialog.showOpenDialog({
           properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
@@ -38,6 +44,7 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
         }),
       )
 
+      yield* scoped("files", Effect.logInfo("directory picker result", { canceled: result.canceled, filePaths: result.filePaths }))
       if (result.canceled) return null
 
       return options?.multiple ? result.filePaths : result.filePaths[0]

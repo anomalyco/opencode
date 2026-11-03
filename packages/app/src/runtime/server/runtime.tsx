@@ -309,13 +309,35 @@ function createServerController(
   // Resolving a directory registers its project on the server; the list then reloads to include it, and the
   // project becomes this client's last used one.
   function add(directory: string) {
+    console.info("[directory-picker] requesting server location", JSON.stringify({ directory, server: connKey }))
     return sdk.api.location
       .get({ location: { directory } })
       .then(async (location) => {
+        console.info("[directory-picker] server location resolved", JSON.stringify({ requestedDirectory: directory, location }))
         await sync.project.refresh()
+        const refreshed = list()
+        const sameID = refreshed.filter((project) => project.id === location.project.id)
+        console.info(
+          "[directory-picker] project inventory after refresh",
+          JSON.stringify({
+            requestedDirectory: directory,
+            locationProject: {
+              id: location.project.id,
+              worktree: location.project.worktree,
+              vcs: location.project.vcs,
+            },
+            sameIDProjects: sameID.map((project) => ({ id: project.id, worktree: project.worktree, vcs: project.vcs })),
+            inventory: refreshed.map((project) => ({ id: project.id, worktree: project.worktree, vcs: project.vcs })),
+          }),
+        )
         projects.touch(location.project.id)
+        const resolved = refreshed.find((project) => project.id === location.project.id)
+        console.info(
+          "[directory-picker] project add resolved from inventory",
+          JSON.stringify({ requestedDirectory: directory, projectID: location.project.id, resolvedWorktree: resolved?.worktree }),
+        )
 
-        return list().find((project) => project.id === location.project.id)
+        return resolved
       })
       .catch((error) => {
         showToast({

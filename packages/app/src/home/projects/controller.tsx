@@ -16,6 +16,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useRevealProject } from "./reveal"
+import { createWorktree } from "@/workspaces/create"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -64,9 +65,39 @@ export function createHomeProjectsController(home: HomeController) {
     pickDirectory({
       server: conn,
       title: language.t("command.project.open"),
-      multiple: true,
-      onSelect: (result) => void home.project.add(conn, homeProjectDirectories(result)),
+      multiple: false,
+      onSelect: (result) => {
+        const directories = homeProjectDirectories(result)
+        console.info("[directory-picker] home project selection", JSON.stringify({ result, directories }))
+        void home.project.add(conn, directories)
+      },
     })
+  }
+
+  async function createSandbox(conn: ServerConnection.Any, project: LocalProject) {
+    if (!project.id || project.vcs !== "git") return
+    if (authenticate(conn, (next) => void createSandbox(next, project))) return
+
+    const ctx = home.server.context(conn)
+    try {
+      const directory = await createWorktree({
+        api: ctx.sdk.api,
+        data: ctx.data,
+        directory: project.worktree,
+        project: {
+          id: project.id,
+          canonical: project.canonical ?? project.worktree,
+          directory: project.worktree,
+        },
+      })
+      home.project.openProjectNewSession(conn, directory)
+    } catch (cause) {
+      showToast({
+        variant: "error",
+        title: language.t("prompt.toast.worktreeCreateFailed.title"),
+        description: errorMessage(cause, language.t("common.requestFailed")),
+      })
+    }
   }
 
   return {
@@ -108,6 +139,7 @@ export function createHomeProjectsController(home: HomeController) {
         if (authenticate(conn, (next) => home.project.openProjectNewSession(next, directory))) return
         home.project.openProjectNewSession(conn, directory)
       },
+      createSandbox,
       canImportSession: !!platform.openAttachmentPickerDialog,
       importSession: (conn: ServerConnection.Any, project: LocalProject) => {
         if (!platform.openAttachmentPickerDialog) return
