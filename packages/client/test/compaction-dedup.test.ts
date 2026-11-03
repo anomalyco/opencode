@@ -53,7 +53,6 @@ test("never appends a duplicate compaction row on a re-delivered session.compact
 
     publish("session.compaction.started", { sessionID: "ses_compact", inputID: "msg_x" })
     publish("session.compaction.ended", { sessionID: "ses_compact", text: "Summary", cost: 1, tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } } })
-    await wait(() => (settled()?.length ?? 0) === 1)
 
     // A re-delivered ended (same event id) must hit the append guard, not add
     // a phantom row.
@@ -63,6 +62,21 @@ test("never appends a duplicate compaction row on a re-delivered session.compact
       "evt_2",
     )
     expect(settled()?.length).toBe(1)
+    // ...and must not mark a newer running row with its own stale summary.
+    publish("session.compaction.started", { sessionID: "ses_compact", inputID: "msg_y" })
+    publish(
+      "session.compaction.ended",
+      { sessionID: "ses_compact", text: "Stale summary", cost: 2, tokens: { input: 3, output: 4, reasoning: 0, cache: { read: 0, write: 0 } } },
+      "evt_2",
+    )
+    const newest = settled()?.at(-1)
+    expect(newest).toMatchObject({ id: "msg_y", status: "running", summary: "" })
+
+    // The failed path (no inputID) gets the same re-delivery guard.
+    publish("session.compaction.started", { sessionID: "ses_compact" })
+    publish("session.compaction.failed", { sessionID: "ses_compact", reason: "oops", error: { message: "boom" } })
+    publish("session.compaction.failed", { sessionID: "ses_compact", reason: "oops", error: { message: "boom" } }, "evt_5")
+    expect(settled()?.filter((row) => row.status === "failed").length).toBe(1)
   } finally {
     setup.dispose()
   }
