@@ -939,6 +939,67 @@ test("ignores catalog updates for unloaded locations while refreshing loaded loc
   }
 })
 
+test("bootstraps a requested location when its first catalog sync failed with 503", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const location = { directory: "/cold", project: { id: "cold", directory: "/cold", canonical: "/cold" } }
+  const requests: string[] = []
+  let warmed = false
+  const serviceUnavailable = () =>
+    new Response(JSON.stringify({ _tag: "ServiceUnavailableError", message: "Location plugins did not finish activating", service: "plugin" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    })
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      requests.push(url.pathname)
+      if (url.pathname === "/api/location") return Response.json(location)
+      // Cold Location: catalog endpoints return 503 until it warms up.
+      if (["/api/agent", "/api/model", "/api/provider"].includes(url.pathname) && !warmed)
+        return serviceUnavailable()
+      const empty =
+        url.pathname === "/api/vcs"
+          ? { branch: {} }
+          : url.pathname === "/api/mcp/resource"
+            ? { resources: [] }
+            : []
+      return Response.json({ location, data: empty })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/cold",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
+
+  try {
+    await setup.data.location.syncInfo()
+    await expect(setup.data.location.agent.sync()).rejects.toMatchObject({ _tag: "ServiceUnavailableError" })
+    expect(setup.data.location.agent.list()).toBeUndefined()
+
+    // The Location finishes booting and announces its catalog. The dropped sync must recover.
+    warmed = true
+    emit({ id: "evt_agent_updated", created: 1, type: "agent.updated", location, data: {} })
+    await wait(() => setup.data.location.agent.list() !== undefined)
+    expect(requests).toContain("/api/agent")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
   const started = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()

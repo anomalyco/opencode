@@ -1,8 +1,14 @@
-import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client"
+import {
+  isLocationNotFoundError,
+  isServiceUnavailableError,
+  type LocationGetOutput,
+  type LocationRef,
+} from "@opencode/client"
 import { retry } from "@opencode/util/retry"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"
+import { useToastOptional } from "../ui/toast"
 
 const context = createContext<{
   readonly current: LocationGetOutput | undefined
@@ -12,9 +18,15 @@ const context = createContext<{
   set: (location?: LocationRef) => void
 }>()
 
+// A cold Location, e.g. a Windows UNC path, can take longer than the server's 5s plugin activation
+// deadline to boot, and each catalog request returns 503 in the meantime. Keep retrying until the
+// Location warms up rather than giving up after three attempts and leaving the composer dead.
+const LOCATION_READY_TIMEOUT = 5 * 60 * 1000
+
 export function LocationProvider(props: ParentProps) {
   const client = useClient()
   const data = useData()
+  const toast = useToastOptional()
   const [ref, setRef] = createSignal<LocationRef>()
   const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
   let generation = 0
@@ -30,19 +42,29 @@ export function LocationProvider(props: ParentProps) {
         : location
     setError(undefined)
     // Only the server's typed LocationNotFoundError proves the folder is gone. Other failures, such as
-    // plugins still activating after a restart, are retried and never block the composer.
+    // 503s while plugins are still activating after a restart, are retried until the Location warms up.
     void retry(() => (generation === attempt ? data.location.sync(target) : Promise.resolve()), {
+      delay: 1_000,
+      maxDelay: 5_000,
+      timeout: LOCATION_READY_TIMEOUT,
       retryIf: (cause) => generation === attempt && !isLocationNotFoundError(cause),
     }).catch((cause) => {
       const current = ref()
-      if (
-        !isLocationNotFoundError(cause) ||
+      const stale =
         generation !== attempt ||
         current?.directory !== location.directory ||
         current.workspaceID !== location.workspaceID
-      )
+      if (stale) return
+      if (isLocationNotFoundError(cause)) {
+        setError({ location, cause })
         return
-      setError({ location, cause })
+      }
+      // The catalog never loaded, so the prompt cannot send. Say so instead of failing silently.
+      if (isServiceUnavailableError(cause)) {
+        toast?.error(`${cause.message}. Check the server logs, then run /reload to retry.`)
+      } else {
+        toast?.error(cause)
+      }
     })
   }
 
