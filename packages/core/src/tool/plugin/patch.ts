@@ -254,13 +254,13 @@ export const Plugin = {
                     const current = yield* FileMutation.readText(environment.files, target).pipe(
                       Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
                     )
+                    // Formatters can write partial corrections before exiting unsuccessfully.
+                    yield* formatter.file(target)
                     formatted.set(
                       target,
-                      (yield* formatter.file(target))
-                        ? yield* FileMutation.syncTextBom(environment.files, target, current.bom).pipe(
-                            Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
-                          )
-                        : current.text,
+                      yield* FileMutation.syncTextBom(environment.files, target, current.bom).pipe(
+                        Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
+                      ),
                     )
                   }),
                 { discard: true },

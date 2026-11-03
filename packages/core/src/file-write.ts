@@ -82,7 +82,8 @@ const layer = Layer.effect(
 
     const commit = Effect.fn("FileWrite.commit")(function* (target: FileAccess.Target, content: string) {
       const written = yield* fileMutation.writeTextPreservingBom({ target, content })
-      if (!(yield* formatter.file(target.absolute))) return written
+      // A failed formatter may still have rewritten the file and its BOM.
+      yield* formatter.file(target.absolute)
       return {
         ...written,
         formatted: yield* FileMutation.syncTextBom(environment.files, target.absolute, written.bom),
