@@ -3,15 +3,20 @@ import { Result } from "effect"
 import type { Diagnostic } from "./codemode.js"
 import { parseProgram } from "./interpreter/execute.js"
 import { formatLocation } from "./interpreter/model.js"
+import { scanPythonTools } from "./python/scan.js"
 
 /**
  * Extracts every `tools.<path>` referenced by a Code Mode program, in first-seen order. Fails on syntax errors,
  * dynamic bracket access (`tools[name]`), or aliasing/passing `tools` rather than calling `tools.<path>(...)` directly.
  */
-export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Diagnostic> {
+export function scanTools(
+  code: string,
+  language: "javascript" | "python" = "javascript",
+): Result.Result<ReadonlyArray<string>, Diagnostic> {
   if (code.trim().length === 0) {
     return Result.fail({ kind: "ParseError", message: "Code cannot be empty." })
   }
+  if (language === "python") return scanPythonTools(code)
   const parsed = parseProgram(code)
   if (!parsed.ok) return Result.fail(parsed.error)
 
@@ -70,7 +75,10 @@ function isReferencePosition(node: AnyNode, parent: AnyNode | undefined): boolea
     return false
   }
   if (
-    (parent.type === "FunctionDeclaration" || parent.type === "FunctionExpression" || parent.type === "ClassDeclaration" || parent.type === "ClassExpression") &&
+    (parent.type === "FunctionDeclaration" ||
+      parent.type === "FunctionExpression" ||
+      parent.type === "ClassDeclaration" ||
+      parent.type === "ClassExpression") &&
     parent.id === node
   ) {
     return false
@@ -82,7 +90,9 @@ function isReferencePosition(node: AnyNode, parent: AnyNode | undefined): boolea
 function readStaticToolCall(
   root: AnyNode,
   ancestors: ReadonlyArray<AnyNode>,
-): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly node: AnyNode; readonly reason: string } {
+):
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly node: AnyNode; readonly reason: string } {
   const segments: Array<string> = []
   let current = root
   let index = ancestors.length - 1
@@ -110,7 +120,8 @@ function readStaticToolCall(
     return {
       ok: false,
       node: parent.property,
-      reason: "Schedule checks must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
+      reason:
+        "Schedule checks must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
     }
   }
 

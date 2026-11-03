@@ -52,6 +52,7 @@ export interface Interface extends State.Transformable<Editor> {
 }
 
 export interface CheckInput {
+  readonly language?: "python" | "javascript"
   readonly code: string
   readonly tools: ReadonlyArray<string>
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
@@ -345,6 +346,7 @@ const layer = Layer.effect(
           input.code,
           input.bindings,
           input.limits,
+          input.language ?? "python",
           (name, tool, toolInput) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)

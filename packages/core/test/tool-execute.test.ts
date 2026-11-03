@@ -28,6 +28,7 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll)
 test("execute describes invariant Code Mode behavior", () => {
   const description = createCodeMode(new Map()).description
   expect(description).toContain("Run a Python subset")
+  expect(description).not.toMatch(/JavaScript|TypeScript|Promise/)
   expect(description).toContain("await asyncio.gather")
   expect(description).toContain("final top-level expression")
 })

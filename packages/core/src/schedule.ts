@@ -180,7 +180,7 @@ const resolveStoredCheck = (input: CreateInput): Effect.Effect<StoredCheck | und
   if (check === undefined) return Effect.succeed(undefined)
   const validated = ScheduleCheck.validate(check.condition)
   if (Result.isFailure(validated)) return Effect.fail(new InvalidError({ reason: validated.failure }))
-  return Effect.succeed(check)
+  return Effect.succeed(check.condition.type === "code" ? { ...check, language: "python" } : check)
 }
 
 const toInfo = (row: Row, lastOutput?: string): Info => ({

@@ -42,6 +42,33 @@ const lookupOrder = Tool.make({
 })
 
 describe("pretty signature rendering", () => {
+  test("renders Python types and defaults from the schema, without rewriting literal text", () => {
+    const tool = Tool.make({
+      description: "Lookup",
+      input: {
+        properties: {
+          opts: { $ref: "#/$defs/options" },
+          note: { const: "null true string" },
+          labels: { type: "object", additionalProperties: { type: "string" } },
+          ok: { type: "boolean", default: false },
+        },
+        $defs: { options: { type: "array", items: { enum: [true, null] } } },
+        required: ["opts", "note"],
+      },
+      execute: () => Effect.void,
+    })
+    expect(CodeMode.make({ language: "python", tools: { lookup: tool } }).catalog[0]!.signature).toBe(
+      [
+        "await tools.lookup({",
+        '  "opts": list[Literal[True, None]],',
+        '  "note": Literal["null true string"],',
+        '  "labels": NotRequired[dict[str, str]],',
+        "  # default: False",
+        '  "ok": NotRequired[bool],',
+        "}) -> None",
+      ].join("\n"),
+    )
+  })
   test("described fields get compact JSDoc; undescribed and unconstrained fields get none", () => {
     expect(inputTypeScript(listIssues, true)).toBe(
       [

@@ -87,7 +87,7 @@ export function validate(condition: ScheduleSchema.Condition): Result.Result<voi
       })
     }
     case "code": {
-      const scanned = CodeMode.scanTools(condition.code)
+      const scanned = CodeMode.scanTools(condition.code, "python")
       if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
       for (const path of scanned.success) {
         if (FORBIDDEN_CODE_TOOLS.has(path)) {
@@ -125,7 +125,7 @@ export const authorize = Effect.fnUntraced(function* (
     case "shell":
       return yield* authorizeShell(session, name, when, check.mode, check.condition)
     case "code":
-      return yield* authorizeCode(session, name, when, check.mode, check.condition)
+      return yield* authorizeCode(session, name, when, check.mode, check.condition, check.language ?? "javascript")
   }
 })
 
@@ -142,7 +142,7 @@ export const evaluate = Effect.fnUntraced(function* (
       case "shell":
         return yield* runShell(session, check.condition, prevState)
       case "code":
-        return yield* runCode(session, check.condition, prevState, context)
+        return yield* runCode(session, check.condition, prevState, context, check.language ?? "javascript")
     }
   })
   return yield* run.pipe(
@@ -191,11 +191,12 @@ const authorizeCode = Effect.fnUntraced(function* (
   when: ScheduleSchema.When,
   mode: ScheduleSchema.CheckMode,
   condition: ScheduleSchema.CodeCondition,
+  language: "python" | "javascript",
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
-  const scanned = CodeMode.scanTools(condition.code)
+  const scanned = CodeMode.scanTools(condition.code, language)
   if (Result.isFailure(scanned)) return yield* Effect.fail(scanned.failure.message)
   const paths = scanned.success
 
@@ -252,13 +253,14 @@ const runCode = Effect.fnUntraced(function* (
   condition: ScheduleSchema.CodeCondition,
   prevState: Schema.Json,
   context: RunContext,
+  language: "python" | "javascript",
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
   if (!agent.info) return { ok: false as const, error: `Agent not found: ${agent.id}` }
 
-  const scanned = CodeMode.scanTools(condition.code)
+  const scanned = CodeMode.scanTools(condition.code, language)
   if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure.message }
   const paths = scanned.success
 
@@ -295,6 +297,7 @@ const runCode = Effect.fnUntraced(function* (
 
   const result = yield* resolved.success.tools
     .check({
+      language,
       code: condition.code,
       tools: paths,
       bindings,
@@ -325,7 +328,7 @@ const runCode = Effect.fnUntraced(function* (
   if (Result.isFailure(decoded)) {
     return {
       ok: false as const,
-      error: `A code check must return a boolean or { wake, state?, message? }: ${decoded.failure}`,
+      error: `A code check must return a boolean or a dictionary with wake and optional state and message: ${decoded.failure}`,
       invalid: true,
     }
   }

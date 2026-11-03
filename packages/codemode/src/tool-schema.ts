@@ -5,6 +5,12 @@ const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> &
 
 const renderLiteral = (value: unknown): string => JSON.stringify(value) ?? "unknown"
 
+// JSON strings already use Python-compatible quoting. Only rewrite tokens outside strings.
+const pythonLiteral = (value: unknown): string =>
+  JSON.stringify(value)?.replace(/"(?:\\.|[^"\\])*"|true|false|null/g, (token) =>
+    token === "true" ? "True" : token === "false" ? "False" : token === "null" ? "None" : token,
+  ) ?? "Any"
+
 export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const renderKey = (name: string): string => (identifierSegment.test(name) ? name : JSON.stringify(name))
@@ -31,10 +37,12 @@ const isEffectEmptyStruct = (schema: JsonSchema) =>
   Object.keys(schema.not).length === 1 &&
   Object.keys(schema).every((key) => key === "not" || annotationKeywords.has(key))
 
-const intersection = (members: ReadonlyArray<string>): string => {
-  const concrete = members.filter((member) => member !== "unknown")
-  if (concrete.length === 0) return "unknown"
+const intersection = (members: ReadonlyArray<string>, ctx: RenderContext): string => {
+  const concrete = members.filter((member) => member !== (ctx.python ? "Any" : "unknown"))
+  if (concrete.length === 0) return ctx.python ? "Any" : "unknown"
   if (concrete.length === 1) return concrete[0]
+  if (ctx.python)
+    return `Annotated[${concrete[0]}, ${JSON.stringify(`also matches ${concrete.slice(1).join(" and ")}`)}]`
   return concrete.map((member) => (member.includes(" | ") ? `(${member})` : member)).join(" & ")
 }
 
@@ -43,6 +51,7 @@ const MAX_RENDER_DEPTH = 8
 type RenderContext = {
   readonly definitions: Readonly<Record<string, JsonSchema>>
   readonly pretty: boolean
+  readonly python?: boolean
 }
 
 const hasUnresolvedRef = (
@@ -68,12 +77,12 @@ const hasUnresolvedRef = (
   ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
 }
 
-const docTags = (schema: JsonSchema): Array<string> => {
+const docTags = (schema: JsonSchema, python: boolean): Array<string> => {
   const tags: Array<string> = []
   if (schema.deprecated === true) tags.push("@deprecated")
   if (schema.default !== undefined) {
     try {
-      const rendered = JSON.stringify(schema.default)
+      const rendered = python ? pythonLiteral(schema.default) : JSON.stringify(schema.default)
       if (rendered !== undefined) tags.push(`@default ${rendered}`)
     } catch {}
   }
@@ -93,11 +102,19 @@ const docTags = (schema: JsonSchema): Array<string> => {
   if (typeof schema.minItems === "number") tags.push(`@minItems ${schema.minItems}`)
   if (typeof schema.maxItems === "number") tags.push(`@maxItems ${schema.maxItems}`)
   if (schema.uniqueItems === true) tags.push("@uniqueItems true")
+  if (!python) return tags
   return tags
+    .filter((tag) => tag !== "@integer")
+    .map((tag) => {
+      const space = tag.indexOf(" ")
+      if (space < 0) return tag.slice(1)
+      if (tag === "@uniqueItems true") return "unique items"
+      return `${tag.slice(1, space)}: ${tag.slice(space + 1)}`
+    })
 }
 
-const docLines = (schema: JsonSchema, width: number): Array<string> => {
-  const summary = docTags(schema).join(" ")
+const docLines = (schema: JsonSchema, width: number, python: boolean): Array<string> => {
+  const summary = docTags(schema, python).join(python ? "; " : " ")
   const lines = (schema.description ?? "").split("\n").map((line) => line.replace(/\s+$/, ""))
   while (lines.length > 0 && lines[0]!.trim() === "") lines.shift()
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
@@ -108,12 +125,12 @@ const docLines = (schema: JsonSchema, width: number): Array<string> => {
 }
 
 // Neutralize `*\/` so model-provided schema text cannot terminate generated documentation.
-const jsdoc = (schema: JsonSchema, pad: string): string => {
-  const content = docLines(schema, pad.length)
+const fieldDocs = (schema: JsonSchema, pad: string, python = false): string => {
+  const content = docLines(schema, pad.length, python)
   const types = typeof schema.type === "string" ? [schema.type] : (schema.type ?? [])
 
   const append = (label: string, child: JsonSchema) => {
-    docLines(child, pad.length + label.length + 2).forEach((line, index) => {
+    docLines(child, pad.length + label.length + 2, python).forEach((line, index) => {
       if (index === 0) {
         content.push(`${label}: ${line}`)
         return
@@ -130,6 +147,7 @@ const jsdoc = (schema: JsonSchema, pad: string): string => {
   }
 
   if (content.length === 0) return ""
+  if (python) return content.map((line) => `${pad}# ${line}\n`).join("")
   const escaped = content.map((line) => line.replaceAll("*/", "* /"))
   if (escaped.length === 1 && pad.length + escaped[0].length + 7 <= 120) return `${pad}/** ${escaped[0]} */\n`
   const body = escaped.map((line) => `${pad} *${line === "" ? "" : ` ${line}`}`).join("\n")
@@ -142,18 +160,26 @@ const renderSchema = (
   depth = 0,
   seen: ReadonlySet<string> = new Set(),
 ): string => {
-  if (depth > MAX_RENDER_DEPTH) return "unknown"
+  const unknown = ctx.python ? "Any" : "unknown"
+  if (depth > MAX_RENDER_DEPTH) return unknown
   const nested =
     schema.definitions === undefined && schema.$defs === undefined
       ? ctx
       : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
     const name = definitionName(schema.$ref)
-    if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
-    return intersection([
-      renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
-      renderSchema({ ...schema, $ref: undefined }, nested, depth + 1, seen),
-    ])
+    if (!name || !nested.definitions[name] || seen.has(name)) return unknown
+    return intersection(
+      [
+        renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
+        renderSchema({ ...schema, $ref: undefined }, nested, depth + 1, seen),
+      ],
+      ctx,
+    )
+  }
+  if (ctx.python && (schema.const !== undefined || schema.enum)) {
+    const values = schema.const !== undefined ? [schema.const] : schema.enum!
+    return `Literal[${values.map(pythonLiteral).join(", ")}]`
   }
   if (schema.const !== undefined) return renderLiteral(schema.const)
   if (schema.enum) return schema.enum.map(renderLiteral).join(" | ")
@@ -166,7 +192,7 @@ const renderSchema = (
       alternatives.some((item) => item.type === "number") &&
       alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
     )
-      return "number"
+      return ctx.python ? "float" : "number"
     // Older Effect releases emitted this pair for an empty struct, and raw schemas from their generators still can.
     if (
       alternatives.length === 2 &&
@@ -178,19 +204,28 @@ const renderSchema = (
       return "{}"
     }
     const members = alternatives.map((item) => renderSchema(item, nested, depth + 1, seen))
-    if (members.some((member) => member === "unknown")) return "unknown"
-    return intersection([
-      members.join(" | "),
-      renderSchema({ ...schema, anyOf: undefined, oneOf: undefined }, nested, depth + 1, seen),
-    ])
+    if (members.some((member) => member === unknown)) return unknown
+    return intersection(
+      [members.join(" | "), renderSchema({ ...schema, anyOf: undefined, oneOf: undefined }, nested, depth + 1, seen)],
+      ctx,
+    )
   }
   if (schema.allOf) {
-    if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return "unknown"
+    if (schema.allOf.some((item) => hasUnresolvedRef(item, nested.definitions))) return unknown
     const members = schema.allOf.map((item) => renderSchema(item, nested, depth + 1, seen))
-    return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members])
+    return intersection([renderSchema({ ...schema, allOf: undefined }, nested, depth + 1, seen), ...members], ctx)
   }
   if (Array.isArray(schema.type)) {
     return schema.type.map((item) => renderSchema({ ...schema, type: item }, nested, depth + 1, seen)).join(" | ")
+  }
+  if (ctx.python) {
+    if (schema.not && Object.keys(schema.not).length === 0) return "Never"
+    if (schema.type === "string") return "str"
+    if (schema.type === "integer") return "int"
+    if (schema.type === "number") return "float"
+    if (schema.type === "boolean") return "bool"
+    if (schema.type === "null") return "None"
+    if (schema.type === "array") return `list[${renderSchema(schema.items ?? {}, nested, depth + 1, seen)}]`
   }
   if (schema.type === "string") return "string"
   if (schema.type === "number" || schema.type === "integer") return "number"
@@ -206,6 +241,16 @@ const renderSchema = (
     const field = ([name, value]: readonly [string, JsonSchema]) =>
       `${renderKey(name)}${required.has(name) ? "" : "?"}: ${renderSchema(value, nested, depth + 1, seen)}`
 
+    if (ctx.python) {
+      if (!properties.length) return indexType === undefined ? "dict" : `dict[str, ${indexType}]`
+      const pad = "  ".repeat(depth + 1)
+      const fields = properties.map(([key, value]) => {
+        const type = renderSchema(value, nested, depth + 1, seen)
+        return `${fieldDocs(value, pad, true)}${pad}${JSON.stringify(key)}: ${required.has(key) ? type : `NotRequired[${type}]`},`
+      })
+      if (indexType !== undefined) fields.push(`${pad}**dict[str, ${indexType}],`)
+      return `{\n${fields.join("\n")}\n${"  ".repeat(depth)}}`
+    }
     if (!ctx.pretty) {
       const fields = properties.map(field)
       if (indexType !== undefined) fields.push(`[key: string]: ${indexType}`)
@@ -214,12 +259,31 @@ const renderSchema = (
 
     if (properties.length === 0 && indexType === undefined) return "{}"
     const pad = "  ".repeat(depth + 1)
-    const lines = properties.map((entry) => `${jsdoc(entry[1], pad)}${pad}${field(entry)},`)
+    const lines = properties.map((entry) => `${fieldDocs(entry[1], pad)}${pad}${field(entry)},`)
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType},`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
   }
   if (isEffectEmptyStruct(schema)) return "{}"
-  return "unknown"
+  return unknown
+}
+
+/** A catalog signature describes the dictionary to pass and the value obtained after awaiting the call. */
+export function pythonSignature<R>(name: string, tool: Tool<R>, async: boolean) {
+  const shape = (schema: SchemaType, decoded: boolean) => {
+    try {
+      const doc = isEffectSchema(schema)
+        ? Schema.toJsonSchemaDocument(decoded ? Schema.toType(schema) : schema, { onExcessProperty: "error" })
+        : { schema, definitions: {} }
+      return renderSchema(doc.schema as JsonSchema, {
+        definitions: doc.definitions as Record<string, JsonSchema>,
+        python: true,
+        pretty: true,
+      })
+    } catch {
+      return "Any"
+    }
+  }
+  return `${async ? "await " : ""}${name}(${isEmptyInput(tool) ? "" : shape(tool.input, false)}) -> ${tool.output === undefined ? "None" : shape(tool.output, true)}`
 }
 
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {

@@ -35,7 +35,7 @@ describe("CodeMode", () => {
             type: "tool",
             name: "echo",
             description: "Echo text",
-            signature: "tools.echo({\n  text: string,\n}): Promise<string>",
+            signature: 'await tools.echo({\n  "text": str,\n}) -> str',
             pinned: true,
           },
           {
@@ -49,7 +49,7 @@ describe("CodeMode", () => {
     }).pipe(Effect.scoped, Effect.provide(toolNode)),
   )
 
-  it.effect("renders Effect numbers in built-in tool signatures as number", () =>
+  it.effect("renders Python dictionary fields, comments, numbers and literal unions", () =>
     Effect.gen(function* () {
       const tools = yield* Tool.Service
       const ref = Schema.String.annotate({ identifier: "Ref", description: "Element ref" })
@@ -73,15 +73,15 @@ describe("CodeMode", () => {
           name: "measure",
           description: "Measure",
           signature: [
-            "tools.measure({",
-            "  /** Element ref */",
-            "  ref: string,",
-            "  amount: number,",
-            '  sentinel: "NaN" | "Infinity" | "-Infinity",',
-            "}): Promise<{",
-            "  exit?: number,",
-            '  sentinel: "NaN" | "Infinity" | "-Infinity",',
-            "}>",
+            "await tools.measure({",
+            "  # Element ref",
+            '  "ref": str,',
+            '  "amount": float,',
+            '  "sentinel": Literal["NaN", "Infinity", "-Infinity"],',
+            "}) -> {",
+            '  "exit": NotRequired[float],',
+            '  "sentinel": Literal["NaN", "Infinity", "-Infinity"],',
+            "}",
           ].join("\n"),
           pinned: false,
         },

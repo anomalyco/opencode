@@ -127,7 +127,7 @@ it.live("manages schedules through the experimental API when enabled and honors 
       // Code Mode until check works end-to-end with no allow field, and { run, code } together is 400.
       const codeMatched = await api.experimental.schedule.create({
         sessionID: session.id,
-        until: { code: 'return { wake: true, message: "models=" + (await tools.opencode.models({})).total }' },
+        until: { code: 'return {"wake": True, "message": "models=" + str((await tools.opencode.models())["total"])}' },
         prompt: "models checked",
       })
       expect(codeMatched).toMatchObject({

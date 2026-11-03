@@ -82,8 +82,8 @@ or a declared async extension creates a coroutine. `await` runs it; `asyncio.gat
 concurrently when the caller next suspends. Dropping a coroutine never runs it or counts a tool call. The interpreter validates
 the entire program's syntax before it starts. See the [Python subset and differences](./interpreter-support.md#experimental-python-subset).
 
-On this branch, OpenCode's agent-facing `execute` tool selects Python. Catalog signatures describe data in TypeScript
-notation; call the listed paths with Python dictionaries. Saved schedule checks and their static scanner still use JavaScript.
+OpenCode's `execute` tool, catalog, discovery results, and new scheduled code checks use Python. Keys marked `NotRequired`
+can be omitted. Previously saved schedule checks retain their original runtime.
 
 ## API
 

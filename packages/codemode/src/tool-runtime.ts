@@ -10,6 +10,7 @@ import {
   inputTypeScript,
   isEmptyInput,
   outputTypeScript,
+  pythonSignature,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
@@ -175,12 +176,17 @@ const flattenTools = <R>(
   ]
 }
 
-const describeTool = <R>(visible: VisibleTool<R>, expression: string): ToolDescription => {
+const describeTool = <R>(
+  visible: VisibleTool<R>,
+  expression: string,
+  language: "javascript" | "python",
+): ToolDescription => {
   let signature: string | undefined
   return {
     path: visible.path,
     description: visible.tool.description,
     get signature() {
+      if (language === "python") return (signature ??= pythonSignature(expression, visible.tool, true))
       // Search ranks paths and descriptions first; only returned matches need their schemas rendered.
       // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
       return (signature ??= [
@@ -294,9 +300,15 @@ export const searchSignature = (() => {
   return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(visible: VisibleTool<R>, expression: string): SearchEntry => ({
+export const pythonSearchSignature = pythonSignature("search", makeSearchTool([]), false)
+
+const toSearchEntry = <R>(
+  visible: VisibleTool<R>,
+  expression: string,
+  language: "javascript" | "python",
+): SearchEntry => ({
   expression,
-  description: describeTool(visible, expression),
+  description: describeTool(visible, expression, language),
   pathWords: tokenize(visible.path),
   searchText: [
     visible.path,
@@ -324,7 +336,7 @@ export const prepare = <R>(tools: Tools<R>, language: "javascript" | "python" = 
       // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
       return (searchIndex ??= flattenTools(root)
         .sort((left, right) => compareText(left.path, right.path))
-        .map((tool) => toSearchEntry(tool, toolExpression(tool.path, language))))
+        .map((tool) => toSearchEntry(tool, toolExpression(tool.path, language), language)))
     },
   }
 }

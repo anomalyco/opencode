@@ -3,6 +3,30 @@ import { Effect, Result } from "effect"
 import { CodeMode } from "../src/index.js"
 
 describe("CodeMode.scanTools", () => {
+  test("scans all branches and nested arguments of Python checks without running them", () => {
+    expect(
+      CodeMode.scanTools(
+        `async def check():
+    if False:
+        return [await tools.ns["read-one"](item) for item in await tools.items()]
+    return await tools.ns["read-one"]({"id": await tools.lookup()})
+return await check()`,
+        "python",
+      ),
+    ).toEqual(Result.succeed(["ns.read-one", "items", "lookup"]))
+  })
+  test.each([
+    "t = tools.ns",
+    "f = tools.ns.run",
+    "return await tools.ns[key]()",
+    "return await tools.ns.run(tools)",
+    "def f(tools):\n    pass",
+    "return [x for tools in []]",
+    "tools = {}",
+    "const ok = true; return ok",
+  ])("rejects nonstatic Python check: %s", (code) => {
+    expect(Result.isFailure(CodeMode.scanTools(code, "python"))).toBe(true)
+  })
   test("extracts dotted, bracketed and nested static tool calls in first-seen order", () => {
     const scanned = CodeMode.scanTools(`
       const chapters = await tools["hex-meetings"].get_chapters({ meeting_id: "m1" })

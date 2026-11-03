@@ -108,6 +108,8 @@ export type CheckMode = typeof CheckMode.Type
 export const StoredCheck = Schema.Struct({
   mode: CheckMode,
   condition: Condition,
+  // Only persisted code checks need the marker. Its absence identifies checks saved before Python.
+  language: Schema.Literal("python").pipe(optional),
 }).annotate({ identifier: "Schedule.StoredCheck" })
 export type StoredCheck = typeof StoredCheck.Type
 
@@ -189,11 +191,10 @@ export const ShellConditionInput = Schema.Struct({
 export const CodeConditionInput = Schema.Struct({
   code: Schema.String.check(Schema.isMinLength(1)).annotate({
     description: [
-      "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      "Python check (no fetch; 30s, 20 tool calls, 32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
-      "Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs.",
-      "Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.:",
-      'const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: "New reply" }',
+      "Runs once at creation with state = None, now (epoch ms) and runs. Return a bool, or a dictionary with wake and optional state and message. Example:",
+      'return (await tools.slack.read_thread({"id": "123"}))["count"] > 1',
     ].join(" "),
   }),
 }).annotate({ identifier: "Schedule.CodeConditionInput" })
@@ -215,18 +216,18 @@ export const Request = Schema.Struct({
   name: Schema.String.pipe(optional).annotate({ description: "A short label for the schedule." }),
   when: WhenInput.pipe(optional).annotate({
     description:
-      'When it fires: { in: "20 minutes" }, { at: "2026-10-27T09:00" }, { every: "1 hour" } or { cron: "0 9 * * 1-5" }. Optional with `until` (defaults to { every: "30 seconds" }).',
+      'When it fires: {"in": "20 minutes"}, {"at": "2026-10-27T09:00"}, {"every": "1 hour"} or {"cron": "0 9 * * 1-5"}. Optional with `until` (defaults to every 30 seconds).',
   }),
   if: ConditionInput.pipe(optional).annotate({
     description:
-      "Recurring gate ({ run } shell command or { code } Code Mode script): check on each slot with no model call, and wake on every slot where it passes.",
+      'Recurring gate ({"run": command} or {"code": program}): check on each slot with no model call, and wake on every slot where it passes.',
   }),
   until: ConditionInput.pipe(optional).annotate({
     description:
-      'One-shot gate ({ run } shell command or { code } Code Mode script): poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
+      'One-shot gate ({"run": command} or {"code": program}): poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
   }),
   ends: Ends.pipe(optional).annotate({
-    description: 'Stops a repeating schedule at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
+    description: 'Stops a repeating schedule at the first limit reached: {"after": "8 hours"}, {"at": timestamp}, or {"times": 3}.',
   }),
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
     description: "The message the Session receives when the schedule wakes.",

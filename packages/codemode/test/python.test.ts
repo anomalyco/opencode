@@ -151,7 +151,10 @@ describe("shared Code Mode host", () => {
   test("catalog and search advertise executable paths for Python keywords and dollar signs", async () => {
     const runtime = CodeMode.make({ language: "python", tools: { from: { $lookup: echo } } })
     const path = 'tools["from"]["$lookup"]'
-    expect(runtime.catalog[0]?.signature).toStartWith(`${path}(`)
+    expect(runtime.catalog[0]?.signature).toStartWith(`await ${path}(`)
+    expect(
+      await Effect.runPromise(runtime.execute(`search({"query": "lookup"})["items"][0]["signature"]`)),
+    ).toMatchObject({ ok: true, value: runtime.catalog[0]?.signature })
     expect(
       await Effect.runPromise(runtime.execute(`return search({"query": "lookup"})["items"][0]["path"]`)),
     ).toMatchObject({ ok: true, value: path })

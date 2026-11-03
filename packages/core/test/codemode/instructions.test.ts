@@ -13,24 +13,31 @@ const echo: CodeModeCatalog.Tool = {
   type: "tool",
   name: "notes.echo",
   description: "Echo text",
-  signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>",
+  signature: 'await tools.notes.echo({\n  "text": str,\n}) -> str',
 }
 
 const lookup: CodeModeCatalog.Tool = {
   type: "tool",
   name: "orders.lookup",
   description: "Look up an order",
-  signature: "tools.orders.lookup({\n  id: string,\n}): Promise<unknown>",
+  signature: 'await tools.orders.lookup({\n  "id": str,\n}) -> Any',
 }
 
 describe("CodeModeInstructions", () => {
   it.effect("switches an unchanged catalog from JavaScript to Python when a session resumes", () =>
     Effect.gen(function* () {
       const inventory = { tools: [echo] }
-      const old = CodeModeCatalog.summarize(inventory)
+      const old = {
+        ...CodeModeCatalog.summarize({
+          tools: [{ ...echo, signature: "tools.notes.echo({text: string}): Promise<string>" }],
+        }),
+        language: "python",
+      }
+      expect(CodeModeInstructions.make(inventory)[0]!.initial(old)).toBeUndefined()
       const update = yield* readUpdate(CodeModeInstructions.make(inventory), { values: { "core/codemode": old } })
       expect(update.text).toContain("as Python inside the `execute` tool")
       expect(update.text).toContain(echo.signature)
+      expect(update.text).not.toContain("Promise<")
     }),
   )
   it.effect("instructs the model not to call execute while the catalog is empty", () =>
@@ -60,12 +67,12 @@ describe("CodeModeInstructions", () => {
       )
       expect(initialized.text).toContain("The catalog is complete.")
       expect(initialized.text).toContain("## Code Mode tools (call only inside `execute`)")
-      expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
+      expect(initialized.text).toContain(`  - ${echo.signature}  # Echo text`)
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
       expect(added.text).toContain("The Code Mode tool catalog has changed.")
       expect(added.text).toContain("New tools are available in addition to those previously listed:")
-      expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
+      expect(added.text).toContain(`  - ${lookup.signature}  # Look up an order`)
       expect(added.text).not.toContain("## Code Mode tools (call only inside `execute`)")
 
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
@@ -124,7 +131,7 @@ describe("CodeModeInstructions", () => {
         }),
       )
 
-      expect(initialized.text).toContain("- tools (2 tools) // Project utilities")
+      expect(initialized.text).toContain("- tools (2 tools)  # Project utilities")
       expect(reordered.changed).toBe(false)
       expect(reordered.text).toBe("")
     }).pipe(Effect.provide(layer))

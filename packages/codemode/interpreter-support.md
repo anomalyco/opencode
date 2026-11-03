@@ -30,7 +30,8 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       dictionary subscripts never read inherited members. Tool calls take one input dictionary or no arguments.
 - [x] Explicit top-level `return`, final top-level expression, or `null` if neither supplies a result.
 - [ ] Slices, unpacking assignments, tuples, sets, generators, default/keyword parameters and f-strings.
-- [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers, classes, and Python-specific catalog signatures.
+- [x] Python signatures in the catalog and discovery results; statically authorized Python schedule checks.
+- [ ] Standard-library modules beyond the built-in `asyncio.gather`, typed exception handlers and classes.
 
 ## Source and execution model
 

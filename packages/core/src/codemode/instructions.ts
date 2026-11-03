@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature, toolExpression } from "@opencode/codemode"
+import { pythonSearchSignature, toolExpression } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -12,7 +12,7 @@ The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be calle
 
 ${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. For example: \`return search({"query": "orders"})["items"]\`. Each result's \`path\` is the complete call expression: write it out as Python, for example \`await tools.orders.lookup({"id": 42})\`. Do not use it as a key such as \`tools[path]\`.
 
-- ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
+- ${pythonSearchSignature}` : "The catalog is complete. Do not guess tool names."}
 
 ## Code Mode tools (call only inside \`execute\`)`
 
@@ -124,24 +124,21 @@ ${render(current)}`
 }
 
 const key = Instructions.Key.make("core/codemode")
-// Include the interpreter in the stored instruction hash so a resumed JS session receives the Python guidance.
-const codec = Schema.toCodecJson(
-  Schema.Struct({ ...CodeModeCatalog.Summary.fields, language: Schema.optionalKey(Schema.Literal("python")) }),
-)
+// Do not replay listings stored before Python signatures existed. A new snapshot renders the complete catalog.
+const codec = Schema.toCodecJson(Schema.Struct({ ...CodeModeCatalog.Summary.fields, format: Schema.Literal("python") }))
 
 export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
   const catalog =
     inventory === undefined
       ? Instructions.removed
-      : { ...CodeModeCatalog.summarize(inventory), language: "python" as const }
+      : { ...CodeModeCatalog.summarize(inventory), format: "python" as const }
   return Instructions.make({
     key,
     codec,
     read: Effect.succeed(catalog),
     render: {
       initial: render,
-      changed: (previous, current) =>
-        previous.language === current.language ? update(previous, current) : render(current),
+      changed: update,
       removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
     },
   })

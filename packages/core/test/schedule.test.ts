@@ -1232,17 +1232,13 @@ describe("Schedule", () => {
   })
 
   describe("code checks", () => {
-    const watchThread = `
-      const thread = await tools.slack.read_thread({})
-      if (state === null || thread.replies <= state.replies) {
-        return { wake: false, state: { replies: thread.replies, runs } }
-      }
-      return {
-        wake: true,
-        state: { replies: thread.replies, runs },
-        message: thread.replies + " replies",
-      }
-    `
+    const watchThread = `thread = await tools.slack.read_thread()
+count = thread["replies"]
+return {
+    "wake": state is not None and count > state["replies"],
+    "state": {"replies": count, "runs": runs},
+    "message": str(count) + " replies",
+}`
 
     it.effect("seeds initial state at t=0 so replies before the first tick are caught, and counts ends.times by wakes", () =>
       Effect.gen(function* () {
@@ -1299,7 +1295,7 @@ describe("Schedule", () => {
           sessionID,
           until: {
             type: "code",
-            code: `const t = await tools.slack.read_thread({}); return { wake: t.replies >= 5, message: "already 5" }`,
+            code: `t = await tools.slack.read_thread()\nreturn {"wake": t["replies"] >= 5, "message": "already 5"}`,
           },
           action: { type: "prompt", prompt: "Done." },
         })
@@ -1315,7 +1311,7 @@ describe("Schedule", () => {
           sessionID,
           until: {
             type: "code",
-            code: `return (await tools.slack.read_thread({})).replies >= 2 && typeof fetch === "undefined"`,
+            code: `try:\n    fetch\nexcept Exception:\n    return (await tools.slack.read_thread())["replies"] >= 2\nreturn False`,
           },
           action: { type: "prompt", prompt: "Reached 2." },
         })
@@ -1326,6 +1322,27 @@ describe("Schedule", () => {
         yield* schedules.tick
         expect(yield* pending).toEqual([messageID(waiting, 1)])
         expect(yield* schedules.get(waiting.id)).toMatchObject({ status: "done", lastOutcome: "fired" })
+      }),
+    )
+
+    it.effect("runs checks persisted without a language using their original interpreter", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const row = yield* schedules.create({
+          sessionID,
+          until: { type: "code", code: "return False" },
+          action: { type: "prompt", prompt: "Ready." },
+        })
+        const { db } = yield* Database.Service
+        yield* db
+          .update(ScheduleTable)
+          .set({ check: { mode: "until", condition: { type: "code", code: "const ready = true; return ready" } } })
+          .where(eq(ScheduleTable.id, row.id))
+          .run()
+          .pipe(Effect.orDie)
+        yield* TestClock.adjust("30 seconds")
+        yield* schedules.tick
+        expect(yield* schedules.get(row.id)).toMatchObject({ status: "done", lastOutcome: "fired" })
       }),
     )
 
@@ -1396,7 +1413,7 @@ describe("Schedule", () => {
         const exportFailure = yield* Effect.flip(
           schedules.create({
             sessionID,
-            until: { type: "code", code: `await tools.slack.export_thread({}); return true` },
+            until: { type: "code", code: `await tools.slack.export_thread({})\nreturn True` },
             action: { type: "prompt", prompt: "Exported." },
           }),
         )
@@ -1431,7 +1448,7 @@ describe("Schedule", () => {
         })
 
         agentRules = [{ action: "execute", resource: "*", effect: "deny" }]
-        expect(yield* bad("return true")).toMatchObject({ _tag: "Permission.BlockedError" })
+        expect(yield* bad("return True")).toMatchObject({ _tag: "Permission.BlockedError" })
       }),
     )
 
@@ -1444,7 +1461,7 @@ describe("Schedule", () => {
             when: { type: "cron", cron: "0 9 * * *" },
             if: {
               type: "code",
-              code: `const t = await tools.slack.read_thread({}); return t.nonexistent.length > 0`,
+              code: `t = await tools.slack.read_thread()\nreturn len(t["nonexistent"]) > 0`,
             },
             action: { type: "prompt", prompt: "Morning check." },
           }),
@@ -1458,7 +1475,7 @@ describe("Schedule", () => {
           when: { type: "every", every: "1 minute" },
           if: {
             type: "code",
-            code: `if (state === null) return { wake: false, state: { ok: true } }; return "not-a-check-result"`,
+            code: `if state is None:\n    return {"wake": False, "state": {"ok": True}}\nreturn "not-a-check-result"`,
           },
           action: { type: "prompt", prompt: "Watch." },
         })

@@ -76,7 +76,7 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
+            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell command or Python check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },

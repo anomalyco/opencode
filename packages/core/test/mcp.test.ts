@@ -2690,7 +2690,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "execute",
     ])
     expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).toContain(
-      "ok: boolean",
+      '"ok": bool',
     )
     expect(execute?.description).not.toContain("tools.demo.search")
   }),
