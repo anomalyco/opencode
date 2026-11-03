@@ -3,7 +3,9 @@
 This is the checkable support matrix for CodeMode's confined JavaScript interpreter. It tracks the language and
 standard-library surface that programs can use today, plus concrete gaps that may be implemented later.
 
-There is also a [standalone Lua 5.1 interpreter written in JavaScript](lua/README.md). Its synchronous `runLua(source)` API supports Lua coroutines and multiple results without native code or Wasm. It is not selectable in Code Mode and does not change the JavaScript support described here. See the experiment's README for its tested subset and limitations.
+The agent-facing `execute` tool uses the [confined Lua profile](lua/README.md). Library callers can select it with
+`language: "lua"`; this checklist covers the existing JavaScript profile only. The unmetered `runLua(source)` entry
+point is for trusted compatibility testing, not agent programs.
 
 - `[x]` means the feature is implemented at the scope described here.
 - `[ ]` means a concrete compatibility gap remains.

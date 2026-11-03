@@ -1083,3 +1083,52 @@ describe("non-identifier tool paths", () => {
     expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"]({')
   })
 })
+
+describe("Lua discovery", () => {
+  const echo = Tool.make({
+    description: "Echo an item list",
+    input: Schema.Struct({
+      end: Schema.Array(Schema.NullOr(Schema.String)).annotate({ description: "Items to echo" }),
+      $tag: Schema.optionalKey(Schema.String),
+    }),
+    output: Schema.Array(Schema.NullOr(Schema.String)),
+    execute: (input) => Effect.succeed(input.end),
+  })
+  const runtime = CodeMode.make({ language: "lua", tools: { "repeat.$echo\u00011": echo } })
+  const path = 'tools["repeat"]["$echo\\0011"]'
+
+  test("catalog and search describe Lua-callable paths, table shapes and nullable values", async () => {
+    const signature = `${path}({\n  -- Items to echo\n  ["end"] = { string | json.null, ... },\n  ["$tag"]? = string,\n}) -> { string | json.null, ... }`
+    expect(runtime.catalog[0]?.signature).toBe(signature)
+    expect(await Effect.runPromise(runtime.execute('return search({ query = "echo" }).items[1]'))).toMatchObject({
+      ok: true,
+      value: { path, signature },
+    })
+    expect(await Effect.runPromise(runtime.execute(`return ${path}({ ["end"] = { "hi", json.null } })`))).toMatchObject(
+      {
+        ok: true,
+        value: ["hi", null],
+      },
+    )
+  })
+
+  test("bounds guest search input and suggestions before ranking or materializing signatures", async () => {
+    for (const input of ["limit = 51", 'query = string.rep("a", 513)', 'namespace = string.rep("a", 513)']) {
+      expect(await Effect.runPromise(runtime.execute(`return search({ ${input} })`))).toMatchObject({
+        ok: false,
+        error: { kind: "InvalidToolInput" },
+      })
+    }
+    expect(
+      await Effect.runPromise(
+        runtime.execute('return #search({ query = string.rep("unrelated ", 16) .. "echo" }).items'),
+      ),
+    ).toMatchObject({ ok: true, value: 0 })
+    expect(
+      await Effect.runPromise(runtime.execute('local k = string.rep("x", 180); return tools[k][k][k]()')),
+    ).toMatchObject({
+      ok: false,
+      error: { kind: "UnknownTool", message: "Unknown tool (path too long for suggestions)." },
+    })
+  })
+})

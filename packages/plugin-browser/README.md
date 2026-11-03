@@ -5,14 +5,14 @@ The server owns tools, invocation scope, and permissions; the desktop owns tabs,
 CDP, captured traffic, evaluations, and capture files. Core only registers the
 plugin. Neither endpoint imports the other's implementation.
 
-```js
-const tab = await tools.browser.tabs.open({ url: "https://example.com" })
-return await tools.browser.snapshot({ tabID: tab.id })
+```lua
+local tab = tools.browser.tabs.open({ url = "https://example.com" })
+return tools.browser.snapshot({ tabID = tab.id })
 ```
 
 All page operations require a `tabID` returned by `browser.tabs.open/list`.
 Focus selects the visible Review tab, not an implicit command target. Discover
-current signatures with `search({ namespace: "browser" })`.
+current signatures with `search({ namespace = "browser" })`.
 Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 
 ## Tools

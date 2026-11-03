@@ -1,6 +1,6 @@
 export * as Extension from "./extension.js"
 
-import type { Effect } from "effect"
+import type { Effect, Schema } from "effect"
 
 /**
  * Host values a program reaches directly as globals: functions, or objects of functions such as `fs`. Values crossing
@@ -52,3 +52,19 @@ export const async = <F extends Function>(global: F): F => {
 }
 
 export const isAsync = (global: Function) => global instanceof AsyncFunction || asyncGlobals.has(global)
+
+const luaExtensions = new WeakSet<Extension>()
+type LuaGlobal = (...args: Array<Schema.Json | undefined>) => Effect.Effect<Schema.Json | undefined, unknown, unknown>
+
+/** Declare named Lua capabilities. The trusted callback returns an Effect, never a guest-selected thenable or host handle. */
+export const lua = <const Globals extends Readonly<Record<string, LuaGlobal>>>(options: Extension<Globals>) => {
+  for (const [name, fn] of Object.entries(options.globals)) {
+    if (typeof fn !== "function") throw new TypeError(`Lua global '${name}' must be an Effect-returning function.`)
+  }
+  const extension = make(options)
+  luaExtensions.add(extension)
+  return extension
+}
+
+export const isLua = (extension: Extension): extension is Extension<Record<string, LuaGlobal>> =>
+  luaExtensions.has(extension)

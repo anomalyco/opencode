@@ -13,14 +13,14 @@ const echo: CodeModeCatalog.Tool = {
   type: "tool",
   name: "notes.echo",
   description: "Echo text",
-  signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>",
+  signature: "tools.notes.echo({\n  text = string,\n}) -> string",
 }
 
 const lookup: CodeModeCatalog.Tool = {
   type: "tool",
   name: "orders.lookup",
   description: "Look up an order",
-  signature: "tools.orders.lookup({\n  id: string,\n}): Promise<unknown>",
+  signature: "tools.orders.lookup({\n  id = string,\n}) -> unknown",
 }
 
 describe("CodeModeInstructions", () => {
@@ -32,7 +32,7 @@ describe("CodeModeInstructions", () => {
       )
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
-      expect(added.text).toContain("New tools are available in addition to those previously listed:")
+      expect(added.text).toContain("they only work as Lua inside the `execute` tool")
       expect(added.text).toContain(echo.signature)
 
       expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
@@ -47,16 +47,16 @@ describe("CodeModeInstructions", () => {
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
-        "The tools listed below cannot be called directly: they only work as JavaScript inside the `execute` tool.",
+        "The tools listed below cannot be called directly: they only work as Lua inside the `execute` tool.",
       )
       expect(initialized.text).toContain("The catalog is complete.")
       expect(initialized.text).toContain("## Code Mode tools (call only inside `execute`)")
-      expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
+      expect(initialized.text).toContain(`  - ${echo.signature} -- Echo text`)
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
       expect(added.text).toContain("The Code Mode tool catalog has changed.")
       expect(added.text).toContain("New tools are available in addition to those previously listed:")
-      expect(added.text).toContain(`  - ${lookup.signature} // Look up an order`)
+      expect(added.text).toContain(`  - ${lookup.signature} -- Look up an order`)
       expect(added.text).not.toContain("## Code Mode tools (call only inside `execute`)")
 
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })
@@ -115,9 +115,21 @@ describe("CodeModeInstructions", () => {
         }),
       )
 
-      expect(initialized.text).toContain("- tools (2 tools) // Project utilities")
+      expect(initialized.text).toContain("- tools (2 tools) -- Project utilities")
       expect(reordered.changed).toBe(false)
       expect(reordered.text).toBe("")
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("refreshes a persisted pre-Lua catalog even if no listing changed", () =>
+    Effect.gen(function* () {
+      // A namespace-only (or empty) catalog can be byte-identical across runtimes except for the language.
+      const old = { total: 0, shown: 0, namespaces: [] }
+      const current = CodeModeInstructions.make({ tools: [] })
+      expect(current[0]?.initial(old)).toBeUndefined()
+      const update = yield* readUpdate(current, { values: { "core/codemode": old } })
+      expect(update.changed).toBe(true)
+      expect(update.text).toContain("No Code Mode tools are currently available")
+    }),
+  )
 })

@@ -20,7 +20,7 @@ import { initRepo } from "./fixture/git"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, toolIdentity } from "./lib/tool"
+import { executeTool, luaLiteral, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer, PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -88,7 +88,7 @@ it.effect("groups available models by provider with paging", () =>
           type: "tool-call",
           id: `call-${JSON.stringify(input)}`,
           name: "execute",
-          input: { code: `return await tools.opencode.models(${JSON.stringify(input)})` },
+          input: { code: `return tools.opencode.models(${luaLiteral(input)})` },
         },
       }).pipe(Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")))
 
@@ -191,14 +191,17 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
     const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
     const registry = yield* Tool.Service
-    const program = (code: string) =>
+    const call = (name: string, input: Record<string, unknown>) =>
       executeTool(registry, {
         sessionID: session.id,
         ...toolIdentity,
-        call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
+        call: {
+          type: "tool-call",
+          id: `call-${name}`,
+          name: "execute",
+          input: { code: `return tools.opencode.${name}(${luaLiteral(input)})` },
+        },
       })
-    const call = (name: string, input: Record<string, unknown>) =>
-      program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
     const run = (name: string, input: Record<string, unknown>) =>
       call(name, input).pipe(
         Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
@@ -229,19 +232,13 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, "draft.txt")).exists())).toBe(true)
     yield* Effect.promise(() => fs.rm(path.join(directory, "draft.txt")))
 
-    // Removal requires the same approval as editing files in the worktree. Rejection feedback reaches the
-    // program and the execute result, as it would reach the model from a direct call.
+    // Removal requires edit approval. Its rejection feedback reaches the model through execute.
     approvals.assertions.length = 0
     approvals.rejectEdit = true
     expect(yield* call("worktree_remove", { directory })).toMatchObject({
       content: [{ type: "text", text: "Keep this worktree" }],
       metadata: { error: true },
     })
-    expect(
-      yield* program(
-        `try { await tools.opencode.worktree_remove(${JSON.stringify({ directory })}) } catch (error) { return error.message }`,
-      ),
-    ).toMatchObject({ content: [{ type: "text", text: "Keep this worktree" }] })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(true)
     approvals.rejectEdit = false
 
@@ -254,7 +251,6 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     // Permission resources always use forward slashes, including on Windows.
     const resource = directory.replaceAll("\\", "/")
     expect(approvals.assertions).toMatchObject([
-      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])

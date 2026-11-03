@@ -14,7 +14,7 @@ import type { CommandDefinition } from "@opencode/plugin/effect/command"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { codeModeListings, executeTool, luaLiteral, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_schedule_tool_test")
 const otherSessionID = Session.ID.make("ses_schedule_tool_other")
@@ -109,7 +109,7 @@ const call = (registry: Tool.Interface, name: string, input: unknown, session = 
       type: "tool-call",
       id: `call-${name}`,
       name: "execute",
-      input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+      input: { code: `return tools.opencode.${name}(${luaLiteral(input)})` },
     },
   })
 const run = (registry: Tool.Interface, name: string, input: unknown, session = sessionID) =>

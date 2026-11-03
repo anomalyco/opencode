@@ -34,6 +34,8 @@ const NamespaceSummary = Schema.Struct({
 })
 
 export const Summary = Schema.Struct({
+  // Old snapshots contain JavaScript call signatures. Never render them alongside Lua instructions.
+  language: Schema.Literal("lua"),
   total: Schema.Number,
   shown: Schema.Number,
   namespaces: Schema.Array(NamespaceSummary),
@@ -66,7 +68,7 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
           const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
           const description =
             firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
-          const suffix = description.length === 0 ? "" : ` // ${description}`
+          const suffix = description.length === 0 ? "" : ` -- ${description}`
           return { path: entry.path, line: `  - ${entry.signature}${suffix}` }
         })
         .toSorted((left, right) => {
@@ -132,6 +134,7 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
   }))
   return {
+    language: "lua",
     total: flattened.tools.length,
     shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
     namespaces: namespaceSummaries,
@@ -169,7 +172,7 @@ export function namespaceLine(namespace: typeof NamespaceSummary.Type) {
       : namespace.entries.length === 0
         ? `${count}, none shown`
         : `${count}, ${namespace.entries.length} shown`
-  return `- ${namespace.name} (${label})${namespace.description === undefined ? "" : ` // ${namespace.description}`}`
+  return `- ${namespace.name} (${label})${namespace.description === undefined ? "" : ` -- ${namespace.description}`}`
 }
 
 function rankListings(listings: ReadonlyArray<typeof Listing.Type>) {

@@ -1,8 +1,9 @@
 # @opencode/codemode
 
-This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
-tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
-[interpreter support checklist](./interpreter-support.md) for more details.
+Code Mode runs small programs over tools supplied by the host. OpenCode's agent-facing `execute` tool runs **Lua**.
+The package also supports its existing JavaScript interpreter: `CodeMode.make` and `CodeMode.execute` default to
+JavaScript for compatibility. Set `language: "lua"` for Lua or `language: "javascript"` to pin JavaScript. Neither
+parser retries a failed program in the other language. Stored schedule checks remain JavaScript.
 
 Rather than trying to sandbox arbitrary JavaScript, CodeMode only runs the language features we implement. Programs
 cannot directly access the network, filesystem, processes, or application APIs. They can interact with the outside
@@ -11,7 +12,32 @@ world only through tools provided by the host, which can also limit execution ti
 The idea of code mode was originally introduced by Cloudflare. See
 [their post](https://blog.cloudflare.com/code-mode/) to learn more about the concept and their isolate-based approach.
 
-## How it differs from JavaScript
+## Writing a Lua program
+
+```lua
+local matches = search({ query = "order lookup" })
+local order = tools.orders["lookup-by-id"]({ id = "order_42" })
+return { id = order.id, needsAttention = order.status ~= "complete" }
+```
+
+Use the exact path returned by `search`; the input is a Lua table, not a JavaScript object literal. Calls wait for the
+tool's Effect in the execution's environment, so the next statement sees the result. Calls within one Lua program
+are sequential: there is no `await`, `Promise.all`, detached work, or parallel Lua task API. Independent executions
+still have separate state and can run concurrently.
+
+- Use an explicit `return`: only the first value is exported. Falling off the end or returning `nil` yields JSON null.
+- Tables with contiguous integer keys starting at **1** are arrays; tables with string keys are objects. `{}` makes
+  an empty object; `json.array()` makes an empty array. Arrays and objects received from a tool keep their shape
+  even when empty. Mixed-key, sparse, cyclic and non-data results cannot cross to the host.
+- `nil` removes a table field. Use `json.null` to keep a JSON null in a field or array slot.
+- Use `local ok, result = pcall(tools.ns.lookup, { id = id })` to recover from an ordinary failed call. On failure
+  the program sees a message, not a host exception. Interruption and resource exhaustion cannot be caught this way.
+- Only explicit capabilities can enter host code. Tools, search, bindings and extension results cross as plain data,
+  never a host object, function, Promise or proxy. Declare Lua globals with `Extension.lua({ name, globals })`:
+  each function returns an Effect producing JSON (or `undefined`), not an object with callable methods. In
+  OpenCode `fetch(url, init)` returns data (`body` is text), not a JavaScript `Response`.
+
+## JavaScript compatibility
 
 - **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
   globals the host adds through extensions. Timers, `process`, filesystem access, packages, and `export` are
@@ -24,7 +50,7 @@ The idea of code mode was originally introduced by Cloudflare. See
 Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location. Current gaps are tracked in the
 [interpreter support checklist](./interpreter-support.md).
 
-## Quick Start
+## Quick Start (host API)
 
 ```ts
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
@@ -38,13 +64,14 @@ const lookupOrder = Tool.make({
 })
 
 const runtime = CodeMode.make({
+  language: "lua",
   tools: { orders: { lookup: lookupOrder } },
 })
 
 const result = await Effect.runPromise(
   runtime.execute(`
-    const order = await tools.orders.lookup({ id: "order_42" })
-    return { id: order.id, needsAttention: order.status !== "complete" }
+    local order = tools.orders.lookup({ id = "order_42" })
+    return { id = order.id, needsAttention = order.status ~= "complete" }
   `),
 )
 ```
@@ -85,7 +112,7 @@ bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 ```ts
 const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
-runtime.catalog() // structured tool descriptions
+runtime.catalog // structured tool descriptions
 runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
@@ -107,7 +134,7 @@ const web = Extension.make({ name: "web", globals: { fetch: async (url: string) 
 const runtime = CodeMode.make({ tools, extensions: [web] })
 ```
 
-A global is synchronous unless it is an `async` function or is marked with `Extension.async`. Mark a plain function
+In the JavaScript interpreter, a global is synchronous unless it is an `async` function or is marked with `Extension.async`. Mark a plain function
 that returns a Promise or an Effect, so a denied call rejects its promise like any other failure:
 
 ```ts
@@ -130,7 +157,11 @@ const web = Extension.make({
     ),
   },
 })
-const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
+const result =
+  yield *
+  CodeMode.make({ extensions: [web] })
+    .execute(code)
+    .pipe(Effect.provideService(Session, session))
 ```
 
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
@@ -158,7 +189,7 @@ create namespaces:
 
 ```ts
 const api = OpenAPI.fromSpec({ spec, auth: { resolve } })
-const runtime = CodeMode.make({ tools: { opencode: api.tools } })
+const runtime = CodeMode.make({ language: "lua", tools: { opencode: api.tools } })
 ```
 
 The synchronous result is `{ tools, skipped }`. Operations with unsupported parameter encodings, request bodies
@@ -217,26 +248,30 @@ copying error. Interruption propagates without becoming an error diagnostic.
 
 ## Discovery
 
-`runtime.catalog()` returns structured descriptors — exact path, description, and generated TypeScript signature — for
-every visible tool. Hosts render their own model-facing instructions from these descriptors; `CodeMode.searchSignature`
-and `CodeMode.toolExpression(path)` supply the exact callable forms.
+`runtime.catalog` returns structured descriptors for every visible tool (path, description and signature in the
+selected language). For Lua instructions use `CodeMode.luaSearchSignature` and `CodeMode.toolExpression(path, "lua")`;
+`CodeMode.searchSignature` and `CodeMode.toolExpression(path)` retain their JavaScript meanings.
 
 The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
-empty-query browsing, and pagination, and returns callable paths with full signatures. Its result can be used directly,
-awaited, or chained with `then`, `catch`, and `finally`, so programs work whichever way they treat it. Search counts toward
+empty-query browsing, and pagination, and returns callable paths with full signatures. Lua sees the result directly.
+In JavaScript it can also be awaited or chained with `then`, `catch`, and `finally`. Search counts toward
 `maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values.
 
 ## Execution Limits
 
-| Limit            | Default   | Controls                        |
-| ---------------- | --------- | ------------------------------- |
-| `timeoutMs`      | unlimited | Total execution time.           |
-| `maxToolCalls`   | unlimited | Admitted tool calls.            |
-| `maxOutputBytes` | unlimited | Retained result value and logs. |
+| Limit            | Lua default | JavaScript default | Controls                                                                          |
+| ---------------- | ----------- | ------------------ | --------------------------------------------------------------------------------- |
+| `timeoutMs`      | 120,000     | unlimited          | Total execution time.                                                             |
+| `maxToolCalls`   | 128         | unlimited          | Lua host call attempts (tools, search and extensions); JavaScript admitted tools. |
+| `maxOutputBytes` | 65,536      | unlimited          | Retained result value and logs.                                                   |
 
-Execution limits have no default values.
+Lua also enforces non-configurable bounds on source and syntax depth, interpreter work and call frames, string and
+table growth, and expanded data copies. These bounds apply even when the host raises its configured limits. The
+production evaluator shares the [Lua interpreter](./lua/README.md)'s frames and call loop but installs only metered
+operations: no prototype libraries, dynamic loading, I/O, metatables, regex/pattern engine or coroutines. Lua strings
+are byte strings; strings crossing JSON boundaries must be valid UTF-8.
 
 Invalid limit configuration throws `RangeError`. Warnings receive a separate budget equal to `maxOutputBytes`.
 Truncation does not fail execution; an oversized value becomes a string with an in-band marker. Timeouts interrupt
-tool calls and busy loops, while a result returned before cleanup times out remains successful with a
-`TimeoutExceeded` warning. Tool-call concurrency is unrestricted. Boundary data is limited to 32 nested levels.
+tool calls and busy loops. In JavaScript a result returned before cleanup times out remains successful with a
+`TimeoutExceeded` warning; JavaScript tool calls may run concurrently.

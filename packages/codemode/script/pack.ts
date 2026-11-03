@@ -16,8 +16,14 @@ try {
     JSON.stringify({ private: true, type: "module", dependencies: { "@opencode/codemode": `file:${tarball}` } }),
   )
   await $`npm install --ignore-scripts --no-audit --no-fund`.cwd(consumer)
-  await $`node --input-type=module -e ${'await import("@opencode/codemode")'}`.cwd(consumer)
-  await $`bun --conditions=workerd -e ${'await import("@opencode/codemode")'}`.cwd(consumer)
+  const smoke = `
+    import { CodeMode } from "@opencode/codemode"
+    import { Effect } from "effect"
+    const result = await Effect.runPromise(CodeMode.execute({ language: "lua", code: "local x = 2; return x + 3" }))
+    if (!result.ok || result.value !== 5) throw Error(JSON.stringify(result))
+  `
+  await $`node --input-type=module -e ${smoke}`.cwd(consumer)
+  await $`bun --conditions=workerd -e ${smoke}`.cwd(consumer)
 } finally {
   await rm(consumer, { recursive: true, force: true })
 }

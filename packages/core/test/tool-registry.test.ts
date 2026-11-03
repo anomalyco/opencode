@@ -402,18 +402,18 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("executes Code Mode tools without requiring letter-leading names or namespace segments", () =>
+  it.effect("executes Code Mode tools whose names or namespace segments are not Lua identifiers", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { "2d_get_scene": make(), "123": make(), _lookup: make(), "-lookup": make() })
-      yield* transform(service, { "2d_get_scene": make() }, { namespace: "123._private.-tools", codemode: true })
+      yield* transform(service, { end: make() }, { namespace: "123._private.-tools", codemode: true })
 
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual([
         "-lookup",
         "123",
-        "123._private.-tools.2d_get_scene",
+        "123._private.-tools.end",
         "2d_get_scene",
         "_lookup",
       ])
@@ -424,13 +424,15 @@ describe("Tool", () => {
           id: "call-nonletter-names",
           name: "execute",
           input: {
-            code: `const results = await Promise.all([
-              tools["2d_get_scene"]({ text: "digit" }),
-              tools["123"]({ text: "numeric" }),
-              tools._lookup({ text: "underscore" }),
-              tools["-lookup"]({ text: "hyphen" }),
-              tools["123"]._private["-tools"]["2d_get_scene"]({ text: "namespaced" }),
-            ]); return results.map(result => result.text).join(",");`,
+            code: `local match = search({ query = "123._private.-tools.end" }).items[1]
+            assert(match.path == 'tools["123"]._private["-tools"]["end"]')
+            return table.concat({
+              tools["2d_get_scene"]({ text = "digit" }).text,
+              tools["123"]({ text = "numeric" }).text,
+              tools._lookup({ text = "underscore" }).text,
+              tools["-lookup"]({ text = "hyphen" }).text,
+              tools["123"]._private["-tools"]["end"]({ text = "namespaced" }).text,
+            }, ",")`,
           },
         },
       })
@@ -502,7 +504,7 @@ describe("Tool", () => {
           type: "tool-call",
           id: "namespace-search",
           name: "execute",
-          input: { code: 'return search({ query: "pricing operations" })' },
+          input: { code: 'return search({ query = "pricing operations" })' },
         },
       })
       expect(result.output).toMatchObject({ output: expect.stringContaining("tools.registry.search") })
@@ -513,10 +515,10 @@ describe("Tool", () => {
           id: "callable-namespace",
           name: "execute",
           input: {
-            code: `return await Promise.all([
-              tools.registry.search({ text: "search" }),
-              tools.registry.search.sales({ text: "sales" }),
-            ])`,
+            code: `return {
+              tools.registry.search({ text = "search" }),
+              tools.registry.search.sales({ text = "sales" }),
+            }`,
           },
         },
       })
@@ -554,7 +556,7 @@ describe("Tool", () => {
             id: `namespace-${query}`,
             name: "execute",
             input: {
-              code: `return search({ query: ${JSON.stringify(query)} }).items.map(item => item.path).join(",")`,
+              code: `local items = search({ query = ${JSON.stringify(query)} }).items; return items[1] and items[1].path or ""`,
             },
           },
         })
@@ -583,10 +585,10 @@ describe("Tool", () => {
           id: "top-level-callable",
           name: "execute",
           input: {
-            code: `return await Promise.all([
-              tools.pricing({ text: "pricing" }),
-              tools.pricing.sales({ text: "sales" }),
-            ])`,
+            code: `return {
+              tools.pricing({ text = "pricing" }),
+              tools.pricing.sales({ text = "sales" }),
+            }`,
           },
         },
       })
@@ -1198,7 +1200,7 @@ describe("Tool", () => {
       const toolSet = yield* service.snapshot()
       const execute = toolSet.definitions.find((tool) => tool.name === "execute")
       expect(codeModeListings(toolSet.codeModeCatalog!)[0]?.line).toContain("tools.echo")
-      expect(execute?.description).toContain("confined Code Mode runtime")
+      expect(execute?.description).toContain("Lua")
       expect(execute?.description).not.toContain("Echo text")
       yield* Scope.close(scope, Exit.void)
       yield* transform(service, {
@@ -1218,7 +1220,7 @@ describe("Tool", () => {
           type: "tool-call",
           id: "call-execute",
           name: "execute",
-          input: { code: 'return await tools.echo({ text: "request" })' },
+          input: { code: 'return tools.echo({ text = "request" })' },
         },
         progress: (update) => Effect.sync(() => progress.push(update)),
       })

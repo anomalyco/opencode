@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "acorn": "8.15.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "luaparse": "0.3.1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

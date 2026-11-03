@@ -20,6 +20,14 @@ export const toolDefinitions = (registry: Tool.Interface, permissions?: Permissi
 export const codeModeListings = (catalog: CodeModeCatalog.Inventory) =>
   CodeModeCatalog.summarize(catalog, { budget: Infinity }).namespaces.flatMap((namespace) => namespace.entries)
 
+/** A Lua table literal for fixture inputs, including dynamic paths and keys like `in` or `index.html`. */
+export function luaLiteral(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return JSON.stringify(value)
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected a fixture record or scalar")
+  const fields = Object.entries(value).map(([key, entry]) => `[${luaLiteral(key)}] = ${luaLiteral(entry)}`)
+  return `{${fields.join(", ")}}`
+}
+
 export function waitForTool(registry: Tool.Interface, name: string, remaining = 1000): Effect.Effect<void, Error> {
   return Effect.gen(function* () {
     if ((yield* toolDefinitions(registry)).some((tool) => tool.name === name)) return

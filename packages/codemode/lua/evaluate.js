@@ -1,16 +1,4 @@
-import {
-  LuaClosure,
-  LuaError,
-  LuaTable,
-  arith,
-  compare,
-  concat,
-  index,
-  len,
-  luaToNumber,
-  newindex,
-  truthy,
-} from "v8lua/src/runtime.js"
+export const checkpoint = Symbol("checkpoint")
 
 // One generator per active Lua function. Expressions delegate within this frame;
 // calls yield a request to the VM rather than delegating to another Lua frame.
@@ -24,6 +12,43 @@ export class Call {
 const stop = Symbol("break")
 const arithmetic = { "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "^": "pow" }
 
+// Both profiles use this trampoline. Only native calls, resource policy and
+// the value operations differ; a suspended event never contains a Lua frame.
+export function* runFrames(vm, frames, call) {
+  const base = frames.length
+  let values
+  for (;;) {
+    if (call) {
+      const target = vm.resolveCall(call)
+      if (vm.isClosure(target.fn)) {
+        if (frames.length > base && frames.at(-1).tail) frames.pop()
+        if (frames.length >= vm.frameLimit) throw vm.ops.stackOverflow()
+        frames.push(new Frame(vm, target.fn, target.args))
+        values = undefined
+      } else values = yield* vm.native(target.fn, target.args)
+      call = undefined
+    }
+    if (frames.length === base) return values
+    const frame = frames.at(-1)
+    if (frame.tail) {
+      frames.pop()
+      continue
+    }
+    const step = frame.code.next(values)
+    if (step.value instanceof Call) {
+      frame.tail = step.done
+      call = step.value
+    } else if (!step.done && step.value === checkpoint) {
+      yield checkpoint
+      values = undefined
+    } else {
+      if (!step.done) throw new Error("invalid Lua frame suspension")
+      values = step.value ?? []
+      frames.pop()
+    }
+  }
+}
+
 function isCall(node) {
   return node.type === "CallExpression" || node.type === "StringCallExpression" || node.type === "TableCallExpression"
 }
@@ -34,26 +59,31 @@ function bind(parent, name, value) {
   return { parent, name, value }
 }
 
-function lookup(scope, name) {
-  for (let cell = scope; cell; cell = cell.parent) if (cell.name === name) return cell
+function lookup(vm, scope, name) {
+  for (let cell = scope; cell; cell = cell.parent) {
+    vm.charge(1)
+    if (cell.name === name) return cell
+  }
 }
 
 export class Frame {
   constructor(vm, closure, args) {
     this.vm = vm
+    this.ops = vm.ops
     this.closure = closure
     this.line = closure.proto.loc.start.line
     let scope = closure.scope
     const proto = closure.proto
     let i = 0
     if (proto.identifier?.indexer === ":") scope = bind(scope, "self", args[i++])
+    vm.charge((proto.parameters?.length ?? 0) + args.length + 1)
     for (const param of proto.parameters ?? []) {
       if (param.type === "VarargLiteral") break
       scope = bind(scope, param.name, args[i++])
     }
     this.varargs = args.slice(i)
     if (proto.legacyArg) {
-      const arg = new LuaTable()
+      const arg = this.ops.table()
       this.varargs.forEach((v, i) => arg.set(i + 1, v))
       arg.set("n", this.varargs.length)
       scope = bind(scope, "arg", arg)
@@ -62,7 +92,7 @@ export class Frame {
   }
 
   close(proto, scope) {
-    const fn = new LuaClosure(proto, scope, proto.identifier?.name, this.vm)
+    const fn = this.ops.closure(proto, scope, proto.identifier?.name, this.vm)
     fn.chunkname = this.closure.chunkname
     fn.env = this.closure.env
     return fn
@@ -73,8 +103,11 @@ export class Frame {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (i === nodes.length - 1 && !node.inParens) {
-        if (node.type === "VarargLiteral") return result.concat(this.varargs)
-        if (isCall(node)) return result.concat(yield* this.call(node, scope))
+        if (node.type === "VarargLiteral" || isCall(node)) {
+          const tail = node.type === "VarargLiteral" ? this.varargs : yield* this.call(node, scope)
+          this.vm.charge(result.length + tail.length + 1)
+          return result.concat(tail)
+        }
       }
       result.push(yield* this.expr(node, scope))
     }
@@ -89,7 +122,7 @@ export class Frame {
   *prepareCall(node, scope) {
     const method = node.base.indexer === ":"
     const self = method ? yield* this.expr(node.base.base, scope) : undefined
-    const fn = method ? this.vm.atomic(index(self, node.base.identifier.name)) : yield* this.expr(node.base, scope)
+    const fn = method ? this.ops.index(self, node.base.identifier.name) : yield* this.expr(node.base, scope)
     const args =
       node.type === "CallExpression"
         ? yield* this.args(node.arguments, scope)
@@ -100,7 +133,7 @@ export class Frame {
 
   *ref(node, scope) {
     if (node.type === "Identifier") {
-      const cell = lookup(scope, node.name)
+      const cell = lookup(this.vm, scope, node.name)
       return cell ? { cell } : { obj: this.closure.env, key: node.name }
     }
     const obj = yield* this.expr(node.base, scope)
@@ -110,10 +143,12 @@ export class Frame {
 
   store(ref, value) {
     if (ref.cell) ref.cell.value = value
-    else this.vm.atomic(newindex(ref.obj, ref.key, value))
+    else this.ops.newindex(ref.obj, ref.key, value)
   }
 
   *expr(node, scope) {
+    if (this.vm.poll(node)) yield checkpoint
+    const ops = this.ops
     switch (node.type) {
       case "NilLiteral":
         return undefined
@@ -128,7 +163,7 @@ export class Frame {
       case "MemberExpression": {
         const ref = yield* this.ref(node, scope)
         this.line = node.loc.start.line
-        return ref.cell ? ref.cell.value : this.vm.atomic(index(ref.obj, ref.key))
+        return ref.cell ? ref.cell.value : ops.index(ref.obj, ref.key)
       }
       case "FunctionDeclaration":
         return this.close(node, scope)
@@ -137,7 +172,7 @@ export class Frame {
       case "StringCallExpression":
         return (yield* this.call(node, scope))[0]
       case "TableConstructorExpression": {
-        const table = new LuaTable()
+        const table = ops.table()
         let at = 1
         for (let i = 0; i < node.fields.length; i++) {
           const field = node.fields[i]
@@ -154,12 +189,12 @@ export class Frame {
       }
       case "UnaryExpression": {
         const value = yield* this.expr(node.argument, scope)
-        if (node.operator === "not") return !truthy(value)
-        return this.vm.atomic(node.operator === "#" ? len(value) : arith("unm", value, value))
+        if (node.operator === "not") return !ops.truthy(value)
+        return node.operator === "#" ? ops.len(value) : ops.arith("unm", value, value)
       }
       case "LogicalExpression": {
         const left = yield* this.expr(node.left, scope)
-        return truthy(left) === (node.operator === "and") ? yield* this.expr(node.right, scope) : left
+        return ops.truthy(left) === (node.operator === "and") ? yield* this.expr(node.right, scope) : left
       }
       case "BinaryExpression": {
         const a = yield* this.expr(node.left, scope)
@@ -167,21 +202,21 @@ export class Frame {
         this.line = node.loc.start.line
         switch (node.operator) {
           case "..":
-            return this.vm.atomic(concat(a, b))
+            return ops.concat(a, b)
           case "==":
-            return this.vm.atomic(compare("eq", a, b))
+            return ops.compare("eq", a, b)
           case "~=":
-            return !this.vm.atomic(compare("eq", a, b))
+            return !ops.compare("eq", a, b)
           case "<":
-            return this.vm.atomic(compare("lt", a, b))
+            return ops.compare("lt", a, b)
           case ">":
-            return this.vm.atomic(compare("lt", b, a))
+            return ops.compare("lt", b, a)
           case "<=":
-            return this.vm.atomic(compare("le", a, b))
+            return ops.compare("le", a, b)
           case ">=":
-            return this.vm.atomic(compare("le", b, a))
+            return ops.compare("le", b, a)
           default:
-            return this.vm.atomic(arith(arithmetic[node.operator], a, b))
+            return ops.arith(arithmetic[node.operator], a, b)
         }
       }
       default:
@@ -190,7 +225,10 @@ export class Frame {
   }
 
   *block(nodes, scope, until) {
+    // Empty loop bodies still consume work and can suspend.
+    if (this.vm.poll()) yield checkpoint
     for (const node of nodes) {
+      if (this.vm.poll(node)) yield checkpoint
       this.line = node.loc.start.line
       switch (node.type) {
         case "CallStatement":
@@ -198,6 +236,7 @@ export class Frame {
           break
         case "LocalStatement": {
           const values = yield* this.args(node.init, scope)
+          this.vm.charge(node.variables.length)
           for (const [i, variable] of node.variables.entries()) scope = bind(scope, variable.name, values[i])
           break
         }
@@ -227,7 +266,7 @@ export class Frame {
         }
         case "IfStatement": {
           for (const clause of node.clauses) {
-            if (clause.condition && !truthy(yield* this.expr(clause.condition, scope))) continue
+            if (clause.condition && !this.ops.truthy(yield* this.expr(clause.condition, scope))) continue
             const result = yield* this.block(clause.body, scope)
             if (result !== undefined) return result
             break
@@ -237,7 +276,7 @@ export class Frame {
         case "WhileStatement":
         case "RepeatStatement": {
           const repeat = node.type === "RepeatStatement"
-          while (repeat || truthy(yield* this.expr(node.condition, scope))) {
+          while (repeat || this.ops.truthy(yield* this.expr(node.condition, scope))) {
             const result = yield* this.block(node.body, scope, repeat && node.condition)
             if (result === stop) break
             if (result !== undefined) return result
@@ -245,10 +284,10 @@ export class Frame {
           break
         }
         case "ForNumericStatement": {
-          const start = luaToNumber(yield* this.expr(node.start, scope))
-          const limit = luaToNumber(yield* this.expr(node.end, scope))
-          const step = node.step ? luaToNumber(yield* this.expr(node.step, scope)) : 1
-          if ([start, limit, step].includes(undefined)) throw new LuaError("'for' values must be numbers")
+          const start = this.ops.number(yield* this.expr(node.start, scope))
+          const limit = this.ops.number(yield* this.expr(node.end, scope))
+          const step = node.step ? this.ops.number(yield* this.expr(node.step, scope)) : 1
+          if ([start, limit, step].includes(undefined)) throw this.ops.error("'for' values must be numbers")
           for (let i = start; step > 0 ? i <= limit : i >= limit; i += step) {
             const result = yield* this.block(node.body, bind(scope, node.variable.name, i))
             if (result === stop) break
@@ -260,9 +299,10 @@ export class Frame {
           const [iterator, state, first] = yield* this.args(node.iterators, scope)
           let control = first
           for (;;) {
-            const values = this.vm.atomic(this.vm.invoke(iterator, [state, control]))
+            const values = yield* this.vm.iterate(iterator, [state, control])
             control = values[0]
             if (control === undefined) break
+            this.vm.charge(node.variables.length)
             const locals = node.variables.reduce((s, v, i) => bind(s, v.name, values[i]), scope)
             const result = yield* this.block(node.body, locals)
             if (result === stop) break
@@ -275,6 +315,6 @@ export class Frame {
       }
     }
     // The repeat condition is inside the body's lexical scope.
-    if (until && truthy(yield* this.expr(until, scope))) return stop
+    if (until && this.ops.truthy(yield* this.expr(until, scope))) return stop
   }
 }

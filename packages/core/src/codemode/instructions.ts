@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature, toolExpression } from "@opencode/codemode"
+import { luaSearchSignature, toolExpression } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -8,11 +8,13 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `# Code Mode
 
-The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
+The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as Lua inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+Signatures describe Lua table shapes, not executable declarations: \`?\` marks optional fields and \`->\` shows the result. Pass actual values, e.g. \`{ name = "notes" }\`.
 
-- ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
+${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. For example, \`return search({ query = "notes", limit = 5 }).items\`. Query and namespace are limited to 512 characters; searches rank the first 16 words and return at most 50 items per page. Each result's \`path\` is the complete call expression: write it out as code, for example \`return tools.ns.tool_name({ id = "123" })\`. Do not use it as a key such as \`tools[path]\`.
+
+- ${luaSearchSignature}` : "The catalog is complete. Do not guess tool names."}
 
 ## Code Mode tools (call only inside \`execute\`)`
 
@@ -33,7 +35,7 @@ export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatal
   const replacement = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
 ${render(current)}`
-  if (current.total === 0) return replacement
+  if (previous.total === 0 || current.total === 0) return replacement
   const previousComplete = previous.shown === previous.total
   const currentComplete = current.shown === current.total
   if (previousComplete !== currentComplete) return replacement
@@ -114,7 +116,7 @@ ${render(current)}`
   if (diff.removed.length > 0) {
     parts.push(
       `The following tools are no longer available and must not be called: ${diff.removed
-        .map((entry) => toolExpression(entry.path))
+        .map((entry) => toolExpression(entry.path, "lua"))
         .join(", ")}.`,
     )
   }

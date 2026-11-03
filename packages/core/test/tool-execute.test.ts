@@ -26,25 +26,40 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll)
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
 test("execute describes invariant Code Mode behavior", () => {
-  expect(createCodeMode(new Map()).description).toBe(
-    [
-      "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-      'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-    ].join("\n"),
-  )
+  const description = createCodeMode(new Map()).description
+  expect(description).toContain("Lua")
+  expect(description).toContain("fetch")
+  expect(description).toContain("search")
+  expect(description).not.toContain("Promise.allSettled")
 })
 
 test("execute rejects filesystem fetches", async () => {
   const result = await Effect.runPromise(
-    createCodeMode(new Map()).execute({ code: 'return await fetch("file:///blocked.txt")' }, context),
+    createCodeMode(new Map()).execute({ code: 'return fetch("file:///blocked.txt")' }, context),
   )
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+test("execute rejects wrong-language source before admitting even its first tool call", async () => {
+  let calls = 0
+  const touch: Info = {
+    name: "touch",
+    description: "Record a call",
+    input: Schema.Struct({}),
+    execute: () => Effect.sync(() => ({ content: String(++calls) })),
+  }
+  const result = await Effect.runPromise(
+    createCodeMode(new Map([["touch", touch]])).execute(
+      // The first statement is valid Lua. The JavaScript-only second statement must reject the whole chunk.
+      { code: "tools.touch({}); const answer = 42; return answer" },
+      context,
+    ),
+  )
+  expect(result.output.error).toBe(true)
+  expect(result.output.toolCalls).toEqual([])
+  expect(calls).toBe(0)
 })
 
 describe("fetch permissions", () => {
@@ -53,11 +68,11 @@ describe("fetch permissions", () => {
   beforeAll(() => {
     server = Bun.serve({
       port: 0,
-      fetch: (request) => {
+      fetch: async (request) => {
         const url = new URL(request.url)
         hits.push(`${request.method} ${url.pathname}`)
         if (url.pathname === "/redirect") return Response.redirect(`${url.origin}/blocked`, 302)
-        return new Response("ok")
+        return new Response(await request.text(), { status: 201, statusText: "Created", headers: { "x-test": "ok" } })
       },
     })
   })
@@ -71,10 +86,18 @@ describe("fetch permissions", () => {
       createCodeMode(
         new Map(),
         permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }),
-      ).execute({ code: `return await (await fetch("${url}", { method: "POST" })).text()` }, context),
+      ).execute({ code: `return fetch("${url}", { method = "POST", body = "posted" })` }, context),
     )
 
-    expect(result.output.output).toBe("ok")
+    expect(JSON.parse(result.output.output)).toMatchObject({
+      status: 201,
+      statusText: "Created",
+      url,
+      redirected: false,
+      ok: true,
+      headers: { "x-test": "ok" },
+      body: "posted",
+    })
     expect(hits).toEqual(["POST /allowed"])
     expect(asked).toEqual([
       {
@@ -97,34 +120,30 @@ describe("fetch permissions", () => {
         Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
     })
     const result = await Effect.runPromise(
-      createCodeMode(new Map(), denied).execute(
-        { code: `try { await fetch("${server.url.origin}/redirect") } catch (e) { return e.message }` },
-        context,
-      ),
+      createCodeMode(new Map(), denied).execute({ code: `return fetch("${server.url.origin}/redirect")` }, context),
     )
 
+    expect(result.output.error).toBe(true)
     expect(result.output.output).toContain("Permission denied")
     expect(hits).toEqual(["GET /redirect"])
   })
 
-  test("a rejection with feedback reaches the program as the error message", async () => {
+  test("a rejection with feedback reaches the model as the execute error", async () => {
     hits.length = 0
     const url = `${server.url.origin}/corrected`
     const corrected = permissionService({
       assert: () => Effect.fail(new Permission.CorrectedError({ feedback: "use the docs site instead" })),
     })
     const result = await Effect.runPromise(
-      createCodeMode(new Map(), corrected).execute(
-        { code: `try { await fetch("${url}") } catch (e) { return e.message }` },
-        context,
-      ),
+      createCodeMode(new Map(), corrected).execute({ code: `return fetch("${url}")` }, context),
     )
 
+    expect(result.output.error).toBe(true)
     expect(result.output.output).toBe(`The user rejected fetching ${url}: use the docs site instead`)
     expect(hits).toEqual([])
   })
 
-  test("a URL denied for webfetch is never requested and rejects like a failed fetch", async () => {
+  test("a URL denied for webfetch fails execute without making a request", async () => {
     hits.length = 0
     const url = `${server.url.origin}/denied`
     const denied = permissionService({
@@ -132,13 +151,11 @@ describe("fetch permissions", () => {
         Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
     })
     const result = await Effect.runPromise(
-      createCodeMode(new Map(), denied).execute(
-        { code: `const [denied] = await Promise.allSettled([fetch("${url}")]); return denied.status` },
-        context,
-      ),
+      createCodeMode(new Map(), denied).execute({ code: `return fetch("${url}")` }, context),
     )
 
-    expect(result.output.output).toBe("rejected")
+    expect(result.output.error).toBe(true)
+    expect(result.output.output).toContain("Permission denied")
     expect(hits).toEqual([])
   })
 })
@@ -245,7 +262,7 @@ test("execute supports callable namespace tools", async () => {
     ]),
   )
   const result = await Effect.runPromise(
-    codeMode.execute({ code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" }, context),
+    codeMode.execute({ code: "return {tools.slack.admin({}), tools.slack.admin.create({})}" }, context),
   )
 
   expect(result.metadata).toEqual({
@@ -284,7 +301,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     const progress: Array<Tool.Metadata> = []
     return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
       .execute(
-        { code: `return await tools.echo({ value: "${id}" })` },
+        { code: `return tools.echo({ value = "${id}" })` },
         { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.map((result) => ({ output: result.output.output, progress })))
@@ -301,13 +318,13 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
     })),
   )
   expect(
-    (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({ value: "x" })' }, context))).output
+    (await Effect.runPromise(codeMode.execute({ code: 'return tools.echo({ value = "x" })' }, context))).output
       .output,
   ).toBe("call_execute:x")
   expect(conversions).toBe(1)
 
   await Effect.runPromise(
-    createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
+    createCodeMode(new Map(inventory.tools)).execute({ code: 'return tools.echo({ value = "next" })' }, context),
   )
   expect(conversions).toBe(2)
 })
@@ -346,7 +363,7 @@ it.effect("execute sends at most one progress update per 100 ms with the latest 
     const progress: Array<Tool.Metadata> = []
     const fiber = yield* progressCodeMode(started, Effect.sleep("250 millis"))
       .execute(
-        { code: "for (const i of [1, 2, 3]) await tools.step({}); await tools.wait({}); return await tools.step({})" },
+        { code: "for i = 1, 3 do tools.step({}) end; tools.wait({}); return tools.step({})" },
         { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.forkChild({ startImmediately: true }))
@@ -373,7 +390,7 @@ it.effect("interrupted execute sends its latest progress rows before it settles"
     const progress: Array<Tool.Metadata> = []
     const fiber = yield* progressCodeMode(started, Effect.never)
       .execute(
-        { code: "await tools.step({}); await tools.step({}); return await tools.wait({})" },
+        { code: "tools.step({}); tools.step({}); return tools.wait({})" },
         { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
       )
       .pipe(Effect.forkChild({ startImmediately: true }))

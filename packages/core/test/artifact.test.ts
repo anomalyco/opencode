@@ -19,7 +19,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { codeModeListings, executeTool, luaLiteral, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const toolPaths = [
   "opencode.artifact_create",
@@ -60,7 +60,7 @@ const callCodeMode = (registry: Tool.Interface, sessionID: Session.ID, name: str
       type: "tool-call",
       id: `call-${name}`,
       name: "execute",
-      input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+      input: { code: `return tools.opencode.${name}(${luaLiteral(input)})` },
     },
   }).pipe(
     Effect.map((result) => {
