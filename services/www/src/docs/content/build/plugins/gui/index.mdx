@@ -787,7 +787,30 @@ A panel's options:
 - `mobile` adds a narrow-screen view of the panel. With `cached: true`, the view stays mounted while the user shows
   another view. By default, the view mounts each time it shows.
 - `wide` asks for the wider session minimum while the side region is open.
+- `width` gives the panel a side region width of its own; see [Panel width](#panel-width).
 - `transient` panels' tabs are not restored.
+
+#### Panel width
+
+By default, every tab in the side region shares the conversation's width. Set `width` when your panel needs less room
+than a review or a browser, or more. Pass CSS pixels, or `"narrow"` for the narrowest the region goes.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- The width applies while the side pane shows one of the panel's tabs. Other tabs keep the conversation's width.
+- When the user drags the divider on one of the panel's tabs, the host keeps that width for the panel, app-wide, in place
+  of `width`.
+- The host keeps the conversation at its minimum width and the region at least `"narrow"`.
+- `ctx.layout.side.width(panel)` reads the stored width, and `ctx.layout.side.resize(panel, width)` stores one, as a drag
+  does. A stored width applies even to a panel without `width`.
 
 A tab's options:
 
@@ -812,6 +835,7 @@ interface Panel {
   region: "side"
   mobile?: MobileView
   wide?: boolean
+  width?: number | "narrow"
   transient?: boolean
   list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
   render(props: PanelProps): JSX.Element
@@ -1473,6 +1497,8 @@ if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", backgro
 - `ready()` is `true` once the stored layout has loaded, and `narrow()` while the viewport is under 768px.
 - `side.opened(session)` is `true` while the side region is open, and `side.toggle(session)` opens or closes it.
 - `side.menu()` lists every plugin's `session.panel` [menu items](#menu-items) in `order`, for a launcher of your own.
+- `side.width(panel)` and `side.resize(panel, width)` read and store the side region width of one of your panels; see
+  [Panel width](#panel-width).
 - `sidebar.opened()` is the inner sidebar preference that every side panel shares.
 - `scroll` stores scroll offsets per session and key.
 - `settings(page?)` opens Settings. `project(server, title)` opens a project's directory picker and a new draft.
@@ -1504,6 +1530,8 @@ interface Layout {
     opened(session: SessionRef): boolean
     toggle(session: SessionRef): void
     menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
   }
   sidebar: {
     opened(): boolean
@@ -2283,6 +2311,28 @@ interface NotifyResult {
   sound: boolean
 }
 ```
+
+### Usage data
+
+A session's token, cost and plan figures are in its server's data, the same reactive store the app reads for the
+header's "28k · $0.28". Read them there rather than from opencode's database.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` is the assistant step whose tokens fill the context window now, as the app's context ring uses. Compare its
+  `tokens` with the model's `limit.context` from `data.location.model.list`.
+- `limits()` holds the OpenCode Console budgets and Go plan allowance once `data.location.usage.sync(location)` has
+  loaded them. It is `null` when the server reports none.
 
 ### Tabs
 

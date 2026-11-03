@@ -21,6 +21,7 @@ import { ComposerDropzone } from "@/composer/dropzone"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
+import { useLayout } from "@/shell/state/layout"
 import { SessionPanelFrame } from "@/session/session-frame"
 import { PluginLinks } from "@/runtime/plugin/render"
 import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
@@ -118,7 +119,11 @@ function SessionScreenContent(props: {
       }),
   })
 
-  const screen = createSessionScreenLayout(session, { wide: region.wide })
+  const screen = createSessionScreenLayout(session, {
+    wide: region.wide,
+    panel: region.pane("side").selected,
+    widths: useLayout().panelWidth,
+  })
 
   const timeline = createSessionTimelineInteraction(session)
 
@@ -505,7 +510,7 @@ function SessionScreenContent(props: {
                 max={screen.panel.max()}
                 onResize={(width) => {
                   screen.size.touch()
-                  session.layout.view().session.resize(width)
+                  screen.panel.resize(width)
                 }}
                 onDraggingChange={setPanelResizing}
               />
