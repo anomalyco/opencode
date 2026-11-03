@@ -168,7 +168,7 @@ const layer = Layer.effect(
             // Discovery may claim an unowned row, but never replace another strategy's ownership.
             setWhere: input.replace
               ? input.strategy
-                ? ne(WorktreeTable.strategy, input.strategy)
+                ? undefined
                 : isNotNull(WorktreeTable.strategy)
               : input.strategy
                 ? isNull(WorktreeTable.strategy)

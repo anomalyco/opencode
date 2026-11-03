@@ -478,6 +478,47 @@ describe("Worktree", () => {
     }),
   )
 
+  it.live("claims an existing unowned row when creating a worktree", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const bus = yield* Bus.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-unowned"))
+      const target = abs(path.join(parent, "worktree"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+
+      yield* input.db
+        .insert(WorktreeTable)
+        .values([{ project_id: input.projectID, directory: target }])
+        .run()
+        .pipe(Effect.orDie)
+
+      const fiber = yield* bus
+        .subscribe(Worktree.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      const created = yield* worktree.create({
+        directory: parent,
+        name: "worktree",
+      })
+
+      expect(created.directory).toBe(target)
+      expect(yield* stored(input.projectID)).toEqual(
+        [
+          { directory: input.sourceDirectory, strategy: null },
+          { directory: target, strategy: "git" },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
+      const event = yield* Fiber.join(fiber).pipe(Effect.timeoutOption("100 millis"))
+      expect(event._tag).toBe("Some")
+
+      yield* worktree.remove({ directory: created.directory, force: false })
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+    }),
+  )
+
   it.live("runs the project setup script with worktree paths", () =>
     Effect.gen(function* () {
       const input = yield* setup()
