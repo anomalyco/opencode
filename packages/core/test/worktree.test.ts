@@ -322,7 +322,10 @@ describe("Worktree", () => {
         .pipe(Effect.orDie)
       yield* database.db
         .insert(WorktreeTable)
-        .values([{ project_id: projectID, directory: bareReal }])
+        .values([
+          { project_id: projectID, directory: bareReal },
+          { project_id: projectID, directory: aReal, strategy: Worktree.StrategyID.make("git") },
+        ])
         .run()
         .pipe(Effect.orDie)
 
@@ -341,6 +344,14 @@ describe("Worktree", () => {
 
       expect(projectRow?.worktree).toBe(aReal)
       expect(yield* stored(projectID)).toEqual([{ directory: aReal, strategy: null }])
+
+      const removeExit = yield* Effect.exit(
+        Context.get(context, Worktree.Service).remove(
+          { projectID, directory: aReal, force: false },
+          Context.get(context, WorktreeStrategies.Service),
+        ),
+      )
+      expect(Exit.isFailure(removeExit)).toBe(true)
     }),
   )
 

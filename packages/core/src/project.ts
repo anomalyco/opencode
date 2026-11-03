@@ -153,18 +153,11 @@ const layer = Layer.effect(
         .returning()
         .get()
         .pipe(Effect.orDie)
-      // Clones share a project ID; only replace a canonical directory that is gone or invalid (e.g. bare repo).
-      const previousUnavailable =
-        previous &&
-        !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
-      const previousBare =
-        previous &&
-        !(yield* fs.exists(path.join(previous.canonical, ".git")).pipe(Effect.orElseSucceed(() => false))) &&
-        !(yield* fs.exists(path.join(previous.canonical, ".hg")).pipe(Effect.orElseSucceed(() => false)))
+      // Clones share a project ID; only replace a canonical directory that is gone.
       const replaced =
         previous &&
         previous.canonical !== project.canonical &&
-        (previousUnavailable || previousBare)
+        !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
           ? yield* db
               .update(ProjectTable)
               .set({ worktree: project.canonical })
@@ -173,13 +166,6 @@ const layer = Layer.effect(
               .get()
               .pipe(Effect.orDie)
           : undefined
-      if (replaced && previous && previousBare) {
-        yield* db
-          .delete(WorktreeTable)
-          .where(and(eq(WorktreeTable.project_id, project.id), eq(WorktreeTable.directory, previous.canonical)))
-          .run()
-          .pipe(Effect.orDie)
-      }
       const changed = replaced ?? unarchived
       if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
       yield* ProjectIcon.refresh(fs, db, project.id).pipe(
