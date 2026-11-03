@@ -144,10 +144,16 @@ export const layer = Layer.effect(
             // A server that answered but refused the pooled handshake, such as one that wants roots, may
             // still accept the Location's own connection; anything unreachable would only fail again.
             failed: (failure, answered) =>
-              Effect.suspend(() => {
+              Effect.gen(function* () {
                 detach(key, slot)
-                if (answered) unpoolable.add(key)
-                return Deferred.succeed(slot.outcome, answered ? "private" : failure)
+                if (answered) {
+                  unpoolable.add(key)
+                  yield* Effect.logWarning("mcp pool ignored: server refused the shared connection", {
+                    server: input.name,
+                    error: failure.error,
+                  })
+                }
+                yield* Deferred.succeed(slot.outcome, answered ? "private" : failure)
               }),
             settled: Effect.void,
             closed: (reason) =>
@@ -169,7 +175,7 @@ export const layer = Layer.effect(
       return slot
     }
 
-    const connect = (key: string, slot: Slot) =>
+    const connect = (key: string, slot: Slot, name: string) =>
       Effect.gen(function* () {
         yield* slot.connection.start
         const client = slot.connection.client
@@ -177,6 +183,10 @@ export const layer = Layer.effect(
         if (!client) return
         if (!client.modern) {
           unpoolable.add(key)
+          yield* Effect.logWarning("mcp pool ignored: server speaks an older protocol", {
+            server: name,
+            version: client.protocolVersion,
+          })
           detach(key, slot)
           yield* slot.connection.stop
           yield* Deferred.succeed(slot.outcome, "private")
@@ -221,7 +231,7 @@ export const layer = Layer.effect(
         () => release(key, slot, holder),
       )
       // Started once a holder is registered: the attempt reads its OAuth provider from the holders.
-      slot.start ??= run(connect(key, slot))
+      slot.start ??= run(connect(key, slot, input.name))
       const outcome = yield* Deferred.await(slot.outcome)
       return outcome === "connected" ? slot.connection : outcome
     })

@@ -52,6 +52,7 @@ import {
   Fiber,
   FiberSet,
   Layer,
+  Logger,
   Option,
   PubSub,
   Ref,
@@ -3162,6 +3163,16 @@ describe("MCP pool", () => {
 
   const status = (mcp: Mcp.Interface) => mcp.servers().pipe(Effect.map((servers) => servers[0]?.status))
 
+  // Collects the pool's "not shared" messages with their details.
+  const poolLogs = () => {
+    const logs: Array<readonly [string, unknown]> = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (Array.isArray(entry.message) && String(entry.message[0]).startsWith("mcp pool ignored"))
+        logs.push([entry.message[0], entry.message[1]])
+    })
+    return { logs, layer: Logger.layer([logger]) }
+  }
+
   // A pool whose own spawns, the attempts at a shared local connection, are recorded.
   const recordingPool = (spawns: Array<ChildProcess.Command>) =>
     Layer.build(
@@ -3273,8 +3284,9 @@ describe("MCP pool", () => {
     )
   })
 
-  live("keeps a server that negotiates legacy private to each Location", () =>
-    Effect.gen(function* () {
+  live("keeps a server that negotiates legacy private to each Location", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
       const probes: Array<ChildProcess.Command> = []
       const spawns: Array<ChildProcess.Command> = []
       const pool = yield* recordingPool(probes)
@@ -3290,11 +3302,16 @@ describe("MCP pool", () => {
       // One discovery attempt through the pool, then each Location spawns its own, as it would unpooled.
       expect(probes).toHaveLength(1)
       expect(spawns).toHaveLength(2)
-    }),
-  )
+      // Once, when the verdict is recorded; the second Location skips straight to its own connection.
+      expect(captured.logs).toEqual([
+        ["mcp pool ignored: server speaks an older protocol", { server: "resources", version: "2025-11-25" }],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
 
-  live("connects on its own when a server refuses the pooled handshake", () =>
-    Effect.gen(function* () {
+  live("connects on its own when a server refuses the pooled handshake", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
       const probes: Array<ChildProcess.Command> = []
       const spawns: Array<ChildProcess.Command> = []
       const pool = yield* recordingPool(probes)
@@ -3311,8 +3328,14 @@ describe("MCP pool", () => {
       expect(yield* status(b.mcp)).toEqual({ status: "connected" })
       expect(probes).toHaveLength(1)
       expect(spawns).toHaveLength(2)
-    }),
-  )
+      expect(captured.logs).toEqual([
+        [
+          "mcp pool ignored: server refused the shared connection",
+          { server: "resources", error: expect.stringContaining("Connection closed") },
+        ],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
 
   // A server that is down, or that refuses this client, would refuse a private connection too.
   for (const [code, what, attempts] of [

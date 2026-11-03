@@ -146,6 +146,8 @@ export interface PerRequest {
 export interface Connection {
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
+  /** The protocol revision the connection negotiated, such as "2025-11-25". */
+  readonly protocolVersion: string | undefined
   /** Display title from `serverInfo.title`, when the server provides one. */
   readonly title: string | undefined
   readonly instructions: string | undefined
@@ -412,6 +414,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
       modern: client.getProtocolEra() === "modern",
+      protocolVersion: client.getNegotiatedProtocolVersion(),
       title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
