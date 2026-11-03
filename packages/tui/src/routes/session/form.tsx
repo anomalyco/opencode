@@ -15,6 +15,7 @@ import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
+import { LinkedText } from "../../ui/linked-text"
 import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
@@ -778,9 +779,13 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           <text fg={theme.text.muted}>{props.form.title}</text>
         </box>
         <Show when={message()}>
-          <box paddingLeft={1}>
-            <text fg={theme.text.base}>{message()}</text>
-          </box>
+          {(text) => (
+            <box paddingLeft={1}>
+              <text fg={theme.text.base}>
+                <LinkedText text={text()} />
+              </text>
+            </box>
+          )}
         </Show>
         <Show when={!single() && !tabbed()}>
           <box flexDirection="row" gap={3} paddingLeft={1}>
@@ -855,7 +860,11 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 <text fg={theme.text.base}>{external().title}</text>
               </Show>
               <Show when={external().description}>
-                <text fg={theme.text.muted}>{external().description}</text>
+                {(description) => (
+                  <text fg={theme.text.muted}>
+                    <LinkedText text={description()} />
+                  </text>
+                )}
               </Show>
               <text
                 fg={theme.text.action.primary.base}
@@ -882,7 +891,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <Show when={!confirm() && answerField()}>
           <box paddingLeft={1} gap={1}>
             <box>
-              <text fg={theme.text.base}>{answerField()!.description ?? formLabel(answerField()!)}</text>
+              <text fg={theme.text.base}>
+                <LinkedText text={answerField()!.description ?? formLabel(answerField()!)} />
+              </text>
             </box>
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>

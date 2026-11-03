@@ -19,6 +19,7 @@ import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
+import { LinkedText } from "../../ui/linked-text"
 import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
@@ -3678,7 +3679,9 @@ function Question(props: ToolProps) {
             <For each={questions()}>
               {(q, i) => (
                 <box flexDirection="column">
-                  <text fg={theme.text.muted}>{q.question}</text>
+                  <text fg={theme.text.muted}>
+                    <LinkedText text={q.question} />
+                  </text>
                   <text fg={theme.text.base}>{format(answers()?.[i()])}</text>
                 </box>
               )}

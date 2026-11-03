@@ -226,6 +226,30 @@ test("includes external acknowledgements in progress", async () => {
   }
 })
 
+test("links URLs in question text", async () => {
+  await using tmp = await tmpdir()
+  const url = "https://www.npmjs.com/auth/cli/2ff15723"
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "approval",
+      type: "string",
+      description: `One more approval: ${url}`,
+      options: [{ value: "done", label: "Done" }],
+    },
+  ])
+  try {
+    await prompt.app.waitForFrame((frame) => frame.includes(url))
+    const rows = prompt.app.captureCharFrame().split("\n")
+    const row = rows.findIndex((line) => line.includes(url))
+    const column = rows[row]!.indexOf(url)
+
+    expect(prompt.app.renderer.getLinkAt(column, row)).toBe(url)
+    expect(prompt.app.renderer.getLinkAt(rows[row]!.indexOf("One"), row)).toBeNull()
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
 test("shows a compact confirmation summary", async () => {
   await using tmp = await tmpdir()
   const prompt = await mountForm(tmp.path, 80, [

@@ -34,6 +34,7 @@ import {
 import type { FormBodyState } from "./form.shared"
 import type { RunFooterTheme } from "./theme"
 import type { FormCancel, FormReply, MiniFormRequest } from "./types"
+import { LinkedText } from "../ui/linked-text"
 import { stringWidth } from "../util/string-width"
 
 export function RunFormBody(props: {
@@ -363,7 +364,7 @@ export function RunFormBody(props: {
           <Show when={message()}>
             {(value) => (
               <text width="100%" fg={props.theme.muted} flexShrink={0}>
-                {value()}
+                <LinkedText text={value()} />
               </text>
             )}
           </Show>
@@ -383,7 +384,7 @@ export function RunFormBody(props: {
             {(field) => (
               <box width="100%" flexDirection="column" flexShrink={0} gap={compact() ? 0 : 1}>
                 <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                  {field().description ?? formLabel(field())}
+                  <LinkedText text={field().description ?? formLabel(field())} />
                 </text>
                 <text width="100%" fg={props.theme.link} wrapMode="word" flexShrink={0}>
                   {field().url}
@@ -405,7 +406,7 @@ export function RunFormBody(props: {
           <Show when={!unsupported() && answerField() && !confirm()}>
             <box width="100%" flexDirection="column" flexShrink={0} gap={compact() ? 0 : 1}>
               <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
-                {answerField()!.description ?? formLabel(answerField()!)}
+                <LinkedText text={answerField()!.description ?? formLabel(answerField()!)} />
                 {answerField()!.required ? " (required)" : ""}
                 {multiple() ? " (select all that apply)" : ""}
               </text>

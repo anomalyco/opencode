@@ -16,6 +16,7 @@ import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
 import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit, TurnSummary } from "./types"
+import { LinkedText } from "../ui/linked-text"
 import { todoMarker } from "../util/todo"
 import { PatchDiff } from "../component/patch-diff"
 
@@ -288,7 +289,7 @@ export function RunEntryContent(props: {
             {question_snapshot()!.items.map((item) => (
               <box width="100%" flexDirection="column" gap={0}>
                 <text width="100%" wrapMode="word" fg={theme().block.muted}>
-                  {item.question}
+                  <LinkedText text={item.question} />
                 </text>
                 <text width="100%" wrapMode="word" fg={theme().block.text}>
                   {item.answer}

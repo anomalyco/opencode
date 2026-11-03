@@ -1,5 +1,5 @@
 import { Index, Show, createMemo } from "solid-js"
-import { linkSegments } from "./link-segments"
+import { linkSegments } from "@opencode/util/link-segments"
 
 /** Plain text with every http(s) URL rendered as a link that opens outside the app. */
 export function LinkedText(props: { text: string }) {
