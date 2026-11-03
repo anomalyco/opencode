@@ -144,6 +144,7 @@ async function fixture(name: string, enabled = true, fullDiskRead = false) {
   const env = isolatedEnv(root, {
     OPENCODE_CONFIG_CONTENT: undefined,
     OPENCODE_CONFIG: undefined,
+    OPENCODE_DB: path.join(directory, "opencode.db"),
     OPENCODE_MODELS_PATH: path.join(root, "models.json"),
     OPENCODE_DISABLE_CLAUDE_CODE: "1",
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
@@ -225,6 +226,7 @@ for (const fullDiskRead of [false, true]) {
     { name: "shell", input: { command: `cat '${f.reference}/readme'` }, expect: "REFERENCE_READ_CANARY" },
     { name: "shell", input: { command: `cat '${f.data}/repos/readme'` }, expect: "DATA_REFERENCE_CANARY" },
     { name: "shell", input: { command: `cat '${f.data}/opencode-probe.db'` }, expect: "Operation not permitted" },
+    { name: "shell", input: { command: "cat opencode.db" }, expect: "Operation not permitted" },
     {
       name: "shell",
       input: { command: `cat '${f.outside}/public'` },

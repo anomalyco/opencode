@@ -46,6 +46,7 @@ Automatic formatters and their discovery commands run inside the sandbox. Format
 Even with `full_disk_read` enabled, sandboxed operations cannot read these paths or their descendants:
 
 - OpenCode's global configuration and state directories, including custom locations used by the server.
+- The server's configured SQLite database and its journal files, including custom database locations.
 - OpenCode's global data directory, except for registered references within it. When such a reference is present, `auth.json`, database files (`.db`, `.sqlite`, and `.sqlite3`, including SQLite journals), and the `log`, `shell`, `snapshot`, `storage`, `tool-output`, and `artifacts` directories directly under the data directory remain excluded.
 - `.aws` and `.ssh` directly under the user's home directory.
 - `.aws` and `.ssh` directly under each writable root, including the workspace, sandbox scratch, and configured writable roots.

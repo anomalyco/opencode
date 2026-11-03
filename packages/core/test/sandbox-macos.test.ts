@@ -340,6 +340,66 @@ kernel.each([false, true])(
   },
 )
 
+kernel.each([false, true])("custom database and sidecars remain private with fullDiskRead=%s", async (fullDiskRead) => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-sandbox-db-")))
+  try {
+    const host = Object.fromEntries(
+      ["directory", "scratch", "home", "config", "data", "state"].map((name) => [name, path.join(root, name)]),
+    ) as Record<"directory" | "scratch" | "home" | "config" | "data" | "state", string>
+    await Promise.all(Object.values(host).map((value) => fs.mkdir(value)))
+    const dbDirectory = path.join(host.directory, "db-dir")
+    await fs.mkdir(dbDirectory)
+    const database = path.join(dbDirectory, "database.db")
+    const alias = path.join(host.directory, "database-alias.db")
+    await fs.writeFile(database, "private-database")
+    await fs.symlink(database, alias)
+    const policy = await MacSandbox.policy(host, { fullDiskRead }, [], alias)
+    for (const target of [database, alias, `${database}-wal`, `${alias}-shm`, `${database}-journal`]) {
+      const launch = MacSandbox.launch(
+        policy,
+        "/bin/sh",
+        ["-c", `cat "$1"; printf changed > "$1"`, "--", target],
+        SandboxPolicy.environment(process.env, host.scratch),
+      )
+      const result = Bun.spawnSync([launch.command, ...launch.args], { cwd: host.directory, env: launch.env })
+      expect(result.exitCode).not.toBe(0)
+      expect(result.stdout.toString()).toBe("")
+    }
+    expect(await fs.readFile(database, "utf8")).toBe("private-database")
+    const move = MacSandbox.launch(
+      policy,
+      "/bin/mv",
+      [dbDirectory, path.join(host.directory, "moved")],
+      SandboxPolicy.environment(process.env, host.scratch),
+    )
+    expect(Bun.spawnSync([move.command, ...move.args], { cwd: host.directory, env: move.env }).exitCode).not.toBe(0)
+    const futureDirectory = path.join(root, "future-db")
+    await fs.mkdir(futureDirectory)
+    const parentAlias = path.join(host.directory, "db-parent-alias")
+    const leafAlias = path.join(host.directory, "db-leaf-alias")
+    await fs.symlink(futureDirectory, parentAlias, "dir")
+    await fs.symlink(path.join(futureDirectory, "leaf.db"), leafAlias)
+    for (const [configured, target] of [
+      [path.join(parentAlias, "parent.db"), path.join(futureDirectory, "parent.db")],
+      [leafAlias, path.join(futureDirectory, "leaf.db")],
+    ]) {
+      const futurePolicy = await MacSandbox.policy(host, { fullDiskRead }, [], configured)
+      await fs.writeFile(target, "future-private")
+      const read = MacSandbox.launch(
+        futurePolicy,
+        "/bin/cat",
+        [target],
+        SandboxPolicy.environment(process.env, host.scratch),
+      )
+      const result = Bun.spawnSync([read.command, ...read.args], { cwd: host.directory, env: read.env })
+      expect(result.exitCode).not.toBe(0)
+      expect(result.stdout.toString()).toBe("")
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 kernel("the kernel blocks reachable loopback and Unix-socket servers", async () => {
   const root = await fs.mkdtemp("/private/tmp/oc-net-")
   const socket = path.join(root, "socket")

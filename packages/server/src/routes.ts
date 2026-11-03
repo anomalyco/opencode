@@ -143,7 +143,7 @@ function makeRoutes<AuthError, AuthServices>(
     ),
     InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
-    Sandbox.settingsNode.replace(Sandbox.settingsConfigured(options.sandbox)),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured(options.sandbox, options.database?.path)),
     Mcp.node.replace(
       Mcp.configured({
         clientInfo: {

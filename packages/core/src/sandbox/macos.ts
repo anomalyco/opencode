@@ -98,6 +98,7 @@ export async function policy(
   host: { directory: string; scratch: string; home: string; config: string; data: string; state: string },
   options: SandboxPolicy.Options,
   gitConfigFiles: readonly string[] = [],
+  databasePath?: string,
 ): Promise<SandboxPolicy.Policy> {
   const directory = await fs.realpath(host.directory)
   if (directory === path.parse(directory).root || directory === (await fs.realpath(host.home)))
@@ -115,6 +116,15 @@ export async function policy(
   if (writableRoots.some((root) => hostPaths.some((value) => contains(root, value))))
     throw new Error("Writable sandbox roots must not contain OpenCode's configuration or state directories.")
   const scratch = await fs.realpath(host.scratch)
+  const databaseTarget = databasePath ? await canonicalPath(databasePath) : undefined
+  const databasePaths = databasePath
+    ? [...new Set([databasePath, databaseTarget!])].flatMap((file) => [
+        file,
+        `${file}-wal`,
+        `${file}-shm`,
+        `${file}-journal`,
+      ])
+    : []
   const protectedPaths = [
     path.join(scratch, ".runtime"),
     ...writableRoots.flatMap((root) => [
@@ -122,11 +132,13 @@ export async function policy(
       ...["opencode.json", "opencode.jsonc"].map((name) => path.join(root, name)),
     ]),
     ...hostPaths,
+    ...databasePaths,
     ...readableRoots,
     ...gitConfigFiles,
   ]
   const unreadablePaths = [
     ...hostPaths,
+    ...databasePaths,
     ...[host.home, ...writableRoots].flatMap((root) => [path.join(root, ".aws"), path.join(root, ".ssh")]),
   ]
   // Protect both a metadata symlink and its existing target. Missing paths remain protected
@@ -299,4 +311,24 @@ export function fileLaunch(policy: SandboxPolicy.Policy, runtime: string, progra
 function contains(root: string, target: string) {
   const relative = path.relative(root, target)
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+}
+
+// The server may start the policy before SQLite creates its database. Resolve existing
+// symlinks, including a dangling leaf, without losing protection for the future file.
+async function canonicalPath(value: string, depth = 0): Promise<string> {
+  if (depth > 40) throw new Error(`Too many database path aliases: ${value}`)
+  try {
+    return await fs.realpath(value)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    const entry = await fs.lstat(value).catch((cause: NodeJS.ErrnoException) => {
+      if (cause.code === "ENOENT") return undefined
+      throw cause
+    })
+    if (entry?.isSymbolicLink())
+      return canonicalPath(path.resolve(path.dirname(value), await fs.readlink(value)), depth + 1)
+    const parent = path.dirname(value)
+    if (parent === value) throw error
+    return path.join(await canonicalPath(parent, depth + 1), path.basename(value))
+  }
 }

@@ -53,11 +53,13 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Sandbox") {}
 
-export class Settings extends Context.Service<Settings, Options>()("@opencode/Sandbox/Settings") {}
+export class Settings extends Context.Service<Settings, Options & { readonly databasePath?: string }>()(
+  "@opencode/Sandbox/Settings",
+) {}
 
 // The server builds this global node before reporting readiness; Location eviction
 // must neither re-resolve configured aliases nor repeat the host runtime probe.
-export const settingsConfigured = (input: Options = {}) =>
+export const settingsConfigured = (input: Options = {}, databasePath?: string) =>
   makeGlobalNode({
     service: Settings,
     layer: Layer.effect(
@@ -78,6 +80,8 @@ export const settingsConfigured = (input: Options = {}) =>
             ...input,
             readableRoots: await MacSandbox.roots(input.readableRoots ?? []),
             writableRoots: await MacSandbox.roots(input.writableRoots ?? []),
+            databasePath:
+              databasePath && databasePath !== ":memory:" ? path.resolve(global.data, databasePath) : undefined,
           }),
           catch: (cause) =>
             new UnavailableError({
@@ -92,7 +96,9 @@ export const settingsConfigured = (input: Options = {}) =>
             )
             const directory = path.join(scratch, "workspace")
             yield* Effect.tryPromise(() => fs.mkdir(directory))
-            const policy = yield* Effect.tryPromise(() => MacSandbox.policy({ ...global, directory, scratch }, options))
+            const policy = yield* Effect.tryPromise(() =>
+              MacSandbox.policy({ ...global, directory, scratch }, options, [], options.databasePath),
+            )
             const { SandboxCheck } = yield* Effect.promise(() => import("./sandbox/check.js"))
             yield* SandboxCheck.run(policy)
           }),
@@ -152,6 +158,7 @@ export const configured = (input?: Options) => {
                     { ...global, directory: location.directory, scratch },
                     options,
                     gitConfigFiles,
+                    options.databasePath,
                   ),
                 catch: (cause) => new UnavailableError({ message: `Unable to initialize shell sandbox: ${cause}` }),
               }).pipe(Effect.orDie)
