@@ -363,10 +363,15 @@ export const layer = (options?: Options) =>
           pool.connection({
             ...input,
             key: Effect.gen(function* () {
-              const credential = entry.integrationID
-                ? (yield* credentials.list(entry.integrationID)).at(-1)?.id
-                : undefined
-              return McpPool.key({ ...input, credential })
+              if (input.config.type === "remote") {
+                const credential = entry.integrationID
+                  ? (yield* credentials.list(entry.integrationID)).at(-1)?.id
+                  : undefined
+                return McpPool.key({ ...input, credential })
+              }
+              // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
+              const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
+              return McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) })
             }),
           })
         const entry: ServerEntry = {

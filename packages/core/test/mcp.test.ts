@@ -3261,27 +3261,21 @@ describe("MCP pool", () => {
       headers: { authorization: "secret" },
     })
     const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "secret" } })
-    const key = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) =>
-      McpPool.key({ config: remote, directory: "/a", ...input })
+    const key = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) => McpPool.key({ config: remote, ...input })
+    const localKey = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) =>
+      McpPool.key({ config: local, cwd: "/a", ...input })
 
     expect(key()).not.toContain("secret")
-    expect(McpPool.key({ config: local, directory: "/a" })).not.toContain("secret")
-    // A remote server does not depend on the Location's directory, so Locations anywhere share it.
-    expect(key({ directory: "/b" })).toBe(key())
+    expect(localKey()).not.toContain("secret")
     expect(key({ credential: "cred_a" })).not.toBe(key({ credential: "cred_b" }))
     expect(key({ config: new ConfigMCP.Remote({ ...remote, headers: { authorization: "other" } }) })).not.toBe(key())
     expect(key({ config: new ConfigMCP.Remote({ ...remote, codemode: false }) })).not.toBe(key())
     expect(key({ config: new ConfigMCP.Remote({ ...remote, disabled: false }) })).toBe(key())
-    expect(McpPool.key({ config: local, directory: "/a" })).not.toBe(McpPool.key({ config: local, directory: "/b" }))
-    expect(McpPool.key({ config: new ConfigMCP.Local({ ...local, cwd: "/srv" }), directory: "/a" })).toBe(
-      McpPool.key({ config: new ConfigMCP.Local({ ...local, cwd: "/srv" }), directory: "/b" }),
+    expect(localKey()).not.toBe(localKey({ cwd: "/b" }))
+    expect(localKey({ config: new ConfigMCP.Local({ ...local, environment: { TOKEN: "other" } }) })).not.toBe(
+      localKey(),
     )
-    expect(
-      McpPool.key({ config: new ConfigMCP.Local({ ...local, environment: { TOKEN: "other" } }), directory: "/a" }),
-    ).not.toBe(McpPool.key({ config: local, directory: "/a" }))
-    expect(McpPool.key({ config: local, directory: "/a", clientInfo: { name: "other", version: "1" } })).not.toBe(
-      McpPool.key({ config: local, directory: "/a" }),
-    )
+    expect(localKey({ clientInfo: { name: "other", version: "1" } })).not.toBe(localKey())
   })
 
   live("keeps a server that negotiates legacy private to each Location", () => {
@@ -3293,6 +3287,7 @@ describe("MCP pool", () => {
       const config = new ConfigMCP.Local({
         type: "local",
         command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+        cwd: directories[0],
         pool: true,
       })
       const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
@@ -3319,6 +3314,7 @@ describe("MCP pool", () => {
       const config = new ConfigMCP.Local({
         type: "local",
         command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+        cwd: directories[0],
         environment: { MCP_REQUIRE_ROOTS: "1" },
         pool: true,
       })
@@ -3486,7 +3482,7 @@ describe("MCP pool", () => {
               closed: () => Effect.void,
               changed: () => Effect.void,
             },
-            key: Effect.succeed(McpPool.key({ config, directory })),
+            key: Effect.succeed(McpPool.key({ config })),
           })
           yield* connection.start
           return { connection, forms, asked }
@@ -3555,6 +3551,35 @@ describe("MCP pool", () => {
       expect(error.message).toContain("roots/list")
     }),
   )
+
+  live("shares a local server across directories only when its cwd is fixed", () => {
+    const captured = poolLogs()
+    return Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const server = (pids: string, cwd?: string) =>
+        new ConfigMCP.Local({
+          type: "local",
+          command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+          environment: { MCP_PID_FILE: path.join(tmp.path, pids) },
+          cwd,
+          pool: true,
+        })
+      const started = (pids: string) =>
+        Effect.promise(() => fs.readFile(path.join(tmp.path, pids), "utf8")).pipe(
+          Effect.map((text) => text.trim().split("\n")),
+        )
+      const pool = yield* makePool
+      for (const directory of directories) yield* open(server("home", "~"), pool, directory)
+      expect(yield* started("home")).toHaveLength(1)
+      expect(captured.logs).toEqual([])
+
+      for (const directory of directories) yield* open(server("project"), pool, directory)
+      expect(yield* started("project")).toHaveLength(2)
+      expect(captured.logs).toEqual([
+        ["mcp pool ignored: local server has no fixed cwd, so each directory runs its own", { server: "resources" }],
+      ])
+    }).pipe(Effect.provide(captured.layer))
+  })
 
   live("shares one local process, fails every holder when it dies, and closes it after the last", () =>
     Effect.gen(function* () {

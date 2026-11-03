@@ -1,6 +1,5 @@
 export * as McpPool from "./pool.js"
 
-import path from "node:path"
 import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -36,7 +35,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mc
  */
 export const key = (input: {
   readonly config: Mcp.ServerConfig
-  readonly directory: string
+  /** Local only: the directory the server runs in, as `McpStdio.resolveCwd` resolves it for the spawn. */
+  readonly cwd?: string
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
@@ -59,8 +59,7 @@ export const key = (input: {
     "local",
     "host",
     config.command,
-    // As the stdio transport resolves it.
-    config.cwd ? path.resolve(input.directory, config.cwd) : input.directory,
+    input.cwd ?? null,
     fingerprint(config.environment),
     ...common,
   ])
@@ -105,6 +104,8 @@ export const layer = Layer.effect(
     const slots = new Map<string, Slot>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
+    // Names of local servers already warned about for having no cwd, which keeps each project's folder in the key.
+    const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
     const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
@@ -309,6 +310,15 @@ export const layer = Layer.effect(
           return live().prompts
         },
         start: Effect.gen(function* () {
+          if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
+            unfixed.add(input.name)
+            yield* Effect.logWarning(
+              "mcp pool ignored: local server has no fixed cwd, so each directory runs its own",
+              {
+                server: input.name,
+              },
+            )
+          }
           const key = yield* input.key
           if (!unpoolable.has(key) && (yield* join(key))) return
           yield* own.start
