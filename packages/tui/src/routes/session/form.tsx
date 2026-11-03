@@ -1,5 +1,5 @@
 import { createStore, unwrap } from "solid-js/store"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import {
   decodePasteBytes,
@@ -535,10 +535,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     )
   }
 
-  createEffect(() => {
-    if (dialog.stack.length > 0) return
-    onCleanup(keymap.mode.push(FORM_MODE))
-  })
+  onMount(() => onCleanup(keymap.mode.push(FORM_MODE, () => dialog.stack.length === 0)))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,
