@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { FileRpcs } from "../../shared/ipc-rpc"
+import { AttachmentSizeLimitError, FileRpcs } from "../../shared/ipc-rpc"
 import { DesktopFiles, openExternalURL, openLocalFileURL } from "../files"
 import { IpcPortHandoff } from "../ipc-transport"
 import { sender } from "./context"
@@ -17,11 +17,12 @@ export const fileHandlers = FileRpcs.toLayer(
             sender(handoff, context).id,
             options ? { ...options, extensions: options.extensions && [...options.extensions] } : undefined,
           )
-          .pipe(Effect.orDie),
+          .pipe(attachmentSizeLimitFailure),
       FilesReadPickedFile: ({ token, path }, context) =>
-        files
-          .readPickedFile(sender(handoff, context).id, token, path)
-          .pipe(Effect.map((buffer) => new Uint8Array(buffer)), Effect.orDie),
+        files.readPickedFile(sender(handoff, context).id, token, path).pipe(
+          Effect.map((buffer) => new Uint8Array(buffer)),
+          attachmentSizeLimitFailure,
+        ),
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
       FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
@@ -39,3 +40,11 @@ export const fileHandlers = FileRpcs.toLayer(
     })
   }),
 )
+
+function attachmentSizeLimitFailure<A>(
+  effect: Effect.Effect<A, unknown, never>,
+): Effect.Effect<A, AttachmentSizeLimitError> {
+  return effect.pipe(
+    Effect.catch((error) => (error instanceof AttachmentSizeLimitError ? Effect.fail(error) : Effect.die(error))),
+  )
+}

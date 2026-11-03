@@ -6,7 +6,7 @@ import { Effect, Layer, ManagedRuntime, Predicate, Schema, Stream } from "effect
 import { Rpc, RpcGroup, RpcMessage, RpcServer } from "effect/rpc"
 import { Transferable } from "effect/workers"
 import { omitUndefined } from "../shared/ipc-transport"
-import { FilesOpenFilePicker } from "../shared/ipc-rpc/files"
+import { AttachmentSizeLimitError, FilesOpenFilePicker, FilesReadPickedFile } from "../shared/ipc-rpc/files"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 
 describe("desktop RPC transport", () => {
@@ -112,6 +112,35 @@ describe("desktop RPC transport", () => {
     for (const port of [first.port2, second.port2, reloaded.port2]) port.close()
     await runtime.dispose()
   })
+
+  test("returns picker and read size-limit failures to the renderer protocol", async () => {
+    const rpcs = RpcGroup.make(FilesOpenFilePicker, FilesReadPickedFile)
+
+    const handlers = rpcs.toLayer({
+      FilesOpenFilePicker: () =>
+        Effect.fail(new AttachmentSizeLimitError({ message: "Selected attachments exceed the 20 MB limit" })),
+      FilesReadPickedFile: () =>
+        Effect.fail(new AttachmentSizeLimitError({ message: "Selected attachments exceed the 20 MB limit" })),
+    })
+
+    const live = RpcServer.layer(rpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive))
+    const runtime = ManagedRuntime.make(live)
+    const handoff = await runtime.runPromise(IpcPortHandoff)
+    const channel = new MessageChannel()
+    handoff.bind(sender(1), serverPort(channel.port1))
+
+    try {
+      expect((await call(channel.port2, 0, "FilesOpenFilePicker", { options: { multiple: true } })).exit).toMatchObject(
+        failed("Selected attachments exceed the 20 MB limit"),
+      )
+      expect(
+        (await call(channel.port2, 1, "FilesReadPickedFile", { token: "picker", path: "/attachment.txt" })).exit,
+      ).toMatchObject(failed("Selected attachments exceed the 20 MB limit"))
+    } finally {
+      channel.port2.close()
+      await runtime.dispose()
+    }
+  })
 })
 
 class TestEvent extends Schema.TaggedClass<TestEvent>()("TestEvent", { value: Schema.String }) {}
@@ -131,6 +160,13 @@ function success<A>(value: A) {
 
 function died<A>(defect: A) {
   return { _tag: "Failure", cause: [{ _tag: "Die", defect }] } as const
+}
+
+function failed(message: string) {
+  return {
+    _tag: "Failure",
+    cause: [{ _tag: "Fail", error: { _tag: "DesktopAttachmentSizeLimit", message } }],
+  } as const
 }
 
 // Speaks the wire format the way src/renderer/ipc-client.ts does: post a request, ack each chunk,
