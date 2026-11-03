@@ -266,6 +266,20 @@ ${ids
     expect(renderedStateDimensions(output).width).toBeLessThanOrEqual(stringWidth(label) + 8)
   })
 
+  test("falls back to the vertical direction when horizontal composite separation does not converge", () => {
+    const source = `stateDiagram-v2
+  direction LR
+  state "left" as left {
+    done --> [*]
+  }
+  state "right" as right {
+    [*] --> pending
+    failed --> [*]
+  }`
+
+    expect(renderStateDiagram(source)).toBe(renderStateDiagram(source, { direction: "TB" }))
+  })
+
   test.each(["TB", "TD", "BT"] as const)("preserves explicit %s layouts under a narrow width target", (direction) => {
     const source = `stateDiagram-v2
   direction ${direction}

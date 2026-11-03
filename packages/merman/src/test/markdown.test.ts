@@ -473,3 +473,32 @@ gitGraph
   expect(frame).toContain("ship")
   expect(frame).not.toContain("gitGraph")
 })
+
+test("renders a state diagram vertically when horizontal composite separation does not converge", async () => {
+  const testRenderer = await setup({ width: 80, height: 40 })
+  const { renderOnce, captureCharFrame } = testRenderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-state-layout-fallback",
+    content: `\`\`\`mermaid
+stateDiagram-v2
+  direction LR
+  state "left" as left {
+    done --> [*]
+  }
+  state "right" as right {
+    [*] --> pending
+    failed --> [*]
+  }
+\`\`\``,
+    syntaxStyle,
+    treeSitterClient,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, renderOnce)
+
+  const frame = captureCharFrame()
+  expect(frame).toContain("pending")
+  expect(frame).not.toContain("stateDiagram-v2")
+})
