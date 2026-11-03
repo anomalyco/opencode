@@ -45,6 +45,13 @@ describe("ReadTool text serialization", () => {
       model: "Read file lines.txt, lines 1-2\n1: alpha\n2: ",
     },
     {
+      name: "preserves a BOM on a selected noninitial line",
+      content: "alpha\n\uFEFFomega\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "\uFEFFomega", offset: 2, truncated: false },
+      model: "Read file lines.txt, lines 2-2\n2: \uFEFFomega",
+    },
+    {
       name: "preserves internal blank lines in a page",
       content: "alpha\n\nomega\n",
       page: { limit: 3 },
@@ -345,6 +352,42 @@ describe("ReadToolFileSystem", () => {
       })
 
       expect(result).toMatchObject({ type: "text-page", content: "second", offset: 2, truncated: false })
+    }),
+  )
+
+  it.effect("returns a truncated long line and the following line across chunks", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "long-page.txt")
+      yield* files.writeFileString(file, `${"x".repeat(512 * 1024)}\nsecond\nthird\n`)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "long-page.txt", { limit: 2 })
+
+      expect(result).toMatchObject({
+        type: "text-page",
+        content: `${"x".repeat(2_000)}... (line truncated to 2000 chars)\nsecond`,
+        offset: 1,
+        truncated: true,
+        next: 3,
+      })
+      expect(ReadTool.toModelContent("long-page.txt", undefined, result)).toEndWith(
+        "2: second\n[Output truncated. Continue reading with offset: 3]",
+      )
+    }),
+  )
+
+  it.effect("reports an offset beyond a BOM-only final selected line", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "bom-only.txt")
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024)}\n\uFEFF`)
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "bom-only.txt", { offset: 2 }).pipe(
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
+      expect(error.message).toBe("Offset 2 is out of range for this file (2 lines)")
     }),
   )
 
