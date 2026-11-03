@@ -28,7 +28,7 @@ const apiKey = Config.Redacted("OPENAI_API_KEY")
 // image generation.
 const openai = OpenAI.configure({
   apiKey,
-  generation: { maxTokens: 160 },
+  maxTokens: 160,
   providerOptions: {
     store: false,
   },
@@ -40,8 +40,8 @@ const model = openai.responses("gpt-4o-mini")
 //
 // Options can live on both the configured route/provider facade and the request:
 //
-//   - `generation`: common controls such as max tokens, temperature, topP/topK,
-//     penalties, seed, and stop sequences.
+//   - `maxTokens`, `temperature`, `topP`, `topK`, penalties, `seed` and `stop`:
+//     common controls set at the top level.
 //   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: model-typed provider-native behavior. For example,
 //     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or

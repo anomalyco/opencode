@@ -132,7 +132,8 @@ describe("llm constructors", () => {
         id: "fake-model",
         provider: "fake",
         route: chatRoute.with({
-          generation: { maxTokens: 100, temperature: 1 },
+          maxTokens: 100,
+          temperature: 1,
           providerOptions: { store: false, metadata: { model: true } },
           http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
         }),
@@ -159,7 +160,7 @@ describe("llm constructors", () => {
     })
     const updated = LanguageModel.update(base, {
       route: responsesRoute,
-      defaults: { generation: { maxTokens: 20 } },
+      defaults: { maxTokens: 20 },
       compatibility: { sanitizer: "gemini", requireFinishReason: false },
     })
     const updatedInput = LanguageModel.input(updated)
@@ -167,7 +168,7 @@ describe("llm constructors", () => {
     expect(updated).toBeInstanceOf(LanguageModel)
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
-    expect(updated.defaults?.generation).toEqual({ maxTokens: 20 })
+    expect(updated.defaults?.maxTokens).toBe(20)
     expect(updated.compatibility).toEqual({ sanitizer: "gemini", requireFinishReason: false })
     expect(updatedInput.defaults).toBe(updated.defaults)
     expect(updatedInput.compatibility).toBe(updated.compatibility)
@@ -179,7 +180,8 @@ describe("llm constructors", () => {
     const model = chatRoute.model({
       id: "kimi-k2",
       defaults: {
-        generation: { maxTokens: 1_024, stop: ["END"] },
+        maxTokens: 1_024,
+        stop: ["END"],
         providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
@@ -187,7 +189,7 @@ describe("llm constructors", () => {
     })
     const request = ai.request({ model, prompt: "Say hello." })
 
-    expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
+    expect(request.model.defaults).toMatchObject({ maxTokens: 1_024, stop: ["END"] })
     expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })

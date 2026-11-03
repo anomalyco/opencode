@@ -14,7 +14,7 @@ import {
 import {
   InvalidProviderOutputError,
   InvalidRequestError,
-  generationFields,
+  mergeGeneration,
   AIError,
   LLMEvent,
   LLMResponse,
@@ -301,7 +301,7 @@ export const request = <const Model extends LanguageModel>(input: LLMRequestInpu
     messages: input.prompt === undefined ? (input.messages ?? []).map(Message.make) : [Message.user(input.prompt)],
     tools: input.tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: input.toolChoice ? ToolChoice.make(input.toolChoice) : undefined,
-    ...generationFields(input),
+    ...mergeGeneration(input),
     providerOptions: input.providerOptions,
     headers: input.headers,
     fetch: input.fetch,

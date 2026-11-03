@@ -409,7 +409,7 @@ shared host; the entry above follows the base URL table. Dedicated hosts can be 
   Replay complete `response.message` values to retain `reasoning_content` separately from answer text.
   Qwen 3.8 defaults to preserving thinking; older models have different defaults.
   Additional options include `toolStream`, `parallelToolCalls`, `repetitionPenalty`, `responseFormat`,
-  `enableSearch`, and native `searchOptions`. `generation.topK` lowers to `top_k`.
+  `enableSearch`, and native `searchOptions`. `topK` lowers to `top_k`.
   `clearThinking` is a hosted GLM control, and `thinking.type` is available for hosted MiniMax models.
 - **Messages:** `effort` → `output_config.effort`. `thinking.type` accepts enabled/disabled with an
   optional `budgetTokens` (or native `budget_tokens`). `outputConfig.format` accepts a JSON schema.
@@ -638,7 +638,7 @@ Responses and Chat support only `toolChoice: "auto"` (the default). Messages als
 its documented forced `"any"` choice currently returns HTTP 400. Messages defaults to adaptive thinking
 with `display: "omitted"`, preserving encrypted `redacted_thinking` in `response.message`. Use
 `providerOptions: { effort: "low" }` for depth or `thinking: { type: "enabled", budgetTokens: 1024 }`
-for budget compatibility (with `generation.maxTokens > 1024`).
+for budget compatibility (with `maxTokens > 1024`).
 
 Add `tools: [Meta.webSearch()]` to a Spark Responses or Messages request for hosted web search.
 Responses exposes hosted results and URL citations in text-part `providerMetadata.meta.annotations`.

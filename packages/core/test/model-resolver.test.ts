@@ -1388,10 +1388,10 @@ describe("ModelResolver", () => {
         include: ["reasoning.encrypted_content"],
       })
       expect(bedrock.route.id).toBe("bedrock-converse")
-      expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
+      expect(bedrock.route.defaults.topP).toBe(0.8)
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
       expect(mantle.route.id).toBe("bedrock-mantle-chat")
-      expect(mantle.route.defaults.generation).toEqual({ topP: 0.6 })
+      expect(mantle.route.defaults.topP).toBe(0.6)
       expect(workers.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),
   )

@@ -19,7 +19,6 @@ import {
   CompactionResponse,
   CompactionCheckpointResponse,
   AIErrorReason,
-  GenerationOptions,
   LLMResponse,
   ResponseFold,
   LanguageModel,
@@ -31,11 +30,10 @@ import {
   ToolChoice,
   ToolEntry,
   type LLMRequest,
-  mergeGenerationOptions,
+  mergeGeneration,
   mergeProviderOptions,
   mergeTransport,
-  generationFields,
-  type TransportOptions,
+  type LanguageModelDefaults,
   withPartial,
 } from "../schema/index.js"
 
@@ -105,15 +103,9 @@ export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "ro
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
-export interface RouteDefaults extends TransportOptions {
-  readonly generation?: GenerationOptions
-  readonly providerOptions?: ProviderOptions
-}
+export type RouteDefaults = LanguageModelDefaults
 
-export interface RouteDefaultsInput extends TransportOptions {
-  readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: ProviderOptions
-}
+export type RouteDefaultsInput = LanguageModelDefaults
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly compact?: CompactionOperations
@@ -149,7 +141,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   ...base,
   ...patch,
   ...mergeTransport(base, patch),
-  generation: mergeGenerationOptions(base?.generation, patch.generation),
+  ...mergeGeneration(base, patch),
   providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
 })
 
@@ -267,7 +259,7 @@ const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
   const modelDefaults = normalized.model.defaults
   return {
     ...normalized,
-    ...generationFields(mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, normalized)),
+    ...mergeGeneration(routeDefaults, modelDefaults, normalized),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
       modelDefaults?.providerOptions,
@@ -587,15 +579,6 @@ const restoreClasses = (request: LLMRequest): LLMRequest => ({
   toolChoice: request.toolChoice === undefined ? undefined : ToolChoice.make(request.toolChoice),
 })
 
-const validateRequest = Schema.decodeUnknownEffect(Schema.Struct(GenerationOptions.fields))
-
-// Requests are plain objects, so their generation fields are checked when they run, not when built.
-const checkRequest = (request: LLMRequest) =>
-  validateRequest(request).pipe(
-    Effect.mapError((error) => ProviderShared.invalidRequest(error.message, error)),
-    Effect.asVoid,
-  )
-
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
   const references = request.messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -611,7 +594,6 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
     return yield* ProviderShared.invalidRequest(
       "Local file references must be read with Media.file(path) before sending",
     )
-  yield* checkRequest(request)
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
@@ -704,15 +686,13 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
       options?: EndpointCompactOptions,
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
-      return checkRequest(request).pipe(
-        Effect.andThen((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
-          if (options?.mechanism === "trigger" && canCompact(request, options))
-            return request.model.route.compact.trigger(prepareRequest(request), executor, options)
-          if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
-            return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
-          return unsupportedCompaction(request.model, options?.mechanism)
-        }),
-      )
+      return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
+        if (options?.mechanism === "trigger" && canCompact(request, options))
+          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
+        if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
+          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
+        return unsupportedCompaction(request.model, options?.mechanism)
+      })
     }
     return Service.of({
       stream,

@@ -45,13 +45,18 @@ describe("request option precedence", () => {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
-        generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
+        maxTokens: 10,
+        temperature: 1,
+        stop: ["route"],
         providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
         defaults: {
-          generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
+          maxTokens: 20,
+          temperature: 0.5,
+          frequencyPenalty: 0.25,
+          stop: ["model"],
           providerOptions: { reasoningEffort: "medium" },
         },
       })
