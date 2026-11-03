@@ -18,7 +18,7 @@ test.each([
   const range = findComposerSlashCommandRange(editor, commands)
 
   expect(range?.toString()).toBe(text.slice(0, end))
-  expect(range?.startContainer).toBe(editor.firstChild)
+  expect(range?.startContainer).toBe(editor.firstChild ?? undefined)
   expect(range?.startOffset).toBe(0)
   expect(range?.endOffset).toBe(end)
   expect(editor.innerHTML).toBe(original)
