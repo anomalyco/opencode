@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { instanceId, recentInstanceIds, skipReason } from "./schedule"
+import { instanceId, isWorkflowError, recentInstanceIds, skipReason } from "./schedule"
 
 describe("stats sync schedule", () => {
   test("names one instance per hourly slot and per history day", () => {
@@ -80,5 +80,18 @@ describe("stats sync schedule", () => {
       instance: "stats-history-2026-11-03",
       status: "complete",
     })
+  })
+
+  test("recognizes Workflow binding errors by their code only", () => {
+    expect(isWorkflowError(new Error("instance.not_found"), "instance.not_found")).toBe(true)
+    expect(isWorkflowError(new Error("(instance.not_found) Instance does not exist"), "instance.not_found")).toBe(true)
+    expect(
+      isWorkflowError(new Error("(instance.already_exists) Instance already exists"), "instance.already_exists"),
+    ).toBe(true)
+    expect(isWorkflowError(new Error("internal error"), "instance.not_found")).toBe(false)
+    expect(isWorkflowError(new Error("(instance.already_exists) Instance already exists"), "instance.not_found")).toBe(
+      false,
+    )
+    expect(isWorkflowError("instance.not_found", "instance.not_found")).toBe(false)
   })
 })

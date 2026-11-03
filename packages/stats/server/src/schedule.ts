@@ -35,3 +35,9 @@ export function skipReason(id: string, instances: { id: string; status: string |
   const active = instances.find((instance) => instance.status !== undefined && ACTIVE.has(instance.status))
   if (active) return { reason: "previous run active", instance: active.id, status: active.status }
 }
+
+// Workflow bindings reject with plain Errors whose message carries the code, as
+// "instance.not_found" or "(instance.already_exists) Instance already exists".
+export function isWorkflowError(error: unknown, code: "instance.not_found" | "instance.already_exists") {
+  return error instanceof Error && error.message.includes(code)
+}
