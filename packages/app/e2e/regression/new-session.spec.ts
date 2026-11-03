@@ -583,12 +583,25 @@ test("backspacing keeps confirmed branch results until the broader search answer
   await expect(options).toHaveText([...closed, "clover-fix"])
 })
 
+// A draft opened in an existing worktree and switched to Local runs in the project root, not the worktree.
 for (const row of [
-  { name: "a repository subdirectory", directory: "C:/OpenCode/SelectedDirectory/packages/app" },
-  { name: "the repository root", directory: "C:/OpenCode/SelectedDirectory" },
-  { name: "a worktree directory", directory: "C:/OpenCode/selected-worktree" },
+  {
+    name: "a repository subdirectory",
+    directory: "C:/OpenCode/SelectedDirectory/packages/app",
+    expected: "C:/OpenCode/SelectedDirectory/packages/app",
+  },
+  {
+    name: "the repository root",
+    directory: "C:/OpenCode/SelectedDirectory",
+    expected: "C:/OpenCode/SelectedDirectory",
+  },
+  {
+    name: "a worktree directory",
+    directory: "C:/OpenCode/selected-worktree",
+    expected: "C:/OpenCode/SelectedDirectory",
+  },
 ]) {
-  test(`a local new session keeps the selected folder when opened in ${row.name}`, async ({ page }) => {
+  test(`a local new session runs in ${row.expected} when opened in ${row.name}`, async ({ page }) => {
     const creates: Parameters<NonNullable<WorkspaceInput["onSessionCreate"]>>[0][] = []
     const root = "C:/OpenCode/SelectedDirectory"
 
@@ -606,11 +619,37 @@ for (const row of [
     await expect(submit(page)).toBeEnabled()
     await submit(page).click()
 
-    await expect.poll(() => creates).toEqual([expect.objectContaining({ location: { directory: row.directory } })])
+    await expect.poll(() => creates).toEqual([expect.objectContaining({ location: { directory: row.expected } })])
     await expectPath(page, sessionHref(String(creates[0]!.id)))
     await expect(page.locator('[data-slot="user-message-text"]')).toHaveText("Check the selected folder.")
   })
 }
+
+test("switching a worktree draft from New worktree back to Local creates the session in the project root", async ({
+  page,
+}) => {
+  const creates: Parameters<NonNullable<WorkspaceInput["onSessionCreate"]>>[0][] = []
+  const root = "C:/OpenCode/SelectedDirectory"
+
+  const view = await openDraft(page, {
+    name: "SelectedDirectory",
+    directory: "C:/OpenCode/selected-worktree",
+    project: { worktree: root, canonical: root, sandboxes: ["C:/OpenCode/selected-worktree"] },
+    onSessionCreate: (body) => {
+      creates.push(body)
+    },
+  })
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionWorktree(page)).toContainText("New worktree")
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(page.getByRole("button", { name: "Local", exact: true })).toBeVisible()
+  await view.editor.fill("Run locally")
+  await submit(page).click()
+
+  await expect.poll(() => creates).toEqual([expect.objectContaining({ location: { directory: root } })])
+})
 
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
   await page.setViewportSize({ width: 935, height: 522 })
