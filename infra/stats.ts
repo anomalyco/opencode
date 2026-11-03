@@ -104,6 +104,9 @@ export const statsSyncWorkflow = new sst.cloudflare.Workflow("StatsSyncWorkflow"
   link: [database, r2Sql, r2SqlAuthToken, statsHiddenModels, statsSyncConfig],
   transform: {
     worker: {
+      // SST's Worker build marks only node:* and cloudflare:workers as external,
+      // so an import from cloudflare:workflows (NonRetryableError) fails to bundle.
+      build: { esbuild: { external: ["cloudflare:workflows"] } },
       transform: {
         worker: (args) => {
           // Raise CPU time from the 30-second default to the 5-minute maximum for

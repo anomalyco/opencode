@@ -24,7 +24,7 @@ import { statProvider } from "./domain/model-normalization"
 import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } from "./domain/provider"
 import { RetentionStatRepo, rowsFromAggregates as retentionRowsFromAggregates } from "./domain/retention"
 import type { StatGrain } from "./domain/stat"
-import { R2Sql, R2SqlQueryError } from "./r2-sql"
+import { isDeterministicR2SqlError, R2Sql, R2SqlQueryError } from "./r2-sql"
 import { syncRange } from "./sync-range"
 
 // Plans cross a Workflow step boundary, so every value is plain JSON.
@@ -86,10 +86,13 @@ export const syncStats = Effect.fn("StatSync.sync")(function* (options?: { histo
   } satisfies SyncStatsResult
 })
 
-export const planStatsSync = Effect.fn("StatSync.plan")(function* (startedAt: Date, options: { history: boolean }) {
+export const planStatsSync = Effect.fn("StatSync.plan")(function* (
+  startedAt: Date,
+  options: { history: boolean; loadCatalog?: typeof loadCatalogIdentity },
+) {
   const retentionStats = yield* RetentionStatRepo
   const range = syncRange(startedAt, options.history)
-  const identity = yield* Effect.promise(loadCatalogIdentity)
+  const identity = yield* Effect.promise(options.loadCatalog ?? loadCatalogIdentity)
   // Without the catalog every period written would attribute models to
   // "unknown"; fail so the run retries instead.
   if (!identity.catalog) return yield* Effect.fail(new CatalogUnavailableError())
@@ -258,6 +261,18 @@ export const syncRetentionCohort = Effect.fn("StatSync.retentionCohort")(functio
   yield* Effect.logInfo(`retention cohort synced ${JSON.stringify(result)}`)
   return result
 })
+
+// A rejected R2 SQL query fails the same way on every attempt, and each attempt
+// repeats its spend. Return the failure as a result so a Workflow step stores it
+// instead of retrying, and a replay reads it instead of running the query again.
+export function deterministicFailureAsResult<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return effect.pipe(
+    Effect.catchIf(
+      (error): error is E & R2SqlQueryError => error instanceof R2SqlQueryError,
+      (error) => (isDeterministicR2SqlError(error) ? Effect.succeed({ failed: error.message }) : Effect.fail(error)),
+    ),
+  )
+}
 
 function logRuntimeCheck() {
   return Effect.logInfo(

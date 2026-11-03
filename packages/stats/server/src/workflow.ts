@@ -1,8 +1,13 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep, type WorkflowStepConfig } from "cloudflare:workers"
-import { NonRetryableError } from "cloudflare:workflows"
-import { isDeterministicR2SqlError, R2Sql, R2SqlQueryError } from "@opencode/stats-core/r2-sql"
+import { R2Sql } from "@opencode/stats-core/r2-sql"
 import { layer } from "@opencode/stats-core/runtime"
-import { planStatsSync, syncRetentionCohort, syncStatPeriod, type SyncStatsError } from "@opencode/stats-core/stat-sync"
+import {
+  deterministicFailureAsResult,
+  planStatsSync,
+  syncRetentionCohort,
+  syncStatPeriod,
+  type SyncStatsError,
+} from "@opencode/stats-core/stat-sync"
 import { Effect, Layer } from "effect"
 import type { StatsSyncParams } from "./schedule"
 
@@ -15,11 +20,12 @@ const STEP: WorkflowStepConfig = {
 }
 
 export class StatsSyncWorkflow extends WorkflowEntrypoint<unknown, StatsSyncParams> {
-  async run(event: WorkflowEvent<StatsSyncParams>, step: WorkflowStep) {
+  async run(event: WorkflowEvent<StatsSyncParams | undefined>, step: WorkflowStep) {
+    // A dashboard trigger can start an instance without params.
     const plan = await step.do("plan", STEP, () =>
       run(
-        planStatsSync(new Date(event.payload.startedAt ?? event.timestamp), {
-          history: event.payload.history ?? false,
+        planStatsSync(new Date(event.payload?.startedAt ?? event.timestamp), {
+          history: event.payload?.history ?? false,
         }),
       ),
     )
@@ -27,29 +33,46 @@ export class StatsSyncWorkflow extends WorkflowEntrypoint<unknown, StatsSyncPara
     // Steps run one at a time to keep one period's rows in memory. A failed
     // period does not stop the others; the run still ends as errored.
     const failed: string[] = []
+    const fail = (name: string, error: unknown) => {
+      failed.push(name)
+      console.error(
+        `stats sync step failed ${JSON.stringify({
+          step: name,
+          error: error instanceof Error ? error.message : String(error),
+          cause: error instanceof Error && error.cause !== undefined ? String(error.cause) : undefined,
+        })}`,
+      )
+    }
+    const settle = (name: string, attempt: Promise<object>) =>
+      attempt.then(
+        (result) => {
+          if ("failed" in result) fail(name, result.failed)
+        },
+        (error) => fail(name, error),
+      )
     for (const period of plan.periods) {
       const name = `${period.grain} ${period.key}`
-      await step.do(name, STEP, () => run(syncStatPeriod(period, plan.catalog))).catch(() => failed.push(name))
+      await settle(
+        name,
+        step.do(name, STEP, () => run(deterministicFailureAsResult(syncStatPeriod(period, plan.catalog)))),
+      )
     }
     for (const period of plan.retentionPeriods) {
       const name = `retention ${period.start.slice(0, 10)}`
-      await step.do(name, STEP, () => run(syncRetentionCohort(period, plan.catalog))).catch(() => failed.push(name))
+      await settle(
+        name,
+        step.do(name, STEP, () => run(deterministicFailureAsResult(syncRetentionCohort(period, plan.catalog)))),
+      )
     }
     if (failed.length > 0) throw new Error(`stats sync failed for ${failed.join(", ")}`)
     return { periods: plan.periods.length, retentionPeriods: plan.retentionPeriods.length }
   }
 }
 
+// SST's generated entry wraps the default export; workerd rejects a module whose
+// default export is undefined.
+export default {}
+
 function run<A>(effect: Effect.Effect<A, SyncStatsError, Layer.Success<typeof runtimeLayer>>) {
-  return Effect.runPromise(
-    effect.pipe(
-      // Retrying a rejected query repeats its R2 SQL spend for the same result.
-      Effect.mapError((error) =>
-        error instanceof R2SqlQueryError && isDeterministicR2SqlError(error)
-          ? new NonRetryableError(error.message, error.name)
-          : error,
-      ),
-      Effect.provide(runtimeLayer),
-    ),
-  )
+  return Effect.runPromise(effect.pipe(Effect.provide(runtimeLayer)))
 }

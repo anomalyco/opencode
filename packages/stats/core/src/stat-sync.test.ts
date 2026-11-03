@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
-import type { CatalogSnapshot } from "./domain/catalog-identity"
+import { catalogIdentity, type CatalogSnapshot } from "./domain/catalog-identity"
 import type { StatPeriodScope } from "./domain/stat"
 import type { R2SqlData } from "./r2-sql"
 
@@ -19,46 +19,38 @@ const { ModelStatRepo } = await import("./domain/model")
 const { ProviderStatRepo } = await import("./domain/provider")
 const { RetentionStatRepo } = await import("./domain/retention")
 const { R2Sql, R2SqlQueryError } = await import("./r2-sql")
-const { CatalogUnavailableError, planStatsSync, syncRetentionCohort, syncStatPeriod } = await import("./stat-sync")
+const { CatalogUnavailableError, deterministicFailureAsResult, planStatsSync, syncRetentionCohort, syncStatPeriod } =
+  await import("./stat-sync")
+const { DatabaseError } = await import("./database")
 
 const catalog: CatalogSnapshot = { offerings: [["opencode/model-a", "lab"]], models: [["model-a", "lab"]] }
-const originalFetch = globalThis.fetch
-
-afterEach(() => {
-  globalThis.fetch = originalFetch
-})
+const loadCatalog = () =>
+  Promise.resolve({
+    catalog: catalogIdentity({
+      models: { "lab/model-a": {} },
+      providers: { opencode: { models: { "model-a": { canonical_model_id: "lab/model-a" } } } },
+    }),
+    stale: false,
+  })
 
 describe("stats sync plan", () => {
-  // Runs first: the catalog loader caches a successful response for five minutes.
   test("fails instead of planning a run without the model catalog", async () => {
-    globalThis.fetch = Object.assign(() => Promise.reject(new TypeError("network down")), {
-      preconnect: originalFetch.preconnect,
-    })
-
     const error = await Effect.runPromise(
-      planStatsSync(new Date("2026-10-23T19:05:00.000Z"), { history: false }).pipe(
-        Effect.flip,
-        Effect.provide(services({ events: [] })),
-      ),
+      planStatsSync(new Date("2026-10-23T19:05:00.000Z"), {
+        history: false,
+        loadCatalog: () => Promise.resolve({ catalog: undefined, stale: true }),
+      }).pipe(Effect.flip, Effect.provide(services({ events: [] }))),
     )
 
     expect(error).toBeInstanceOf(CatalogUnavailableError)
   })
 
   test("plans the current week for hourly runs and the rest of the window for history runs", async () => {
-    globalThis.fetch = Object.assign(
-      () =>
-        Promise.resolve(
-          Response.json({
-            models: { "lab/model-a": {} },
-            providers: { opencode: { models: { "model-a": { canonical_model_id: "lab/model-a" } } } },
-          }),
-        ),
-      { preconnect: originalFetch.preconnect },
-    )
     const startedAt = new Date("2026-10-23T19:05:00.000Z")
     const plan = (history: boolean) =>
-      Effect.runPromise(planStatsSync(startedAt, { history }).pipe(Effect.provide(services({ events: [] }))))
+      Effect.runPromise(
+        planStatsSync(startedAt, { history, loadCatalog }).pipe(Effect.provide(services({ events: [] }))),
+      )
 
     const hourly = await plan(false)
     expect(hourly.catalog).toEqual({ offerings: [["opencode/model-a", "lab"]], models: [["model-a", "lab"]] })
@@ -166,6 +158,42 @@ describe("stats sync steps", () => {
 
     expect(error).toBe(failure)
     expect(events).toEqual(["query"])
+  })
+})
+
+describe("stats sync failures", () => {
+  test("returns a deterministic R2 SQL failure as the result", async () => {
+    const result = await Effect.runPromise(
+      deterministicFailureAsResult(
+        Effect.fail(new R2SqlQueryError({ message: "R2 SQL stats query failed: syntax error", status: 400 })),
+      ),
+    )
+
+    expect(result).toEqual({ failed: "R2 SQL stats query failed: syntax error" })
+  })
+
+  test("keeps transient R2 SQL and database failures as failures so the step retries", async () => {
+    const transient = new R2SqlQueryError({ message: "query timeout", status: 400, code: 40005 })
+    const database = new DatabaseError({ cause: new Error("connection reset") })
+
+    expect(await Effect.runPromise(deterministicFailureAsResult(Effect.fail(transient)).pipe(Effect.flip))).toBe(
+      transient,
+    )
+    expect(await Effect.runPromise(deterministicFailureAsResult(Effect.fail(database)).pipe(Effect.flip))).toBe(
+      database,
+    )
+  })
+
+  test("names the driver's error in a database failure without the wrapped query", () => {
+    const driver = new Error("target: stats.-.primary: vttablet: rpc error: code = Unavailable")
+    const wrapped = Object.assign(new Error("Failed query: insert into model_stat ...\nparams: 1,2,3"), {
+      cause: driver,
+    })
+
+    expect(new DatabaseError({ cause: wrapped }).message).toBe(
+      "Database operation failed: Error: target: stats.-.primary: vttablet: rpc error: code = Unavailable",
+    )
+    expect(new DatabaseError({ cause: "timeout" }).message).toBe("Database operation failed")
   })
 })
 
