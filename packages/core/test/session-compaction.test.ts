@@ -492,6 +492,20 @@ it.effect("auto compaction estimates current content against the buffered prompt
     // Another provider's usage is not trusted either.
     const foreign = { ...assistant, model: { ...assistant.model, providerID: Provider.ID.make("other") } }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [foreign] })).toBe(21)
+    // Another model's usage is not trusted, even when the provider matches.
+    const swapped = {
+      ...assistant,
+      id: SessionMessage.ID.create(),
+      model: { ...assistant.model, id: Model.ID.make("other-model") },
+    }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [swapped] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [swapped] })).toBe(false)
+    expect(
+      SessionCompaction.estimateContext({
+        ...grown,
+        messages: [input(1_000, contextLimited).messages[0], swapped],
+      }),
+    ).toBe(1_001)
     expect(
       SessionCompaction.estimateContext({
         ...grown,
@@ -1316,9 +1330,13 @@ it.effect("a model switch waits for the new model's first response before summar
 
     // The latest response came from the previous model, so the new one has no cached prefix to summarize from.
     yield* compaction.precompute(Effect.succeed(switched(history.near)))
-    expect(yield* compaction.compact({ reason: "auto", context: switched(history.due) })).toEqual({
-      status: "completed",
-    })
+    // The new model must reach the ceiling from the content, not the previous model's usage.
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context: switched([textUser(tokenText(summaryCeiling)), ...history.due]),
+      }),
+    ).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0].messages)).toContain("Third answer")
   }),
@@ -1398,9 +1416,9 @@ it.effect("compaction summarizes as usual when the background summary no longer 
     const burst = [...history.near, textUser("x".repeat(140_000)), measured("Burst handled", 182_000)]
     expect(yield* compactAfterPrecompute(burst)).toContain("Burst handled")
 
-    // A different model would replay a summary written for the previous one.
+    // A different model would replay a summary written for the previous one. Its content still needs compaction.
     const switched = {
-      ...loaded(session, history.due),
+      ...loaded(session, [textUser(tokenText(summaryCeiling)), ...history.due]),
       model: { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } },
     }
     expect(yield* compactAfterPrecompute(history.due, switched)).toContain("Third answer")

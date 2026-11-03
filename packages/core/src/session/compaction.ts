@@ -1102,7 +1102,12 @@ export const estimateContext = (context: SessionContext.Loaded) => total(estimat
 
 /** The size of the prompt `context` sends. */
 export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
-  const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
+  const anchorIndex = context.messages.findLastIndex(
+    (message) =>
+      message.type === "assistant" &&
+      message.model.id === context.model.ref.id &&
+      hasMeasuredPrompt(message, context.model.ref),
+  )
   const anchor = context.messages[anchorIndex]
   const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))
   // TODO: Pass compaction history the runner has already shaped. This and `recentUserMessages` repeat the
