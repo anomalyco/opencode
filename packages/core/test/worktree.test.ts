@@ -266,6 +266,84 @@ describe("Worktree", () => {
     }),
   )
 
+  it.live("opening a second checkout of a bare repo registers it as linked and removable", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const first = path.join(root.path, "first")
+      const second = path.join(root.path, "second")
+      yield* Effect.promise(() => bareRepo(root.path, [first, second]))
+      const [firstReal, secondReal] = yield* Effect.forEach([first, second], (dir) =>
+        Effect.promise(() => fs.realpath(dir)).pipe(Effect.map(abs)),
+      )
+      const project = yield* Project.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+
+      const resolvedFirst = yield* project.resolve(firstReal)
+      const resolvedSecond = yield* project.resolve(secondReal)
+
+      expect(resolvedFirst.canonical).toBe(firstReal)
+      expect(resolvedSecond.canonical).toBe(firstReal)
+      expect(yield* stored(resolvedFirst.id)).toEqual(
+        [
+          { directory: firstReal, strategy: null },
+          { directory: secondReal, strategy: "git" },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
+
+      const context = yield* Layer.build(worktreeLayer(firstReal, resolvedFirst.id, database, bus, root.path))
+      yield* Context.get(context, Worktree.Service).remove(
+        { projectID: resolvedFirst.id, directory: secondReal, force: false },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+      expect(yield* stored(resolvedFirst.id)).toEqual([{ directory: firstReal, strategy: null }])
+    }),
+  )
+
+  it.live("migrates legacy projects whose root was set to a bare repository", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const a = path.join(root.path, "a")
+      const { bare } = yield* Effect.promise(() => bareRepo(root.path, [a]))
+      const bareReal = abs(yield* Effect.promise(() => fs.realpath(bare)))
+      const aReal = abs(yield* Effect.promise(() => fs.realpath(a)))
+      const projectID = Project.ID.make("legacy-bare-project")
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: projectID,
+          worktree: bareReal,
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(WorktreeTable)
+        .values([{ project_id: projectID, directory: bareReal }])
+        .run()
+        .pipe(Effect.orDie)
+
+      const context = yield* Layer.build(worktreeLayer(bareReal, projectID, database, yield* Bus.Service, root.path))
+      yield* Context.get(context, Worktree.Service).refresh(
+        { projectID },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+
+      const projectRow = yield* database.db
+        .select({ worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, projectID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(projectRow?.worktree).toBe(aReal)
+      expect(yield* stored(projectID)).toEqual([{ directory: aReal, strategy: null }])
+    }),
+  )
+
   it.effect("accepts arbitrary non-empty strategy ids", () =>
     Effect.sync(() => {
       expect(String(Worktree.StrategyID.make("acme/snapshot"))).toBe("acme/snapshot")

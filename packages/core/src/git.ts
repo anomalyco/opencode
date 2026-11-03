@@ -216,17 +216,36 @@ const layer = Layer.effect(
         Effect.map((matches) => matches[0]),
         Effect.orElseSucceed(() => undefined),
       )
-      if (!dotgit) return undefined
+      if (dotgit) {
+        const cwd = path.dirname(dotgit)
+        const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
+        const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
+        if (!gitDir || !commonDir) return undefined
 
-      const cwd = path.dirname(dotgit)
-      const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
-      const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
+        return new Repository({
+          worktree: AbsolutePath.make(topLevel ? resolvePath(cwd, topLevel) : cwd),
+          gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir)),
+          commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir)),
+        })
+      }
+
+      const isBare =
+        (yield* fs.exists(path.join(input, "HEAD")).pipe(Effect.orElseSucceed(() => false))) &&
+        (yield* fs.exists(path.join(input, "config")).pipe(Effect.orElseSucceed(() => false))) &&
+        (yield* fs.exists(path.join(input, "objects")).pipe(Effect.orElseSucceed(() => false)))
+      if (!isBare) return undefined
+
+      const result = yield* run(input, proc, ["rev-parse", "--git-dir", "--git-common-dir"]).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (!result || result.exitCode !== 0) return undefined
+      const [gitDir, commonDir] = result.text.split(/\r?\n/)
       if (!gitDir || !commonDir) return undefined
 
       return new Repository({
-        worktree: AbsolutePath.make(topLevel ? resolvePath(cwd, topLevel) : cwd),
-        gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir)),
-        commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir)),
+        worktree: input,
+        gitDirectory: AbsolutePath.make(resolvePath(input, gitDir)),
+        commonDirectory: AbsolutePath.make(resolvePath(input, commonDir)),
       })
     })
 
@@ -1454,7 +1473,7 @@ const layer = Layer.effect(
         entries.push(
           new Worktree({
             directory: AbsolutePath.make(resolvePath(repository.worktree, first.slice("worktree ".length).trim())),
-            kind: index === 0 ? "main" : "linked",
+            kind: entries.length === 0 ? "main" : "linked",
           }),
         )
       }

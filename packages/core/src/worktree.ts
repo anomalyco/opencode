@@ -15,6 +15,7 @@ import { Location } from "./location.js"
 import type { FileSystem } from "./filesystem.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Project } from "./project.js"
+import { ProjectSchema } from "./project/schema.js"
 import { Worktree } from "@opencode/schema/worktree"
 import { WorktreeTable } from "./worktree/sql.js"
 import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
@@ -285,7 +286,7 @@ const layer = Layer.effect(
       const otherProjects = yield* db
         .select({ worktree: ProjectTable.worktree })
         .from(ProjectTable)
-        .where(ne(ProjectTable.id, input.projectID))
+        .where(and(ne(ProjectTable.id, input.projectID), isNull(ProjectTable.time_archived)))
         .all()
         .pipe(Effect.orDie)
       const foreign = new Set<AbsolutePath>()
@@ -293,21 +294,6 @@ const layer = Layer.effect(
         if (item.worktree !== row.worktree) {
           const resolved = yield* canonical(fs, item.worktree).pipe(
             Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(item.worktree)),
-          )
-          foreign.add(resolved)
-        }
-      }
-      const otherWorktrees = yield* db
-        .select({ directory: WorktreeTable.directory })
-        .from(WorktreeTable)
-        .where(ne(WorktreeTable.project_id, input.projectID))
-        .all()
-        .pipe(Effect.orDie)
-      const local = new Set(stored.map((item) => item.directory))
-      for (const item of otherWorktrees) {
-        if (!local.has(item.directory) && item.directory !== row.worktree) {
-          const resolved = yield* canonical(fs, item.directory).pipe(
-            Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(item.directory)),
           )
           foreign.add(resolved)
         }
@@ -321,17 +307,34 @@ const layer = Layer.effect(
           .filter((item) => item.exists && !item.strategy && !foreign.has(item.directory))
           .map((item) => item.directory),
       ])
+      const failedRoots = new Set<AbsolutePath>()
       for (const directory of roots) {
-        if (!(yield* fs.isDir(directory))) continue
+        if (!(yield* fs.isDir(directory))) {
+          failedRoots.add(directory)
+          continue
+        }
+        const isBare =
+          (yield* fs.exists(path.join(directory, "HEAD")).pipe(Effect.orElseSucceed(() => false))) &&
+          !(yield* fs.exists(path.join(directory, ".git")).pipe(Effect.orElseSucceed(() => false)))
+        if (isBare) failedRoots.add(directory)
         for (const strategy of strategies) {
+          let unavailable = false
           const entries = yield* strategy.list(directory).pipe(
             Effect.mapError((error) => operationError(strategy.id, "list", error)),
-            Effect.catch((error) =>
-              Effect.logWarning("worktree discovery failed", { directory, strategy: strategy.id, error }).pipe(
-                Effect.as([]),
-              ),
-            ),
+            Effect.catch((error) => {
+              if (error instanceof DirectoryUnavailableError) {
+                unavailable = true
+                return Effect.succeed([] as Worktree.ListEntry[])
+              }
+              return Effect.logWarning("worktree discovery failed", { directory, strategy: strategy.id, error }).pipe(
+                Effect.as([] as Worktree.ListEntry[]),
+              )
+            }),
           )
+          if (unavailable) {
+            failedRoots.add(directory)
+            continue
+          }
           for (const entry of entries) {
             const directory = yield* canonical(fs, entry.directory).pipe(
               Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.undefined),
@@ -344,8 +347,41 @@ const layer = Layer.effect(
           }
         }
       }
+      if (failedRoots.has(row.worktree)) {
+        const nextRoot =
+          Array.from(discovered.keys())[0] ??
+          checked.find((item) => item.exists && !failedRoots.has(item.directory))?.directory
+        if (nextRoot) {
+          yield* db
+            .update(ProjectTable)
+            .set({ worktree: nextRoot })
+            .where(eq(ProjectTable.id, input.projectID))
+            .run()
+            .pipe(Effect.orDie)
+          row.worktree = nextRoot
+          discovered.set(nextRoot, { directory: nextRoot, strategy: undefined })
+          yield* bus.publish(ProjectSchema.Event.Updated, {
+            id: row.id,
+            canonical: nextRoot,
+            sandboxes: row.sandboxes,
+            time: {
+              created: row.time_created,
+              updated: row.time_updated,
+              active: row.time_active,
+              archived: row.time_archived ?? undefined,
+            },
+          })
+        } else {
+          failedRoots.delete(row.worktree)
+        }
+      }
       const removed = checked
-        .filter((item) => !item.exists || (item.directory !== row.worktree && foreign.has(item.directory)))
+        .filter(
+          (item) =>
+            !item.exists ||
+            (failedRoots.has(item.directory) && item.directory !== row.worktree) ||
+            (item.directory !== row.worktree && foreign.has(item.directory)),
+        )
         .map((item) => item.directory)
       const changes = yield* db
         .transaction((tx) =>

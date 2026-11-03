@@ -99,23 +99,28 @@ describe("Git worktrees", () => {
     }),
   )
 
-  it.live("omits the bare repository entry when listing worktrees", () =>
+  it.live("omits the bare repository entry and designates the first checkout as main", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped()
       const source = path.join(root.path, "source")
       const bare = path.join(root.path, "bare.git")
-      const linked = path.join(root.path, "linked")
+      const first = path.join(root.path, "first")
+      const second = path.join(root.path, "second")
       yield* Effect.promise(async () => {
         await initRepo(source)
         await $`git clone -q --bare ${source} ${bare}`.quiet()
-        await $`git worktree add -q --detach ${linked}`.cwd(bare).quiet()
+        await $`git worktree add -q --detach ${first}`.cwd(bare).quiet()
+        await $`git worktree add -q --detach ${second}`.cwd(bare).quiet()
       })
       const git = yield* Git.Service
-      const repo = yield* git.repo.discover(AbsolutePath.make(linked))
+      const repo = yield* git.repo.discover(AbsolutePath.make(first))
       if (!repo) throw new Error("Repository not found")
 
       expect((yield* git.worktree.list(repo)).map((entry) => ({ directory: entry.directory, kind: entry.kind }))).toEqual(
-        [{ directory: AbsolutePath.make(yield* Effect.promise(() => fs.realpath(linked))), kind: "linked" }],
+        [
+          { directory: AbsolutePath.make(yield* Effect.promise(() => fs.realpath(first))), kind: "main" },
+          { directory: AbsolutePath.make(yield* Effect.promise(() => fs.realpath(second))), kind: "linked" },
+        ],
       )
     }),
   )
