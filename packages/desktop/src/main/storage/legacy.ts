@@ -14,7 +14,7 @@ type Candidate = { name: string; path: string; modified: number; entries: Record
 
 // Before the state table existed, every namespace the renderer persisted was an electron-store
 // JSON file in userData. Copy them into SQLite once and remove them; this is the only place the
-// storage layer touches the filesystem, and it runs before the first renderer request.
+// storage layer touches the filesystem, and it starts before the first renderer request.
 export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")(function* (
   db: Database,
   userData: string,
