@@ -2,6 +2,10 @@ import { additionalIcons, additionalIconViewBox } from "./icon/additional-icons"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  pin: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5 2.5H11M6 2.5V6L3.5 8.5V10H12.5V8.5L10 6V2.5M8 10V14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,

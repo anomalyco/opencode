@@ -3,9 +3,9 @@
   flex: none;
   min-height: 0;
   flex-direction: column;
-  padding-block-end: 8px;
-  margin-block-end: 8px;
-  border-bottom: 1px solid var(--v2-border-border-muted);
+  padding-block-start: 8px;
+  margin-block-start: 8px;
+  border-top: 1px solid var(--v2-border-border-muted);
 
   [data-slot="active-sessions-header"] {
     display: flex;
@@ -21,7 +21,8 @@
 
   [data-slot="active-sessions-list"] {
     min-height: 0;
-    max-height: min(288px, 40dvh);
+    /* Five 36px rows, while preserving project navigation in short windows. */
+    max-height: min(180px, 30dvh);
     overflow-y: auto;
     overscroll-behavior: contain;
   }

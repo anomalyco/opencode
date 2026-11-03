@@ -7,7 +7,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { projectSettingsKey, useSettings } from "@/settings/model"
-import { sessionRequests } from "@/shell/layout/project-avatar-state"
+import { sessionBackgroundShells, sessionRequests } from "@/shell/layout/project-avatar-state"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { sessionLastRunLabel, sessionTabTitle } from "./tab-title"
@@ -16,7 +16,7 @@ import { createSessionBranches } from "./session-branches"
 import { pathKey } from "@/workspaces/path-key"
 import "./active-sessions.css"
 
-/** The server-wide active index includes running sessions without an open tab, including child sessions. */
+/** Execution and collected Shell activity include sessions without an open tab, including child sessions. */
 export function ActiveSessions() {
   const global = useGlobal()
   const language = useLanguage()
@@ -37,7 +37,7 @@ export function ActiveSessions() {
 
       if (!ctx || ctx.sdk.connection.status() !== "connected") return []
 
-      return ctx.data.session.active().map((id) => ({
+      return [...new Set([...ctx.data.session.active(), ...ctx.data.shell.activeSessions()])].map((id) => ({
         key: JSON.stringify([ServerConnection.key(item.conn), id]),
         id,
         server: ServerConnection.key(item.conn),
@@ -117,8 +117,19 @@ export function ActiveSessions() {
                 }
                 const duration = () => {
                   const value = session()
-                  return value ? workingDuration(value, clock.now, language) : undefined
+                  const starts = [
+                    ...(entry().ctx.data.session.status(entry().id) === "running" ? [value?.time.busy ?? 0] : []),
+                    ...shells().map((shell) => shell.time.started),
+                  ].filter((time) => time > 0)
+                  return starts.length
+                    ? workingDuration({ time: { busy: Math.min(...starts) } }, clock.now, language)
+                    : undefined
                 }
+                const shells = () => sessionBackgroundShells(entry().ctx.data, entry().id)
+                const background = () =>
+                  entry().ctx.data.session.status(entry().id) !== "running" && shells().length > 0
+                const summary = () =>
+                  shells().length ? language.plural("sidebar.running.shells", shells().length) : undefined
 
                 const status = createMemo(() => {
                   const value = entry()
@@ -155,6 +166,8 @@ export function ActiveSessions() {
                       branch(),
                       session()?.location.directory,
                       sessionLastRunLabel(session()?.time, language),
+                      summary(),
+                      ...shells().map((shell) => shell.command),
                     ]
                       .filter(Boolean)
                       .join("\n")}
@@ -185,7 +198,13 @@ export function ActiveSessions() {
                           : language.t(`sidebar.inbox.status.${status()}`)
                       }
                     >
-                      <span class="sr-only">{language.t(`sidebar.inbox.status.${status()}`)}</span>
+                      <span class="sr-only">
+                        {language.t(
+                          background() && status() === "working"
+                            ? "sidebar.running.background"
+                            : `sidebar.inbox.status.${status()}`,
+                        )}
+                      </span>
                       <span aria-hidden="true">
                         {status() === "working"
                           ? (duration() ?? language.t("sidebar.inbox.status.working"))
@@ -195,6 +214,12 @@ export function ActiveSessions() {
                     <span data-slot="active-session-project" dir="auto">
                       <Show when={project()} fallback={language.t("common.loading")}>
                         <span class="min-w-0 truncate">{projectName()}</span>
+                      </Show>
+                      <Show when={background()}>
+                        <span aria-hidden="true">·</span>
+                        <span class="truncate" title={summary()}>
+                          {language.t("sidebar.running.background")}
+                        </span>
                       </Show>
                       <Show when={branch() || worktree()}>
                         <span aria-hidden="true">·</span>

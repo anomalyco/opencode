@@ -349,9 +349,9 @@ test("a server whose saved password changes works with the new password", async 
   await remote.getByRole("button", { name: "More options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
   const editor = page.getByRole("dialog", { name: "Edit server" })
-  await editor.getByPlaceholder("password").fill("new-password")
-  // The server now rejects the old password, as after `opencode service set password`.
+  // Rotate first: typing previews the new credentials, and Save reuses that health check.
   accepted.password = "new-password"
+  await editor.getByPlaceholder("password").fill("new-password")
   await editor.getByRole("button", { name: "Save", exact: true }).click()
   await expect(editor).toHaveCount(0)
 

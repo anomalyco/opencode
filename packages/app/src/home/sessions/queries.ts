@@ -60,7 +60,7 @@ export function createSessionIndexes(connections: Accessor<{ conn: ServerConnect
   }))
 
   createEffect(() => {
-    connections().forEach((item) => {
+    connections().forEach((item, index) => {
       onCleanup(
         item.ctx.data.on("session.deleted", (event) => {
           queryClient.setQueryData<SessionInfo[]>(["home-sessions", item.conn], (current) =>
@@ -69,6 +69,14 @@ export function createSessionIndexes(connections: Accessor<{ conn: ServerConnect
           queryClient.setQueryData<HomeSessionInventory>(["home-session-inventory", item.conn], (current) =>
             current?.filter((session) => session.id !== event.data.sessionID),
           )
+        }),
+      )
+      // A collapsed history row may only have an index snapshot; Data does not refresh unloaded sessions on view.
+      onCleanup(
+        item.ctx.data.on("session.viewed", (event) => {
+          const id = event.data.sessionID
+          if (item.ctx.data.session.get(id) || !queries[index]?.data?.()?.some((session) => session.id === id)) return
+          void item.ctx.data.session.sync(id).catch(() => undefined)
         }),
       )
     })

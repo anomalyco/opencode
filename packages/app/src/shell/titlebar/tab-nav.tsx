@@ -453,7 +453,7 @@ export function TabNavItem(props: {
             {language.t("common.rename")}
           </Menu.Item>
           <Show when={props.closable !== false}>
-            <Menu.Item onSelect={props.onClose}>{props.closeLabel ?? language.t("common.closeTab")}</Menu.Item>
+            <Menu.Item onSelect={props.onClose}>{props.closeLabel ?? language.t("common.close")}</Menu.Item>
           </Show>
           <Menu.Separator />
           <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>

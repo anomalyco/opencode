@@ -43,6 +43,8 @@ import { previousSessionCommand, nextSessionCommand } from "./tab-strip"
 
 const PROJECT_SESSION_LIMIT = 5
 
+type SessionTabStatus = { unread: boolean; attention: boolean; loading: boolean }
+
 function SessionTabSlot(props: {
   tab: SessionTab
   id: string
@@ -137,8 +139,8 @@ function SessionTabEntry(props: {
   opened?: boolean
   dismissible?: boolean
   serverCtx: ServerCtx | undefined
+  status: SessionTabStatus | undefined
   onVisibleChange: (visible: boolean) => void
-  onUnreadChange: (unread: boolean) => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
@@ -151,16 +153,6 @@ function SessionTabEntry(props: {
   const pending = createMemo(() => tabs.pendingSession(props.tab.server, props.tab.sessionId))
   const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
-
-  const status = useSessionTabAvatarState(
-    () => props.tab.server,
-    () => props.tab.sessionId,
-    () => true,
-    () => props.indexed,
-  )
-
-  // A busy session shows its progress indicator instead of the unread dot.
-  const unread = createMemo(() => status.unread() && !status.loading())
 
   const [loadedSession] = createResource(
     () => {
@@ -259,7 +251,6 @@ function SessionTabEntry(props: {
   }
 
   createEffect(() => props.onVisibleChange(visible()))
-  createEffect(() => props.onUnreadChange(unread()))
 
   createEffect(() => {
     const ctx = props.serverCtx
@@ -357,9 +348,9 @@ function SessionTabEntry(props: {
         closeLabel={props.opened === false ? language.t("sidebar.recent.hide") : undefined}
         session={session()}
         preparing={!!pending()}
-        unread={unread()}
-        attention={status.attention()}
-        loading={status.loading()}
+        unread={!!props.status?.unread}
+        attention={!!props.status?.attention}
+        loading={!!props.status?.loading}
         fallbackTitle={
           pending()
             ? language.t("session.tab.session")
@@ -451,6 +442,7 @@ export function SidebarSessions(props: {
   const vertical = () => props.orientation === "vertical"
   const grouped = () => vertical() && props.grouping && settings.appearance.tabGrouping() === "project"
   let listRef!: HTMLDivElement
+  let boundsRef!: HTMLDivElement
   let scrollRef!: HTMLDivElement
   // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
   const [fade, setFade] = createStore({ top: 0, bottom: 0 })
@@ -468,8 +460,9 @@ export function SidebarSessions(props: {
     if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
   })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
-  const [unread, setUnread] = createStore<Record<string, boolean>>({})
+  const [status, setStatus] = createStore<Record<string, SessionTabStatus | undefined>>({})
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const collator = createMemo(() => new Intl.Collator(language.intl(), { numeric: true, sensitivity: "base" }))
 
   const servers = useServers()
   const sidebar = props.grouping
@@ -480,6 +473,9 @@ export function SidebarSessions(props: {
     : undefined
   const collapsed = props.grouping
     ? persisted(Persist.window("sidebar.collapsedProjects"), Schema.Array(Schema.String), [])
+    : undefined
+  const pinned = props.grouping
+    ? persisted(Persist.window("sidebar.pinnedProjects"), Schema.Array(Schema.String), [])
     : undefined
   const indexed = createMemo(
     () =>
@@ -616,16 +612,31 @@ export function SidebarSessions(props: {
         tabs: [tab],
       })
     })
-    return [...result.values()].map((group) => {
-      const sessions = group.tabs.filter((tab) => tab.type === "session")
-      return {
-        ...group,
-        recent: sessions.length,
-        total: new Set([...(totals.get(group.key) ?? []), ...sessions.map((tab) => tab.sessionId)]).size,
-      }
-    })
+    const pins = new Set(pinned?.[0])
+    return [...result.values()]
+      .map((group) => {
+        const sessions = group.tabs.filter((tab) => tab.type === "session")
+        return {
+          ...group,
+          recent: sessions.length,
+          total: new Set([...(totals.get(group.key) ?? []), ...sessions.map((tab) => tab.sessionId)]).size,
+        }
+      })
+      .toSorted(
+        (a, b) =>
+          Number(pins.has(b.key)) - Number(pins.has(a.key)) ||
+          collator().compare(a.name, b.name) ||
+          servers.visible.findIndex((conn) => ServerConnection.key(conn) === a.connection) -
+            servers.visible.findIndex((conn) => ServerConnection.key(conn) === b.connection) ||
+          a.key.localeCompare(b.key),
+      )
   })
   const groupsByKey = createMemo(() => new Map(groups().map((group) => [group.key, group])))
+  const pinnedGroups = createMemo(() =>
+    groups()
+      .filter((group) => pinned?.[0].includes(group.key))
+      .map((group) => group.key),
+  )
   const projectTabs = createMemo(
     () =>
       new Map(
@@ -648,10 +659,13 @@ export function SidebarSessions(props: {
   const visibleTabs = createMemo(() => orderedTabs().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
-  // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
+  const isUnread = (tab: Tab) =>
+    (!props.currentTab || tabKey(tab) !== tabKey(props.currentTab)) && !!status[tabKey(tab)]?.unread
+
+  // Include collapsed projects and rows outside the recent preview, while excluding the current session.
   createEffect(() => {
     if (!vertical()) return
-    setSidebarUnread(displayedTabs().some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]))
+    setSidebarUnread(displayedTabs().some(isUnread))
     onCleanup(() => setSidebarUnread(false))
   })
 
@@ -689,14 +703,14 @@ export function SidebarSessions(props: {
       category: language.t("command.category.session"),
       title: language.t("command.session.previous.unseen"),
       keybind: "shift+alt+arrowup",
-      onSelect: () => selectAdjacentTab(-1, (key) => !!unread[key]),
+      onSelect: () => selectAdjacentTab(-1, (key) => !!status[key]?.unread),
     },
     {
       id: "session.next.unseen",
       category: language.t("command.category.session"),
       title: language.t("command.session.next.unseen"),
       keybind: "shift+alt+arrowdown",
-      onSelect: () => selectAdjacentTab(1, (key) => !!unread[key]),
+      onSelect: () => selectAdjacentTab(1, (key) => !!status[key]?.unread),
     },
   ])
 
@@ -737,6 +751,8 @@ export function SidebarSessions(props: {
     let ref!: HTMLDivElement
     // Live metadata refreshes must not reset the sortable's in-flight index when the row order is unchanged.
     const visibleIndex = createMemo(() => visibleTabs().findIndex((item) => tabKey(item) === id))
+    // Hover reads this outside rendering, so own its computation with the row.
+    const active = createMemo(() => !!props.currentTab && tabKey(props.currentTab) === id)
     const group = () => tabGroups().get(id)
 
     const element = () => ref
@@ -759,15 +775,15 @@ export function SidebarSessions(props: {
             currentTab={props.currentTab}
             id={id}
             index={visibleIndex()}
-            active={!!props.currentTab && tabKey(props.currentTab) === id}
+            active={active()}
             orientation={vertical() ? "vertical" : "horizontal"}
             sortGroup={group()?.key}
             serverCtx={serverCtx()}
+            status={status[id]}
             indexed={indexed().get(id)?.session}
             opened={!sidebar || opened().has(id)}
             dismissible={!!sidebar}
             onVisibleChange={(visible) => setVisibility(id, visible)}
-            onUnreadChange={(value) => setUnread(id, value)}
             onNavigate={(element) => {
               ref = element
               navigate(tab, element)
@@ -787,10 +803,10 @@ export function SidebarSessions(props: {
           tab={tab}
           id={id}
           index={visibleIndex()}
-          active={!!props.currentTab && tabKey(props.currentTab) === id}
+          active={active()}
           orientation={vertical() ? "vertical" : "horizontal"}
           sortGroup={group()?.key}
-          title={language.t("session.tab.session")}
+          title={language.t("sidebar.draft.unsent")}
           onNavigate={(element) => {
             ref = element
             navigate(tab, element)
@@ -801,98 +817,278 @@ export function SidebarSessions(props: {
     )
   }
 
+  const renderGroup = (key: string) => (
+    <>
+      <Show when={grouped() && groupsByKey().get(key)}>
+        {(group) => (
+          <div
+            class="sidebar-project-header mt-3 mb-1 min-w-0 rounded-md bg-v2-background-bg-layer-02 px-1.5 py-1"
+            title={[
+              group().name,
+              group().directory,
+              group().server,
+              language.plural("sidebar.recent.count", group().total, {
+                recent: group().recent,
+                shown:
+                  projectTabs()
+                    .get(key)
+                    ?.filter((tab) => tab.type === "session").length ?? 0,
+              }),
+            ]
+              .filter(Boolean)
+              .join("\n")}
+          >
+            <div class="relative flex h-5 min-w-0 items-center">
+              <h3
+                aria-label={group().name}
+                class="min-w-0 flex-1 text-[13px] leading-4 font-medium text-v2-text-text-base"
+              >
+                <button
+                  type="button"
+                  class="flex w-full min-w-0 items-center gap-1 rounded-sm text-start outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
+                  aria-label={language.t(
+                    collapsed?.[0].includes(key) ? "sidebar.project.expand" : "sidebar.project.collapse",
+                    { project: group().name },
+                  )}
+                  aria-expanded={!collapsed?.[0].includes(key)}
+                  onClick={() => {
+                    if (!collapsed?.[3]()) return
+                    collapsed[1]((keys) => (keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]))
+                  }}
+                >
+                  <Icon name={collapsed?.[0].includes(key) ? "chevron-right" : "chevron-down"} class="shrink-0" />
+                  <Show when={group().tabs.some(isUnread)}>
+                    <span
+                      role="img"
+                      aria-label={language.t("sidebar.project.unread")}
+                      class="size-1.5 shrink-0 rounded-full bg-v2-background-bg-accent"
+                    />
+                  </Show>
+                  <span dir="auto" class="min-w-0 flex-1 truncate">
+                    {group().name}
+                  </span>
+                </button>
+              </h3>
+              <div class="sidebar-project-actions absolute inset-y-0 end-0 z-10 flex items-center gap-2 bg-v2-background-bg-layer-02">
+                <span class="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-v2-text-text-faint">
+                  {group().recent}/{group().total}
+                </span>
+                <Show when={group().directory}>
+                  {(directory) => (
+                    <IconButton
+                      size="small"
+                      variant="ghost-muted"
+                      class="sidebar-project-action"
+                      icon={<Icon name="plus-small" />}
+                      aria-label={language.t("sidebar.project.newSession", { project: group().name })}
+                      title={language.t("sidebar.project.newSession", { project: group().name })}
+                      onClick={() => {
+                        collapsed?.[1]((keys) => keys.filter((item) => item !== key))
+                        global.serverCtx(group().connection)?.projects.touch(directory())
+                        void tabs.newDraft({ server: group().connection, directory: directory() })
+                      }}
+                    />
+                  )}
+                </Show>
+                <IconButton
+                  size="small"
+                  variant="ghost-muted"
+                  class="sidebar-project-action"
+                  state={pinned?.[0].includes(key) ? "pressed" : undefined}
+                  icon={<Icon name="pin" />}
+                  disabled={!pinned?.[3]()}
+                  aria-pressed={!!pinned?.[0].includes(key)}
+                  aria-label={language.t(pinned?.[0].includes(key) ? "sidebar.project.unpin" : "sidebar.project.pin", {
+                    project: group().name,
+                  })}
+                  title={language.t(pinned?.[0].includes(key) ? "sidebar.project.unpin" : "sidebar.project.pin", {
+                    project: group().name,
+                  })}
+                  onClick={() =>
+                    pinned?.[1]((keys) => (keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key]))
+                  }
+                />
+              </div>
+            </div>
+            <Show when={group().server}>
+              <div dir="auto" class="truncate text-[12px] leading-4 text-v2-text-text-faint">
+                {group().server}
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+      <Show when={grouped()} fallback={<For each={displayedTabs()}>{renderTab}</For>}>
+        <div class="flex min-w-0 flex-col gap-1 ps-2">
+          <For each={projectTabs().get(key)}>{renderTab}</For>
+        </div>
+      </Show>
+      <Show when={grouped() && groupsByKey().get(key)}>
+        {(group) => (
+          <Show when={!collapsed?.[0].includes(key) && group().tabs.length > PROJECT_SESSION_LIMIT}>
+            <Button
+              variant="ghost-muted"
+              size="small"
+              class="h-7 shrink-0 justify-start"
+              aria-expanded={!!expanded[key]}
+              aria-label={
+                expanded[key]
+                  ? language.t("sidebar.recent.collapse", { project: group().name })
+                  : language.plural("sidebar.recent.expand", group().tabs.length - PROJECT_SESSION_LIMIT, {
+                      project: group().name,
+                    })
+              }
+              onClick={() => setExpanded(key, !expanded[key])}
+            >
+              {expanded[key]
+                ? language.t("sidebar.recent.less")
+                : language.plural("sidebar.recent.more", group().tabs.length - PROJECT_SESSION_LIMIT)}
+            </Button>
+          </Show>
+        )}
+      </Show>
+    </>
+  )
+
   return (
     <div
+      ref={boundsRef}
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
       data-orientation={vertical() ? "vertical" : "horizontal"}
       class="sidebar-sessions relative min-w-0"
       classList={{ "min-h-0 overflow-hidden": vertical() }}
     >
-      <Show when={vertical() && props.grouping}>
-        <div class="mb-2 flex shrink-0 items-center gap-2 [app-region:no-drag]">
-          <h2 class="shrink-0 text-[13px] leading-4 font-medium text-v2-text-text-muted">
-            {language.t("sidebar.recent.title")}
-          </h2>
-          <Select
-            options={["none", "project"] as const}
-            current={settings.appearance.tabGrouping()}
-            aria-label={language.t("sidebar.grouping.label")}
-            label={(option) => language.t(`sidebar.grouping.${option}`)}
-            onSelect={(option) => option && settings.appearance.setTabGrouping(option)}
-            class="min-w-0 flex-1"
-          />
-        </div>
-      </Show>
-      <div
-        ref={scrollRef}
-        data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
-        data-scrollable
-        class="flex min-w-0 no-scrollbar [app-region:no-drag]"
-        classList={{
-          "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
-          "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+      {/* Status tracking must outlive rows hidden by a collapsed project or the recent preview. */}
+      <For each={displayedTabs()}>
+        {(tab) => {
+          if (tab.type !== "session") return
+          const id = tabKey(tab)
+          const state = useSessionTabAvatarState(
+            () => tab.server,
+            () => tab.sessionId,
+            () => true,
+            () => indexed().get(id)?.session,
+          )
+          createEffect(() =>
+            setStatus(id, {
+              unread: state.unread() && !state.loading(),
+              attention: state.attention(),
+              loading: state.loading(),
+            }),
+          )
+          onCleanup(() => setStatus(id, undefined))
+          return null
         }}
-        style={
-          vertical()
-            ? { "--vertical-tabs-fade-top": `${fade.top}px`, "--vertical-tabs-fade-bottom": `${fade.bottom}px` }
-            : undefined
-        }
-        onScroll={() => {
-          if (vertical()) measureFade()
+      </For>
+      <DragDropProvider
+        sensors={[
+          PointerSensor.configure({
+            activationConstraints: (event) =>
+              event.pointerType === "touch"
+                ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                : [new PointerActivationConstraints.Distance({ value: 4 })],
+            preventActivation: (event) =>
+              event.target instanceof Element &&
+              !!event.target.closest(
+                '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+              ),
+          }),
+        ]}
+        modifiers={[
+          vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
+          RestrictToElement.configure({ element: () => (grouped() ? boundsRef : listRef) }),
+        ]}
+        plugins={(defaults) => [
+          ...defaults.filter((plugin) => plugin !== Accessibility),
+          AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
+          Feedback.configure({ dropAnimation: null }),
+        ]}
+        onDragStart={(event) => {
+          const source = event.operation.source
+
+          if (!source) return
+          const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+
+          if (!tab) return
+
+          if (vertical()) return
+          const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+          props.onNavigate(tab, tabEl ?? undefined)
+        }}
+        onDragEnd={(event) => {
+          const source = event.operation.source
+
+          if (event.canceled || !isSortable(source)) return
+          const group = tabGroups().get(source.id.toString())
+          const visible = visibleTabIds()
+          const current = group ? visible.filter((key) => tabGroups().get(key) === group) : visible
+          const from = group ? current.indexOf(source.id.toString()) : source.initialIndex
+          const to = group ? current.indexOf(visible[source.index]) : source.index
+
+          if (from !== -1 && to !== -1 && from !== to) {
+            const keys = mergeVisibleTabOrder(displayedTabs().map(tabKey), current, arrayMove(current, from, to))
+            if (!sidebarOrder) return props.onReorder(keys)
+            const save = () => sidebarOrder[1](() => keys)
+            if (sidebarOrder[3]()) return save()
+            void sidebarOrder[3].promise?.then(save)
+          }
         }}
       >
-        <DragDropProvider
-          sensors={[
-            PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
-              preventActivation: (event) =>
-                event.target instanceof Element &&
-                !!event.target.closest(
-                  '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
-                ),
-            }),
-          ]}
-          modifiers={[
-            vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
-            RestrictToElement.configure({ element: () => listRef }),
-          ]}
-          plugins={(defaults) => [
-            ...defaults.filter((plugin) => plugin !== Accessibility),
-            AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
-            Feedback.configure({ dropAnimation: null }),
-          ]}
-          onDragStart={(event) => {
-            const source = event.operation.source
-
-            if (!source) return
-            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
-
-            if (!tab) return
-
-            if (vertical()) return
-            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
-            props.onNavigate(tab, tabEl ?? undefined)
+        <Show when={grouped() && pinnedGroups().length > 0}>
+          <section
+            aria-label={language.t("sidebar.pinned.title")}
+            class="flex min-h-0 max-h-[40%] shrink-0 flex-col pb-3"
+          >
+            <h2 class="mb-1 shrink-0 text-[13px] leading-4 font-medium text-v2-text-text-muted">
+              {language.t("sidebar.pinned.title")}
+            </h2>
+            <div
+              data-slot="sidebar-pinned-scroll"
+              data-scrollable
+              class="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+            >
+              <div
+                data-titlebar-tab-list
+                data-orientation="vertical"
+                class="flex w-full min-w-0 flex-col items-stretch"
+              >
+                <For each={pinnedGroups()}>{renderGroup}</For>
+              </div>
+            </div>
+          </section>
+        </Show>
+        <Show when={vertical() && props.grouping}>
+          <div class="mb-2 flex shrink-0 items-center gap-2 [app-region:no-drag]">
+            <h2 class="shrink-0 text-[13px] leading-4 font-medium text-v2-text-text-muted">
+              {language.t("sidebar.recent.title")}
+            </h2>
+            <Select
+              options={["none", "project"] as const}
+              current={settings.appearance.tabGrouping()}
+              aria-label={language.t("sidebar.grouping.label")}
+              label={(option) => language.t(`sidebar.grouping.${option}`)}
+              onSelect={(option) => option && settings.appearance.setTabGrouping(option)}
+              class="min-w-0 flex-1"
+            />
+          </div>
+        </Show>
+        <div
+          ref={scrollRef}
+          data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
+          data-scrollable
+          class="flex min-w-0 [app-region:no-drag]"
+          classList={{
+            "no-scrollbar": !props.grouping,
+            "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
+            "min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden": vertical(),
           }}
-          onDragEnd={(event) => {
-            const source = event.operation.source
-
-            if (event.canceled || !isSortable(source)) return
-            const group = tabGroups().get(source.id.toString())
-            const visible = visibleTabIds()
-            const current = group ? visible.filter((key) => tabGroups().get(key) === group) : visible
-            const from = group ? current.indexOf(source.id.toString()) : source.initialIndex
-            const to = group ? current.indexOf(visible[source.index]) : source.index
-
-            if (from !== -1 && to !== -1 && from !== to) {
-              const keys = mergeVisibleTabOrder(displayedTabs().map(tabKey), current, arrayMove(current, from, to))
-              if (!sidebarOrder) return props.onReorder(keys)
-              const save = () => sidebarOrder[1](() => keys)
-              if (sidebarOrder[3]()) return save()
-              void sidebarOrder[3].promise?.then(save)
-            }
+          style={
+            vertical()
+              ? { "--vertical-tabs-fade-top": `${fade.top}px`, "--vertical-tabs-fade-bottom": `${fade.bottom}px` }
+              : undefined
+          }
+          onScroll={() => {
+            if (vertical()) measureFade()
           }}
         >
           <div
@@ -902,120 +1098,18 @@ export function SidebarSessions(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={grouped() ? groups().map((group) => group.key) : [""]}>
-              {(key) => (
-                <>
-                  <Show when={grouped() && groupsByKey().get(key)}>
-                    {(group) => (
-                      <div
-                        class="mt-3 mb-1 min-w-0 rounded-md bg-v2-background-bg-layer-02 px-1.5 py-1"
-                        title={[
-                          group().name,
-                          group().directory,
-                          group().server,
-                          language.plural("sidebar.recent.count", group().total, {
-                            recent: group().recent,
-                            shown:
-                              projectTabs()
-                                .get(key)
-                                ?.filter((tab) => tab.type === "session").length ?? 0,
-                          }),
-                        ]
-                          .filter(Boolean)
-                          .join("\n")}
-                      >
-                        <div class="flex min-w-0 items-center gap-2">
-                          <h3
-                            aria-label={group().name}
-                            class="min-w-0 flex-1 text-[13px] leading-4 font-medium text-v2-text-text-base"
-                          >
-                            <button
-                              type="button"
-                              class="flex w-full min-w-0 items-center gap-1 rounded-sm text-start outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-focus"
-                              aria-label={language.t(
-                                collapsed?.[0].includes(key) ? "sidebar.project.expand" : "sidebar.project.collapse",
-                                { project: group().name },
-                              )}
-                              aria-expanded={!collapsed?.[0].includes(key)}
-                              onClick={() => {
-                                if (!collapsed?.[3]()) return
-                                collapsed[1]((keys) =>
-                                  keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key],
-                                )
-                              }}
-                            >
-                              <Icon
-                                name={collapsed?.[0].includes(key) ? "chevron-right" : "chevron-down"}
-                                class="shrink-0"
-                              />
-                              <span dir="auto" class="min-w-0 flex-1 truncate">
-                                {group().name}
-                              </span>
-                            </button>
-                          </h3>
-                          <span class="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-v2-text-text-faint">
-                            {group().recent}/{group().total}
-                          </span>
-                          <Show when={group().directory}>
-                            {(directory) => (
-                              <IconButton
-                                size="small"
-                                variant="ghost-muted"
-                                icon={<Icon name="plus-small" />}
-                                aria-label={language.t("sidebar.project.newSession", { project: group().name })}
-                                title={language.t("sidebar.project.newSession", { project: group().name })}
-                                onClick={() => {
-                                  collapsed?.[1]((keys) => keys.filter((item) => item !== key))
-                                  global.serverCtx(group().connection)?.projects.touch(directory())
-                                  void tabs.newDraft({ server: group().connection, directory: directory() })
-                                }}
-                              />
-                            )}
-                          </Show>
-                        </div>
-                        <Show when={group().server}>
-                          <div dir="auto" class="truncate text-[12px] leading-4 text-v2-text-text-faint">
-                            {group().server}
-                          </div>
-                        </Show>
-                      </div>
-                    )}
-                  </Show>
-                  <Show when={grouped()} fallback={<For each={displayedTabs()}>{renderTab}</For>}>
-                    <div class="flex min-w-0 flex-col gap-1 ps-2">
-                      <For each={projectTabs().get(key)}>{renderTab}</For>
-                    </div>
-                  </Show>
-                  <Show when={grouped() && groupsByKey().get(key)}>
-                    {(group) => (
-                      <Show when={!collapsed?.[0].includes(key) && group().tabs.length > PROJECT_SESSION_LIMIT}>
-                        <Button
-                          variant="ghost-muted"
-                          size="small"
-                          class="h-7 shrink-0 justify-start"
-                          aria-expanded={!!expanded[key]}
-                          aria-label={
-                            expanded[key]
-                              ? language.t("sidebar.recent.collapse", { project: group().name })
-                              : language.plural("sidebar.recent.expand", group().tabs.length - PROJECT_SESSION_LIMIT, {
-                                  project: group().name,
-                                })
-                          }
-                          onClick={() => setExpanded(key, !expanded[key])}
-                        >
-                          {expanded[key]
-                            ? language.t("sidebar.recent.less")
-                            : language.plural("sidebar.recent.more", group().tabs.length - PROJECT_SESSION_LIMIT)}
-                        </Button>
-                      </Show>
-                    )}
-                  </Show>
-                </>
-              )}
-            </For>
+            <Show when={grouped()} fallback={<For each={displayedTabs()}>{renderTab}</For>}>
+              <For
+                each={groups()
+                  .filter((group) => !pinned?.[0].includes(group.key))
+                  .map((group) => group.key)}
+              >
+                {renderGroup}
+              </For>
+            </Show>
           </div>
-        </DragDropProvider>
-      </div>
+        </div>
+      </DragDropProvider>
       <Show when={!vertical()}>
         <div
           data-slot="titlebar-tabs-fade-left"
