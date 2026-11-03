@@ -3,7 +3,7 @@ import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
 import { DateTime, Effect, Ref, Schema } from "effect"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { isFallbackTitle, withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
   AuthenticateResponse,
@@ -76,6 +76,18 @@ export function make(input: {
   const currentOptions = Effect.fnUntraced(function* (attached: Attached) {
     return configOptions(yield* input.catalog.get(attached.cwd), yield* Ref.get(attached.selection))
   })
+
+  // A titled session never triggers title generation again, so clients only learn its title
+  // when attaching to it. Fallback titles are left for the client to replace on the first rename.
+  const announceTitle = (session: Session.Info) =>
+    Effect.suspend(() =>
+      session.title !== undefined && !isFallbackTitle(session.title)
+        ? input.connection.sessionUpdate({
+            sessionId: session.id,
+            update: { sessionUpdate: "session_info_update", title: session.title },
+          })
+        : Effect.void,
+    )
 
   const withReload = <A>(attached: Attached, attempt: Effect.Effect<A, ACPError.Failure>) => {
     const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(attempt))
@@ -151,6 +163,7 @@ export function make(input: {
       const session = yield* getSession(params.sessionId, params.cwd)
       yield* ACPDirectories.activate(input.client, session, directories)
       const attachment = yield* input.sessions.attach(session, session.location.directory, mcpServers)
+      yield* announceTitle(session)
       return yield* ACPReplay.history(
         input.client,
         input.connection,
@@ -206,6 +219,7 @@ export function make(input: {
       const session = yield* getSession(params.sessionId, params.cwd)
       yield* ACPDirectories.activate(input.client, session, directories)
       const attachment = yield* input.sessions.attach(session, session.location.directory, mcpServers)
+      yield* announceTitle(session)
       return { configOptions: attachment.configOptions }
     }),
     closeSession: Effect.fnUntraced(function* (params) {
@@ -221,6 +235,7 @@ export function make(input: {
       // Forks inherit the source's grants; replace them with this request's.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attachment = yield* input.sessions.attach(forked, forked.location.directory, mcpServers)
+      yield* announceTitle(forked)
       return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }
     }),
     setSessionConfigOption: Effect.fnUntraced(function* (params) {

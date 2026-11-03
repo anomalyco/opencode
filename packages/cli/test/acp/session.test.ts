@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
+import { durableEvent, makeSession, rpcError, secondModel, startWire, turn, type Wire } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
@@ -120,16 +120,20 @@ describe("acp session lifecycle over the wire", () => {
     const params = { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }
 
     expect(await untilCommands(acp, () => acp.newSession())).toEqual(["response", "available_commands_update"])
+    // Titled sessions announce their stored title on attach, before any replay.
     expect(await untilCommands(acp, () => acp.request("session/load", params))).toEqual([
+      "session_info_update",
       "user_message_chunk",
       "response",
       "available_commands_update",
     ])
     expect(await untilCommands(acp, () => acp.request("session/resume", params))).toEqual([
+      "session_info_update",
       "response",
       "available_commands_update",
     ])
     expect(await untilCommands(acp, () => acp.request("session/fork", params))).toEqual([
+      "session_info_update",
       "response",
       "available_commands_update",
     ])
@@ -183,6 +187,85 @@ describe("acp session lifecycle over the wire", () => {
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
   })
+  test("pushes a session_info_update when the server renames an attached session", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+    const { sessionId } = await acp.newSession()
+
+    acp.server.send(durableEvent("session.renamed", { sessionID: sessionId, title: "Fix CSS bug on login page" }))
+
+    await acp.waitForUpdate(
+      (item) => item.sessionId === sessionId && item.update.sessionUpdate === "session_info_update",
+      "session_info_update for the generated title",
+    )
+    expect(titleUpdates(acp)).toEqual([
+      { sessionId, update: { sessionUpdate: "session_info_update", title: "Fix CSS bug on login page" } },
+    ])
+  })
+
+  test("forwards the title when generation completes mid-turn", async () => {
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) => [
+        ...turn(sessionID, id),
+        durableEvent("session.renamed", { sessionID, title: "Mid-turn title" }),
+      ],
+    })
+    await acp.initialize()
+    const { sessionId } = await acp.newSession()
+
+    await acp.prompt(sessionId, "hello")
+
+    await acp.waitForUpdate(
+      (item) => item.sessionId === sessionId && item.update.sessionUpdate === "session_info_update",
+      "session_info_update for the mid-turn title",
+    )
+    expect(titleUpdates(acp)).toEqual([
+      { sessionId, update: { sessionUpdate: "session_info_update", title: "Mid-turn title" } },
+    ])
+  })
+
+  test("ignores renames for sessions it does not have attached", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+    const { sessionId } = await acp.newSession()
+
+    // The untracked rename precedes the tracked one on one stream, so observing the second
+    // proves the first was processed and dropped.
+    acp.server.send(
+      durableEvent("session.renamed", { sessionID: "ses_unknown", title: "Untracked" }),
+      durableEvent("session.renamed", { sessionID: sessionId, title: "Tracked" }),
+    )
+
+    await acp.waitForUpdate(
+      (item) => item.sessionId === sessionId && item.update.sessionUpdate === "session_info_update",
+      "session_info_update for the attached session",
+    )
+    expect(titleUpdates(acp)).toEqual([
+      { sessionId, update: { sessionUpdate: "session_info_update", title: "Tracked" } },
+    ])
+  })
+
+  test("announces a stored title when loading, resuming, or forking a titled session", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_titled", makeSession("ses_titled"))
+    acp.server.sessions.set("ses_fallback", {
+      ...makeSession("ses_fallback"),
+      title: "New session - 2026-01-01T00:00:00.000Z",
+    })
+    await acp.initialize()
+
+    await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_titled", mcpServers: [] })
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_titled", mcpServers: [] })
+    const forked = await acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_titled", mcpServers: [] })
+    await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_fallback", mcpServers: [] })
+
+    expect(titleUpdates(acp)).toEqual([
+      { sessionId: "ses_titled", update: { sessionUpdate: "session_info_update", title: "Session ses_titled" } },
+      { sessionId: "ses_titled", update: { sessionUpdate: "session_info_update", title: "Session ses_titled" } },
+      { sessionId: forked.sessionId, update: { sessionUpdate: "session_info_update", title: "Session ses_titled" } },
+    ])
+  })
+
   test("rejects relative cwds, MCP-over-ACP, and SSE servers before creating or loading a session", async () => {
     await using acp = await startWire()
     acp.server.sessions.set("ses_saved", makeSession("ses_saved"))
@@ -227,6 +310,14 @@ const isSessionUpdate = Schema.is(
     params: Schema.Struct({ update: Schema.Struct({ sessionUpdate: Schema.String }) }),
   }),
 )
+
+function titleUpdates(acp: Wire) {
+  return acp.updates.flatMap((item) =>
+    item.update.sessionUpdate === "session_info_update" && "title" in item.update
+      ? [{ sessionId: item.sessionId, update: item.update }]
+      : [],
+  )
+}
 
 // Labels what the agent sends from the request until the commands that follow it, in wire order.
 async function untilCommands(acp: Wire, send: () => Promise<unknown>) {
