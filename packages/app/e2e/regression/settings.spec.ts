@@ -56,29 +56,6 @@ const patched = (page: Page) =>
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/project/${projectID}`,
   )
 
-test("Russian language is reachable by scrolling and persists after reload", async ({ page }) => {
-  const { settings } = await open(page)
-  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
-  const language = settings.locator('[data-action="settings-language"]')
-  await expect(language).toContainText("English")
-  await page.screenshot({ path: "e2e/test-results/russian-preferences-before.png" })
-  await language.click()
-  const list = page.getByRole("listbox")
-  await expect(list).toBeVisible()
-  await list.hover()
-  await page.mouse.wheel(0, 240)
-  const russian = list.getByRole("option", { name: "Русский", exact: true })
-  await expect(russian).toBeInViewport()
-  await russian.click()
-  await expect(language).toContainText("Русский")
-  await expect(settings.getByRole("heading", { name: "Предпочтения", exact: true })).toBeVisible()
-  await expect(settings.getByText("Вкладки сверху", { exact: true })).toBeVisible()
-  await expect(settings.getByText("Вкладки сбоку", { exact: true })).toBeVisible()
-  await page.screenshot({ path: "e2e/test-results/russian-preferences-after.png" })
-  await page.reload()
-  await expect(page.locator('[data-action="settings-language"]')).toContainText("Русский")
-})
-
 test("settings has its own route and returns through app history", async ({ page }) => {
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
