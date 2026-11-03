@@ -33,6 +33,8 @@ export interface Interface {
     sessionID: SessionSchema.ID,
     options?: {
       readonly resume?: boolean
+      /** Inherit the active parent's reason when cascading a tool interruption. */
+      readonly parentID?: SessionSchema.ID
     },
   ) => Effect.Effect<boolean>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
@@ -150,7 +152,11 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          const interrupted = yield* coordinator.interrupt(sessionID, "user")
+          // Unlabelled owner interruption follows the same shutdown default as terminal().
+          const reason = options?.parentID
+            ? ((yield* coordinator.interruptionReason(options.parentID)) ?? "shutdown")
+            : "user"
+          const interrupted = yield* coordinator.interrupt(sessionID, reason)
           if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
