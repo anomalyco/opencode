@@ -81,11 +81,3 @@ test("never appends a duplicate compaction row on a re-delivered session.compact
     setup.dispose()
   }
 })
-
-async function wait(check: () => boolean) {
-  const started = Date.now()
-  while (!check()) {
-    if (Date.now() - started > 2_000) throw new Error("Timed out waiting for condition")
-    await Bun.sleep(10)
-  }
-}
