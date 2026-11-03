@@ -75,6 +75,15 @@ describe("SessionSkills.loaded", () => {
     ])
   })
 
+  test("keeps the first name when the same skill is loaded repeatedly", () => {
+    const messages: SessionMessage.Info[] = [
+      assistant([skillTool("effect", "Effect")]),
+      assistant([skillTool("effect", "Effect renamed")]),
+    ]
+
+    expect(SessionSkills.loaded(messages, [])).toEqual([{ id: "effect", name: "Effect" }])
+  })
+
   test("ignores failed loads and unrelated tools, and deduplicates repeated loads", () => {
     const messages: SessionMessage.Info[] = [
       assistant([skillTool("effect", "Effect"), skillTool("broken", "Broken", "error")]),
@@ -109,6 +118,15 @@ describe("SessionSkills.loaded", () => {
     expect(
       SessionSkills.loaded(messages, Permission.merge([{ action: "skill", resource: "*", effect: "deny" }])),
     ).toEqual([])
+    expect(
+      SessionSkills.loaded(
+        messages,
+        Permission.merge([
+          { action: "skill", resource: "*", effect: "deny" },
+          { action: "skill", resource: "effect", effect: "allow" },
+        ]),
+      ),
+    ).toEqual([{ id: "effect", name: "Effect" }])
   })
 })
 

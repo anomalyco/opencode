@@ -32,6 +32,7 @@ import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Skill } from "@opencode/schema/skill"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionContext } from "@opencode/core/session/context"
 import { SessionGenerate } from "@opencode/core/session/generate"
@@ -357,6 +358,32 @@ it.effect(
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.webSocket).toBeUndefined()
       expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "carries loaded skills in the generation system prompt",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      const { db, bus, instructions, session, instances } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+      yield* bus.publish(SessionEvent.Skill.Activated, {
+        sessionID,
+        id: Skill.ID.make("effect"),
+        name: Skill.Name.make("Effect"),
+        text: "Effect guidance",
+      })
+
+      yield* SessionGenerate.generate({ session, prompt: "Continue" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
+
+      const system = requests[0]?.system.map((part) => part.text).join("\n")
+      expect(system).toContain("<loaded_skills>")
+      expect(system).toContain("<skill>Effect</skill>")
     }),
   { timeout: 15_000 },
 )

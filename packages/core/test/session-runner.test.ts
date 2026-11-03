@@ -44,6 +44,7 @@ import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Money } from "@opencode/schema/money"
+import { Skill } from "@opencode/schema/skill"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
@@ -1464,6 +1465,21 @@ describe("SessionRunnerLLM", () => {
       { role: "user", content: [{ type: "text", text: "Second" }] },
     ])
     expect(yield* s.messages).toHaveLength(2)
+  })
+
+  scenario("reminds the model about skills already in the conversation", function* (s) {
+    yield* s.bus.publish(SessionEvent.Skill.Activated, {
+      sessionID,
+      id: Skill.ID.make("effect"),
+      name: Skill.Name.make("Effect"),
+      text: "Effect guidance",
+    })
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(1)
+    const system = s.requests[0]?.system.map((part) => part.text).join("\n")
+    expect(system).toContain("<loaded_skills>")
+    expect(system).toContain("<skill>Effect</skill>")
   })
 
   scenario("marks the initial instruction sync as baseline metadata", function* (s) {
