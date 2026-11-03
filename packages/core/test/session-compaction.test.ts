@@ -476,7 +476,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
       id: "call_read",
       name: "read",
       state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
-      time: { created: DateTime.makeUnsafe(0) },
+      time: { created: DateTime.makeUnsafe(0), ran: DateTime.makeUnsafe(0) },
     })
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
