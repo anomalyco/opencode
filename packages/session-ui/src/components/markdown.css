@@ -395,10 +395,13 @@
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
+  /* A path turns into a link after an async existence check, so it keeps the plain code box and only fades its colours. */
   :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    padding: 0 2px;
-    background: none;
+    background-color: transparent;
+    transition:
+      color 200ms ease-out,
+      background-color 200ms ease-out;
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
@@ -496,6 +499,10 @@
 :root[data-motion="reduce"] {
   [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
     animation: none;
+  }
+
+  [data-component="markdown"] :not(pre) > code[data-inline-code-kind="path"] {
+    transition: none;
   }
 }
 
