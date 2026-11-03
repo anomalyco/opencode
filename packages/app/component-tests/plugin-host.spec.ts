@@ -1424,6 +1424,69 @@ story("startup enable state does not wait for the manager, and live updates beat
   })
 })
 
+story(
+  "a plugin theme joins the theme picker and leaves it with its plugin, keeping the user's choice",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountThemes, until, Theme } = await import(fixture)
+      const root = document.documentElement
+
+      const variant = {
+        palette: {
+          neutral: "#101418",
+          ink: "#e6edf3",
+          primary: "#009fff",
+          success: "#3fb950",
+          warning: "#d29922",
+          error: "#f85149",
+          info: "#a371f7",
+        },
+      }
+
+      const host = mountThemes({
+        definitions: [
+          {
+            id: "acme",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Theme, {
+                  $schema: "https://opencode.ai/desktop-theme.json",
+                  name: "Midnight",
+                  id: "midnight",
+                  light: variant,
+                  dark: variant,
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => host.status("acme") === "active")
+      const options = host.options()
+      host.select("acme:midnight")
+      await until(() => root.dataset.theme === "acme:midnight")
+
+      host.disable("acme")
+      await until(() => root.dataset.theme === "oc-2")
+      const withdrawn = { listed: host.options().some((option: { id: string }) => option.id === "acme:midnight") }
+      const kept = host.selected()
+
+      host.enable()
+      await until(() => root.dataset.theme === "acme:midnight")
+      host.unmount()
+
+      return { first: options[0], last: options.at(-1), withdrawn, kept }
+    }, fixture)
+
+    expect(result).toEqual({
+      first: { id: "amoled", name: "AMOLED" },
+      last: { id: "acme:midnight", name: "Midnight" },
+      withdrawn: { listed: false },
+      kept: "acme:midnight",
+    })
+  },
+)
+
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)

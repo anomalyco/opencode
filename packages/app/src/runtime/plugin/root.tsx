@@ -9,7 +9,7 @@ import { PluginHostProvider, usePluginHost } from "./host"
 import { createIpcClients } from "./ipc"
 import { createPluginAttachment, createHostApis, PluginAttachmentProvider, type HostApis } from "./host-apis"
 import { PluginCommands } from "./commands"
-import { PluginStyles } from "./render"
+import { PluginStyles, PluginThemes } from "./render"
 import { PluginServersProvider } from "./servers"
 import { PluginServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
@@ -112,6 +112,7 @@ export function PluginRoot(props: ParentProps) {
           failed={failed}
         >
           <PluginStyles />
+          <PluginThemes />
           {PluginHotReload && (
             <Suspense>
               <PluginHotReload />

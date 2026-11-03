@@ -41,7 +41,8 @@ import { createInstalled } from "../src/runtime/plugin/installed"
 import { pluginEnabled, type Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
-import { PluginSlot } from "../src/runtime/plugin/render"
+import { PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { ThemeProvider, useTheme } from "@opencode/ui/theme/context"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
@@ -58,6 +59,7 @@ export {
   Panel,
   Slot,
   Store,
+  Theme,
 } from "@opencode/plugin/gui"
 
 export { Schema }
@@ -550,6 +552,60 @@ export function mountSessionRegion(input: {
     /** The session each composer attachment reached, in order. */
     attached,
     status: (id: string) => hosts[0]?.state.status[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host's theme contributions into the app's theme provider, as the window does. `options` reads the
+ * theme picker's choices as Settings › Appearance lists them; `disable` and `enable` toggle a plugin as
+ * Extensions › Plugins does.
+ */
+export function mountThemes(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
+  const hosts: PluginHost[] = []
+  const themes: ReturnType<typeof useTheme>[] = []
+
+  function Capture() {
+    hosts.push(usePluginHost())
+    themes.push(useTheme())
+
+    return null
+  }
+
+  const dispose = render(
+    () => (
+      <ThemeProvider>
+        <LanguageProvider locale="en">
+          <DialogProvider>
+            <PluginHostProvider
+              definitions={() => input.definitions}
+              disabled={disabled}
+              apis={fakeApis(unused)}
+              whenMounted={mounted}
+            >
+              <PluginThemes />
+              <Capture />
+            </PluginHostProvider>
+          </DialogProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    ),
+    container,
+  )
+
+  return {
+    status: (id: string) => hosts[0]?.state.status[id],
+    options: () => themes[0]?.ids().map((id) => ({ id, name: themes[0]?.name(id) })) ?? [],
+    select: (id: string) => themes[0]?.setTheme(id),
+    selected: () => themes[0]?.themeId(),
+    disable: (id: string) => setDisabled(new Set([id])),
+    enable: () => setDisabled(new Set<string>()),
     unmount: () => {
       dispose()
       container.remove()

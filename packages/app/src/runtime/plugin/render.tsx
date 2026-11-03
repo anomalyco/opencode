@@ -1,9 +1,11 @@
-import { createMemo, ErrorBoundary, For, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
+import { createMemo, ErrorBoundary, For, onCleanup, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
-import { Style, type MountedSession } from "@opencode/plugin/gui"
+import { useTheme } from "@opencode/ui/theme/context"
+import type { DesktopTheme } from "@opencode/ui/theme/types"
+import { Style, Theme, type MountedSession } from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost } from "./host"
@@ -70,6 +72,24 @@ export function PluginStyles() {
     <Portal mount={document.head}>
       <For each={host.items(Style)}>{(item) => <style data-plugin={item.plugin}>{item.value}</style>}</For>
     </Portal>
+  )
+}
+
+/** Lists each contributed theme in the theme picker, keyed by plugin, while it is contributed. */
+export function PluginThemes() {
+  const host = usePluginHost()
+  const theme = useTheme()
+
+  return (
+    <For each={host.items(Theme)}>
+      {(item) => {
+        // SAFETY: an SDK theme has the bundled themes' shape with colors typed as plain strings; the resolver parses
+        // any string without throwing (a malformed color resolves to black), so the narrower color types add nothing.
+        onCleanup(theme.registerTheme({ ...item.value, id: `${item.plugin}:${item.value.id}` } as DesktopTheme))
+
+        return null
+      }}
+    </For>
   )
 }
 
