@@ -20,6 +20,12 @@ import { usageByModel } from "./usage"
 import "@/settings/settings.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
+type Usage = ReturnType<typeof usageByModel>
+
+// The stats query scans the whole history, so one result is shared per server instead of refetching
+// every time the tab becomes active.
+const usageCache = new Map<string, { at: number; value: Promise<Usage | undefined> }>()
+const usageTTL = 60_000
 
 export const ModelProvidersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -72,18 +78,32 @@ export const SettingsModels: Component<{
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
 
-  const [usage, setUsage] = createSignal<ReturnType<typeof usageByModel>>()
+  const [usage, setUsage] = createSignal<Usage>()
+  let usageRequest = 0
 
-  // Reload on every visit: the totals move whenever a model is used.
-  createEffect(() => {
-    if (props.active === false) return
-    void serverSdk.api.experimental.session
+  const loadUsage = () => {
+    const key = serverSdk.scope
+    const cached = usageCache.get(key)
+    if (cached && Date.now() - cached.at < usageTTL) return cached.value
+
+    const value = serverSdk.api.experimental.session
       .stats({
         tools: "none",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
-      .then((stats) => setUsage(usageByModel(stats)))
+      .then(usageByModel)
       .catch(() => undefined)
+
+    usageCache.set(key, { at: Date.now(), value })
+    return value
+  }
+
+  createEffect(() => {
+    if (props.active === false) return
+    const request = ++usageRequest
+    void loadUsage().then((value) => {
+      if (request === usageRequest) setUsage(value)
+    })
   })
 
   const usageLabel = (item: ModelItem) => {
