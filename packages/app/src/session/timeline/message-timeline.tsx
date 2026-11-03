@@ -405,12 +405,29 @@ function MessageTimelineView(
   // The bottom lane also keeps its height while live status moves into the Activity row, so the tail the activity pill
   // floats in never closes and a pinned timeline does not shift when input waits.
   // The working row tracks the active turn from its user prompt, so it keeps counting until the turn finishes.
+  // Pending steers still project under the previous response until delivery, so anchor on the latest
+  // user input instead of the turn's original prompt: otherwise a follow-up sent seconds ago would
+  // immediately read minutes old.
   const workingTime = createMemo(() => {
     const id = projection.activeMessageID()
+
     if (!id) return undefined
+
     const message = messageByID().get(id)
+
     if (message?.type !== "user") return undefined
-    return { created: message.time.created, ran: message.time.created }
+
+    const session = sessionID()
+    const pending = session ? data.session.pending.list(session) : []
+
+    const latest = pending.reduce<number | undefined>(
+      (max, item) => (item.type === "user" ? Math.max(max ?? Number.NEGATIVE_INFINITY, item.time.created) : max),
+      undefined,
+    )
+
+    const start = latest === undefined ? message.time.created : Math.max(message.time.created, latest)
+
+    return { created: start, ran: start }
   })
 
   const activity = (live: () => boolean) => (
