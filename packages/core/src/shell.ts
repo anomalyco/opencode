@@ -303,153 +303,166 @@ const layer = () =>
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
-        runFork(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const handle = yield* environment.spawner
-                .spawn(
-                  ChildProcess.make(invocation.shell, args, {
-                    cwd: invocation.cwd,
-                    env: invocation.env,
-                    stdin: "ignore",
-                    detached: process.platform !== "win32",
-                    forceKillAfter: Duration.seconds(3),
-                  }),
-                )
-                .pipe(
-                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
-                )
-              const command: Active = {
-                info: produce(info, (draft) => {
-                  draft.pid = handle.pid
-                }),
-                file,
-                size: 0,
-                newlines: 0,
-                done: Deferred.makeUnsafe<Info, NotFoundError>(),
-              }
-              commands.set(id, command)
-
-              const stream = createWriteStream(file)
-              const outputDone = Latch.makeUnsafe()
-              const pump = handle.all.pipe(
-                Stream.runForEach((chunk: Uint8Array) =>
-                  Effect.sync(() => {
-                    stream.write(chunk)
-                    command.size += chunk.length
-                    // Count while streaming so truncation notices never rescan the output file.
-                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1))
-                      command.newlines++
-                  }),
-                ),
-              )
-              runFork(
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const manager = runFork(
+              Effect.scoped(
                 Effect.gen(function* () {
-                  yield* pump.pipe(Effect.catch(() => Effect.void))
+                  const handle = yield* environment.spawner
+                    .spawn(
+                      ChildProcess.make(invocation.shell, args, {
+                        cwd: invocation.cwd,
+                        env: invocation.env,
+                        stdin: "ignore",
+                        detached: process.platform !== "win32",
+                        forceKillAfter: Duration.seconds(3),
+                      }),
+                    )
+                    .pipe(
+                      Effect.mapError(
+                        (cause) => new AppProcess.AppProcessError({ command: invocation.command, cause }),
+                      ),
+                    )
+                  const command: Active = {
+                    info: produce(info, (draft) => {
+                      draft.pid = handle.pid
+                    }),
+                    file,
+                    size: 0,
+                    newlines: 0,
+                    done: Deferred.makeUnsafe<Info, NotFoundError>(),
+                  }
+                  commands.set(id, command)
+
+                  const stream = createWriteStream(file)
+                  const outputDone = Latch.makeUnsafe()
+                  const pump = handle.all.pipe(
+                    Stream.runForEach((chunk: Uint8Array) =>
+                      Effect.sync(() => {
+                        stream.write(chunk)
+                        command.size += chunk.length
+                        // Count while streaming so truncation notices never rescan the output file.
+                        for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1))
+                          command.newlines++
+                      }),
+                    ),
+                  )
+                  runFork(
+                    Effect.gen(function* () {
+                      yield* pump.pipe(Effect.catch(() => Effect.void))
+                      yield* Effect.promise(
+                        () =>
+                          new Promise<void>((resolve) => {
+                            stream.end(() => resolve())
+                          }),
+                      )
+                      yield* outputDone.open
+                    }),
+                  )
                   yield* Effect.promise(
                     () =>
                       new Promise<void>((resolve) => {
-                        stream.end(() => resolve())
+                        stream.once("open", () => resolve())
+                        stream.once("error", () => resolve())
                       }),
                   )
-                  yield* outputDone.open
-                }),
-              )
-              yield* Effect.promise(
-                () =>
-                  new Promise<void>((resolve) => {
-                    stream.once("open", () => resolve())
-                    stream.once("error", () => resolve())
-                  }),
-              )
 
-              // The process exit and the timeout race to record how the command ended; the first wins.
-              const ended = Deferred.makeUnsafe<Ended>()
-              const end = (outcome: Omit<Ended, "completed">) =>
-                Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
+                  // The process exit and the timeout race to record how the command ended; the first wins.
+                  const ended = Deferred.makeUnsafe<Ended>()
+                  const end = (outcome: Omit<Ended, "completed">) =>
+                    Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
 
-              command.timeout = (duration) =>
-                Effect.gen(function* () {
-                  if (Deferred.isDoneUnsafe(ended)) return
-                  if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-                  command.timeoutFiber = undefined
-                  if (duration === 0) return
-                  command.timeoutFiber = runFork(
-                    Effect.sleep(Duration.millis(duration)).pipe(
-                      // A recorded timeout must always kill. The kill runs detached, so interrupting this
-                      // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
-                      Effect.andThen(
-                        Effect.gen(function* () {
-                          if (!(yield* end({ status: "timeout" }))) return
-                          runFork(
-                            handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                          )
-                        }).pipe(Effect.uninterruptible),
-                      ),
-                    ),
+                  command.timeout = (duration) =>
+                    Effect.gen(function* () {
+                      if (Deferred.isDoneUnsafe(ended)) return
+                      if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+                      command.timeoutFiber = undefined
+                      if (duration === 0) return
+                      command.timeoutFiber = runFork(
+                        Effect.sleep(Duration.millis(duration)).pipe(
+                          // A recorded timeout must always kill. The kill runs detached, so interrupting this
+                          // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
+                          Effect.andThen(
+                            Effect.gen(function* () {
+                              if (!(yield* end({ status: "timeout" }))) return
+                              runFork(
+                                handle
+                                  .kill({ forceKillAfter: Duration.seconds(3) })
+                                  .pipe(Effect.catch(() => Effect.void)),
+                              )
+                            }).pipe(Effect.uninterruptible),
+                          ),
+                        ),
+                      )
+                    })
+
+                  yield* command.timeout(invocation.timeout)
+
+                  // The process exits even after a timeout kill, so this fiber always publishes the outcome.
+                  runFork(
+                    Effect.gen(function* () {
+                      yield* handle.exitCode.pipe(
+                        Effect.flatMap((code) => end({ status: "exited", exit: code })),
+                        Effect.catch((error) =>
+                          end({
+                            status: "exited",
+                            signal:
+                              error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
+                          }),
+                        ),
+                      )
+                      const outcome = yield* Deferred.await(ended)
+                      // Report the terminal status only once captured output is complete, so a reader that
+                      // sees it never reads a partial file.
+                      yield* outputDone.await
+                      // A removed command already failed its waiters and published its exit and deletion.
+                      if (commands.get(id) !== command) return
+                      command.info = produce(command.info, (draft) => {
+                        draft.status = outcome.status
+                        if (outcome.exit !== undefined) draft.exit = outcome.exit
+                        if (outcome.signal !== undefined) draft.signal = outcome.signal
+                        draft.time.completed = outcome.completed
+                      })
+                      // Resolve waiters before retention eviction, so an evicted command still reports its
+                      // terminal Info rather than the removal NotFoundError.
+                      yield* Deferred.succeed(command.done, command.info)
+                      yield* bus.publish(Shell.Event.Exited, {
+                        id,
+                        ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
+                        status: outcome.status,
+                      })
+                      exitOrder.push(id)
+                      while (exitOrder.length > EXITED_LIMIT) {
+                        const oldest = exitOrder[0]
+                        if (!oldest) break
+                        yield* removeCommand(oldest)
+                      }
+                      // Keep exited history data-only.
+                      const timeoutFiber = command.timeoutFiber
+                      command.timeout = undefined
+                      command.timeoutFiber = undefined
+                      if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
+                    }),
                   )
-                })
 
-              yield* command.timeout(invocation.timeout)
-
-              // The process exits even after a timeout kill, so this fiber always publishes the outcome.
-              runFork(
-                Effect.gen(function* () {
-                  yield* handle.exitCode.pipe(
-                    Effect.flatMap((code) => end({ status: "exited", exit: code })),
-                    Effect.catch((error) =>
-                      end({
-                        status: "exited",
-                        signal:
-                          error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
-                      }),
-                    ),
-                  )
-                  const outcome = yield* Deferred.await(ended)
-                  // Report the terminal status only once captured output is complete, so a reader that
-                  // sees it never reads a partial file.
-                  yield* outputDone.await
-                  // A removed command already failed its waiters and published its exit and deletion.
-                  if (commands.get(id) !== command) return
-                  command.info = produce(command.info, (draft) => {
-                    draft.status = outcome.status
-                    if (outcome.exit !== undefined) draft.exit = outcome.exit
-                    if (outcome.signal !== undefined) draft.signal = outcome.signal
-                    draft.time.completed = outcome.completed
-                  })
-                  // Resolve waiters before retention eviction, so an evicted command still reports its
-                  // terminal Info rather than the removal NotFoundError.
-                  yield* Deferred.succeed(command.done, command.info)
-                  yield* bus.publish(Shell.Event.Exited, {
-                    id,
-                    ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}),
-                    status: outcome.status,
-                  })
-                  exitOrder.push(id)
-                  while (exitOrder.length > EXITED_LIMIT) {
-                    const oldest = exitOrder[0]
-                    if (!oldest) break
-                    yield* removeCommand(oldest)
-                  }
-                  // Keep exited history data-only.
-                  const timeoutFiber = command.timeoutFiber
-                  command.timeout = undefined
-                  command.timeoutFiber = undefined
-                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
+                  yield* bus.publish(Shell.Event.Created, { info })
+                  yield* Deferred.succeed(ready, command)
+                  // Hold the handle's scope open until the command terminates; closing it earlier would
+                  // release (kill) the process before its exit is observed.
+                  yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
                 }),
-              )
+              ).pipe(
+                Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error)),
+                Effect.interruptible,
+              ),
+            )
 
-              yield* bus.publish(Shell.Event.Created, { info })
-              yield* Deferred.succeed(ready, command)
-              // Hold the handle's scope open until the command terminates; closing it earlier would
-              // release (kill) the process before its exit is observed.
-              yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
-            }),
-          ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
+            return yield* restore(Deferred.await(ready)).pipe(
+              Effect.map((command) => command.info),
+              Effect.onInterrupt(() => Fiber.interrupt(manager).pipe(Effect.andThen(removeCommand(id)))),
+            )
+          }),
         )
-
-        const command = yield* Deferred.await(ready)
-        return command.info
       })
 
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
