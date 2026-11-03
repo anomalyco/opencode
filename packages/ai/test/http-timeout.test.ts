@@ -49,6 +49,26 @@ const stalledServer = Effect.gen(function* () {
   return { layer, stalled, resume: () => resume() }
 })
 
+// Sends one chunk, then yields the controller so the caller can push keepalive comments.
+const keepaliveServer = Effect.gen(function* () {
+  const ready = yield* Deferred.make<ReadableStreamDefaultController<Uint8Array>>()
+  const encoder = new TextEncoder()
+  const layer = dynamicResponse((input) =>
+    Effect.sync(() =>
+      input.respond(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(sseRaw(`data: ${JSON.stringify(deltaChunk({ content: "Hi" }))}`)))
+            Deferred.doneUnsafe(ready, Effect.succeed(controller))
+          },
+        }),
+        SSE,
+      ),
+    ),
+  )
+  return { layer, ready }
+})
+
 describe("HTTP transport timeouts", () => {
   it.effect("fails when response headers take longer than five minutes", () =>
     Effect.gen(function* () {
@@ -80,6 +100,33 @@ describe("HTTP transport timeouts", () => {
       yield* Deferred.await(server.stalled)
       yield* Effect.yieldNow
       yield* TestClock.adjust("15 minutes")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read", code: "Timeout" })
+      expect(error.reason.http).toMatchObject({ status: 200 })
+    }),
+  )
+
+  it.effect("fails when the response body only sends SSE keepalive comments", () =>
+    Effect.gen(function* () {
+      const server = yield* keepaliveServer
+      const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+        Effect.provide(server.layer),
+        Effect.flip,
+        Effect.forkChild({ startImmediately: true }),
+      )
+      const controller = yield* Deferred.await(server.ready)
+      const encoder = new TextEncoder()
+      for (let i = 0; i < 20; i++) {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"))
+        } catch {
+          break
+        }
+        yield* Effect.promise(() => new Promise((r) => setTimeout(r, 5)))
+        yield* TestClock.adjust("1 minute")
+        yield* Effect.yieldNow
+      }
       const error = yield* Fiber.join(fiber)
 
       expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read", code: "Timeout" })

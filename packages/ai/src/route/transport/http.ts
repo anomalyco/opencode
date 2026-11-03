@@ -116,16 +116,14 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       const http = RequestExecutor.responseHttp(response)
       const remaining = Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
       return {
-        frames: prepared.framing.frame(
-          RequestExecutor.responseStream(response).pipe(
-            Stream.timeoutOrElse({
-              duration: timeoutDuration(request.http?.chunkTimeout, DEFAULT_CHUNK_TIMEOUT_MS),
-              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
-            }),
-            Stream.interruptWhen(
-              Effect.sleep(remaining).pipe(
-                Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
-              ),
+        frames: prepared.framing.frame(RequestExecutor.responseStream(response)).pipe(
+          Stream.timeoutOrElse({
+            duration: timeoutDuration(request.http?.chunkTimeout, DEFAULT_CHUNK_TIMEOUT_MS),
+            orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
+          }),
+          Stream.interruptWhen(
+            Effect.sleep(remaining).pipe(
+              Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
             ),
           ),
         ),
