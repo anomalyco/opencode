@@ -5,6 +5,7 @@ import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
 import { verifySimulationGraph } from "./script/verify-artifact"
+import pkg from "./package.json"
 
 const dir = import.meta.dirname
 
@@ -297,7 +298,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
 }
 
 export default mainConfig({
-  version: process.env.OPENCODE_VERSION ?? "local",
+  version: process.env.OPENCODE_VERSION ?? pkg.version,
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
