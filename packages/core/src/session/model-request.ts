@@ -29,8 +29,8 @@ import type {
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
-import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Cause, Context, Effect, Layer, Option, Result, Stream } from "effect"
+import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Instructions } from "../instructions/index.js"
@@ -369,7 +369,19 @@ export const layer = Layer.effect(
                         before.request.headers.get("content-type") ?? undefined,
                       )
                     : HttpClientRequest.fromWeb(before.request)
-              const res = yield* handler(sent)
+              // `HttpClientRequest.fromWeb` keeps the method, url, headers and body only, so a hook that asked for
+              // `redirect: "manual"` or `"error"` would have it dropped and every redirect followed by default.
+              // Carry the approved request's redirect mode to the fetch options, keeping whatever the transport
+              // already set there.
+              const requestInit = yield* Effect.serviceOption(FetchHttpClient.RequestInit)
+              const res = yield* before.request.redirect === "follow"
+                ? handler(sent)
+                : handler(sent).pipe(
+                    Effect.provideService(FetchHttpClient.RequestInit, {
+                      ...(Option.isSome(requestInit) ? requestInit.value : {}),
+                      redirect: before.request.redirect,
+                    }),
+                  )
               const after = yield* hooks.trigger("session", "http.response", {
                 ...scope,
                 request: before.request,

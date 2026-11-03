@@ -12,8 +12,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { DateTime, Effect, Option, Schema, Stream } from "effect"
+import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -129,6 +129,56 @@ describe("SessionModelRequest HTTP hooks", () => {
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
+  it.effect("carries a hook-returned request's redirect mode to the transport", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      let redirect: RequestRedirect | undefined
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          if (redirect === undefined) return
+          event.request = new Request(event.request.url, { method: "POST", redirect })
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        model,
+        system: [],
+        messages: [],
+      })
+      const http = prepared.options.http
+      if (!http) throw new Error("Expected HTTP middleware")
+      const original = HttpClientRequest.post("https://example.test/v1/chat/completions").pipe(
+        HttpClientRequest.bodyText('{"messages":[]}', "application/json"),
+      )
+      // Read the fetch options the middleware would send with, the way FetchHttpClient consumes them.
+      const send = () =>
+        http(original, (request) =>
+          Effect.map(Effect.serviceOption(FetchHttpClient.RequestInit), (options) =>
+            HttpClientResponse.fromWeb(
+              request,
+              new Response(JSON.stringify({ sent: Option.isSome(options) ? options.value : null }), { status: 200 }),
+            ),
+          ),
+        ).pipe(
+          Effect.flatMap((response) =>
+            HttpClientResponse.schemaBodyJson(
+              Schema.Struct({ sent: Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)) }),
+            )(response),
+          ),
+        )
+
+      // A hook that leaves the default alone keeps the transport's own options untouched.
+      expect(yield* send()).toEqual({ sent: null })
+
+      for (const mode of ["manual", "error"] as const) {
+        redirect = mode
+        expect((yield* send()).sent?.redirect).toBe(mode)
+      }
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
   it.effect("keeps hook edits to a tool schema out of later requests", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
@@ -146,14 +196,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       }
 
       const required = yield* Effect.forEach([1, 2], () =>
-        requests
-          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
-          .pipe(
-            Effect.map((prepared) => {
-              const tool = prepared.request.tools[0]
-              return tool?.type === "tool" ? tool.inputSchema.required : undefined
-            }),
-          ),
+        requests.primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools }).pipe(
+          Effect.map((prepared) => {
+            const tool = prepared.request.tools[0]
+            return tool?.type === "tool" ? tool.inputSchema.required : undefined
+          }),
+        ),
       )
 
       expect(required).toEqual([
