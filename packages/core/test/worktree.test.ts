@@ -245,24 +245,41 @@ describe("Worktree", () => {
         )
         .run()
         .pipe(Effect.orDie)
-      // Simulate historical cross-registration where project-a has project-b's root
+      // Simulate historical cross-registration where project-a has project-b's root,
+      // and project-b had its own root previously stored as "git".
       yield* database.db
         .insert(WorktreeTable)
         .values([
           { project_id: projects[0].id, directory: a },
           { project_id: projects[0].id, directory: b, strategy: Worktree.StrategyID.make("git") },
-          { project_id: projects[1].id, directory: b },
+          { project_id: projects[1].id, directory: b, strategy: Worktree.StrategyID.make("git") },
         ])
         .run()
         .pipe(Effect.orDie)
-      const context = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
+      const contextA = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
 
-      yield* Context.get(context, Worktree.Service).refresh(
+      yield* Context.get(contextA, Worktree.Service).refresh(
         { projectID: projects[0].id },
-        Context.get(context, WorktreeStrategies.Service),
+        Context.get(contextA, WorktreeStrategies.Service),
       )
 
       expect(yield* stored(projects[0].id)).toEqual([{ directory: a, strategy: null }])
+
+      const contextB = yield* Layer.build(worktreeLayer(b, projects[1].id, database, yield* Bus.Service, root.path))
+      yield* Context.get(contextB, Worktree.Service).refresh(
+        { projectID: projects[1].id },
+        Context.get(contextB, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[1].id)).toEqual([{ directory: b, strategy: null }])
+
+      const removeExit = yield* Effect.exit(
+        Context.get(contextB, Worktree.Service).remove(
+          { projectID: projects[1].id, directory: b, force: false },
+          Context.get(contextB, WorktreeStrategies.Service),
+        ),
+      )
+      expect(Exit.isFailure(removeExit)).toBe(true)
     }),
   )
 

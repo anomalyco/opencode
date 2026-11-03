@@ -1,7 +1,7 @@
 export * as Worktree from "./worktree.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -166,7 +166,13 @@ const layer = Layer.effect(
               strategy: input.strategy ?? null,
             },
             // Discovery may claim an unowned row, but never replace another strategy's ownership.
-            setWhere: input.replace ? undefined : input.strategy ? isNull(WorktreeTable.strategy) : sql`false`,
+            setWhere: input.replace
+              ? input.strategy
+                ? ne(WorktreeTable.strategy, input.strategy)
+                : isNotNull(WorktreeTable.strategy)
+              : input.strategy
+                ? isNull(WorktreeTable.strategy)
+                : sql`false`,
           })
           .returning({ directory: WorktreeTable.directory })
           .get()
@@ -339,6 +345,7 @@ const layer = Layer.effect(
             discovered.set(directory, {
               directory,
               strategy: directory === row.worktree ? undefined : entry.type === "worktree" ? strategy.id : undefined,
+              replace: directory === row.worktree ? true : undefined,
             })
           }
         }
