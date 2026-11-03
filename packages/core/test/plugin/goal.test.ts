@@ -39,7 +39,7 @@ const it = testEffect(
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
-                AIModel.make({ type: "chat", id: "goal", provider: "test", route: OpenAIChat.route }),
+                AIModel.make({ type: "chat", id: "goal", provider: "test", api: OpenAIChat.route }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },
                   cost: [],

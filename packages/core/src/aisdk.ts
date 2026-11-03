@@ -405,7 +405,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     },
     with: () => route,
     model: (input) =>
-      Model.make({ type: "chat", ...input, provider: "provider" in input ? input.provider : providerID, route }),
+      Model.make({ type: "chat", ...input, provider: "provider" in input ? input.provider : providerID, api: route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
       streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
@@ -414,7 +414,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     type: "chat",
     id: info.modelID ?? info.id,
     provider: providerID,
-    route,
+    api: route,
     compatibility: info.compatibility,
   })
 }

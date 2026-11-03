@@ -52,7 +52,7 @@ export function imageModel<Options extends ImageOptions, Frame, State, Token>(
     id: input.id,
     provider: route.protocol.provider,
     options: mediaOptions(input),
-    route: composeRoute(route, input, collectResponse) as ImageRoute,
+    api: composeRoute(route, input, collectResponse) as ImageRoute,
   })
 }
 

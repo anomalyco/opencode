@@ -143,7 +143,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const model = SessionRunnerModel.resolved(
     endpoint
       ? Model.with(native, {
-          route: native.route.with({ compact: { endpoint: native.route.compact.endpoint } }),
+          api: native.route.with({ compact: { endpoint: native.route.compact.endpoint } }),
         })
       : native,
     {

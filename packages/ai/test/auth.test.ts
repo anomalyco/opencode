@@ -9,7 +9,7 @@ import { it } from "./lib/effect.js"
 
 const request = ai.request({
   id: "req_auth",
-  model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: OpenAIChat.route }),
+  model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: OpenAIChat.route }),
   prompt: "hello",
 })
 

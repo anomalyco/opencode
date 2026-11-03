@@ -24,7 +24,7 @@ import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
-const model = Model.make({ type: "chat", id: "test-model", provider: "test-provider", route: OpenAIChat.route })
+const model = Model.make({ type: "chat", id: "test-model", provider: "test-provider", api: OpenAIChat.route })
 const limit = { context: 100_000, output: 1_000 }
 const resolved = SessionRunnerModel.resolved(model, {
   capabilities: { tools: true, input: ["text"], output: ["text"] },

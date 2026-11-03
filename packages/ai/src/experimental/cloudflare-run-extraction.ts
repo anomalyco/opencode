@@ -102,7 +102,7 @@ export const model = (input: MediaRoute.ModelInput) =>
     id: input.id,
     provider: route.provider,
     options: mediaOptions(input),
-    route: MediaRoute.inline({
+    api: MediaRoute.inline({
       protocol,
       endpoint: Endpoint.path<MediaProtocol.Body, ExtractionRequest>(({ request }) => `/${request.model.id}`, {
         baseURL: input.baseURL,

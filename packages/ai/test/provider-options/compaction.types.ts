@@ -66,7 +66,7 @@ ai.compact({ ...switched, model: openai })
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
   ai.request({
-    model: Model.with(openai, { route: Anthropic.configure().model("fixture").route }),
+    model: Model.with(openai, { api: Anthropic.configure().model("fixture").route }),
     prompt: "Hello",
   }),
 )

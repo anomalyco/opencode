@@ -13,10 +13,10 @@ test("runtime capability checks follow model and route updates", () => {
   expect(ai.canCompact(request)).toBe(true)
   expect(ai.canCompact({ ...request, messages: [] })).toBe(true)
   expect(ai.canCompact({ ...request, model: unsupported })).toBe(false)
-  expect(
-    ai.canCompact(ai.request({ model: Model.with(supported, { route: unsupported.route }), prompt: "Hello" })),
-  ).toBe(false)
-  expect(ai.canCompact(ai.request({ model: Model.with(supported, { route: undefined }), prompt: "Hello" }))).toBe(true)
+  expect(ai.canCompact(ai.request({ model: Model.with(supported, { api: unsupported.route }), prompt: "Hello" }))).toBe(
+    false,
+  )
+  expect(ai.canCompact(ai.request({ model: Model.with(supported, { api: undefined }), prompt: "Hello" }))).toBe(true)
   expect(ai.canCompact(supported)).toBe(true)
   expect(ai.canCompact(supported, { mechanism: "trigger" })).toBe(true)
   expect(ai.canCompact(unsupported)).toBe(false)

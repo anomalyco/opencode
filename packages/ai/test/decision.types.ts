@@ -60,7 +60,7 @@ const custom = Model.make<"decision", { readonly temperature?: number }>({
   type: "decision",
   id: "custom",
   provider: "custom",
-  route,
+  api: route,
 })
 ai.decision.generate({
   model: custom,

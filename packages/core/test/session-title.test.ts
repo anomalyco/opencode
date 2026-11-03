@@ -42,8 +42,8 @@ let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
 let selectedPrimary: Model.Info | undefined
 let selections: Array<Session.Info["model"]> = []
-const model = AIModel.make({ type: "chat", id: "title-model", provider: "test", route: OpenAIChat.route })
-const smallModel = AIModel.make({ type: "chat", id: "title-small", provider: "test", route: OpenAIChat.route })
+const model = AIModel.make({ type: "chat", id: "title-model", provider: "test", api: OpenAIChat.route })
+const smallModel = AIModel.make({ type: "chat", id: "title-small", provider: "test", api: OpenAIChat.route })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

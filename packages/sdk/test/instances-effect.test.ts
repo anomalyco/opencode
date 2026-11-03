@@ -16,7 +16,7 @@ import { AbsolutePath, Agent, Location, OpenCode } from "../src/effect"
 const it = testEffect(Layer.empty)
 const metadata = Schema.decodeUnknownSync(Schema.Struct({ threadID: Schema.String }))
 const model = SessionRunnerModel.resolved(
-  Model.make({ type: "chat",  id: "instance-model", provider: "test", route: OpenAIChat.route }),
+  Model.make({ type: "chat", id: "instance-model", provider: "test", api: OpenAIChat.route }),
   {
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     cost: [],

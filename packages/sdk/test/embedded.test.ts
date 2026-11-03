@@ -137,7 +137,10 @@ it.live("seeds host plugins from CreateOptions and waits for delayed model plugi
       )
 
       const [defaultModel, generated] = yield* Effect.all(
-        [opencode.model.default({ location: location(fixture) }), opencode.experimental.generate.text({ prompt: "Say ready" })],
+        [
+          opencode.model.default({ location: location(fixture) }),
+          opencode.experimental.generate.text({ prompt: "Say ready" }),
+        ],
         { concurrency: "unbounded" },
       )
 
@@ -223,8 +226,16 @@ it.live(
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
-        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
-        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
+        yield* opencode.experimental.session.instructions.entry.put({
+          sessionID: id,
+          key: "deploy-target",
+          value: "production",
+        })
+        yield* opencode.experimental.session.instructions.entry.put({
+          sessionID: id,
+          key: "flags",
+          value: { beta: true },
+        })
         const contextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
         yield* opencode.experimental.session.instructions.entry.remove({ sessionID: id, key: "flags" })
         const remainingContextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
@@ -257,7 +268,9 @@ it.live(
           [
             opencode.experimental.session.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+            opencode.sessions.message
+              .get({ sessionID: missingSessionID, messageID: modelMessage.id })
+              .pipe(Effect.flip),
             opencode.experimental.session.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
@@ -469,7 +482,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     const createRelease = yield* Deferred.make<void>()
     const modelStarted = yield* Deferred.make<void>()
     yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
-    const model = Model.make({ type: "chat",  id: "workspace-test", provider: "test", route: OpenAIChat.route })
+    const model = Model.make({ type: "chat", id: "workspace-test", provider: "test", api: OpenAIChat.route })
     const client = TestLLM.testLayer({
       fallback: TestLLM.text("ready", "answer"),
       transformRequest: (request) => {
@@ -567,7 +580,7 @@ it.live(
         const createStarted = yield* Deferred.make<void>()
         const createRelease = yield* Deferred.make<void>()
         yield* Effect.addFinalizer(() => Deferred.succeed(createRelease, undefined).pipe(Effect.asVoid))
-        const model = Model.make({ type: "chat",  id: "workspace-tool-test", provider: "test", route: OpenAIChat.route })
+        const model = Model.make({ type: "chat", id: "workspace-tool-test", provider: "test", api: OpenAIChat.route })
         // The first tool-advertising request selects the shell tool; everything else
         // (including title generation, which carries no tools) answers with text.
         let toolIssued = false

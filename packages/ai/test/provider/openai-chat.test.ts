@@ -479,7 +479,7 @@ describe("OpenAI Chat route", () => {
     LLMClient.generate({
       ...request,
       model: Model.with(model, {
-        route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
+        api: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
       }),
     }).pipe(
       Effect.provide(
@@ -1286,7 +1286,7 @@ describe("OpenAI Chat route", () => {
   it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
     Effect.gen(function* () {
       const selected = Model.with(model, {
-        route: { ...model.route, providerMetadataKey: "vendor" },
+        api: { ...model.route, providerMetadataKey: "vendor" },
       })
       const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
       const response = yield* LLMClient.generate({ ...request, model: selected }).pipe(
@@ -1320,7 +1320,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
       const selected = Model.with(compatible, {
-        route: { ...compatible.route, providerMetadataKey: undefined },
+        api: { ...compatible.route, providerMetadataKey: undefined },
       })
       const response = yield* LLMClient.generate({ ...request, model: selected }).pipe(
         Effect.provide(

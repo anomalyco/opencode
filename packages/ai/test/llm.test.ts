@@ -23,7 +23,7 @@ const responsesRoute = OpenAIResponses.route
 describe("llm constructors", () => {
   test("normalizes recursive tool namespaces", () => {
     const request = ai.request({
-      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: responsesRoute }),
+      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: responsesRoute }),
       prompt: "Hello",
       tools: [
         {
@@ -71,7 +71,7 @@ describe("llm constructors", () => {
   test("normalizes ergonomic input into a plain request", () => {
     const request = ai.request({
       id: "req_1",
-      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: chatRoute }),
+      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: chatRoute }),
       system: "You are concise.",
       prompt: "Say hello.",
     })
@@ -88,7 +88,7 @@ describe("llm constructors", () => {
   test("edits requests with a spread or by passing them back to ai.request", () => {
     const base = ai.request({
       id: "req_1",
-      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: chatRoute }),
+      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = {
@@ -132,7 +132,7 @@ describe("llm constructors", () => {
         type: "chat",
         id: "fake-model",
         provider: "fake",
-        route: chatRoute.with({
+        api: chatRoute.with({
           maxTokens: 100,
           temperature: 1,
           providerOptions: { store: false, metadata: { model: true } },
@@ -154,9 +154,9 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical models from the model datatype", () => {
-    const base = Model.make({ type: "chat", id: "fake-model", provider: "fake", route: chatRoute })
+    const base = Model.make({ type: "chat", id: "fake-model", provider: "fake", api: chatRoute })
     const updated = Model.with(base, {
-      route: responsesRoute,
+      api: responsesRoute,
       options: { maxTokens: 20 },
       compatibility: { sanitizer: "gemini", requireFinishReason: false },
     })
@@ -207,7 +207,7 @@ describe("llm constructors", () => {
     expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
       ai.request({
-        model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: chatRoute }),
+        model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: chatRoute }),
         prompt: "Use tools if needed.",
         toolChoice: "required",
       }).toolChoice,
@@ -229,7 +229,7 @@ describe("llm constructors", () => {
       { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
     ])
     const request = ai.request({
-      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", route: chatRoute }),
+      model: Model.make({ type: "chat", id: "fake-model", provider: "fake", api: chatRoute }),
       system: "Initial operator prompt.",
       messages: [Message.user("Review this."), update],
     })

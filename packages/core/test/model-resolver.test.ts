@@ -968,7 +968,7 @@ describe("ModelResolver", () => {
                   headers: { "x-package": "header" },
                   body: { custom: true },
                 })
-                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", api: native.route })
               },
             })
           },
@@ -1015,7 +1015,7 @@ describe("ModelResolver", () => {
                 expect(settings).not.toHaveProperty("server")
                 expect(settings).not.toHaveProperty("orgID")
                 expect(settings).not.toHaveProperty("orgName")
-                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "package-provider", api: native.route })
               },
             }),
         }),
@@ -1138,7 +1138,7 @@ describe("ModelResolver", () => {
                     body: { custom: true },
                     ...providerOptions,
                   })
-                  return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", route: native.route })
+                  return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", api: native.route })
                 },
               })
             },
@@ -1184,7 +1184,7 @@ describe("ModelResolver", () => {
             loadPackage: (specifier) => {
               expect(specifier).toBe(nativePackage)
               return Effect.succeed({
-                model: (id) => AIModel.make({ type: "chat", id, provider: "native-provider", route: OpenAIChat.route }),
+                model: (id) => AIModel.make({ type: "chat", id, provider: "native-provider", api: OpenAIChat.route }),
               })
             },
             loadAISDK: () => Effect.die(`AI SDK loader called for ${catalogPackage}`),
@@ -1229,7 +1229,7 @@ describe("ModelResolver", () => {
                   thinking: { type: "adaptive", display: "summarized" },
                   effort: "high",
                 })
-                return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", route: native.route })
+                return AIModel.make({ type: "chat", id: modelID, provider: "native-provider", api: native.route })
               },
             })
           },
@@ -1265,7 +1265,7 @@ describe("ModelResolver", () => {
                 transforms: ["middle-out"],
                 provider: { sort: "price", only: ["anthropic"] },
               })
-              return AIModel.make({ type: "chat", id: modelID, provider: "openrouter", route: OpenAIChat.route })
+              return AIModel.make({ type: "chat", id: modelID, provider: "openrouter", api: OpenAIChat.route })
             },
           }),
       },
@@ -1295,7 +1295,7 @@ describe("ModelResolver", () => {
                 factory: true,
                 custom: { source: true, catalog: true },
               })
-              return AIModel.make({ type: "chat", id: modelID, provider: "mistral", route: OpenAIChat.route })
+              return AIModel.make({ type: "chat", id: modelID, provider: "mistral", api: OpenAIChat.route })
             },
           }),
       },
@@ -1432,7 +1432,7 @@ describe("ModelResolver", () => {
                 type: "chat",
                 id: runtime.modelID ?? runtime.id,
                 provider: runtime.providerID,
-                route: native.route,
+                api: native.route,
               })
             }),
         },

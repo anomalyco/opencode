@@ -52,7 +52,7 @@ let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
 let reject: ((request: LLMRequest) => boolean) | undefined
-const model = AIModel.make({ type: "chat", id: "summary-model", provider: "test", route: OpenAIChat.route })
+const model = AIModel.make({ type: "chat", id: "summary-model", provider: "test", api: OpenAIChat.route })
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),

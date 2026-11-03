@@ -6,7 +6,7 @@ import { Model } from "../src/schema/index.js"
 
 const request = () =>
   ai.request({
-    model: Model.make({ type: "chat", id: "model-1", provider: "test", route: OpenAIChat.route }),
+    model: Model.make({ type: "chat", id: "model-1", provider: "test", api: OpenAIChat.route }),
     prompt: "hello",
   })
 

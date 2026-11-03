@@ -60,7 +60,7 @@ export function transcriptionModel<Options extends TranscriptionOptions, Frame, 
     id: input.id,
     provider: route.protocol.provider,
     options: mediaOptions(input),
-    route: composeRoute(route, input, collectResponse) as TranscriptionRoute,
+    api: composeRoute(route, input, collectResponse) as TranscriptionRoute,
   })
 }
 

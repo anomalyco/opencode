@@ -25,7 +25,7 @@ import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const model = Model.make({ type: "chat", id: "summary-model", provider: "test", route: OpenAIChat.route })
+const model = Model.make({ type: "chat", id: "summary-model", provider: "test", api: OpenAIChat.route })
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {

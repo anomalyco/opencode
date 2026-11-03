@@ -62,7 +62,7 @@ describe("Provider and Model", () => {
             {
               loadAISDK: () =>
                 Effect.succeed(
-                  AIModel.make({ type: "chat", id: modelID, provider: providerID, route: OpenAIChat.route }),
+                  AIModel.make({ type: "chat", id: modelID, provider: providerID, api: OpenAIChat.route }),
                 ),
             },
           )

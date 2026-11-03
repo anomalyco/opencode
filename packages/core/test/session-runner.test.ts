@@ -122,7 +122,7 @@ const defaultModelLimit = { context: 200_000, output: 32_000 }
 const modelLimits = new Map<string, ModelLimit>()
 const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
   modelLimits.set(id, limit)
-  return AIModel.make({ type: "chat", id, provider: "fake", route: OpenAIChat.route })
+  return AIModel.make({ type: "chat", id, provider: "fake", api: OpenAIChat.route })
 }
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
@@ -1988,7 +1988,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
-    s.currentModel = AIModel.make({ type: "chat", id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = AIModel.make({ type: "chat", id: "gpt-5", provider: "openai", api: OpenAIChat.route })
     yield* s.admit("First")
 
     yield* s.llm.push(TestLLM.text("Done", "text-provider-prompt"))
@@ -2002,7 +2002,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("uses the selected model family prompt when the agent system override is empty", function* (s) {
-    s.currentModel = AIModel.make({ type: "chat", id: "gpt-5", provider: "openai", route: OpenAIChat.route })
+    s.currentModel = AIModel.make({ type: "chat", id: "gpt-5", provider: "openai", api: OpenAIChat.route })
     const agent = yield* Agent.Service
     yield* agent.transform((editor) =>
       editor.update(Agent.ID.make("build"), (agent) => {
@@ -2320,7 +2320,7 @@ describe("SessionRunnerLLM", () => {
       type: "chat",
       id: "claude-opus-5",
       provider: "anthropic",
-      route: AnthropicMessages.route,
+      api: AnthropicMessages.route,
     })
     const model = { id: ID.make("claude-opus-5"), providerID: Provider.ID.make("anthropic") }
     yield* s.bus.publish(SessionEvent.ModelSelected, {
@@ -2765,7 +2765,7 @@ describe("SessionRunnerLLM", () => {
           type: "chat",
           id: route === AnthropicMessages.route ? "claude-sonnet-4-6" : "gpt-5",
           provider: route === AnthropicMessages.route ? "anthropic" : "openai",
-          route,
+          api: route,
         })
         yield* agents.transform((editor) =>
           editor.update(agentID, (agent) => {
@@ -3520,7 +3520,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
-    s.currentModel = AIModel.make({ type: "chat", id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = AIModel.make({ type: "chat", id: "native", provider: "openai", api: OpenAIResponses.route })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const agents = yield* Agent.Service
@@ -3572,7 +3572,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("recovers an overflowing native window with another native compaction", function* (s) {
-    s.currentModel = AIModel.make({ type: "chat", id: "native", provider: "openai", route: OpenAIResponses.route })
+    s.currentModel = AIModel.make({ type: "chat", id: "native", provider: "openai", api: OpenAIResponses.route })
     modelLimits.set("native", { context: 11_000, output: 1_000 })
     s.compaction = { type: "native" }
     const checkpoint = (encrypted: string) =>

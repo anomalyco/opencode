@@ -36,7 +36,7 @@ const decode = (checkpoint: { readonly native: { readonly messages: unknown } })
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
 
 const model = SessionRunnerModel.resolved(
-  AIModel.make({ type: "chat", id: "deployment", provider: "openai", route: OpenAIResponses.route }),
+  AIModel.make({ type: "chat", id: "deployment", provider: "openai", api: OpenAIResponses.route }),
   {
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     cost: [],

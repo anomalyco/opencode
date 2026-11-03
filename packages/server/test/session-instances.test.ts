@@ -44,7 +44,7 @@ it.live(
       const commands: Session.ID[] = []
       const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
       const model = SessionRunnerModel.resolved(
-        Model.make({ type: "chat",  id: "instance-model", provider: "test", route: OpenAIChat.route }),
+        Model.make({ type: "chat", id: "instance-model", provider: "test", api: OpenAIChat.route }),
         {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           cost: [],

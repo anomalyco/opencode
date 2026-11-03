@@ -39,7 +39,7 @@ const it = testEffect(
                   type: "chat",
                   id: session.model?.id ?? "parent",
                   provider: "test",
-                  route: OpenAIChat.route,
+                  api: OpenAIChat.route,
                 }),
                 {
                   capabilities: { tools: true, input: ["text"], output: ["text"] },

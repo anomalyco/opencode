@@ -35,7 +35,7 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/perplexity"),
 })
-const runtime = AIModel.make({ type: "chat", id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const runtime = AIModel.make({ type: "chat", id: "gemini", provider: "test-provider", api: OpenAIChat.route })
 const reference = Ref.make({ providerID: selected.providerID, id: selected.id })
 
 const providers = Layer.mock(Provider.Service, {

@@ -1486,7 +1486,7 @@ describe("OpenAI Responses route", () => {
       yield* LLMClient.generate({
         ...request,
         model: Model.with(model, {
-          route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
+          api: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
         }),
       }).pipe(
         Effect.provide(

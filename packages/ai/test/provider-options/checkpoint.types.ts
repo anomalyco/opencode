@@ -95,7 +95,7 @@ ai.compact(unsupported.xai, { mechanism: "trigger" })
 ai.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.
 ai.compact({ ...request, model: azure }, { mechanism: "trigger" })
-ai.compact(ai.request({ model: Model.with(model, { route: azure.route }), prompt: "Hello" }), {
+ai.compact(ai.request({ model: Model.with(model, { api: azure.route }), prompt: "Hello" }), {
   // @ts-expect-error Changing the route replaces its capability.
   mechanism: "trigger",
 })

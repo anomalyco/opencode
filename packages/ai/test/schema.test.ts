@@ -33,7 +33,7 @@ const model = Model.make({
   type: "chat",
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
-  route: OpenAIChat.route,
+  api: OpenAIChat.route,
 })
 
 const decodeLLMEvent = Schema.decodeUnknownSync(LLMEvent as unknown as Schema.Decoder<LLMEvent>)

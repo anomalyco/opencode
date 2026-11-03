@@ -162,7 +162,7 @@ const completionIt = testEffect(
         resolve: () =>
           Effect.succeed(
             SessionRunnerModel.resolved(
-              AIModel.make({ type: "chat", id: "child", provider: "test", route: OpenAIChat.route }),
+              AIModel.make({ type: "chat", id: "child", provider: "test", api: OpenAIChat.route }),
               {
                 capabilities: { tools: true, input: ["text"], output: ["text"] },
                 cost: [],

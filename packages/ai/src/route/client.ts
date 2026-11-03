@@ -105,9 +105,9 @@ export type AnyRoute<Compact extends CompactionOperations | undefined = Compacti
   Compact
 >
 
-export type RouteLanguageModelInput = Omit<Model.Input<"chat">, "type" | "provider" | "route">
+export type RouteLanguageModelInput = Omit<Model.Input<"chat">, "type" | "provider" | "api" | "baseURL" | "auth">
 
-export type RouteRoutedLanguageModelInput = Omit<Model.Input<"chat">, "type" | "route">
+export type RouteRoutedLanguageModelInput = Omit<Model.Input<"chat">, "type" | "api" | "baseURL" | "auth">
 
 export interface RoutePatch<Body, Prepared> extends RequestOptions {
   readonly compact?: CompactionOperations
@@ -136,7 +136,7 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
     ...mapped,
     type: "chat",
     provider,
-    route,
+    api: route,
   })
 }
 

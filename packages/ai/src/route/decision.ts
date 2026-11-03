@@ -105,7 +105,7 @@ export const make = (input: MakeInput): Route => {
         type: "decision",
         options: mediaOptions({ http: route.http, providerOptions: model.providerOptions }),
         compatibility: model.compatibility,
-        route: { id: route.id, generate: send },
+        api: { id: route.id, generate: send },
       })
     },
   }

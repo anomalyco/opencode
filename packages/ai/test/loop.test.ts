@@ -6,7 +6,7 @@ import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
 
-const model = Model.make({ type: "chat", id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
+const model = Model.make({ type: "chat", id: "fictional-model", provider: "fixture", api: OpenAIChat.route })
 const it = testEffect(TestLLM.testLayer())
 
 const read_file = tool({

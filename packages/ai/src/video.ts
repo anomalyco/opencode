@@ -52,7 +52,7 @@ export function videoModel<Options extends VideoOptions, Frame, State, Token>(
     id: input.id,
     provider: route.protocol.provider,
     options: mediaOptions(input),
-    route: composeRoute(route, input, collectResponse) as VideoRoute,
+    api: composeRoute(route, input, collectResponse) as VideoRoute,
   })
 }
 

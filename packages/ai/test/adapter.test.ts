@@ -86,7 +86,7 @@ const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local"
 
 const request = ai.request({
   id: "req_1",
-  model: Model.make({ type: "chat", id: "fake-model", provider: "fake-provider", route: configuredFake }),
+  model: Model.make({ type: "chat", id: "fake-model", provider: "fake-provider", api: configuredFake }),
   prompt: "hello",
 })
 
@@ -138,7 +138,7 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest({
         ...request,
-        model: updateModel(request.model, { route: configuredGemini }),
+        model: updateModel(request.model, { api: configuredGemini }),
       })
 
       expect(prepared.route).toBe("gemini-fake")
@@ -168,7 +168,7 @@ describe("llm route", () => {
         framing: fakeFraming,
       })
 
-      const prepared = yield* compileRequest({ ...request, model: updateModel(request.model, { route: duplicate }) })
+      const prepared = yield* compileRequest({ ...request, model: updateModel(request.model, { api: duplicate }) })
 
       expect(prepared.body).toEqual({ body: "late-default" })
     }),

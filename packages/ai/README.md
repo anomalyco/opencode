@@ -1553,6 +1553,30 @@ const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/mode
 
 The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `.fireworks`, `.groq`, and `.togetherai` presets are replaced by the top-level `Baseten`, `Cerebras`, `DeepInfra`, `DeepSeek`, `Fireworks`, `Groq`, and `TogetherAI` exports. Use `CloudflareAIGateway` and `CloudflareWorkersAI` directly; each has its own module. `OpenAICompatible` configures generic endpoints with an explicit `baseURL`.
 
+### Describing a model by hand
+
+A provider model is a `Model` with its fields filled in. Describe one yourself by naming the API it speaks:
+
+```ts
+import { Model } from "@opencode/ai"
+import { apis } from "@opencode/ai/apis"
+import { Auth } from "@opencode/ai/route"
+
+const local = Model.make({
+  type: "chat",
+  id: "qwen3-coder",
+  provider: "lmstudio",
+  api: apis.openaiChat,
+  baseURL: "http://localhost:1234/v1",
+  auth: Auth.none,
+  capabilities: { tools: { strict: false } },
+  options: { temperature: 0.7 },
+  compatibility: { maxTokensField: "max_tokens" },
+})
+
+const proxied = Model.with(local, { baseURL: "http://gpu-box:1234/v1" })
+```
+
 ### Provider entrypoints
 
 Provider modules are available through dedicated exports from `@opencode/ai`. Each LLM entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays.
