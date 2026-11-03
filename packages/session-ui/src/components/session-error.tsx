@@ -5,8 +5,9 @@ import { LinkedText } from "./linked-text"
 
 export function SessionErrorMessage(props: { message: string; links?: boolean }) {
   const content = createMemo(() => {
-    // The colon of a URL scheme does not end a title.
-    const separator = props.message.search(/:(?!\/\/)/)
+    // Only a colon before the first URL ends a title, so a scheme or port never splits a URL.
+    const url = props.message.search(/https?:\/\//)
+    const separator = props.message.slice(0, url === -1 ? undefined : url).indexOf(":")
 
     if (separator === -1) return { detail: props.message }
 

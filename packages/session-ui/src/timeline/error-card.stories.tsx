@@ -110,8 +110,8 @@ const linkDocument = {
       model: STORY_MODEL,
       content: [],
       error: {
-        type: "provider.quota",
-        message: "Insufficient balance. Top up at https://platform.example.com/settings/billing to continue.",
+        type: "provider.transport",
+        message: "Could not connect to http://localhost:11434/api. Check that Ollama is running.",
       },
       time: { created: STORY_TIME + 33_000, completed: STORY_TIME + 34_000 },
     },
