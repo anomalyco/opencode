@@ -66,6 +66,15 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Keep scroll on submit",
+    category: "Session",
+    path: ["session", "keep_scroll_on_submit"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["scroll", "jump to bottom", "submit"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],

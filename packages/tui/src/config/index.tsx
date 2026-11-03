@@ -155,6 +155,9 @@ export const Info = Schema.Struct({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
+      keep_scroll_on_submit: Schema.optional(Schema.Boolean).annotate({
+        description: "Keep the transcript where it is when a prompt is submitted instead of jumping to the bottom",
+      }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
       }),
