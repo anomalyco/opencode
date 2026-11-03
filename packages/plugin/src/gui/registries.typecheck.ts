@@ -1,7 +1,7 @@
 // Type-level contract of the registries, checked by `bun typecheck`. Nothing imports this file. Each `@ts-expect-error`
 // fails the typecheck if its line stops being an error.
 import { Plugin } from "./index.js"
-import { MenuItem, TitlebarItem } from "./index.js"
+import { MenuItem, Theme, TitlebarItem } from "./index.js"
 
 const Fixture = Plugin.define({})
 
@@ -32,4 +32,32 @@ export const menus: Plugin.Setup<typeof Fixture> = (ctx) => {
 
   // A pill without `run` only shows its label.
   ctx.add(TitlebarItem, { id: "status", label: "Ready" })
+}
+
+const palette = {
+  neutral: "#2e3440",
+  ink: "#e5e9f0",
+  primary: "#88c0d0",
+  success: "#a3be8c",
+  warning: "#d08770",
+  error: "#bf616a",
+  info: "#81a1c1",
+}
+
+const seeds = { ...palette, interactive: "#88c0d0", diffAdd: "#a3be8c", diffDelete: "#bf616a" }
+
+// Typed like an imported theme file: JSON modules widen every color to `string`.
+const file = {
+  $schema: "https://opencode.ai/desktop-theme.json",
+  name: "Nord",
+  id: "nord",
+  light: { palette, overrides: { "syntax-keyword": "var(--text-strong)" } },
+  dark: { seeds },
+}
+
+export const themes: Plugin.Setup<typeof Fixture> = (ctx) => {
+  ctx.add(Theme, file)
+
+  // @ts-expect-error a variant starts from seeds or a palette, not both
+  ctx.add(Theme, { ...file, light: { palette, seeds } })
 }
