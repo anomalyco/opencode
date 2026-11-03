@@ -769,12 +769,12 @@
       "name": "@opencode/stats-server",
       "version": "2.2.5",
       "dependencies": {
-        "@effect/platform-node": "catalog:",
         "@opencode/stats-core": "workspace:*",
         "effect": "catalog:",
         "sst": "catalog:",
       },
       "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",

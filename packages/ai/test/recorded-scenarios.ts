@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import {
   ai,
-  type ContentPart,
+  type AssistantMessage,
   type FinishReason,
   type LanguageModel,
   type LLM,
@@ -154,7 +154,7 @@ const encryptedReasoningOptions = {
 
 type AssistantTextExpectation = string | RegExp
 
-type UserStep = { readonly type: "user"; readonly content: Message.ContentInput }
+type UserStep = { readonly type: "user"; readonly content: Message.UserContentInput }
 type AssistantStep = {
   readonly type: "assistant"
   readonly text?: AssistantTextExpectation
@@ -171,7 +171,7 @@ type AssistantStep = {
 }
 type ConversationStep = UserStep | AssistantStep
 
-const user = (content: Message.ContentInput): ConversationStep => ({ type: "user", content })
+const user = (content: Message.UserContentInput): ConversationStep => ({ type: "user", content })
 
 const assistant = {
   expectText: (
@@ -213,7 +213,7 @@ const assertAssistantToolCall = (response: LLMResponse, expected: NonNullable<As
 // encrypted reasoning + text, text, or tool call. Keep mixed interleavings in
 // focused protocol tests where event order can be asserted directly.
 const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep) => {
-  const content: ContentPart[] = []
+  const content: Array<AssistantMessage["content"][number]> = []
   if (step.reasoning === "openai-encrypted") {
     const reasoning = response.events.find(
       (event): event is Extract<LLMEvent, { readonly type: "reasoning-end" }> =>

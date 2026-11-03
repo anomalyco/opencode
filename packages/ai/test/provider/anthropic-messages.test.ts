@@ -388,22 +388,6 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects non-text chronological system update content before send", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          model: opus48,
-          messages: [
-            Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("Anthropic Messages system messages only support text content for now")
-    }),
-  )
-
   it.effect("falls back for unsupported native chronological system update placement", () =>
     Effect.gen(function* () {
       expect(

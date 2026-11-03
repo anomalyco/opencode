@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nie skonfigurowano żadnych wtyczek",
   skills: "Umiejętności",
   "skills.empty": "Nie skonfigurowano żadnych umiejętności",
-  lsp: "LSP",
-  "lsp.empty": "Brak skonfigurowanych serwerów LSP",
   failed: "Nie powiodło się",
   retry: "Spróbuj ponownie",
   connecting: "Łączenie…",

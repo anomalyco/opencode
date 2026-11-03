@@ -20,7 +20,6 @@ import {
   CompactionCheckpointResponse,
   AIErrorReason,
   GenerationOptions,
-  HttpOptions,
   LLMResponse,
   ResponseFold,
   LanguageModel,
@@ -33,8 +32,9 @@ import {
   ToolEntry,
   type LLMRequest,
   mergeGenerationOptions,
-  mergeHttpOptions,
   mergeProviderOptions,
+  mergeTransport,
+  type TransportOptions,
   withPartial,
 } from "../schema/index.js"
 
@@ -104,18 +104,14 @@ export type RouteLanguageModelInput = Omit<LanguageModel.Input, "provider" | "ro
 
 export type RouteRoutedLanguageModelInput = Omit<LanguageModel.Input, "route">
 
-export interface RouteDefaults {
-  readonly headers?: Record<string, string>
+export interface RouteDefaults extends TransportOptions {
   readonly generation?: GenerationOptions
   readonly providerOptions?: ProviderOptions
-  readonly http?: HttpOptions
 }
 
-export interface RouteDefaultsInput {
-  readonly headers?: Record<string, string>
+export interface RouteDefaultsInput extends TransportOptions {
   readonly generation?: GenerationOptions.Input
   readonly providerOptions?: ProviderOptions
-  readonly http?: HttpOptions.Input
 }
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
@@ -148,29 +144,13 @@ const makeRouteLanguageModel = <Options extends ProviderOptions, Compact extends
   })
 }
 
-const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => {
-  const headers = mergeHeaders(base?.headers, patch.headers)
-  return {
-    ...base,
-    ...patch,
-    headers,
-    generation: mergeGenerationOptions(base?.generation, patch.generation),
-    providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
-    http: mergeHttpOptions(
-      base?.http,
-      HttpOptions.make(patch.http),
-      headers === undefined ? undefined : new HttpOptions({ headers }),
-    ),
-  }
-}
-
-const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
-  const entries = items.flatMap((item) =>
-    item === undefined ? [] : Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  )
-  if (entries.length === 0) return undefined
-  return Object.fromEntries(entries)
-}
+const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => ({
+  ...base,
+  ...patch,
+  ...mergeTransport(base, patch),
+  generation: mergeGenerationOptions(base?.generation, patch.generation),
+  providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
+})
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -293,7 +273,7 @@ const resolveRequestOptions = (request: LLMRequest): LLMRequest => {
       modelDefaults?.providerOptions,
       normalized.providerOptions,
     ),
-    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, normalized.http),
+    ...mergeTransport(routeDefaults, modelDefaults, normalized),
   }
 }
 
@@ -447,7 +427,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           endpoint: routeInput.endpoint,
           auth: routeInput.auth ?? Auth.none,
           encodeBody: ProviderShared.encodeJson,
-          middleware: options?.http,
+          middleware: RequestExecutor.withFetch(request.fetch, options?.http),
           webSocket: options?.webSocket,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime, options?: StreamOptions) => {
@@ -596,9 +576,7 @@ const prepareRequest = (request: LLMRequest): LLMRequest => {
     applyEffortUpdates({ ...sanitized, tools: ToolSchemaProjection.tools(dedupe(sanitized.tools), sanitized.model) }),
   )
   const headers = resolved.model.route.headers?.({ request: resolved })
-  return headers === undefined
-    ? resolved
-    : { ...resolved, http: mergeHttpOptions(new HttpOptions({ headers }), resolved.http) }
+  return headers === undefined ? resolved : { ...resolved, headers: { ...headers, ...resolved.headers } }
 }
 
 // Sanitizing copies changed class instances into plain records; rebuild them so protocols see the canonical classes.
@@ -608,7 +586,6 @@ const restoreClasses = (request: LLMRequest): LLMRequest => ({
   tools: request.tools.map(ToolEntry.make),
   toolChoice: request.toolChoice === undefined ? undefined : ToolChoice.make(request.toolChoice),
   generation: request.generation === undefined ? undefined : GenerationOptions.make(request.generation),
-  http: HttpOptions.make(request.http),
 })
 
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {

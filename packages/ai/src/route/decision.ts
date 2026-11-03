@@ -8,7 +8,7 @@ import {
   type DecisionRequest,
   type DecisionResponse,
 } from "../decision.js"
-import { HttpOptions, ProviderID, type AIError, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService } from "./executor-service.js"
@@ -40,7 +40,7 @@ export interface Patch {
   readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, DecisionRequest>
   readonly auth?: Auth.Definition
   readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
+  readonly http?: HttpOptions
 }
 
 export interface Route {
@@ -77,7 +77,7 @@ export const make = (input: MakeInput): Route => {
     endpoint: input.endpoint,
     auth: input.auth ?? Auth.none,
     headers: input.headers,
-    http: HttpOptions.make(input.http),
+    http: input.http,
   }
   return {
     ...route,
@@ -90,7 +90,7 @@ export const make = (input: MakeInput): Route => {
           patch.providerMetadataKey ?? (patch.provider === undefined ? route.providerMetadataKey : undefined),
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
         headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
-        http: patch.http === undefined ? route.http : HttpOptions.make(patch.http),
+        http: patch.http ?? route.http,
       }),
     model: <Options extends DecisionOptions>(model: {
       readonly id: string

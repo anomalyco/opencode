@@ -340,8 +340,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     if (message.role === "user") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "media"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
         parts.push(yield* lowerContentPart(part))
       }
       contents.push({ role: "user", parts })
@@ -395,8 +393,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {
