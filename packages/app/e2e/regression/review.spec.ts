@@ -899,7 +899,10 @@ test("artifact actions copy and download content, switch source, and follow the 
   expect(surface.y - bar.y - bar.height).toBe(1)
   await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
   await copy.click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(notes)
+  // Chromium writes CRLF to the Windows clipboard.
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n")))
+    .toBe(notes)
   await page.getByRole("button", { name: "Dismiss", exact: true }).click()
   await sourceAction.click()
   await expect(paper).toHaveCount(0)
