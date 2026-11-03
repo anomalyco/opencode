@@ -130,6 +130,11 @@ export const copy = {
 // one prompt never silently exempts another signal's prompt for the same signature.
 export const resourceSuffix = { guard: ":repeat", unobserved: ":unobserved", a: "", b: "", c: "" } as const
 
+// Host-specific strings that mark argument-validation rejections (the tool never executed).
+// Kept in one place so a host copy change is a one-line fix; an unmatched message is treated as a
+// real failure (conservative: counts into C rather than silently exempting it).
+export const VALIDATION_PREFIX = "Invalid arguments for tool"
+
 // Texts the live after hook can inject into a persisted result: warnings prepend to a completed
 // result's content and append to a failed call's error message. They fire only at fixed streaks,
 // so the complete set is enumerable. The fold strips them to hash the same text the live path
@@ -151,7 +156,7 @@ export const hasBlockedMetadata = (metadata: Record<string, unknown> | undefined
 
 export type Verdict =
   | { readonly kind: "pass" }
-  | { readonly kind: "circuit"; readonly message: string }
+  | { readonly kind: "circuit"; readonly message: string; readonly sticky: boolean }
   | {
       readonly kind: "assert"
       readonly signal: keyof typeof resourceSuffix
@@ -201,12 +206,11 @@ export interface Call {
 
 // Short-circuit order: circuit breaker -> same-message guard (==3, one-shot) -> unobserved-layer
 // one-time prompt -> A >= 6 -> B >= 8 surgical (requires A streak >= 3 corroboration) -> C >= 6.
-// The first hit is the only action for this call; a circuit hit hard-stops without asking.
+// The first hit is the only action for this call. A circuit hit is a permission ask like every
+// other signal: allow resets B and lets the run continue; a denial makes it sticky (hard stop).
 export function beforeCall(current: SessionState, call: Call): Verdict {
-  if (current.circuitBroken || current.bStreak >= B_CIRCUIT) {
-    current.circuitBroken = true
-    return { kind: "circuit", message: copy.circuit }
-  }
+  if (current.circuitBroken) return { kind: "circuit", message: copy.circuit, sticky: true }
+  if (current.bStreak >= B_CIRCUIT) return { kind: "circuit", message: copy.circuit, sticky: false }
   if (current.emitted.messageID !== call.messageID) {
     current.emitted = { messageID: call.messageID, counts: new Map() }
   }
@@ -351,9 +355,13 @@ export function compacted(current: SessionState) {
   current.bStreak = 0
 }
 
-// User message: the circuit breaker's defined escape hatch. B resets, the breaker re-arms; A/C
-// survive across user messages (a user interjection must not hand the loop a fresh counter).
+// User message: the circuit breaker's defined escape hatch and the per-turn scope boundary. B and
+// the breaker reset, and A/C counters reset too — a new user turn opens a fresh observation window,
+// so a periodic legitimate re-check cannot accumulate into a block over days. A real loop
+// re-accumulates within seconds after an interrupt, so detection is preserved.
 export function userMessage(current: SessionState) {
+  current.signatures.clear()
+  current.failures.clear()
   current.bStreak = 0
   current.circuitBroken = false
 }
@@ -364,7 +372,7 @@ export function filesChanged(current: SessionState) {
 }
 
 // Execution-end sweep (memory bound): tighten the line store of the session that just finished.
-// A/C counters are preserved — they intentionally survive across user messages and executions.
+// A/C counters are preserved here — they only reset on a new user message (per-turn scoping).
 export function tighten(current: SessionState) {
   if (current.lines.order.length <= TIGHTENED_LINE_KEEP) return
   const evicted = current.lines.order.splice(0, current.lines.order.length - TIGHTENED_LINE_KEEP)

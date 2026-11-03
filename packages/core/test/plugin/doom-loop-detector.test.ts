@@ -511,7 +511,7 @@ describe("doom loop detector", () => {
       expect(state.signatures.get(sig)?.streak).toBe(1)
     })
 
-    it("user messages clear only bStreak and the circuit breaker", () => {
+    it("user messages reset A/C counters and re-arm the breaker", () => {
       const state = DoomLoopDetector.state()
       const sig = DoomLoopDetector.signature("grep", { pattern: "TODO" })
       for (let i = 0; i < 5; i++) {
@@ -520,9 +520,10 @@ describe("doom loop detector", () => {
       }
       DoomLoopDetector.recordFailed(state, { tool: "edit", errorText: "boom", validation: false })
       DoomLoopDetector.userMessage(state)
-      // A/C survive a user interjection — clearing them would hand the loop a fresh counter.
-      expect(state.signatures.get(sig)?.streak).toBe(5)
-      expect(state.failures.has("edit")).toBe(true)
+      // Per-turn scoping: a new user message opens a fresh observation window for A and C too,
+      // so a periodic legitimate re-check cannot accumulate into a block over days.
+      expect(state.signatures.has(sig)).toBe(false)
+      expect(state.failures.has("edit")).toBe(false)
       expect(state.bStreak).toBe(0)
     })
 
@@ -552,6 +553,12 @@ describe("doom loop detector", () => {
       expect(v1.kind).toBe("circuit")
       expect(v2.kind).toBe("circuit")
       expect(v1.kind === "circuit" && v1.message).toContain("Stop making tool calls")
+      // First trip is a permission ask (not yet sticky); a denied circuit becomes sticky.
+      expect(v1.kind === "circuit" && v1.sticky).toBe(false)
+      state.circuitBroken = true
+      const sticky = DoomLoopDetector.beforeCall(state, { tool: "read", sigHash: sig, messageID: "ci_2b" })
+      expect(sticky.kind).toBe("circuit")
+      expect(sticky.kind === "circuit" && sticky.sticky).toBe(true)
       DoomLoopDetector.userMessage(state)
       const v3 = DoomLoopDetector.beforeCall(state, { tool: "read", sigHash: sig, messageID: "ci_3" })
       expect(v3.kind).toBe("pass")

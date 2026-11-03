@@ -55,7 +55,7 @@ export function fold(state: DoomLoopDetector.SessionState, messages: ReadonlyArr
         DoomLoopDetector.recordFailed(state, {
           tool: part.name,
           errorText,
-          validation: errorText.startsWith("Invalid arguments for tool"),
+          validation: errorText.startsWith(DoomLoopDetector.VALIDATION_PREFIX),
         })
         continue
       }

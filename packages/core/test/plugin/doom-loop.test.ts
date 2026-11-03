@@ -57,11 +57,12 @@ interface HarnessOptions {
   readonly contextFails?: boolean
   /** Durable plugin KV; share one map across harness instances to simulate a restart. */
   readonly storage?: Map<string, Schema.Json>
+  /** Factory-injected session cap (no global seam). */
+  readonly maxTrackedSessions?: number
 }
 
 /** Boots the plugin against stubbed domains and returns its registered hooks plus spies. */
 const run = Effect.fnUntraced(function* (options?: HarnessOptions) {
-  DoomLoopPlugin.setMaxTrackedSessions()
   const base = host()
   const kv = options?.storage ?? new Map<string, Schema.Json>()
   let beforeHook: BeforeHook | undefined
@@ -70,7 +71,7 @@ const run = Effect.fnUntraced(function* (options?: HarnessOptions) {
   const outcome: { current: Outcome } = { current: () => Effect.void }
   let interrupts = 0
   const queue = yield* Queue.unbounded<Published>()
-  yield* DoomLoopPlugin.Plugin.effect(
+  yield* DoomLoopPlugin.makePlugin({ maxTrackedSessions: options?.maxTrackedSessions }).effect(
     host({
       permission: {
         ...base.permission,
@@ -609,19 +610,36 @@ describe("doom loop plugin", () => {
         const exit = yield* emit(h, "shell", input, `ci_${i}`, text(out(i)))
         expect(Exit.isSuccess(exit)).toBe(true)
       }
-      expect(h.asserted).toEqual([])
+      h.setOutcome(() => Effect.fail(new Tool.Error({ message: "Permission denied: doom_loop" })))
       const exit = yield* Effect.exit(h.before(beforeEvent("shell", input, "ci_14")))
       const error = findToolError(exit)
       expect(error).toBeInstanceOf(Tool.Error)
       expect(error?.message).toContain("Stop making tool calls entirely")
-      // The circuit short-circuits before every ask and forks the interrupt without awaiting.
-      expect(h.asserted).toEqual([])
+      // The denied circuit asks once through doom_loop, then becomes sticky without re-asking.
+      expect(h.asserted).toHaveLength(1)
       yield* settle(() => h.interrupts() === 1)
       // A retry during circuit hits the same hard stop and never reaches the repeat guard.
       const retry = yield* Effect.exit(h.before(beforeEvent("shell", input, "ci_14")))
       expect(findToolError(retry)?.message).toContain("Stop making tool calls entirely")
-      expect(h.asserted).toEqual([])
+      expect(h.asserted).toHaveLength(1)
       yield* settle(() => h.interrupts() === 2)
+    }),
+  )
+
+  it.effect("resets B and lets the run continue when the circuit ask is allowed", () =>
+    Effect.gen(function* () {
+      const h = yield* run()
+      const input = { command: "probe" }
+      const out = (i: number) => `probe ${i}\nstatic line one\nstatic line two`
+      for (let i = 1; i <= 13; i++) {
+        yield* emit(h, "shell", input, `al_${i}`, text(out(i)))
+      }
+      // Default outcome allows the circuit ask: no interrupt, and B resets so the run continues.
+      const exit = yield* Effect.exit(h.before(beforeEvent("shell", input, "al_14")))
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(h.asserted).toHaveLength(1)
+      const next = yield* Effect.exit(h.before(beforeEvent("shell", input, "al_15")))
+      expect(Exit.isSuccess(next)).toBe(true)
     }),
   )
 
@@ -633,6 +651,7 @@ describe("doom loop plugin", () => {
       for (let i = 1; i <= 13; i++) {
         yield* emit(h, "shell", input, `ev_${i}`, text(out(i)))
       }
+      h.setOutcome(() => Effect.fail(new Tool.Error({ message: "Permission denied: doom_loop" })))
       const circuits = () =>
         Effect.gen(function* () {
           const exit = yield* Effect.exit(h.before(beforeEvent("shell", input, "ev_live")))
@@ -740,8 +759,8 @@ describe("doom loop plugin", () => {
       const out = "src/a.ts:1:TODO\nsrc/b.ts:2:TODO\nsrc/c.ts:3:TODO"
       const h = yield* run({
         histories: { [sesA]: [foldedCall("lru_a1", "grep", input, out), foldedCall("lru_a2", "grep", input, out)] },
+        maxTrackedSessions: 2,
       })
-      DoomLoopPlugin.setMaxTrackedSessions(2)
       // A folds its two historical calls; the third identical accounting warns.
       const a3 = completedEvent("grep", input, "lru_a3", text(out), sesA)
       yield* h.before(beforeEvent("grep", input, "lru_a3", sesA))
@@ -771,13 +790,14 @@ describe("doom loop plugin", () => {
       const sesA = Session.ID.make("ses_lru_circuit_a")
       const sesB = Session.ID.make("ses_lru_circuit_b")
       const sesC = Session.ID.make("ses_lru_circuit_c")
-      const h = yield* run()
-      DoomLoopPlugin.setMaxTrackedSessions(2)
+      const h = yield* run({ maxTrackedSessions: 2 })
       const input = { command: "probe" }
       const out = (i: number) => `probe ${i}\nstatic line one\nstatic line two`
       for (let i = 1; i <= 13; i++) {
         yield* emit(h, "shell", input, `lc_${i}`, text(out(i)), sesA)
       }
+      // A denied circuit trips the sticky stop.
+      h.setOutcome(() => Effect.fail(new Tool.Error({ message: "Permission denied: doom_loop" })))
       const tripped = yield* Effect.exit(h.before(beforeEvent("shell", input, "lc_14", sesA)))
       expect(findToolError(tripped)?.message).toContain("Stop making tool calls entirely")
       yield* settle(() => h.interrupts() === 1)
@@ -788,7 +808,7 @@ describe("doom loop plugin", () => {
       // hard-stops the next call.
       const again = yield* Effect.exit(h.before(beforeEvent("shell", input, "lc_15", sesA)))
       expect(findToolError(again)?.message).toContain("Stop making tool calls entirely")
-      expect(h.asserted).toEqual([])
+      expect(h.asserted).toHaveLength(1)
       yield* settle(() => h.interrupts() === 2)
     }),
   )
@@ -958,6 +978,7 @@ describe("doom loop plugin", () => {
       for (let i = 1; i <= 13; i++) {
         yield* emit(h1, "shell", input, `rs_${i}`, text(out(i)))
       }
+      h1.setOutcome(() => Effect.fail(new Tool.Error({ message: "Permission denied: doom_loop" })))
       const tripped = yield* Effect.exit(h1.before(beforeEvent("shell", input, "rs_14")))
       expect(findToolError(tripped)?.message).toContain("Stop making tool calls entirely")
       yield* settle(() => h1.interrupts() === 1)
@@ -985,6 +1006,7 @@ describe("doom loop plugin", () => {
       for (let i = 1; i <= 13; i++) {
         yield* emit(h, "shell", input, `dc_${i}`, text(out(i)))
       }
+      h.setOutcome(() => Effect.fail(new Tool.Error({ message: "Permission denied: doom_loop" })))
       const tripped = yield* Effect.exit(h.before(beforeEvent("shell", input, "dc_14")))
       expect(findToolError(tripped)?.message).toContain("Stop making tool calls entirely")
       expect(storage.has(`circuit:${sessionID}`)).toBe(true)
