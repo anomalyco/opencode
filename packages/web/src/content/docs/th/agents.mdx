@@ -150,7 +150,7 @@ _Mode_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -170,7 +170,7 @@ _Mode_: `primary`
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -194,7 +194,7 @@ _Mode_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -645,7 +645,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -663,19 +663,9 @@ Only analyze code and suggest changes.
 
 ## การสร้างเอเจนต์
 
-สร้างเอเจนต์ใหม่ด้วยคำสั่ง:
+สร้างเอเจนต์ใหม่โดยเพิ่มไฟล์ Markdown ไว้ใน `.opencode/agents/` สำหรับโปรเจ็กต์ หรือ `~/.config/opencode/agents/` สำหรับระดับผู้ใช้ (Global) ชื่อไฟล์จะกลายเป็นชื่อเอเจนต์ และ frontmatter ใช้กำหนดคำอธิบาย โหมด โมเดล และสิทธิ์ของเอเจนต์ ดูรูปแบบไฟล์ได้ที่ [Markdown](#markdown) ด้านบน
 
-```bash
-opencode agent create
-```
-
-คำสั่งแบบโต้ตอบจะถาม:
-
-1. สถานที่บันทึก (Global หรือ Project)
-2. คำอธิบายหน้าที่ของเอเจนต์
-3. สร้างพรอมต์และเลือกไอคอนที่เหมาะสม
-4. เลือกเครื่องมือที่เอเจนต์สามารถใช้ได้
-5. สร้างไฟล์ Markdown ของเอเจนต์
+รัน `opencode agent list` เพื่อแสดงรายการเอเจนต์ที่ OpenCode โหลดไว้
 
 ---
 

@@ -143,12 +143,6 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       },
       update,
       containWheel,
-      containOuterWheel: (event: WheelEvent) => {
-        if (!viewport) return
-
-        if (event.target instanceof Node && viewport.contains(event.target)) return
-        containWheel(event)
-      },
     },
     header: {
       setContent: (element: HTMLDivElement) => {

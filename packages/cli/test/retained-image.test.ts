@@ -68,6 +68,19 @@ windows("installed accepts package-manager and curl binaries only", () =>
     const cases = [
       [path.join(home, ".bun", "install", "global", "node_modules", "@opencode", "cli", "bin", "opencode.exe"), true],
       [path.join(home, ".opencode", "bin", "opencode.exe"), true],
+      [
+        path.join(
+          home,
+          "AppData",
+          "Local",
+          "Microsoft",
+          "WinGet",
+          "Packages",
+          "Anomaly.OpenCode_Microsoft.Winget.Source_8wekyb3d8bbwe",
+          "opencode.exe",
+        ),
+        true,
+      ],
       [path.join(home, "AppData", "Local", "Programs", "OpenCode", "resources", "opencode-cli.exe"), false],
       [path.join(home, "node_modules", "bun", "bin", "bun.exe"), false],
     ] as const

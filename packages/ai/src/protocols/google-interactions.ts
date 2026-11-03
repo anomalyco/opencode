@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -6,6 +6,8 @@ import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
+  ContentPolicyError,
+  InvalidProviderOutputError,
   LLMEvent,
   ProviderID,
   Usage,
@@ -19,9 +21,11 @@ import { encodeJson } from "../utils/json.js"
 import { JsonObject, knownString, lenient, optionalNull, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { MediaInput } from "./utils/media-input.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "google-interactions"
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -132,19 +136,57 @@ const OutputStep = Schema.Struct({
   content: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, text: Schema.optional(Schema.String) }))),
 })
 type OutputStep = typeof OutputStep.Type
+const KNOWN_DELTA_TYPES = new Set(["text", "arguments_delta", "thought_signature", "thought_summary"])
+const UnknownDelta = Schema.Struct({
+  type: Schema.String.check(Schema.makeFilter((type) => !KNOWN_DELTA_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ type: Schema.Literal("unknown"), rawType: Schema.String }), {
+    decode: SchemaGetter.transform((delta) => ({ type: "unknown" as const, rawType: delta.type })),
+    encode: SchemaGetter.forbidden(() => "Unknown Google Interactions deltas are decode-only"),
+  }),
+)
 const Delta = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("arguments_delta"), arguments: Schema.String }),
   Schema.Struct({ type: Schema.Literal("thought_signature"), signature: Schema.String }),
   Schema.Struct({ type: Schema.Literal("thought_summary"), content: Text }),
   // Unknown output modalities must fail explicitly rather than disappearing from a successful response.
-  Schema.Struct({ type: Schema.String }),
+  UnknownDelta,
 ])
 const Interaction = Schema.StructWithRest(
   Schema.Struct({
     id: Schema.optional(Schema.String),
     status: Schema.String,
     usage: Schema.optional(RawUsage),
+    errors: Schema.optional(
+      Schema.Array(Schema.Struct({ code: Schema.optional(Schema.String), message: Schema.optional(Schema.String) })),
+    ),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+const KNOWN_EVENT_TYPES = new Set([
+  "step.start",
+  "step.delta",
+  "step.stop",
+  "interaction.created",
+  "interaction.status_update",
+  "interaction.completed",
+  "error",
+])
+// Google may add stream event types. Unknown types are ignored, while a malformed known type still fails decoding.
+const UnknownEvent = Schema.Struct({
+  event_type: Schema.String.check(Schema.makeFilter((type) => !KNOWN_EVENT_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ event_type: Schema.Literal("unknown") }), {
+    decode: SchemaGetter.transform(() => ({ event_type: "unknown" as const })),
+    encode: SchemaGetter.forbidden(() => "Unknown Google Interactions stream events are decode-only"),
+  }),
+)
+const ErrorDetail = Schema.StructWithRest(
+  Schema.Struct({
+    code: lenient(Schema.String),
+    error_type: lenient(Schema.String),
+    message: lenient(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -162,7 +204,8 @@ const Event = Schema.Union([
     status: Schema.String,
   }),
   Schema.Struct({ event_type: Schema.Literal("interaction.completed"), interaction: Interaction }),
-  Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.Unknown }),
+  Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.optionalKey(Schema.Unknown) }),
+  UnknownEvent,
 ])
 type Event = typeof Event.Type
 
@@ -175,7 +218,6 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly steps: Partial<Record<number, OutputStep>>
   readonly tools: ToolStream.State<number>
-  readonly completed: boolean
 }
 type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
@@ -195,7 +237,10 @@ const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
     )
   const type: (typeof MediaContent.Type)["type"] =
     asset.kind === "image" || asset.kind === "audio" || asset.kind === "video" ? asset.kind : "document"
-  const uri = MediaInput.refID(asset, ProviderID.make("google"))
+  const uri =
+    asset.kind === "video" && asset.source.type === "url" && /^https?:\/\//i.test(asset.source.url)
+      ? asset.source.url
+      : MediaInput.refID(asset, ProviderID.make("google"))
   if (uri !== undefined) return { type, uri, mime_type: asset.mediaType }
   const inline = yield* ProviderShared.requireInlineMedia("Google Interactions", asset)
   return { type, data: inline.base64, mime_type: inline.mime }
@@ -203,14 +248,12 @@ const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
 
 const signature = (metadata: ProviderMetadata | undefined, key: string) => {
   const value = metadata?.[key]
-  return ProviderShared.isRecord(value) && typeof value.interactionSignature === "string"
-    ? value.interactionSignature
-    : undefined
+  return typeof value?.interactionSignature === "string" ? value.interactionSignature : undefined
 }
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
-  const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const key = request.model.route.providerMetadataKey ?? request.model.provider
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Google Interactions", message)
@@ -226,6 +269,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         steps[steps.length - 1] = { type, content: [...last.content, content] }
       else steps.push({ type, content: [content] })
     }
+    let hasSignedStep = false
     for (const part of message.content) {
       if (message.role === "tool") {
         if (part.type !== "tool-result")
@@ -248,21 +292,25 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         continue
       }
       if (message.role === "assistant" && part.type === "reasoning") {
+        const thoughtSignature = signature(part.providerMetadata, key)
         steps.push({
           type: "thought",
-          signature: signature(part.providerMetadata, key),
+          signature: thoughtSignature,
           summary: part.text ? [{ type: "text", text: part.text }] : undefined,
         })
+        if (thoughtSignature !== undefined) hasSignedStep = true
         continue
       }
       if (message.role === "assistant" && part.type === "tool-call") {
+        const toolSignature = signature(part.providerMetadata, key)
         steps.push({
           type: "function_call",
           id: part.id,
           name: part.name,
           arguments: part.input,
-          signature: signature(part.providerMetadata, key),
+          signature: toolSignature ?? (!hasSignedStep ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
         })
+        if (toolSignature !== undefined) hasSignedStep = true
         continue
       }
       return yield* ProviderShared.unsupportedContent(
@@ -281,7 +329,7 @@ const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
 
   return yield* Effect.forEach(part.result.value, (item): Effect.Effect<typeof Content.Type, AIError> => {
     if (item.type === "text") return Effect.succeed({ type: "text", text: item.text })
-    return mediaContent(ProviderShared.toolFileMedia(item).media)
+    return mediaContent(GeminiGenerateContent.toolMedia(item))
   })
 })
 
@@ -364,11 +412,7 @@ const mapUsage = (usage: RawUsage | undefined, key: string) => {
   })
 }
 
-const onStart = Effect.fnUntraced(function* (
-  state: ParserState,
-  index: number,
-  step: OutputStep,
-) {
+const onStart = Effect.fnUntraced(function* (state: ParserState, index: number, step: OutputStep) {
   const events: LLMEvent[] = []
   let lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   let tools = state.tools
@@ -402,26 +446,22 @@ const onStart = Effect.fnUntraced(function* (
   return [{ ...state, lifecycle, tools, steps: { ...state.steps, [index]: step } }, events] satisfies StepResult
 })
 
-const onDelta = Effect.fnUntraced(function* (
-  state: ParserState,
-  index: number,
-  delta: typeof Delta.Type,
-) {
+const onDelta = Effect.fnUntraced(function* (state: ParserState, index: number, delta: typeof Delta.Type) {
   const step = state.steps[index]
   if (!step)
     return yield* ProviderShared.eventError(ADAPTER, "Interactions delta without step.start", encodeJson(delta))
   const events: LLMEvent[] = []
-  if (delta.type === "text" && "text" in delta && step.type === "model_output")
+  if (delta.type === "text" && step.type === "model_output")
     return [
       { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, String(index), delta.text) },
       events,
     ] satisfies StepResult
-  if (delta.type === "thought_summary" && "content" in delta && step.type === "thought")
+  if (delta.type === "thought_summary" && step.type === "thought")
     return [
       { ...state, lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, String(index), delta.content.text) },
       events,
     ] satisfies StepResult
-  if (delta.type === "thought_signature" && "signature" in delta) {
+  if (delta.type === "thought_signature") {
     const next = { ...step, signature: delta.signature }
     const tool = state.tools[index]
     return [
@@ -433,7 +473,7 @@ const onDelta = Effect.fnUntraced(function* (
       events,
     ] satisfies StepResult
   }
-  if (delta.type === "arguments_delta" && "arguments" in delta && step.type === "function_call") {
+  if (delta.type === "arguments_delta" && step.type === "function_call") {
     const result = ToolStream.appendExisting(
       ADAPTER,
       state.tools,
@@ -444,7 +484,11 @@ const onDelta = Effect.fnUntraced(function* (
     if (ToolStream.isError(result)) return yield* result
     return [{ ...state, tools: result.tools }, result.events] satisfies StepResult
   }
-  return yield* ProviderShared.eventError(ADAPTER, `Unsupported Interactions delta: ${delta.type}`, encodeJson(delta))
+  return yield* ProviderShared.eventError(
+    ADAPTER,
+    `Unsupported Interactions delta: ${delta.type === "unknown" ? delta.rawType : delta.type}`,
+    encodeJson(delta),
+  )
 })
 
 const onStop = Effect.fnUntraced(function* (state: ParserState, index: number) {
@@ -465,6 +509,25 @@ const onStop = Effect.fnUntraced(function* (state: ParserState, index: number) {
   return [{ ...state, tools: result.tools }, result.events ?? []] satisfies StepResult
 })
 
+const RECOVERABLE_CODES = new Set([
+  "MALFORMED_FUNCTION_CALL",
+  "MALFORMED_TOOL_CALL",
+  "UNEXPECTED_TOOL_CALL",
+  "MALFORMED_RESPONSE",
+])
+const INVALID_OUTPUT_CODES = new Set(["MISSING_THOUGHT_SIGNATURE", "TOO_MANY_TOOL_CALLS", "NO_IMAGE"])
+
+const failureReason = (route: string, code: string | undefined, message: string, data: unknown, rawBody: string) => {
+  const normalized = code?.trim().toUpperCase().replaceAll("-", "_")
+  if (normalized && RECOVERABLE_CODES.has(normalized))
+    return new InvalidProviderOutputError({ route, message, body: rawBody, classification: "incomplete-stream" })
+  if (normalized && INVALID_OUTPUT_CODES.has(normalized))
+    return new InvalidProviderOutputError({ route, message, body: rawBody })
+  if (normalized && (normalized === "CONTENT_BLOCKED" || GeminiGenerateContent.contentFiltered(normalized)))
+    return new ContentPolicyError({ message, body: rawBody })
+  return classifyProviderFailure({ message, data, rawBody })
+}
+
 const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   switch (event.event_type) {
     case "step.start":
@@ -475,25 +538,37 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
       return yield* onStop(state, event.index)
     case "interaction.created":
     case "interaction.status_update":
+    case "unknown":
       return [state, []] satisfies StepResult
-    case "error":
+    case "error": {
+      const rawBody = encodeJson(event)
+      const detail = Option.getOrUndefined(Schema.decodeUnknownOption(ErrorDetail)(event.error))
       return yield* new AIError({
-        reason: classifyProviderFailure({
-          message: providerErrorMessage(encodeJson(event)) ?? "Google Interactions stream error",
-          data: event.error,
-          rawBody: encodeJson(event),
-        }),
+        reason: failureReason(
+          state.route,
+          detail?.code ?? detail?.error_type,
+          detail?.message?.trim() || providerErrorMessage(rawBody) || "Google Interactions stream error",
+          event.error,
+          rawBody,
+        ),
       })
+    }
     case "interaction.completed": {
       const interaction = event.interaction
-      if (interaction.status === "failed" || interaction.status === "cancelled")
+      if (interaction.status === "failed" || interaction.status === "cancelled") {
+        const messages = (interaction.errors ?? []).flatMap((error) => (error.message?.trim() ? [error.message] : []))
+        const coded = interaction.errors?.find((error) => error.code)
         return yield* new AIError({
-          reason: classifyProviderFailure({
-            message: `Google Interactions ${interaction.status}`,
-            data: interaction,
-            rawBody: encodeJson(event),
-          }),
+          reason: failureReason(
+            state.route,
+            coded?.code,
+            messages.length > 0 ? messages.join("\n") : `Google Interactions ${interaction.status}`,
+            // The first coded error decides the classification; every message stays visible.
+            coded ?? interaction,
+            encodeJson(event),
+          ),
         })
+      }
       if (!["completed", "requires_action", "incomplete"].includes(interaction.status))
         return yield* ProviderShared.eventError(
           ADAPTER,
@@ -502,10 +577,11 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
         )
       const pending = yield* ToolStream.finishAll(ADAPTER, state.tools)
       const events = [...pending.events]
+      const hasToolCalls = Object.values(state.steps).some((item) => item?.type === "function_call")
       const lifecycle = Lifecycle.finish(state.lifecycle, events, {
         reason: {
           normalized:
-            interaction.status === "requires_action"
+            interaction.status === "requires_action" || (interaction.status === "completed" && hasToolCalls)
               ? "tool-calls"
               : interaction.status === "incomplete"
                 ? "length"
@@ -515,7 +591,7 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
         usage: mapUsage(interaction.usage, state.metadataKey),
         providerMetadata: { [state.metadataKey]: { interactionId: interaction.id } },
       })
-      return [{ ...state, lifecycle, tools: pending.tools, completed: true }, events] satisfies StepResult
+      return [{ ...state, lifecycle, tools: pending.tools }, events] satisfies StepResult
     }
   }
 })
@@ -530,21 +606,14 @@ export const protocol = Protocol.make({
   stream: {
     event: Protocol.jsonEvent(Event),
     initial: (request): ParserState => ({
-      route: `${request.model.provider}/${ADAPTER}`,
-      metadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
+      route: `${request.model.provider}/${request.model.route.id}`,
+      metadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       lifecycle: Lifecycle.initial(),
       steps: {},
       tools: ToolStream.empty<number>(),
-      completed: false,
     }),
     step,
     terminal: (event) => event.event_type === "interaction.completed",
-    onHalt: (state) =>
-      state.completed
-        ? Effect.succeed([])
-        : Effect.fail(
-            ProviderShared.eventError(ADAPTER, "Google Interactions stream ended before interaction.completed"),
-          ),
   },
 })
 

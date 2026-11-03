@@ -10,9 +10,9 @@ test("exposes every standard HTTP API group", () => {
     "agent",
     "plugin",
     "session",
+    "experimental",
     "message",
     "model",
-    "generate",
     "provider",
     "integration",
     "mcp",
@@ -26,32 +26,148 @@ test("exposes every standard HTTP API group", () => {
     "rpc",
     "event",
     "pty",
-    "experimental",
     "shell",
     "reference",
     "worktree",
     "vcs",
     "debug",
-    "migration",
     "websearch",
     "config",
+    "generate",
+    "voice",
+    "migration",
+    "usage",
   ])
-  expect(Object.keys(client.debug)).toEqual(["location"])
+  expect(Object.keys(client.debug)).toEqual(["heapDump", "location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
   expect(Object.keys(client.message)).toEqual(["list"])
-  expect(Object.keys(client.integration)).toEqual(["list", "get", "wellknown", "connect", "oauth", "command"])
-  expect(Object.keys(client.integration.wellknown)).toEqual(["add"])
-  expect(Object.keys(client.integration.connect)).toEqual(["key"])
+  expect(Object.keys(client.integration)).toEqual(["list", "get", "connect", "oauth", "command", "wellknown"])
+  expect(Object.keys(client.integration.connect)).toEqual(["key", "external"])
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write", "watch", "unwatch"])
+  expect(Object.keys(client.mcp)).toEqual(["list", "resource", "add", "remove", "connect", "disconnect", "client"])
+  expect(Object.keys(client.config)).toEqual(["get", "shells", "update"])
+  expect(Object.keys(client.vcs)).toEqual(["init", "get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
-  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(Object.keys(client.experimental)).toEqual([
+    "session",
+    "generate",
+    "voice",
+    "integration",
+    "mcp",
+    "file",
+    "persistentPty",
+    "media",
+    "schedule",
+    "artifacts",
+    "migration",
+    "usage",
+    "config",
+  ])
+  expect(Object.keys(client.experimental.session)).toEqual([
+    "stats",
+    "import",
+    "export",
+    "skill",
+    "wait",
+    "instructions",
+    "log",
+  ])
+  expect(Object.keys(client.experimental.voice)).toEqual(["models", "session"])
+  expect(Object.keys(client.experimental.usage)).toEqual(["limits"])
+  expect(Object.keys(client.experimental.mcp)).toEqual(["add", "remove", "connect", "disconnect", "client"])
+  expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])
+  expect(Object.keys(client.experimental.file)).toEqual(["write", "watch", "unwatch"])
+  expect(Object.keys(client.experimental.media)).toEqual(["get"])
+  expect(Object.keys(client.experimental.schedule)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
   expect(client.experimental.persistentPty.read).toBeFunction()
-  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
+})
+
+test("nests a method under client.experimental exactly when its route is experimental", async () => {
+  let url: URL | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      url = new URL(input instanceof Request ? input.url : String(input))
+      throw new Error("captured")
+    },
+  })
+  // Every field reads as "x" so path params resolve; request options stay unset.
+  const input = new Proxy(
+    {},
+    { get: (_target, key) => (key === "signal" || key === "headers" || key === "onActivity" ? undefined : "x") },
+  )
+  const routes: Array<{ readonly method: string; readonly experimentalRoute: boolean }> = []
+  const deprecated: Array<string> = []
+  const visit = async (node: object, path: ReadonlyArray<string>): Promise<void> => {
+    for (const [name, value] of Object.entries(node)) {
+      // `rpc` is a callable that also carries its generated routes.
+      if (typeof value !== "function" || Object.keys(value).length > 0) {
+        await visit(value, [...path, name])
+        continue
+      }
+      const target = [...path, name].reduce<unknown>(
+        (parent, key) => (parent as Record<string, unknown> | undefined)?.[key],
+        client.experimental,
+      )
+      if (path[0] !== "experimental" && target === value) {
+        deprecated.push([...path, name].join("."))
+        continue
+      }
+      url = undefined
+      const result: unknown = value(input)
+      if (typeof result === "object" && result !== null && Symbol.asyncIterator in result) {
+        await (result as AsyncIterable<unknown>)
+          [Symbol.asyncIterator]()
+          .next()
+          .catch(() => undefined)
+      } else await Promise.resolve(result).catch(() => undefined)
+      const method = [...path, name].join(".")
+      if (url === undefined) throw new Error(`${method} did not send a request`)
+      routes.push({ method, experimentalRoute: url.pathname.startsWith("/api/experimental/") })
+    }
+  }
+  await visit(client, [])
+
+  expect(routes.filter((route) => route.experimentalRoute).length).toBeGreaterThan(20)
+  expect(
+    routes
+      .filter((route) => route.experimentalRoute !== route.method.startsWith("experimental."))
+      .map((route) => route.method),
+  ).toEqual([])
+  // Pre-experimental paths kept as deprecated aliases until the next minor.
+  expect(deprecated.toSorted()).toEqual([
+    "config.update",
+    "file.unwatch",
+    "file.watch",
+    "file.write",
+    "generate.decisions",
+    "generate.image",
+    "generate.text",
+    "integration.wellknown.add",
+    "mcp.add",
+    "mcp.client.token",
+    "mcp.connect",
+    "mcp.disconnect",
+    "mcp.remove",
+    "migration.v1.status",
+    "session.export",
+    "session.import",
+    "session.instructions.entry.list",
+    "session.instructions.entry.put",
+    "session.instructions.entry.remove",
+    "session.log",
+    "session.skill",
+    "session.stats",
+    "session.wait",
+    "usage.limits",
+    "voice.models",
+    "voice.session",
+  ])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
@@ -249,8 +365,8 @@ test("generate.text uses the locationless public contract", async () => {
     },
   })
 
-  expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
-  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate")
+  expect(await client.experimental.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
+  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate/text")
   expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 
@@ -320,7 +436,7 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
     },
   })
 
-  await client.integration.wellknown.add({
+  await client.experimental.integration.wellknown.add({
     url: "https://example.com",
     location: { directory: "/tmp/project" },
   })
@@ -582,13 +698,13 @@ test("session instructions methods use the public HTTP contract", async () => {
     },
   })
 
-  const result = await client.session.instructions.entry.list({ sessionID: "ses_test" })
-  await client.session.instructions.entry.put({
+  const result = await client.experimental.session.instructions.entry.list({ sessionID: "ses_test" })
+  await client.experimental.session.instructions.entry.put({
     sessionID: "ses_test",
     key: "review-notes",
     value: instructions[0].value,
   })
-  await client.session.instructions.entry.remove({ sessionID: "ses_test", key: "review-notes" })
+  await client.experimental.session.instructions.entry.remove({ sessionID: "ses_test", key: "review-notes" })
 
   expect(result).toEqual(instructions)
   expect(requests).toEqual([
@@ -967,11 +1083,11 @@ test("session methods use the public HTTP contract", async () => {
     resume: false,
   })
   await client.session.compact({ sessionID: "ses_test" })
-  await client.session.wait({ sessionID: "ses_test" })
+  await client.experimental.session.wait({ sessionID: "ses_test" })
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
-  for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
+  for await (const item of client.experimental.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
+  const interrupted = await client.session.interrupt({ sessionID: "ses_test", resume: true })
   const message = await client.session.message.get({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -999,7 +1115,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?resume=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const viewBody = requests.find((request) => request.url.endsWith("/api/session/ses_test/view"))?.init?.body
@@ -1046,7 +1162,7 @@ test("session.log decodes SessionNotFoundError", async () => {
   })
 
   try {
-    await client.session.log({ sessionID: "ses_missing" })[Symbol.asyncIterator]().next()
+    await client.experimental.session.log({ sessionID: "ses_missing" })[Symbol.asyncIterator]().next()
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isSessionNotFoundError(error)).toBe(true)

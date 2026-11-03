@@ -66,13 +66,19 @@ export const queryR2SqlPages = Effect.fn("R2Sql.query")(function* (
     const page = yield* Effect.suspend(() =>
       fetchRows(columns?.length ? pageQuery(query, columns, cursor) : query),
     ).pipe(
-      // Retry only this page; a transient R2 timeout must not discard the whole
-      // display-window backfill. Syntax, auth, and row-limit errors still fail.
+      // Retry only this page; a transient R2 failure must not discard the whole
+      // pass. 40005 is a query timeout, 60104 an intermittent "Unprocessable
+      // Entity", and fetch rejects with a TypeError when the connection drops.
+      // Syntax, auth, row-limit, and 15-minute request timeout errors still fail.
       Effect.retry({
         times: 2,
         schedule: Schedule.exponential("5 seconds"),
         while: (error) =>
-          error.code === 40005 || error.status === 429 || (error.status !== undefined && error.status >= 500),
+          error.code === 40005 ||
+          error.code === 60104 ||
+          error.status === 429 ||
+          (error.status !== undefined && error.status >= 500) ||
+          error.cause instanceof TypeError,
       }),
     )
     if (page.length >= R2_SQL_MAX_ROWS && !columns?.length)

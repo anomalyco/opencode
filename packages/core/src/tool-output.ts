@@ -30,6 +30,8 @@ export type Editor = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly truncate: (result: Result) => Effect.Effect<Result>
+  /** Writes bytes the model cannot receive inline to a retained file and returns its path. */
+  readonly save: (bytes: Uint8Array, extension: string) => Effect.Effect<string>
   readonly cleanup: () => Effect.Effect<void>
 }
 
@@ -117,10 +119,17 @@ const layer = Layer.effect(
       }
     })
 
+    const save = Effect.fnUntraced(function* (bytes: Uint8Array, extension: string) {
+      const file = path.join(directory, fileName() + extension)
+      yield* fs.writeWithDirs(file, bytes).pipe(Effect.orDie)
+      return file
+    })
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       truncate,
+      save,
       cleanup: () => cleanup(fs, directory),
     })
   }),

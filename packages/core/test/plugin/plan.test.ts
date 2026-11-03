@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Message, ToolFailure } from "@opencode/ai"
+import { Message, ToolFailure } from "@opencode/ai/effect"
 import { DateTime, Effect, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"

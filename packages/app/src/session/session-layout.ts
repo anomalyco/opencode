@@ -8,7 +8,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { ServerConnection } from "@/runtime/server/registry"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 
-export const useSessionKey = () => {
+const useSessionKey = () => {
   const params = useParams()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -33,14 +33,17 @@ export const useSessionLayout = () => {
   })
 
   const regions = {
-    dockOpened: () => tabs.region(currentTab(), "dock"),
-    setDockOpened: (opened: boolean) => tabs.setRegion(currentTab(), "dock", opened),
-    dockHeight: () => tabs.regionSize(currentTab(), "dockHeight"),
-    setDockHeight: (height: number) => tabs.setRegionSize(currentTab(), "dockHeight", height),
     sideOpened: () => tabs.region(currentTab(), "side"),
     setSideOpened: (opened: boolean) => tabs.setRegion(currentTab(), "side", opened),
+    // The bottom pane shows whenever it holds tabs until the user hides it.
+    bottomOpened: () => tabs.region(currentTab(), "bottom", true),
+    setBottomOpened: (opened: boolean) => tabs.setRegion(currentTab(), "bottom", opened),
     sessionWidth: () => tabs.regionSize(currentTab(), "sessionWidth"),
     setSessionWidth: (width: number) => tabs.setRegionSize(currentTab(), "sessionWidth", width),
+    bottomHeight: () => tabs.regionSize(currentTab(), "bottomHeight"),
+    setBottomHeight: (height: number) => tabs.setRegionSize(currentTab(), "bottomHeight", height),
+    splitRatio: () => tabs.regionSize(currentTab(), "splitRatio"),
+    setSplitRatio: (ratio: number) => tabs.setRegionSize(currentTab(), "splitRatio", ratio),
   }
 
   return {

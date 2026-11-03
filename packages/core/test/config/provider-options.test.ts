@@ -24,6 +24,27 @@ describe("ConfigProviderOptionsV1", () => {
     })
   })
 
+  test("moves openai-compatible options the package does not read into the body", () => {
+    expect(
+      ConfigProviderOptionsV1.compatibleModel({
+        reasoningEffort: "high",
+        timeout: 1000,
+        allowed_openai_params: ["reasoning_effort"],
+        chat_template_kwargs: { enable_thinking: true },
+      }),
+    ).toEqual({
+      settings: { reasoningEffort: "high", timeout: 1000 },
+      body: {
+        allowed_openai_params: ["reasoning_effort"],
+        chat_template_kwargs: { enable_thinking: true },
+      },
+    })
+    expect(ConfigProviderOptionsV1.compatibleModel({ reasoningEffort: "low" })).toEqual({
+      settings: { reasoningEffort: "low" },
+      body: undefined,
+    })
+  })
+
   test("keeps model and variant options unchanged", () => {
     expect(
       ConfigProviderOptionsV1.model({

@@ -84,9 +84,9 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, GoogleInteractions.ProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderOptionsInput> = (
   modelID,
-  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
+  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {},
 ) => {
   if (apiKey !== undefined && accessToken !== undefined)
     throw new ProviderConfigurationError({

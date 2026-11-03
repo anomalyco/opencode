@@ -37,7 +37,7 @@ function MermaidTimeline(props: { streaming: boolean }) {
           type: "assistant",
           agent: "build",
           model: STORY_MODEL,
-          time: { created: STORY_TIME + 100, ...(completed() ? { completed: STORY_TIME + 1000 } : {}) },
+          time: { created: STORY_TIME + 100, completed: completed() ? STORY_TIME + 1000 : undefined },
           content: [
             {
               type: "text",
@@ -48,7 +48,7 @@ function MermaidTimeline(props: { streaming: boolean }) {
                 "```mermaid\nsequenceDiagram\n Client->>Server: Send prompt\n Server->>Model: Generate response\n Model-->>Client: Response\n" +
                   (completed() ? "```" : ""),
               ].join("\n\n"),
-              ...(completed() ? {} : { state: { phase: "streaming" } }),
+              native: completed() ? undefined : { phase: "streaming" },
             },
           ],
         },

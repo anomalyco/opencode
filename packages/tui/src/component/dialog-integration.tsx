@@ -1,4 +1,4 @@
-import { ScrollBoxRenderable, TextareaRenderable, TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type {
   ConnectionInfo,
@@ -15,13 +15,22 @@ import type {
 import { openUrl } from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useNewDesigns } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import {
+  DIALOG_INSET,
+  DIALOG_LIST_INSET,
+  DialogBleed,
+  DialogFooter,
+  DialogHeader,
+  DialogLayout,
+  useDialog,
+} from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
@@ -38,8 +47,8 @@ import {
 } from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
-  "opencode-go": 0,
-  opencode: 1,
+  opencode: 0,
+  "opencode-go": 1,
   openai: 2,
   "github-copilot": 3,
   anthropic: 4,
@@ -54,11 +63,12 @@ const CANCELLED = Symbol("cancelled")
 const CUSTOM = Symbol("custom")
 const OPEN = Symbol("open")
 const SUBMIT = Symbol("submit")
+// Device-flow codes such as "R283-GOUEO"; when present they are copied instead of the URL.
+const OAUTH_CODE = /[A-Z0-9]{4}-[A-Z0-9]{4,5}/
 
 export function integrationOptions(list: IntegrationInfo[]) {
   return list.toSorted(
     (a, b) =>
-      Number(b.metadata?.source === "mcp") - Number(a.metadata?.source === "mcp") ||
       (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
       a.name.localeCompare(b.name) ||
       a.id.localeCompare(b.id),
@@ -94,9 +104,12 @@ export function DialogIntegration(
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const location = currentLocation.ref ?? data.location.default()
+  // The MCP dialog signs its servers in through `integrationID`; the connect menu leaves them to it.
   const integrations = createMemo(() =>
-    integrationOptions(data.location.integration.list(location) ?? []).filter(
-      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    integrationOptions(data.location.integration.list(location) ?? []).filter((integration) =>
+      props.integrationID === undefined
+        ? integration.metadata?.source !== "mcp"
+        : integration.id === props.integrationID,
     ),
   )
 
@@ -118,7 +131,6 @@ export function DialogIntegration(
       const credentials = credentialConnections(integration)
       let category = "Services"
       if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
-      if (integration.metadata?.source === "mcp") category = "MCP"
       const status = integration.connections[0]?.status
       return {
         title: integration.name,
@@ -145,12 +157,12 @@ export function DialogIntegration(
       title="Connect an integration"
       options={options()}
       emptyView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={theme.text.muted}>No integrations available</text>
         </box>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET}>
           <text fg={theme.text.muted}>No integrations found</text>
         </box>
       }
@@ -171,6 +183,7 @@ function manageConnections(
     const toast = useToast()
     const theme = useTheme().surface("dialog")
     const shortcuts = Keymap.useShortcuts()
+    const newDesigns = useNewDesigns()
     const [deleting, setDeleting] = createSignal<string>()
     const [selected, setSelected] = createSignal(methods.length ? "add" : credentialConnections(integration)[0]?.id)
     const current = createMemo(() =>
@@ -249,7 +262,7 @@ function manageConnections(
           },
           {
             command: "dialog.integration.delete",
-            title: "delete",
+            title: newDesigns() ? "remove account" : "delete",
             hidden: selected() === "add",
             disabled: (option) => !option || option.value === "add",
             onTrigger: (option) => {
@@ -283,16 +296,20 @@ function selectMethod(
   onConnected?: OnIntegrationConnected,
 ) {
   if (methods.length === 1) return openMethod(integration, methods[0], location, dialog, onConnected)
-  dialog.replace(() => (
-    <DialogSelect
-      title={`Connect ${integration.name}`}
-      options={methods.map((method) => ({
-        title: method.type === "key" ? (method.label ?? "API key") : method.label,
-        value: method.type === "key" ? "key" : method.id,
-        onSelect: () => openMethod(integration, method, location, dialog, onConnected),
-      }))}
-    />
-  ))
+  dialog.replace(() => {
+    const newDesigns = useNewDesigns()
+    return (
+      <DialogSelect
+        title={`Connect ${integration.name}`}
+        renderFilter={!newDesigns()}
+        options={methods.map((method) => ({
+          title: method.type === "key" ? (method.label ?? "API key") : method.label,
+          value: method.type === "key" ? "key" : method.id,
+          onSelect: () => openMethod(integration, method, location, dialog, onConnected),
+        }))}
+      />
+    )
+  })
 }
 
 function openMethod(
@@ -509,28 +526,22 @@ function CommandView(props: { title: string; output: string; message: string }) 
   const overlayTheme = useTheme()
   onMount(() => dialog.setSize("large"))
   return (
-    <box gap={1} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
-          {props.title}
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc close
-        </text>
-      </box>
-      <box
-        backgroundColor={overlayTheme.background.raised.high}
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-        paddingBottom={1}
-      >
-        <text fg={overlayTheme.text.base}>{props.output.trim()}</text>
-      </box>
-      <box paddingLeft={2} paddingRight={2}>
+    <DialogLayout header={<DialogHeader title={props.title} closeLabel="esc close" />}>
+      <box gap={1}>
+        <DialogBleed>
+          <box
+            backgroundColor={overlayTheme.background.raised.high}
+            paddingLeft={DIALOG_INSET}
+            paddingRight={DIALOG_INSET}
+            paddingTop={1}
+            paddingBottom={1}
+          >
+            <text fg={overlayTheme.text.base}>{props.output.trim()}</text>
+          </box>
+        </DialogBleed>
         <text fg={theme.text.muted}>{props.message}</text>
       </box>
-    </box>
+    </DialogLayout>
   )
 }
 
@@ -654,37 +665,32 @@ function OAuthAuto(props: {
   const client = useClient()
   const toast = useToast()
   const clipboard = useClipboard()
+  const newDesigns = useNewDesigns()
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
+
+  const open = () => {
+    openUrl(props.attempt.url).catch(() =>
+      toast.show({
+        message: "Could not open the browser. Copy the URL and continue manually.",
+        variant: "error",
+      }),
+    )
+  }
+
+  const copy = () => {
+    const value = props.attempt.instructions.match(OAUTH_CODE)?.[0] ?? props.attempt.url
+    clipboard
+      .write(value)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+  }
 
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      {
-        bind: "o",
-        title: "Open authorization URL",
-        group: "Dialog",
-        run: () => {
-          openUrl(props.attempt.url).catch(() =>
-            toast.show({
-              message: "Could not open the browser. Copy the URL and continue manually.",
-              variant: "error",
-            }),
-          )
-        },
-      },
-      {
-        bind: "c",
-        title: "Copy authorization details",
-        group: "Dialog",
-        run: () => {
-          const value = props.attempt.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.attempt.url
-          clipboard
-            .write(value)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-        },
-      },
+      { bind: newDesigns() ? "return" : "o", title: "Open authorization URL", group: "Dialog", run: open },
+      { bind: "c", title: "Copy authorization details", group: "Dialog", run: copy },
     ],
   }))
 
@@ -733,8 +739,8 @@ function OAuthAuto(props: {
       url={props.attempt.url}
       instructions={props.attempt.instructions}
       message="Waiting for authorization…"
-      copy
-      open
+      onCopy={copy}
+      onOpen={open}
     />
   )
 }
@@ -751,6 +757,7 @@ function OAuthCode(props: {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme().surface("dialog")
+  const newDesigns = useNewDesigns()
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -766,6 +773,7 @@ function OAuthCode(props: {
   return (
     <DialogPrompt
       title={props.title}
+      subtitle={props.attempt.instructions}
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
@@ -784,7 +792,9 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <text fg={theme.text.muted}>{props.attempt.instructions}</text>
+          <Show when={!newDesigns()}>
+            <text fg={theme.text.muted}>{props.attempt.instructions}</text>
+          </Show>
           <Link href={props.attempt.url} fg={theme.markdown.link} />
           <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
         </box>
@@ -798,45 +808,54 @@ function OAuthView(props: {
   url?: string
   instructions?: string
   message: string
-  copy?: boolean
-  open?: boolean
+  onCopy?: () => void
+  onOpen?: () => void
 }) {
-  const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
-          {props.title}
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
-      <Show when={props.url}>
-        {(url) => (
-          <box gap={1}>
-            <Link href={url()} fg={theme.markdown.link} />
-            <Show when={props.instructions}>
-              {(instructions) => <text fg={theme.text.muted}>{instructions()}</text>}
-            </Show>
-          </box>
-        )}
-      </Show>
-      <text fg={theme.text.muted}>{props.message}</text>
-      <box flexDirection="row" gap={2}>
-        <Show when={props.open}>
-          <text fg={theme.text.base}>
-            o <span style={{ fg: theme.text.muted }}>open</span>
-          </text>
+    <DialogLayout
+      header={<DialogHeader title={props.title} />}
+      footer={{
+        actions: {
+          primary: [
+            ...(props.onCopy
+              ? [
+                  {
+                    title: props.instructions?.match(OAUTH_CODE) ? "copy code" : "copy link",
+                    key: "c",
+                    onTrigger: props.onCopy,
+                  },
+                ]
+              : []),
+            ...(props.onOpen ? [{ title: "open link", key: "enter", onTrigger: props.onOpen }] : []),
+          ],
+        },
+      }}
+      legacyFooter={
+        <DialogFooter
+          actions={{
+            secondary: [
+              ...(props.onOpen ? [{ title: "open", key: "o" }] : []),
+              ...(props.onCopy ? [{ title: "copy", key: "c" }] : []),
+            ],
+          }}
+        />
+      }
+    >
+      <box gap={1}>
+        <Show when={props.url}>
+          {(url) => (
+            <box gap={1}>
+              <Link href={url()} fg={theme.markdown.link} />
+              <Show when={props.instructions}>
+                {(instructions) => <text fg={theme.text.muted}>{instructions()}</text>}
+              </Show>
+            </box>
+          )}
         </Show>
-        <Show when={props.copy}>
-          <text fg={theme.text.base}>
-            c <span style={{ fg: theme.text.muted }}>copy</span>
-          </text>
-        </Show>
+        <text fg={theme.text.muted}>{props.message}</text>
       </box>
-    </box>
+    </DialogLayout>
   )
 }
 
@@ -985,87 +1004,96 @@ function StringChoiceField(props: {
     ],
   }))
   return (
-    <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          {formLabel(props.field)}
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => (store.editing ? back() : dialog.clear())}>
-          esc
-        </text>
-      </box>
-      <Show when={props.field.description}>{(description) => <text fg={theme.text.muted}>{description()}</text>}</Show>
-      <scrollbox
-        gap={1}
-        height={Math.min(
-          count + rows.filter((row) => row.description).length,
-          Math.max(3, Math.floor(dimensions().height / 2) - 6),
-        )}
-        scrollbarOptions={{ visible: false }}
-        ref={(value: ScrollBoxRenderable) => {
-          scroll = value
-        }}
-      >
-        <For each={rows}>
-          {(row, index) => (
-            <box onMouseUp={() => select(index())}>
-              <text fg={fg(index())}>
-                {index() + 1}. {row.label}
-              </text>
-              <Show when={row.description}>
-                {(description) => (
-                  <box paddingLeft={3}>
-                    <text fg={theme.text.muted}>{description()}</text>
-                  </box>
-                )}
-              </Show>
-            </box>
-          )}
-        </For>
-        <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
-          <text fg={fg(rows.length)}>{rows.length + 1}.</text>
-          <Show
-            when={store.editing}
-            fallback={<text fg={fg(rows.length)}>{store.text || "Type your own answer"}</text>}
-          >
-            <textarea
-              height={1}
-              flexGrow={1}
-              wrapMode="none"
-              initialValue={store.text}
-              placeholder={props.field.placeholder ?? "Type your own answer"}
-              placeholderColor={theme.text.muted}
-              textColor={theme.text.formfield.focused}
-              focusedTextColor={theme.text.formfield.focused}
-              cursorColor={theme.text.formfield.focused}
-              ref={(value: TextareaRenderable) => {
-                setTextarea(value)
-                value.traits = { status: "ANSWER" }
-                queueMicrotask(() => {
-                  if (value.isDestroyed) return
-                  value.focus()
-                  value.gotoLineEnd()
-                })
-              }}
-              onContentChange={() => {
-                const text = textarea()?.plainText ?? ""
-                setStore("text", text)
-                if (store.error && !formValidateValue(props.field, text.trim() || undefined)) setStore("error", "")
-              }}
-            />
-          </Show>
-        </box>
-        <Show when={!props.field.required}>
-          <text fg={fg(rows.length + 1)} onMouseUp={() => select(rows.length + 1)}>
-            {rows.length + 2}. Skip
-          </text>
+    <DialogLayout
+      header={<DialogHeader title={formLabel(props.field)} onClose={() => (store.editing ? back() : dialog.clear())} />}
+      footer={{
+        actions: {
+          secondary: store.editing
+            ? [
+                { title: "submit", key: "enter", onTrigger: () => submit(textarea()?.plainText.trim() || undefined) },
+                { title: "back", key: "esc", onTrigger: back },
+              ]
+            : [
+                { title: "select", key: "↑/↓" },
+                { title: "confirm", key: "enter", onTrigger: () => select(store.selected) },
+                { title: "cancel", key: "esc", onTrigger: () => dialog.clear() },
+              ],
+        },
+      }}
+    >
+      <box gap={1}>
+        <Show when={props.field.description}>
+          {(description) => <text fg={theme.text.muted}>{description()}</text>}
         </Show>
-      </scrollbox>
-      <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
-      <text fg={theme.text.muted}>
-        {store.editing ? "enter submit · esc back" : "↑/↓ select · enter confirm · esc cancel"}
-      </text>
-    </box>
+        <scrollbox
+          gap={1}
+          height={Math.min(
+            count + rows.filter((row) => row.description).length,
+            Math.max(3, Math.floor(dimensions().height / 2) - 6),
+          )}
+          scrollbarOptions={{ visible: false }}
+          ref={(value: ScrollBoxRenderable) => {
+            scroll = value
+          }}
+        >
+          <For each={rows}>
+            {(row, index) => (
+              <box onMouseUp={() => select(index())}>
+                <text fg={fg(index())}>
+                  {index() + 1}. {row.label}
+                </text>
+                <Show when={row.description}>
+                  {(description) => (
+                    <box paddingLeft={3}>
+                      <text fg={theme.text.muted}>{description()}</text>
+                    </box>
+                  )}
+                </Show>
+              </box>
+            )}
+          </For>
+          <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
+            <text fg={fg(rows.length)}>{rows.length + 1}.</text>
+            <Show
+              when={store.editing}
+              fallback={<text fg={fg(rows.length)}>{store.text || "Type your own answer"}</text>}
+            >
+              <textarea
+                height={1}
+                flexGrow={1}
+                wrapMode="none"
+                initialValue={store.text}
+                placeholder={props.field.placeholder ?? "Type your own answer"}
+                placeholderColor={theme.text.muted}
+                textColor={theme.text.formfield.focused}
+                focusedTextColor={theme.text.formfield.focused}
+                cursorColor={theme.text.formfield.focused}
+                ref={(value: TextareaRenderable) => {
+                  setTextarea(value)
+                  value.traits = { status: "ANSWER" }
+                  queueMicrotask(() => {
+                    if (value.isDestroyed) return
+                    value.focus()
+                    value.gotoLineEnd()
+                  })
+                }}
+                onContentChange={() => {
+                  const text = textarea()?.plainText ?? ""
+                  setStore("text", text)
+                  if (store.error && !formValidateValue(props.field, text.trim() || undefined)) setStore("error", "")
+                }}
+              />
+            </Show>
+          </box>
+          <Show when={!props.field.required}>
+            <text fg={fg(rows.length + 1)} onMouseUp={() => select(rows.length + 1)}>
+              {rows.length + 2}. Skip
+            </text>
+          </Show>
+        </scrollbox>
+        <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
+      </box>
+    </DialogLayout>
   )
 }
 
@@ -1235,7 +1263,7 @@ async function connected(
     data.location.provider.sync(location),
   ])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
-  if (onConnected && integration.metadata?.source !== "mcp") {
+  if (onConnected) {
     onConnected(providerID(data, location, integration.id))
     return
   }

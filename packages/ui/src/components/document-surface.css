@@ -1,0 +1,37 @@
+[data-component="document-surface"] {
+  position: relative;
+  border-radius: 8px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+}
+
+/* Paint the border above page bitmaps without changing their dimensions or text coordinates. */
+[data-component="document-surface"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* The raised token paints outside the sheet; retain its top edge in flush scrollports. */
+[data-document-surface-inset] {
+  padding-block-start: 1px;
+}
+
+[data-document-surface-scrollport] {
+  --document-surface-gutter: 20px;
+  scrollbar-gutter: stable;
+}
+
+[data-document-surface-column] {
+  padding-inline: var(--document-surface-gutter, 20px);
+}
+
+@container (max-width: 600px) {
+  [data-document-surface-scrollport] {
+    --document-surface-gutter: 12px;
+  }
+}

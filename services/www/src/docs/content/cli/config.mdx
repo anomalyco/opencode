@@ -32,8 +32,9 @@ There is no project-local CLI settings file. Add the published JSON Schema for v
 }
 ```
 
-OpenCode adds `$schema` when it creates or migrates this file. Unknown settings are rejected, and valid edits reload
-while the TUI is running.
+OpenCode adds `$schema` when it creates or migrates this file. Valid edits reload while the TUI is running.
+
+Unknown settings are ignored. Keep `$schema` so your editor flags invalid values.
 
 ## Inline config
 
@@ -242,6 +243,15 @@ Enable system notifications and attention sounds independently:
 </div>
 
 An invalid or unreadable override falls back to the built-in sound for that event.
+
+After an update, the TUI shows the new release's highlights once on the home screen. Run `/highlights` to see them
+again, or turn the dialog off:
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
 
 ## Terminal
 

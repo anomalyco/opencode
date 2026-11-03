@@ -1,14 +1,14 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
-import { Clock, Deferred, Effect, Option, Schema, Stream } from "effect"
+import { Clock, Deferred, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.make("snowflake-cortex")
 const integrationID = Integration.ID.make(providerID)
@@ -40,7 +40,6 @@ export const SnowflakeCortexPlugin = define({
     const http = yield* HttpClient.HttpClient
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
-    const bus = yield* Bus.Service
     const configured = yield* configuredSettings(providerID)
     const account = { value: "" }
     const saved = Effect.gen(function* () {
@@ -172,13 +171,9 @@ export const SnowflakeCortexPlugin = define({
 
     const load = Effect.gen(function* () {
       const value = (yield* saved)?.value
-      account.value = normalizeAccount(
-        process.env.SNOWFLAKE_ACCOUNT ??
-          (value?.type === "key"
-            ? (value.configuration?.account ?? value.metadata?.account)
-            : value?.metadata?.account) ??
-          configured?.account,
-      )
+      const previous = account.value
+      account.value = normalizeAccount(process.env.SNOWFLAKE_ACCOUNT ?? value?.metadata?.account ?? configured?.account)
+      return account.value !== previous
     })
     yield* load
     yield* ctx.provider.transform((providers) => {
@@ -197,16 +192,15 @@ export const SnowflakeCortexPlugin = define({
       for (const item of models.list(providerID)) {
         models.update(providerID, item.id, (model) => {
           model.compatibility = { maxTokensField: "max_completion_tokens", ...model.compatibility }
+          // Cortex Chat Completions caches Claude only through explicit `cache_control` breakpoints.
+          if ((model.modelID ?? model.id).includes("claude"))
+            model.compatibility = { cacheFormat: "anthropic", ...model.compatibility }
           if (model.settings?.baseURL !== undefined)
             model.settings.baseURL = endpoint(model.settings.baseURL, account.value)
         })
       }
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load.pipe(Effect.andThen(ctx.provider.reload()))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    yield* ProviderRefresh.onSwitch(integrationID, ProviderRefresh.reloadIfChanged(load, ctx.provider.reload()))
     yield* ctx.session.hook(
       "http.request",
       (event) =>

@@ -155,8 +155,6 @@ opencode sunucusu aşağıdaki API'leri sunar.
 | `POST`   | `/session/:id/init`                      | Uygulamayı analiz et ve `AGENTS.md` oluştur | gövde: `{ messageID, providerID, modelID }`, `boolean` döndürür                      |
 | `POST`   | `/session/:id/fork`                      | Mevcut bir oturumu bir mesajda çatalla      | gövde: `{ messageID? }`, <a href={typesUrl}><code>Session</code></a> döndürür        |
 | `POST`   | `/session/:id/abort`                     | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                   |
-| `POST`   | `/session/:id/share`                     | Bir oturumu paylaş                          | <a href={typesUrl}><code>Session</code></a> döndürür                                 |
-| `DELETE` | `/session/:id/share`                     | Bir oturumun paylaşımını kaldır             | <a href={typesUrl}><code>Session</code></a> döndürür                                 |
 | `GET`    | `/session/:id/diff`                      | Bu oturum için farkı (diff) al              | sorgu: `messageID?`, <a href={typesUrl}><code>FileDiff[]</code></a> döndürür         |
 | `POST`   | `/session/:id/summarize`                 | Oturumu özetle                              | gövde: `{ providerID, modelID }`, `boolean` döndürür                                 |
 | `POST`   | `/session/:id/revert`                    | Bir mesajı geri al                          | gövde: `{ messageID, partID? }`, `boolean` döndürür                                  |

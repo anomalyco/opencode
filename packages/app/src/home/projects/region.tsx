@@ -13,14 +13,13 @@ export function HomeProjects(props: {
       language={props.projects.copy.language}
       servers={props.projects.server.list()}
       projects={props.projects.project.list()}
-      recentlyClosed={props.projects.project.recentlyClosed()}
       selection={props.projects.selection.value()}
-      homedir={props.projects.project.homedir()}
       serverHealth={props.projects.server.health}
+      serverLabel={props.projects.server.label}
       projectsForServer={props.projects.server.projects}
       collapsed={props.projects.server.collapsed}
       canRevealProject={props.projects.project.canReveal}
-      unseenCount={props.projects.project.unseenCount}
+      hasUnread={props.projects.project.hasUnread}
       onWheel={props.scroll.viewport.containWheel}
       onChooseProject={props.projects.project.choose}
       onFocusServer={props.projects.server.focus}
@@ -31,16 +30,14 @@ export function HomeProjects(props: {
       onRemoveServer={props.projects.server.remove}
       canHideServer={props.projects.server.canHide}
       onHideServer={props.projects.server.hide}
-      onMoveProject={props.projects.project.move}
       onSelectProject={props.projects.project.select}
-      onAddProjects={props.projects.project.add}
       onOpenProjectNewSession={props.projects.project.openNewSession}
       canImportSession={props.projects.project.canImportSession}
       onImportSession={props.projects.project.importSession}
       onEditProject={props.projects.project.edit}
       onRevealProject={props.projects.project.reveal}
       onClearNotifications={props.projects.project.clearNotifications}
-      onCloseProject={props.projects.project.close}
+      onHideProject={props.projects.project.hide}
       onOpenSettings={props.projects.utility.settings}
       onOpenHelp={props.projects.utility.help}
     />

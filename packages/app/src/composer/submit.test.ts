@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
-import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
+import type {
+  ActiveComposerAdapter,
+  ComposerControls,
+  ComposerDelivery,
+  ComposerSession,
+  NewSessionComposerAdapter,
+} from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
 import { createComposerSubmit } from "./submit"
+import { createSteerBackground } from "@/session/requests/steer-background"
 import type { ComposerStateTarget } from "./submission-state"
 
 // SAFETY: submission reads only the selected model's id, name, and provider id.
@@ -16,8 +23,10 @@ const selectedModel = {
 
 const selection = {
   ready: Object.assign(() => true, { promise: undefined }),
+  key: () => ({ providerID: "provider-1", modelID: "model-1" }),
   current: () => selectedModel,
   recent: () => [selectedModel],
+  favorite: { list: () => [], toggle() {} },
   list: () => [selectedModel],
   cycle() {},
   set() {},
@@ -75,12 +84,14 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
+  delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
+    delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -106,11 +117,13 @@ function session(input: {
   command?: ComposerSession["api"]["command"]
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
+  background?: ComposerSession["background"]
 }): ComposerSession {
   return {
     id: "session-1",
+    background: input.background,
     directory: "C:/repo",
-    handoff: input.handoff,
+    handoff: input.handoff ?? { set() {}, clear() {} },
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -140,8 +153,11 @@ function session(input: {
       location: { command: { list: () => [] } },
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
+        // Like the data layer: admit locally, prepare, then send.
         prompt: async (value) => {
-          input.calls.push("prompt")
+          input.calls.push("admit")
+          await value.prepare?.()
+          input.calls.push("send")
           await input.prompt?.(value)
 
           // The admitted inbox item, as the server returns it.
@@ -160,6 +176,108 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test.each(["steer", "queue"] as const)(
+    "sends only the selected quote as a %s, including its comment mentions, without clearing the draft",
+    async (delivery) => {
+      const state = createMemoryComposerState({ prompt: "/review keep this draft" }).capture()
+
+      const image = {
+        type: "image" as const,
+        id: "unrelated-image",
+        filename: "draft.png",
+        mime: "image/png",
+        blob: { id: "unrelated-image", url: "data:image/png;base64,YQ==" },
+      }
+
+      state.set([...state.current(), image], 5)
+      state.mode.set("shell")
+      state.context.add({ type: "quote", text: "Selected passage", commentID: "selected", comment: "Old comment" })
+      state.context.add({ type: "quote", text: "Unrelated passage", commentID: "other" })
+      state.context.add({ type: "file", path: "unrelated.ts" })
+      const before = state.current()
+
+      const requests: Parameters<ComposerSession["data"]["session"]["prompt"]>[0][] = []
+
+      const submission = submitInput(
+        active(state, session({ calls: [], prompt: async (value) => void requests.push(value) })),
+        undefined,
+        "shell",
+        undefined,
+        undefined,
+        undefined,
+        (alternate) => {
+          expect(alternate).toBe(true)
+
+          return delivery
+        },
+      )
+
+      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts")).toBe(true)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.text).toBe(
+        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts",
+      )
+      expect(requests[0]).toMatchObject({
+        delivery,
+        files: [{ uri: "file:///C:/repo/src/api.ts", name: "api.ts" }],
+        agents: [],
+        skills: [],
+        metadata: {
+          displayText: "",
+          comments: [{ type: "quote", text: "Selected passage", comment: "Compare @src/api.ts" }],
+          attachments: [],
+        },
+      })
+      expect(state.current()).toBe(before)
+      expect(state.cursor()).toBe(5)
+      expect(state.mode.current()).toBe("shell")
+      expect(state.context.items().map((item) => item.key)).toEqual([
+        "quote:c=other",
+        "file:unrelated.ts:undefined:undefined",
+      ])
+    },
+  )
+
+  test("a failed quote send retains its latest comment and prevents duplicate submissions while pending", async () => {
+    const state = createMemoryComposerState({ prompt: "Keep this draft" }).capture()
+
+    state.context.add({ type: "quote", text: "Selected passage", commentID: "selected" })
+    const failed = Promise.withResolvers<void>()
+
+    const started = Promise.withResolvers<void>()
+
+    const errors: string[] = []
+
+    const calls: string[] = []
+
+    const submission = submitInput(
+      active(
+        state,
+        session({
+          calls,
+          prompt: async () => {
+            started.resolve()
+            await failed.promise
+          },
+        }),
+      ),
+      { missingSelection() {}, unqueueable() {}, failed: (_kind, error) => void errors.push(String(error)) },
+    )
+
+    const pending = submission.submitQuote("quote:c=selected", "Latest comment")
+
+    await started.promise
+    expect(await submission.submitQuote("quote:c=selected", "Duplicate")).toBe(false)
+    failed.reject(new Error("Could not send"))
+    expect(await pending).toBe(false)
+    expect(errors).toHaveLength(1)
+    expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
+    expect(state.context.items()).toMatchObject([
+      { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
+    ])
+    expect(calls.filter((call) => call === "send")).toHaveLength(2)
+  })
+
   test("applies the selection and runs a client argument command without admitting it to the session", async () => {
     const state = createMemoryComposerState().capture()
 
@@ -192,16 +310,21 @@ describe("Composer submission", () => {
   })
 
   test.each([
-    { current: { agent: "plan", model: { id: "old", providerID: "old" } }, calls: ["switch-agent", "switch-model"] },
-    // The model still commits: cached session state may lag behind an earlier switch.
+    // The prompt admits before the selection commits, so a steer shows as pending while it does.
+    {
+      current: { agent: "plan", model: { id: "old", providerID: "old" } },
+      calls: ["admit", "switch-agent", "switch-model", "send"],
+    },
+    // An unchanged selection sends without a model request to wait on.
     {
       current: { agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } },
-      calls: ["switch-model"],
+      calls: ["admit", "send"],
     },
-    // A prompt commits a staged revert, which would delete the model switch made after its boundary.
+    // A prompt commits a staged revert, which would delete the model switch made after its boundary. The revert
+    // settles before admission, whose row it would also delete.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" }, revert: { messageID: "msg_reverted" } },
-      calls: ["switch-agent", "revert-commit", "switch-model"],
+      calls: ["switch-agent", "revert-commit", "switch-model", "admit", "send"],
     },
   ])("applies the selection before sending one captured value: $calls", async (row) => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
@@ -213,7 +336,7 @@ describe("Composer submission", () => {
     await submitInput(active(state, target)).submit(new Event("submit"))
     const request = await admitted.promise
 
-    expect(calls).toEqual([...row.calls, "prompt"])
+    expect(calls).toEqual([...row.calls])
     expect(request.delivery).toBe("steer")
     expect(request.text).toBe("ship it")
     expect(request.id).toMatch(/^msg_/)
@@ -228,6 +351,102 @@ describe("Composer submission", () => {
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(state.context.items()).toEqual([])
   })
+
+  test.each(["", "Align these targets"])("hands off and admits uncommented notes with instruction %j", async (text) => {
+    const draft = createMemoryComposerState({ prompt: text }).capture()
+
+    const notes = [
+      {
+        type: "note" as const,
+        origin: "example",
+        label: "Save",
+        title: "button#save",
+        subtitle: "Browser annotation",
+        icon: "select-element",
+        subject: 'the "Save" element',
+        href: "example:save",
+        live: { subject: 'the "Save" element (live reference @e42)', href: "example:save#e42" },
+        comment: "",
+      },
+      {
+        type: "note" as const,
+        origin: "another-plugin",
+        label: "Cancel",
+        icon: "select-element",
+        subject: 'the "Cancel" element',
+        comment: "",
+      },
+    ]
+
+    notes.forEach((note, index) => draft.context.add({ ...note, commentID: `${index}` }))
+    const handoffs: SessionMessageHandoff[] = []
+    const first: Parameters<NewSessionComposerAdapter["start"]>[2][] = []
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const calls: string[] = []
+
+    const target = session({
+      calls,
+      handoff: { set: (value) => handoffs.push(value), clear() {} },
+      prompt: async (value) => admitted.resolve(value),
+    })
+
+    await submitInput(
+      fresh(draft, async (_selection, _submission, message) => {
+        first.push(message)
+
+        return { session: target, cleanupReady: Promise.resolve() }
+      }),
+    ).submit(new Event("submit"))
+
+    expect(calls).toContain("admit")
+    const request = await admitted.promise
+    expect(request.metadata).toMatchObject({ displayText: text, comments: notes })
+    expect(first).toMatchObject([{ text, metadata: { displayText: text, comments: notes } }])
+    expect(handoffs).toMatchObject([{ message: { text, metadata: { displayText: text, comments: notes } } }])
+    expect(draft.context.items()).toEqual([])
+  })
+
+  test.each(["steer", "queue"] as const)(
+    "shows a %s in the session as the composer clears, before its selection commits",
+    async (delivery) => {
+      const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+      const committed = Promise.withResolvers<void>()
+      const handoffs: SessionMessageHandoff[] = []
+      const statuses: ("idle" | "running")[] = []
+
+      const target = session({
+        calls: [],
+        statuses,
+        handoff: { set: (handoff) => handoffs.push(handoff), clear() {} },
+        switchModel: async () => committed.promise,
+      })
+
+      await submitInput(
+        active(state, target),
+        undefined,
+        "normal",
+        undefined,
+        undefined,
+        undefined,
+        () => delivery,
+      ).submit(new Event("submit"))
+
+      expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+      expect(statuses).toEqual(["running"])
+      // A queued prompt shows in the queue once admitted, not in the transcript.
+      expect(handoffs).toMatchObject(
+        delivery === "steer"
+          ? [
+              {
+                message: { type: "user", text: "ship it" },
+                selection: { agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } },
+              },
+            ]
+          : [],
+      )
+      committed.resolve()
+    },
+  )
 
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
@@ -344,13 +563,29 @@ describe("Composer submission", () => {
 
     state.set(prompt)
     state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
+
+    const note = {
+      type: "note" as const,
+      origin: "example",
+      label: "Target",
+      title: "#target",
+      subtitle: "Browser annotation",
+      icon: "select-element",
+      subject: "the target",
+      live: { subject: "the live target" },
+      comment: "",
+      commentID: "target",
+    }
+
+    state.context.add(note)
     const attempts: string[] = []
+    const calls: string[] = []
     const statuses: ("idle" | "running")[] = []
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
 
     const target = session({
-      calls: [],
+      calls,
       statuses,
       prompt: async (value) => {
         attempts.push(value.id ?? "")
@@ -374,9 +609,13 @@ describe("Composer submission", () => {
 
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
+    // A retried admission reuses its submission's selection commit.
+    const submitted = ["admit", "switch-agent", "switch-model", "send", "admit", "send"]
+    expect(calls).toEqual([...submitted, ...submitted])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     expect(state.context.items()).toMatchObject([
+      note,
       { type: "file", path: "notes.md", description: "the failing version" },
     ])
     // The caret returns after the mention text; attachments take no caret positions.
@@ -446,6 +685,159 @@ describe("Composer submission", () => {
     expect(new Set(attempts).size).toBe(1)
   })
 
+  describe("steering while foreground work runs", () => {
+    // A long shell command blocks the run; moving it resolves only the move, never the admission.
+    // `unstarted` moves before the shell's job starts, so the server finds nothing to move and the call still blocks.
+    function running(
+      input: {
+        fail?: boolean
+        failOnce?: boolean
+        unstarted?: boolean
+        blocking?: { partID: string }[]
+        prompt?: () => Promise<void>
+      } = {},
+    ) {
+      const calls: string[] = []
+      const failures: string[] = []
+      const state = createMemoryComposerState({ prompt: "use Beta instead" }).capture()
+      const blocking = { parts: input.blocking ?? [{ partID: "prt_shell" }] }
+
+      const claim = createSteerBackground({
+        sessionID: () => "session-1",
+        blocking: () => blocking.parts,
+        move: async () => {
+          calls.push("background")
+
+          if (input.fail) throw new Error("server unavailable")
+
+          if (input.failOnce) {
+            input.failOnce = false
+            throw new Error("server unavailable")
+          }
+
+          if (input.unstarted) {
+            input.unstarted = false
+
+            return
+          }
+
+          blocking.parts = []
+        },
+      })
+
+      const target = session({ calls, prompt: input.prompt, background: () => claim("session-1") })
+      const adapter = { ...active(state, target), working: () => true }
+      const notify = { missingSelection() {}, unqueueable() {}, failed: () => void failures.push("failed") }
+
+      const submit = async (delivery: ComposerDelivery = "steer", working = true) => {
+        state.set([{ type: "text", content: "use Beta instead", start: 0, end: 16 }])
+        await submitInput(
+          { ...adapter, working: () => working },
+          notify,
+          "normal",
+          () => [],
+          [],
+          undefined,
+          () => delivery,
+        ).submit(new Event("submit"))
+        // The send settles after submit returns; let it and the move that follows it finish.
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      return { calls, failures, submit, blocking }
+    }
+
+    test("moves the work to the background once the steer is admitted, and only once", async () => {
+      const run = running()
+
+      await run.submit()
+      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "background"])
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+
+    test("a steer moves work that its previous steer's move missed", async () => {
+      const run = running({ unstarted: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer sent while the previous one is admitted moves the work when the previous move fails", async () => {
+      const admitted = Promise.withResolvers<void>()
+      const attempts = { count: 0 }
+
+      const run = running({
+        failOnce: true,
+        prompt: async () => {
+          attempts.count++
+
+          if (attempts.count === 1) await admitted.promise
+        },
+      })
+
+      await run.submit()
+      await run.submit()
+      admitted.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("moves a shell that starts while the steer is admitted", async () => {
+      const run = running({
+        blocking: [],
+        prompt: async () => {
+          run.blocking.parts = [{ partID: "prt_shell" }]
+        },
+      })
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+      expect(run.blocking.parts).toEqual([])
+    })
+
+    test("leaves the work alone for a queued prompt or an idle session", async () => {
+      const run = running()
+
+      await run.submit("queue")
+      await run.submit("steer", false)
+      expect(run.calls).not.toContain("background")
+    })
+
+    test("still sends the steer when the move fails, and a later steer tries again", async () => {
+      const run = running({ fail: true })
+
+      await run.submit()
+      await run.submit()
+      expect(run.failures).toEqual([])
+      expect(run.calls.filter((call) => call === "send")).toHaveLength(2)
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(2)
+    })
+
+    test("a steer that fails to send leaves the work for the next one", async () => {
+      const attempts = { count: 0 }
+
+      const run = running({
+        prompt: async () => {
+          attempts.count++
+
+          // The first submission's admission and its single retry both fail.
+          if (attempts.count <= 2) throw new Error("network unavailable")
+        },
+      })
+
+      await run.submit()
+      expect(run.failures).toEqual(["failed"])
+      expect(run.calls).not.toContain("background")
+
+      await run.submit()
+      expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
+    })
+  })
+
   test("hands off image-only first prompts and admits them before cleanup is ready", async () => {
     const draft = createMemoryComposerState().capture()
 
@@ -461,7 +853,7 @@ describe("Composer submission", () => {
     ]
 
     draft.set(prompt)
-    const handedOff = Promise.withResolvers<SessionMessageUser>()
+    const handedOff = Promise.withResolvers<SessionMessageHandoff>()
     const admitted = Promise.withResolvers<void>()
     const cleanup = Promise.withResolvers<void>()
 
@@ -481,7 +873,7 @@ describe("Composer submission", () => {
     await submitted
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
 
-    expect(await handedOff.promise).toMatchObject({
+    expect((await handedOff.promise).message).toMatchObject({
       type: "user",
       text: "",
       files: [

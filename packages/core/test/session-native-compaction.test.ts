@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai"
+import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -20,13 +20,15 @@ import { InstructionState } from "@opencode/core/session/instruction-state"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionProjector } from "@opencode/core/session/projector"
-import { SessionProviderContext } from "@opencode/core/session/provider-context"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { testEffect } from "./lib/effect"
+
+const decode = (checkpoint: { readonly native: { readonly messages: unknown } }) =>
+  Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -190,12 +192,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: id })
   })
   const load = Effect.gen(function* () {
-    const history = yield* SessionHistory.preview(
-      db,
-      sessionID,
-      instructions,
-      SessionProviderContext.provenance(model) ?? "local",
-    )
+    const history = yield* SessionHistory.preview(db, sessionID, instructions, model.ref)
     return {
       session,
       model,
@@ -213,19 +210,18 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   // Opens the compaction's message as the runner does when it delivers `/compact`.
   const compact = Effect.gen(function* () {
     const inputID = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID })
     return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
   })
   const checkpoint = Effect.gen(function* () {
     const messages = (yield* load).messages
     const last = messages.findLast((message) => message.type === "compaction" && message.status === "completed")
-    if (last?.type !== "compaction" || last.status !== "completed" || !last.providerContext)
-      return yield* Effect.die("Missing native checkpoint")
+    if (!last || !SessionHistory.isNativeCompaction(last)) return yield* Effect.die("Missing native checkpoint")
     expect(last.summary).toBe("")
-    expect(last.recent).toBe("")
+    expect(last.metadata?.recent).toBeUndefined()
     // Provider compaction has no summary, so the request usage is the only visible cost of the operation.
     expect(last.tokens).toMatchObject({ input: 20, output: 4 })
-    return last.providerContext
+    return last
   })
   return {
     compact,
@@ -258,8 +254,8 @@ it.live(
       yield* fixture.prompt("Synthetic context, not a user request", true)
       expect(yield* fixture.compact).toEqual({ status: "completed" })
       const first = yield* fixture.checkpoint
-      expect(SessionProviderContext.decode(first).map((message) => message.role)).toEqual(["user", "assistant"])
-      expect(JSON.stringify(first.messages)).not.toContain("Synthetic context")
+      expect(decode(first).map((message) => message.role)).toEqual(["user", "assistant"])
+      expect(JSON.stringify(first.native.messages)).not.toContain("Synthetic context")
       expect(fixture.bodies[0]).toMatchObject({
         input: expect.arrayContaining([{ type: "compaction_trigger" }]),
         tools: [expect.objectContaining({ name: "read" })],
@@ -284,11 +280,11 @@ it.live(
       expect(yield* fixture.compact).toEqual({ status: "completed" })
       const second = yield* fixture.checkpoint
       expect(
-        SessionProviderContext.decode(second)
+        decode(second)
           .filter((message) => message.role === "user")
           .map((message) => message.content),
       ).toEqual([[Message.text("First real user request")], [Message.text("Second real user request")]])
-      expect(JSON.stringify(second.messages)).not.toContain("encrypted_1")
+      expect(JSON.stringify(second.native.messages)).not.toContain("encrypted_1")
       expect(yield* fixture.store.get(fixture.sessionID)).toMatchObject({ tokens: { input: 40, output: 8 } })
       // Nothing new since the checkpoint is not compactable, exactly like a fresh local summary.
       expect(yield* fixture.compact).toMatchObject({ status: "failed", error: { type: "compaction.unavailable" } })
@@ -324,9 +320,7 @@ it.live(
           decision: { retry: true, delay: 0 },
         },
       ])
-      expect(
-        SessionProviderContext.decode(yield* fixture.checkpoint).filter((message) => message.role === "user"),
-      ).toHaveLength(3)
+      expect(decode(yield* fixture.checkpoint).filter((message) => message.role === "user")).toHaveLength(3)
     }),
   15000,
 )
@@ -338,7 +332,7 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
     expect(yield* fixture.compact).toEqual({ status: "completed" })
     yield* fixture.prompt("Later user")
     expect(yield* fixture.overflow).toEqual({ status: "completed" })
-    const replacement = SessionProviderContext.decode(yield* fixture.checkpoint)
+    const replacement = decode(yield* fixture.checkpoint)
     expect(replacement[0]?.content).toEqual([Message.text("endpoint retained")])
     expect(JSON.stringify(replacement)).not.toContain("Original user")
     expect(fixture.state.calls).toBe(2)
@@ -388,7 +382,7 @@ it.live("compaction hooks supply the summary instead of provider compaction", ()
       Effect.sync(() => {
         event.result = {
           summary: "## Objective\n- hooked summary",
-          providerState: { responseId: "plugin" },
+          native: { responseId: "plugin" },
           metadata: { plugin: "custom" },
           tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
         }
@@ -400,28 +394,10 @@ it.live("compaction hooks supply the summary instead of provider compaction", ()
       type: "compaction",
       status: "completed",
       summary: "## Objective\n- hooked summary",
-      recent: "",
-      providerState: { responseId: "plugin" },
+      native: { responseId: "plugin" },
       metadata: { plugin: "custom" },
       tokens: { input: 10, output: 5 },
     })
-  }),
-)
-
-it.live("rejects request-hook route rewrites before provider compaction", () =>
-  Effect.gen(function* () {
-    const fixture = yield* setup()
-    yield* fixture.prompt("Original user")
-    yield* fixture.hooks.register("session", "model.request", (event) =>
-      Effect.sync(() => {
-        event.baseURL = "https://another.example/v1"
-      }),
-    )
-    expect(yield* fixture.compact).toMatchObject({
-      status: "failed",
-      error: { type: "provider.unsupported-operation" },
-    })
-    expect(fixture.state.calls).toBe(0)
   }),
 )
 

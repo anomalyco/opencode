@@ -3,10 +3,10 @@ import { createMemo, Show } from "solid-js"
 import { ErrorPage } from "@/shell/errors/error"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
-import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { isLocalSessionNotFoundError, isSessionNotFoundError } from "@/runtime/server/errors"
-import { IncompatibleServerPanel } from "./incompatible-server-panel"
+import { ServerUnavailablePanel } from "./server-unavailable-panel"
 
 export function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
   const language = useLanguage()
@@ -17,7 +17,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
   const displayServer = createMemo(() => {
     const conn = server.list.find((item) => ServerConnection.key(item) === props.serverKey)
 
-    return conn ? serverName(conn) : props.serverKey
+    return conn ? server.label(conn) : props.serverKey
   })
 
   const closeSession = () => {
@@ -28,10 +28,14 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
   return (
     <Show
       when={!activeServer.health?.incompatible}
-      fallback={<IncompatibleServerPanel onClose={props.sessionID ? closeSession : undefined} />}
+      fallback={<ServerUnavailablePanel reason="incompatible" onClose={props.sessionID ? closeSession : undefined} />}
     >
       <Show
-        when={isCurrentSessionNotFoundError(props.error, props.sessionID)}
+        when={
+          props.sessionID &&
+          (isSessionNotFoundError(props.error, props.sessionID) ||
+            isLocalSessionNotFoundError(props.error, props.sessionID))
+        }
         fallback={<ErrorPage error={props.error} />}
       >
         <div class="flex-1 min-h-0 overflow-hidden">
@@ -68,10 +72,4 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
       </Show>
     </Show>
   )
-}
-
-function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
-  if (!sessionID) return false
-
-  return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
 }

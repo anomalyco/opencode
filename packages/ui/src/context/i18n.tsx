@@ -51,6 +51,7 @@ export function pluralCategory(locale: string, count: number): UiPluralCategory 
 }
 
 export function pluralKey(key: UiI18nPluralKey, category: UiPluralCategory) {
+  // SAFETY: `PluralKey` names a base whose `.one`/`.other` forms exist, so `${key}.${category}` is a lookup key.
   return `${key}.${category}` as UiI18nPluralLookupKey
 }
 
@@ -73,7 +74,7 @@ export function localizedListSeparator(locale: string, index: number, count: num
     .join("")
 }
 
-function resolveTemplate(text: string, params?: UiI18nParams) {
+export function resolveTemplate(text: string, params?: UiI18nParams) {
   if (!params) return text
 
   return text.replace(/{{\s*([^}]+?)\s*}}/g, (_, rawKey) => {
@@ -106,6 +107,7 @@ export function createUiI18n(source: UiI18nSource): UiI18n {
 const fallbackSource: UiI18nSource = {
   locale: () => "en",
   t: (key, params) => {
+    // SAFETY: the fallback source only translates keys from the UI dictionary; any other key falls back to itself.
     const value = en[key as UiI18nKey] ?? String(key)
 
     return resolveTemplate(value, params)
@@ -113,6 +115,7 @@ const fallbackSource: UiI18nSource = {
   plural: (key, count, params) =>
     fallback.pluralForm!(key, pluralCategory(fallback.locale(), count), { ...params, count }),
   pluralForm: (key, category, params) => {
+    // SAFETY: locale keys are a subset of the dictionary keys, and every value is a string.
     const values = en as Partial<Record<UiI18nLocaleKey, string>>
     const value = values[pluralKey(key, category)] ?? values[`${key}.other`] ?? `${key}.other`
 

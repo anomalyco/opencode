@@ -107,7 +107,8 @@ test("replaces the composer when the location is not found and recovers by movin
   })
 
   await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
-  const status = page.getByRole("status").filter({ hasText: "Session location unavailable" })
+  const status = page.getByRole("group", { name: "Session location unavailable", exact: true })
+  await expect(status).toHaveAccessibleDescription(`${directory} Choose another directory to continue this session.`)
   await expect(status).toContainText(directory)
   await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
@@ -238,7 +239,7 @@ test("keeps the side panel's tabs and selection when the session moves", async (
     await page.keyboard.press("ControlOrMeta+Shift+P")
 
     const dialog = page.getByRole("dialog")
-    const search = dialog.getByRole("textbox")
+    const search = dialog.getByRole("combobox")
     await search.fill(name)
     await expect(dialog.getByRole("option", { name: `/ ${name}.md`, exact: true })).toHaveAttribute(
       "aria-selected",

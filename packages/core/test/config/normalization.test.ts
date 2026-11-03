@@ -44,6 +44,15 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
       delete compaction.keep
     if (!originallyEmpty && !Object.keys(compaction).length) delete result.compaction
   }
+  // Deprecated experimental policies normalize into top-level policies.
+  if (typeof result.experimental === "object" && result.experimental !== null && !Array.isArray(result.experimental)) {
+    const experimental = result.experimental as Record<string, unknown>
+    if (Array.isArray(experimental.policies)) {
+      result.policies = [...experimental.policies, ...(Array.isArray(result.policies) ? result.policies : [])]
+      delete experimental.policies
+      if (!Object.keys(experimental).length) delete result.experimental
+    }
+  }
   return result
 }
 
@@ -56,7 +65,7 @@ describe("ConfigNormalize", () => {
     ] as const
     const result = normalized({ experimental: { policies } })
     expect(result.diagnostics).toEqual([])
-    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual(policies)
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).policies).toEqual(policies)
   })
 
   test("drops unsupported policy actions without losing supported policies", () => {
@@ -70,7 +79,7 @@ describe("ConfigNormalize", () => {
         ],
       },
     })
-    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual([supported])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).policies).toEqual([supported])
     expect(result.diagnostics.map((diagnostic) => diagnostic.path)).toEqual([
       ["experimental", "policies", "0"],
       ["experimental", "policies", "2"],
@@ -103,7 +112,8 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
     const info = Schema.decodeUnknownSync(Info)(result.encoded)
     if (typeof info.warming === "boolean" || info.warming === undefined) throw new Error("expected warming info")
-    expect(Duration.toMillis(info.warming.interval ?? Duration.zero)).toBe(240_000)
+    const interval = info.warming.interval
+    expect(interval === "auto" ? interval : Duration.toMillis(interval ?? Duration.zero)).toBe(240_000)
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 
@@ -411,6 +421,53 @@ describe("ConfigNormalize", () => {
     ).toBe(true)
   })
 
+  test.each([
+    { type: "local", command: ["example"] },
+    { type: "remote", url: "https://example.com/mcp" },
+  ])("preserves codemode: false for legacy $type MCP servers", (server) => {
+    const result = normalized({ mcp: { example: { ...server, codemode: false } } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBe(false)
+  })
+
+  test.each([
+    { type: "local", command: ["example"] },
+    { type: "remote", url: "https://example.com/mcp" },
+  ])("leaves codemode unset for legacy $type MCP servers when omitted", (server) => {
+    const result = normalized({ mcp: { example: server } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBeUndefined()
+  })
+
+  test("expands numeric MCP timeouts to every phase", () => {
+    const result = normalized({
+      mcp: {
+        timeout: 4000,
+        servers: {
+          local: { type: "local", command: ["local"], timeout: 6000 },
+          remote: { type: "remote", url: "https://remote.example.com", timeout: 8000 },
+          structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+          invalid: { type: "local", command: ["invalid"], timeout: -1 },
+        },
+      },
+    })
+    expect(result.encoded.mcp).toEqual({
+      timeout: { startup: 4000, catalog: 4000, execution: 4000 },
+      servers: {
+        local: { type: "local", command: ["local"], timeout: { startup: 6000, catalog: 6000, execution: 6000 } },
+        remote: {
+          type: "remote",
+          url: "https://remote.example.com",
+          timeout: { startup: 8000, catalog: 8000, execution: 8000 },
+        },
+        structured: { type: "local", command: ["structured"], timeout: { catalog: 9000 } },
+      },
+    })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["mcp", "servers", "invalid"]],
+    ])
+  })
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {
@@ -464,41 +521,101 @@ describe("ConfigNormalize", () => {
       ["conflict", ["compaction", "keep", "tokens"]],
       ["conflict", ["compaction", "buffer"]],
     ])
+
+    expect(normalized({ compaction: { buffer: "12.5%" } }).encoded.compaction).toEqual({ buffer: "12.5%" })
+    for (const buffer of ["0%", "100%", "150%"]) {
+      const result = normalized({ compaction: { buffer } })
+      expect(result.encoded.compaction).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["compaction", "buffer"]]])
+    }
   })
 
   test("distinguishes empty, mixed, and wholly malformed enabled provider lists", () => {
-    expect(normalized({ enabled_providers: [] }).encoded.experimental).toEqual({
-      policies: [{ action: "provider.use", resource: "*", effect: "deny" }],
-    })
-    expect(normalized({ enabled_providers: [1, "anthropic", false] }).encoded.experimental).toEqual({
-      policies: [
-        { action: "provider.use", resource: "*", effect: "deny" },
-        { action: "provider.use", resource: "anthropic", effect: "allow" },
-      ],
-    })
-    expect(normalized({ enabled_providers: [1, false] }).encoded.experimental).toBeUndefined()
-    expect(normalized({ enabled_providers: "anthropic" }).encoded.experimental).toBeUndefined()
+    expect(normalized({ enabled_providers: [] }).encoded.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+    ])
+    expect(normalized({ enabled_providers: [1, "anthropic", false] }).encoded.policies).toEqual([
+      { action: "provider.use", resource: "*", effect: "deny" },
+      { action: "provider.use", resource: "anthropic", effect: "allow" },
+    ])
+    expect(normalized({ enabled_providers: [1, false] }).encoded.policies).toBeUndefined()
+    expect(normalized({ enabled_providers: "anthropic" }).encoded.policies).toBeUndefined()
   })
 
-  test("appends native policies after migrated provider policies", () => {
+  test("merges migrated, experimental, and native policies in order", () => {
     expect(
       normalized({
         enabled_providers: ["anthropic"],
         disabled_providers: ["openai"],
+        policies: [{ action: "provider.use", resource: "native", effect: "deny" }],
         experimental: {
           portable_shell_scanner: true,
+          todo: true,
+          background_compaction: true,
+          media_blob: true,
+          image_generate: { model: "openai/gpt-image-2" },
           subagent_depth: 0,
+          location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
-      }).encoded.experimental,
-    ).toEqual({
-      portable_shell_scanner: true,
-      subagent_depth: 0,
+      }).encoded,
+    ).toMatchObject({
+      experimental: {
+        portable_shell_scanner: true,
+        todo: true,
+        background_compaction: true,
+        media_blob: true,
+        image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
+        subagent_depth: 0,
+        location_idle_timeout: "7200000 millis",
+      },
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },
         { action: "provider.use", resource: "anthropic", effect: "allow" },
         { action: "provider.use", resource: "openai", effect: "deny" },
         { action: "provider.use", resource: "custom", effect: "allow" },
+        { action: "provider.use", resource: "native", effect: "deny" },
+      ],
+    })
+  })
+
+  test("normalizes the image_generate setting", () => {
+    for (const [value, expected] of [
+      [true, true],
+      [false, false],
+      [{}, {}],
+      [{ model: "openai/gpt-image-2#hd" }, { model: { providerID: "openai", model: "gpt-image-2", variant: "hd" } }],
+    ] as const)
+      expect(normalized({ experimental: { image_generate: value } }).encoded.experimental).toEqual({
+        image_generate: expected,
+      })
+    for (const value of ["openai/gpt-image-2", 1, { model: "no-slash" }, { model: 1 }]) {
+      const result = normalized({ experimental: { image_generate: value } })
+      expect(result.encoded.experimental).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+        ["invalid", ["experimental", "image_generate"]],
+      ])
+    }
+  })
+
+  test("never emits experimental policies", () => {
+    expect(
+      normalized({ experimental: { policies: [{ action: "provider.use", resource: "*", effect: "deny" }] } }).encoded,
+    ).toEqual({ policies: [{ action: "provider.use", resource: "*", effect: "deny" }] })
+  })
+
+  test("converts legacy prefixed integration.use statements from config and MDM files", () => {
+    expect(
+      normalized({
+        policies: [
+          { action: "integration.use", resource: "mcp:github", effect: "deny" },
+          { action: "integration.use", resource: "*", effect: "deny" },
+        ],
+      }).encoded,
+    ).toEqual({
+      policies: [
+        { action: "mcp.use", resource: "github", effect: "deny" },
+        { action: "integration.use", resource: "*", effect: "deny" },
       ],
     })
   })
@@ -614,6 +731,23 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
   })
 
+  test("migrates the legacy setCacheKey provider option into provider compatibility", () => {
+    const result = normalized({
+      provider: {
+        proxy: { npm: "@ai-sdk/openai-compatible", options: { baseURL: "https://proxy.test/v1", setCacheKey: true } },
+        openai: { options: { setCacheKey: false } },
+        untouched: { options: { baseURL: "https://untouched.test/v1" } },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      proxy: { compatibility: { supportsPromptCacheKey: true }, settings: { baseURL: "https://proxy.test/v1" } },
+      openai: { compatibility: { supportsPromptCacheKey: false } },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["proxy", "settings", "setCacheKey"])
+    expect(result.encoded.providers).not.toHaveProperty(["openai", "settings", "setCacheKey"])
+    expect(result.encoded.providers).not.toHaveProperty(["untouched", "compatibility"])
+  })
+
   test("invalid legacy provider overlays skip only that provider", () => {
     const result = normalized({
       provider: {
@@ -640,7 +774,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded).toMatchObject({
       snapshots: false,
@@ -649,7 +783,7 @@ describe("ConfigNormalize", () => {
       agents: {},
       providers: {},
       instructions: [],
-      experimental: { subagent_depth: 0 },
+      experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
     expect(result.encoded.share).toBeUndefined()
   })

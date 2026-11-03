@@ -8,7 +8,15 @@ import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
-import { dialogWidth, useDialog } from "../../ui/dialog"
+import {
+  DIALOG_INSET,
+  DialogBleed,
+  DialogFooter,
+  DialogHeader,
+  DialogLayout,
+  dialogWidth,
+  useDialog,
+} from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -49,7 +57,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   // Code and JSON wrap by character, so the content height is known up front.
   // Sizing synchronously lets the dialog open complete instead of growing over frames.
   const height = createMemo(() => {
-    const width = Math.max(20, Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 4)
+    const width = Math.max(20, Math.min(dialogWidth(dialog.size), dimensions().width - 2) - DIALOG_INSET * 2)
     const codeWidth = Math.max(1, width - digits() - 1)
     const body = highlighted()
     const outputRows = body
@@ -91,94 +99,105 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     ],
   }))
 
+  const copyActions = () => [
+    copied() === "code"
+      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("code") }
+      : { title: "copy code", key: "c", onTrigger: () => copy("code") },
+    copied() === "output"
+      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("output") }
+      : { title: "copy output", key: "o", onTrigger: () => copy("output") },
+  ]
+
   return (
-    <box gap={1} paddingBottom={1}>
-      <box flexDirection="row" gap={2} paddingLeft={2} paddingRight={2}>
-        <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
-          execute
-        </text>
-        <text fg={failed() ? theme.text.feedback.error.base : theme.text.muted}>{status()}</text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
-      <scrollbox
-        id="execute-detail-scroll"
-        ref={(value: ScrollBoxRenderable) => (scroll = value)}
-        height={height()}
-        contentOptions={{ minHeight: 0 }}
-        backgroundColor={contentTheme.background.raised.high}
-        scrollbarOptions={{ visible: false }}
-        scrollAcceleration={getScrollAcceleration(config)}
-      >
-        <box gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-          <box>
-            <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
-              Code
+    <DialogLayout
+      header={
+        <DialogHeader
+          gap={2}
+          titleView={
+            <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
+              execute
             </text>
-            <Show when={code()} fallback={<text fg={contentTheme.text.muted}>Waiting for code…</text>}>
-              {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} />}
-            </Show>
+          }
+        >
+          <text fg={failed() ? theme.text.feedback.error.base : theme.text.muted}>{status()}</text>
+        </DialogHeader>
+      }
+      footer={{ actions: { primary: copyActions() } }}
+      legacyFooter={
+        <DialogFooter
+          actions={{
+            secondary: [
+              { title: "scroll", key: "↑/↓" },
+              ...copyActions(),
+              { title: "back", key: "esc", onTrigger: () => dialog.clear() },
+            ],
+          }}
+        />
+      }
+    >
+      <DialogBleed>
+        <scrollbox
+          id="execute-detail-scroll"
+          ref={(value: ScrollBoxRenderable) => (scroll = value)}
+          height={height()}
+          contentOptions={{ minHeight: 0 }}
+          backgroundColor={contentTheme.background.raised.high}
+          scrollbarOptions={{ visible: false }}
+          scrollAcceleration={getScrollAcceleration(config)}
+        >
+          <box gap={1} paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
+            <box>
+              <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
+                Code
+              </text>
+              <Show when={code()} fallback={<text fg={contentTheme.text.muted}>Waiting for code…</text>}>
+                {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} />}
+              </Show>
+            </box>
+            <box>
+              <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
+                Output
+              </text>
+              <Show
+                when={highlighted()}
+                fallback={
+                  <text
+                    fg={
+                      text()
+                        ? failed()
+                          ? contentTheme.text.feedback.error.base
+                          : contentTheme.text.base
+                        : contentTheme.text.muted
+                    }
+                    wrapMode="word"
+                  >
+                    {text() ?? (props.part.state.status === "completed" ? "No output" : "Waiting for output…")}
+                  </text>
+                }
+              >
+                {(body) => (
+                  <>
+                    <GutteredCode content={body().json} filetype="json" digits={digits()} />
+                    <Show when={body().rest}>
+                      {(rest) => (
+                        <box paddingLeft={digits() + 1}>
+                          <text
+                            fg={failed() ? contentTheme.text.feedback.error.base : contentTheme.text.base}
+                            wrapMode="word"
+                          >
+                            {rest()}
+                          </text>
+                        </box>
+                      )}
+                    </Show>
+                  </>
+                )}
+              </Show>
+            </box>
           </box>
-          <box>
-            <text fg={contentTheme.text.muted} attributes={TextAttributes.BOLD}>
-              Output
-            </text>
-            <Show
-              when={highlighted()}
-              fallback={
-                <text
-                  fg={
-                    text()
-                      ? failed()
-                        ? contentTheme.text.feedback.error.base
-                        : contentTheme.text.base
-                      : contentTheme.text.muted
-                  }
-                  wrapMode="word"
-                >
-                  {text() ?? (props.part.state.status === "completed" ? "No output" : "Waiting for output…")}
-                </text>
-              }
-            >
-              {(body) => (
-                <>
-                  <GutteredCode content={body().json} filetype="json" digits={digits()} />
-                  <Show when={body().rest}>
-                    {(rest) => (
-                      <box paddingLeft={digits() + 1}>
-                        <text
-                          fg={failed() ? contentTheme.text.feedback.error.base : contentTheme.text.base}
-                          wrapMode="word"
-                        >
-                          {rest()}
-                        </text>
-                      </box>
-                    )}
-                  </Show>
-                </>
-              )}
-            </Show>
-          </box>
-        </box>
-      </scrollbox>
-      <box flexDirection="row" gap={3} flexWrap="wrap" paddingLeft={2} paddingRight={2}>
-        <text fg={theme.text.muted}>↑/↓ scroll</text>
-        <text onMouseUp={() => copy("code")}>
-          <span style={{ fg: copied() === "code" ? theme.text.feedback.success.base : theme.text.base }}>
-            <b>{copied() === "code" ? "✓ copied" : "c"}</b>
-          </span>
-          <span style={{ fg: theme.text.muted }}>{copied() === "code" ? "" : " copy code"}</span>
-        </text>
-        <text onMouseUp={() => copy("output")}>
-          <span style={{ fg: copied() === "output" ? theme.text.feedback.success.base : theme.text.base }}>
-            <b>{copied() === "output" ? "✓ copied" : "o"}</b>
-          </span>
-          <span style={{ fg: theme.text.muted }}>{copied() === "output" ? "" : " copy output"}</span>
-        </text>
-        <text fg={theme.text.muted}>esc back</text>
-      </box>
-    </box>
+        </scrollbox>
+      </DialogBleed>
+    </DialogLayout>
   )
 }
 
@@ -188,7 +207,7 @@ function executeCode(input: SessionMessageAssistantTool["state"]["input"]) {
 }
 
 function outputText(state: SessionMessageAssistantTool["state"]) {
-  if (state.status === "error") return state.error.message || undefined
+  if (state.status === "error") return stripAnsi(state.error.message) || undefined
   if (state.status !== "completed") return
   const text = stripAnsi(
     state.content

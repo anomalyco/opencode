@@ -82,7 +82,13 @@ A local server is a command that OpenCode starts over the MCP stdio transport. A
 opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
 ```
 
-Use configuration for process options such as a working directory or environment variables:
+Pass environment variables with repeated `--env` flags:
+
+```sh
+opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+```
+
+Use configuration for other process options such as a working directory:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -132,7 +138,13 @@ A remote server uses the MCP Streamable HTTP transport and requires an absolute 
 opencode mcp add context7 --url https://mcp.context7.com/mcp
 ```
 
-Use configuration when the server needs headers or other options. Store secrets in environment variables rather than in the file:
+Pass request headers with repeated `--header` flags. Quote `{env:NAME}` references so the shell writes them literally:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+```
+
+Use configuration for other options. Store secrets in environment variables rather than in the file:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -176,9 +188,9 @@ Use `oauth: false` only when the server exclusively uses an API key or another h
 
 ## OAuth
 
-OAuth is enabled for remote servers unless `oauth` is `false`. OpenCode discovers the authorization server, uses PKCE, refreshes tokens, and attempts dynamic client registration when supported; credentials stay outside project configuration.
+OAuth is enabled for remote servers unless `oauth` is `false`. OpenCode discovers the authorization server, signs in with PKCE, and refreshes tokens. Credentials are stored outside project configuration.
 
-For dynamic registration, configure only the server URL:
+Most servers need only the URL:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -199,6 +211,44 @@ If the server needs authentication, run `/mcps`, select it, and complete authori
 ```sh
 opencode mcp auth sentry
 ```
+
+### Client registration
+
+OpenCode identifies itself to the authorization server with the first method that applies:
+
+| Method | Used when |
+| --- | --- |
+| Pre-registered client | `oauth.client_id` is configured. |
+| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | The authorization server supports CIMD and public clients, and `oauth.redirect_uri` is not set. |
+| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins. |
+
+An authorization server opts into CIMD through its metadata:
+
+```json
+{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+With CIMD, OpenCode sends its metadata document URL as the `client_id` and skips registration:
+
+```text
+https://opencode.ai/oauth/opencode/client.json
+```
+
+The document allows these loopback redirects without a port:
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- `http://127.0.0.1/mcp/oauth/callback` for older clients
+
+Authorization servers accept any loopback port for these redirects, as [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) requires, so `callback_port` works with CIMD. A custom `redirect_uri` does not, so OpenCode falls back to DCR.
+
+If the authorization server supports neither CIMD nor DCR, configure a pre-registered client.
+
+### Pre-registered clients
 
 When a provider gives you client credentials, use V2's snake_case OAuth fields:
 
@@ -225,11 +275,11 @@ When a provider gives you client credentials, use V2's snake_case OAuth fields:
 
 | Field | Description |
 | --- | --- |
-| `client_id` | Pre-registered client ID. Omit it to attempt dynamic registration. |
-| `client_secret` | Secret for a pre-registered client. |
-| `scope` | Space-delimited scopes to request. |
-| `callback_port` | Local callback port from `1` through `65535`. An available ephemeral port is the default. |
-| `redirect_uri` | Pre-registered loopback URI whose path and port reach the local callback listener. |
+| `client_id` | Pre-registered client ID. Takes priority over CIMD and DCR. |
+| `client_secret` | Secret for a confidential client, sent in the token request body. Omit it for public clients. |
+| `scope` | Space-delimited scopes to request. Defaults to the scope the server names when it rejects an unauthenticated request. |
+| `callback_port` | Local callback port from `1` through `65535`. Defaults to the `redirect_uri` port, then an available ephemeral port. |
+| `redirect_uri` | Pre-registered loopback URI whose path and port reach the local callback listener. Setting it disables CIMD. |
 | `auth_server_metadata_url` | URL of the authorization server's OAuth or OpenID Connect metadata document. Set it when the MCP server does not publish protected resource metadata that names its authorization server. |
 
 Remove stored OAuth credentials when you need to sign in again or switch accounts:
@@ -313,6 +363,12 @@ MCP prompts become commands named `<server>:<prompt>` with the same normalizatio
 /context_7:find_docs
 ```
 
+Command text fills the prompt's arguments in order. Separate them with spaces and quote values that contain spaces:
+
+```text
+/context_7:find_docs react "server components"
+```
+
 Choose short server names that remain unique after normalization. Under the default Code Mode, tools are grouped by the normalized server name:
 
 ```text
@@ -350,6 +406,55 @@ Use permission actions to hide or deny tools without disconnecting their server.
   ],
 }
 ```
+
+## Resources
+
+Agents read MCP resources through two built-in tools, `list_mcp_resources` and `read_mcp_resource`. Control them with these permission actions:
+
+| Action | Resource |
+| --- | --- |
+| `opencode_list_mcp_resources` | The server name. |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+
+For example, allow every read from the `docs` server:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}
+```
+
+## Server instructions
+
+When a server returns instructions during initialization, OpenCode adds them to the system prompt:
+
+```text
+<mcp_instructions>
+  <server name="sentry">
+    Search for an existing issue before creating a new one.
+  </server>
+</mcp_instructions>
+```
+
+For servers that use Code Mode, OpenCode adds a line that says where the agent can find the server's tools.
+
+A server's instructions are omitted when the agent's permissions deny every one of its tools, or when they deny `execute` for a server that uses Code Mode.
+
+## Input requests
+
+Servers can ask for input during a call through MCP elicitation. OpenCode shows the request as a form, or as a link to open for URL requests:
+
+```text
+sentry is requesting input
+```
+
+Dismissing the form cancels the request.
 
 ## Context
 
@@ -391,6 +496,12 @@ opencode mcp auth sentry
 opencode mcp logout sentry
 ```
 
+Run `opencode mcp auth` without a name to pick from the OAuth-capable servers:
+
+```sh
+opencode mcp auth
+```
+
 To remove a server, delete its entry from the project or global configuration where it was added:
 
 ```jsonc
@@ -401,7 +512,7 @@ To remove a server, delete its entry from the project or global configuration wh
 }
 ```
 
-Edit configuration directly for OAuth client settings, timeouts, working directories, or persistent enablement:
+Disconnecting a server in `/mcps` does not change configuration. Edit configuration directly for OAuth client settings, timeouts, working directories, or to keep a server disconnected:
 
 ```jsonc
 {

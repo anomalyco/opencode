@@ -11,6 +11,15 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Session.
   sessionID: SessionSchema.ID,
 }) {}
 
+export class InvalidListCursorError extends Schema.TaggedError<InvalidListCursorError>()(
+  "Session.InvalidListCursorError",
+  {},
+) {
+  override get message() {
+    return "Invalid cursor"
+  }
+}
+
 export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundError>()("Session.MessageNotFoundError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,

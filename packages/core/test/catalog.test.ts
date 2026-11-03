@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"
@@ -12,6 +12,8 @@ import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Money } from "@opencode/schema/money"
+import { withEnv } from "./fixture/env"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -201,8 +203,7 @@ describe("Provider and Model", () => {
       yield* settle(
         Ref.get(log).pipe(
           Effect.map(
-            (types) =>
-              types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
+            (types) => types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
           ),
         ),
       )
@@ -359,32 +360,21 @@ describe("Provider and Model", () => {
   })
 
   it.effect("projects environment connections without a catalog plugin", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.env.CATALOG_TEST_API_KEY
-        process.env.CATALOG_TEST_API_KEY = "secret"
-        return previous
-      }),
-      () =>
-        Effect.gen(function* () {
-          const providers = yield* Provider.Service
-          const integrations = yield* Integration.Service
-          const providerID = Provider.ID.make("test")
-          yield* integrations.transform((editor) =>
-            editor.method.update({
-              integrationID: Integration.ID.make(providerID),
-              method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
-            }),
-          )
-          yield* providers.transform((editor) => editor.update(providerID, () => {}))
+    withEnv({ CATALOG_TEST_API_KEY: "secret" }, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const integrations = yield* Integration.Service
+        const providerID = Provider.ID.make("test")
+        yield* integrations.transform((editor) =>
+          editor.method.update({
+            integrationID: Integration.ID.make(providerID),
+            method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
+          }),
+        )
+        yield* providers.transform((editor) => editor.update(providerID, () => {}))
 
-          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
-        }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) delete process.env.CATALOG_TEST_API_KEY
-          else process.env.CATALOG_TEST_API_KEY = previous
-        }),
+        expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
+      }),
     ),
   )
 
@@ -566,6 +556,55 @@ describe("Provider and Model", () => {
       })
 
       expect((yield* models.default())?.id).toMatch("new")
+    }),
+  )
+
+  it.effect("defaults to big-pickle when only free OpenCode models are available", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.opencode, () => {})
+        ;["muse-spark-1.3-contributor-free", "new-free", "deepseek-v4.1-flash-free", "big-pickle"].forEach(
+          (id, index) =>
+            editor.models.update(Provider.ID.opencode, Model.ID.make(id), (model) => {
+              model.time.released = 4000 - index * 1000
+            }),
+        )
+      })
+
+      expect((yield* models.available()).map((model) => model.id)).toEqual([
+        Model.ID.make("big-pickle"),
+        Model.ID.make("deepseek-v4.1-flash-free"),
+        Model.ID.make("muse-spark-1.3-contributor-free"),
+        Model.ID.make("new-free"),
+      ])
+      expect((yield* models.default())?.id).toBe(Model.ID.make("big-pickle"))
+    }),
+  )
+
+  it.effect("keeps the newest default when a paid model is available", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.opencode, () => {})
+        editor.models.update(Provider.ID.opencode, Model.ID.make("big-pickle"), (model) => {
+          model.time.released = 1000
+        })
+        editor.models.update(Provider.ID.opencode, Model.ID.make("paid"), (model) => {
+          model.time.released = 2000
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(1),
+              output: Money.USDPerMillionTokens.make(1),
+              cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+            },
+          ]
+        })
+      })
+
+      expect((yield* models.default())?.id).toBe(Model.ID.make("paid"))
     }),
   )
 

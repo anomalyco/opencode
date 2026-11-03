@@ -48,16 +48,6 @@ opencode [project]
 
 ---
 
-### agent
-
-إدارة وكلاء OpenCode.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |         | تفريع الجلسة عند المتابعة (استخدمه مع `--continue` أو `--session`)                |
 | <nobr><code>{"--password"}</code></nobr> | `-p`    | كلمة مرور المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_PASSWORD`)                |
 | <nobr><code>{"--username"}</code></nobr> | `-u`    | اسم مستخدم المصادقة الأساسية (الافتراضي `OPENCODE_SERVER_USERNAME` أو `opencode`) |
-
----
-
-#### create
-
-إنشاء وكيل جديد بإعدادات مخصصة.
-
-```bash
-opencode agent create
-```
-
-سيرشدك هذا الأمر خلال إنشاء وكيل جديد مع موجه نظام مخصص وإعدادات الأدوات.
-
----
-
-#### list
-
-عرض جميع الوكلاء المتاحين.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`    | متابعة الجلسة الأخيرة                                                             |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`    | معرّف الجلسة للمتابعة                                                             |
 | <nobr><code>{"--fork"}</code></nobr>     |         | تفريع الجلسة عند المتابعة (يستخدم مع `--continue` أو `--session`)                 |
-| <nobr><code>{"--share"}</code></nobr>    |         | مشاركة الجلسة                                                                     |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                                      |
 | <nobr><code>{"--agent"}</code></nobr>    |         | الوكيل المراد استخدامه                                                            |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                                       |
@@ -442,17 +409,14 @@ opencode export [sessionID]
 
 ### import
 
-استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة OpenCode.
+استيراد بيانات الجلسة من ملف JSON.
 
 ```bash
 opencode import <file>
 ```
 
-يمكنك الاستيراد من ملف محلي أو من رابط مشاركة OpenCode.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ opencode upgrade v0.1.48
 
 | المتغير                               | النوع   | الوصف                                                     |
 | ------------------------------------- | ------- | --------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
 | `OPENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
 | `OPENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
 | `OPENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |

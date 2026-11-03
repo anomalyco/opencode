@@ -1,6 +1,5 @@
 import { Effect } from "effect"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Provider } from "../../provider.js"
 
 // Chat-completions `prompt_cache_key` body support for catalog providers
 // without a dedicated AI package. Audited per provider (docs + OpenAPI +
@@ -25,14 +24,13 @@ const providerIDs = [
 export const PromptCacheKeyPlugin = define({
   id: "opencode.provider.prompt-cache-key",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.model.transform((models) => {
+    // Set on the provider so configured provider and model compatibility can override it.
+    yield* ctx.provider.transform((providers) => {
       for (const id of providerIDs) {
-        const providerID = Provider.ID.make(id)
-        for (const model of models.list(providerID)) {
-          models.update(model.providerID, model.id, (draft) => {
-            draft.compatibility = { ...draft.compatibility, supportsPromptCacheKey: true }
-          })
-        }
+        if (!providers.get(id)) continue
+        providers.update(id, (provider) => {
+          provider.compatibility = { ...provider.compatibility, supportsPromptCacheKey: true }
+        })
       }
     })
   }),

@@ -1,20 +1,20 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
   CacheHint,
-  CachePolicy,
-  GenerationOptions,
-  HttpOptions,
+  type CachePolicy,
+  type GenerationOptions,
+  type HttpOptions,
   JsonSchema,
-  LanguageModelSchema,
   type LanguageModel,
+  type LanguageModelProviderOptions,
   ProviderMetadata,
-  ProviderOptions,
   ReasoningEffort,
 } from "./options.js"
 import { ProviderID } from "./ids.js"
 import { Media } from "../media.js"
+import { Json } from "../utils/json.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -41,7 +41,6 @@ export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Text" })
 export type TextPart = Schema.Schema.Type<typeof TextPart>
@@ -51,7 +50,6 @@ export const MediaPart = Schema.Struct({
   media: Media.AssetSchema,
   filename: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
@@ -119,13 +117,11 @@ export const ToolOutput = withStatics(
   },
 )
 
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
 const toolResultText = (value: unknown) => {
   if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
+  return Option.getOrElse(encodeJsonOption(value), () => String(value))
 }
 
 export const ToolCallPart = withStatics(
@@ -137,7 +133,6 @@ export const ToolCallPart = withStatics(
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
   {
@@ -155,7 +150,6 @@ export const ToolResultPart = withStatics(
     result: ToolResultValue,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolResult" }),
   {
@@ -172,7 +166,6 @@ export const ToolResultPart = withStatics(
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
       cache: input.cache,
-      metadata: input.metadata,
       providerMetadata: input.providerMetadata,
     }),
   },
@@ -184,7 +177,6 @@ export const ReasoningPart = Schema.Struct({
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
@@ -238,7 +230,6 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   id: Schema.optional(Schema.String),
   role: MessageRole,
   content: Schema.Array(ContentPart),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -285,13 +276,24 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
+/**
+ * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
+ * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ */
+export const Freeform = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+]).annotate({ identifier: "LLM.Freeform" })
+export type Freeform = Schema.Schema.Type<typeof Freeform>
+
 const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
+  freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }
 
@@ -311,6 +313,15 @@ export namespace ToolDefinition {
 
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
+
+  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
+  export const freeformField = (schema: JsonSchema) => {
+    const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
+    if (properties.length !== 1) return undefined
+    const [name, property] = properties[0]
+    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
+  }
 }
 
 export type ToolNamespace = {
@@ -382,69 +393,23 @@ export namespace ToolChoice {
   }
 }
 
-const requestSchema = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  model: LanguageModelSchema,
-  system: Schema.Array(SystemPart),
-  messages: Schema.Array(Message),
-  tools: Schema.Array(ToolEntry),
-  toolChoice: Schema.optional(ToolChoice),
-  generation: Schema.optional(GenerationOptions),
-  providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-  cache: Schema.optional(CachePolicy),
-  // Stable cache affinity for protocols that support provider-managed prompt caching.
-  promptCacheKey: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-})
-
-export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
-  requestSchema.fields,
-) {
-  declare readonly model: Model
-
-  // Preserve model inference instead of inheriting the schema's erased constructor signature.
-  // oxlint-disable-next-line no-useless-constructor
-  constructor(input: LLMRequest.Input<Model>) {
-    super(input)
-  }
-}
-
-export namespace LLMRequest {
-  export type Input<Model extends LanguageModel = LanguageModel> = Omit<typeof requestSchema.Type, "model"> & {
-    readonly model: Model
-  }
-
-  export const input = <Model extends LanguageModel>(request: LLMRequest<Model>): Input<Model> => ({
-    id: request.id,
-    model: request.model,
-    system: request.system,
-    messages: request.messages,
-    tools: request.tools,
-    toolChoice: request.toolChoice,
-    generation: request.generation,
-    providerOptions: request.providerOptions,
-    http: request.http,
-    cache: request.cache,
-    promptCacheKey: request.promptCacheKey,
-    metadata: request.metadata,
-  })
-
-  export function update<Model extends LanguageModel>(
-    request: LLMRequest,
-    patch: Partial<Input<Model>> & { readonly model: Model },
-  ): LLMRequest<Model>
-  export function update<Model extends LanguageModel>(
-    request: LLMRequest<Model>,
-    patch: Partial<Omit<Input, "model">> & { readonly model?: undefined },
-  ): LLMRequest<Model>
-  export function update(request: LLMRequest, patch: Partial<Input>): LLMRequest
-  export function update(request: LLMRequest, patch: Partial<Input>) {
-    if (Object.keys(patch).length === 0) return request
-    return new LLMRequest({
-      ...input(request),
-      ...patch,
-      model: patch.model ?? request.model,
-    })
-  }
+/**
+ * A normalized text request, the plain object `ai.request(...)` returns. Edit it with a spread, such as
+ * `{ ...request, messages: [...request.messages, next] }`, or pass the edited object back to `ai.request`.
+ */
+export interface LLMRequest<Model extends LanguageModel = LanguageModel> {
+  readonly id?: string
+  readonly model: Model
+  readonly system: ReadonlyArray<SystemPart>
+  readonly messages: ReadonlyArray<Message>
+  readonly tools: ReadonlyArray<ToolEntry>
+  readonly toolChoice?: ToolChoice
+  readonly generation?: GenerationOptions
+  readonly providerOptions?: LanguageModelProviderOptions<Model>
+  readonly http?: HttpOptions
+  readonly cache?: CachePolicy
+  /** Stable cache affinity for protocols that support provider-managed prompt caching. */
+  readonly promptCacheKey?: string
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  readonly includeRaw?: boolean
 }

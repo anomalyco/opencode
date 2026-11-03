@@ -5,7 +5,7 @@ import {
   CompactionPart,
   CompactionResponse,
   HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ContentPart,
   mergeJsonRecords,
@@ -108,16 +108,22 @@ export const make = (
     const url = Endpoint.render(route.endpoint, { request, body: native })
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
-      request: LLMRequest.update(request, {
+      request: {
+        ...request,
         http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-      }),
+      },
       body,
       endpoint: Endpoint.path(url.toString()),
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
     const response = yield* executor.execute(
-      ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
+      ProviderShared.jsonPost({
+        url: parts.url,
+        body: parts.bodyText,
+        headers: parts.headers,
+        encoding: request.http?.encoding,
+      }),
       options?.http,
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(

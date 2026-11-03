@@ -48,7 +48,7 @@ test("selects rows through Effect-yieldable query builders", async () => {
   )
 })
 
-test("maps query failures with query, params, and cause", async () => {
+test("maps query failures with query, redacted params, and cause", async () => {
   await run(
     Effect.gen(function* () {
       const db = yield* EffectDrizzleSqlite.makeWithDefaults()
@@ -56,7 +56,7 @@ test("maps query failures with query, params, and cause", async () => {
 
       expect(error).toBeInstanceOf(EffectDrizzleQueryError)
       expect(error.query).toBe("select * from missing_table where id = ?")
-      expect(error.params).toEqual([42])
+      expect(error.params).toEqual(["[redacted]"])
       expect(Cause.isCause(error.cause)).toBe(true)
       if (!Cause.isCause(error.cause)) return
       expect(error.cause.reasons[0]?._tag).toBe("Fail")

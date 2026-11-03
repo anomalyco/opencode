@@ -18,7 +18,7 @@ import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
-import { useConfig } from "../../config"
+import { useCursorStyle } from "../../config"
 import { errorMessage } from "../../util/error"
 import {
   formCustom,
@@ -64,7 +64,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const keymap = Keymap.use()
   const enabled = useInteractivity()
   const active = () => enabled() && keymap.mode.current() === FORM_MODE
-  const config = useConfig().data
+  const cursorStyle = useCursorStyle()
   const clipboard = useClipboard()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
@@ -885,7 +885,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
-                  cursorStyle={config.cursor}
+                  cursorStyle={cursorStyle()}
                   ref={(val: TextareaRenderable) => {
                     textarea = val
                     val.traits = { status: "ANSWER" }
@@ -1025,7 +1025,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         >
                           <textarea
                             flexGrow={1}
-                            cursorStyle={config.cursor}
+                            cursorStyle={cursorStyle()}
                             ref={(val: TextareaRenderable) => {
                               textarea = val
                               val.traits = { status: "ANSWER" }

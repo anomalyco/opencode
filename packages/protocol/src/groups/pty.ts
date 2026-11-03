@@ -9,13 +9,12 @@ import { LocationQuery, locationQueryOpenApi } from "./location.js"
 export const PTY_CONNECT_TICKET_QUERY = "ticket"
 export const PTY_CONNECT_TOKEN_HEADER = "x-opencode-ticket"
 export const PTY_CONNECT_TOKEN_HEADER_VALUE = "1"
+export const PTY_CONNECT_PATH = "/api/pty/:ptyID/connect"
 
-const PTY_CONNECT_PATH = /^\/api\/pty\/[^/]+\/connect$/
+const PTY_CONNECT_URL = /^\/api\/pty\/[^/]+\/connect$/
 
-// Authorization middleware skips credential checks when this matches; the PTY connect handler
-// is then responsible for consuming and validating the ticket.
 export function hasPtyConnectTicketURL(url: URL) {
-  return PTY_CONNECT_PATH.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+  return PTY_CONNECT_URL.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
 }
 
 export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, LocationService>(
@@ -120,7 +119,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .middleware(locationMiddleware)
     .add(
       // Query fields are decoded in the raw handler before upgrade work.
-      HttpApiEndpoint.get("pty.connect", "/api/pty/:ptyID/connect", {
+      HttpApiEndpoint.get("pty.connect", PTY_CONNECT_PATH, {
         params: { ptyID: Pty.ID },
         success: Schema.Boolean,
         error: [ForbiddenError, PtyNotFoundError, LocationNotFoundError],

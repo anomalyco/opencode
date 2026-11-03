@@ -1,0 +1,27 @@
+[data-component="legal"] [data-slot="status"] {
+  --status-dot: var(--color-text-weak);
+  white-space: nowrap;
+}
+
+/* An inline dot keeps the label on the same baseline as the rest of the row. */
+[data-component="legal"] [data-slot="status"]::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 10px;
+  vertical-align: 0.1em;
+  background: var(--status-dot);
+}
+
+[data-component="legal"] [data-slot="status"][data-status="operational"] {
+  --status-dot: #198b43;
+}
+
+[data-component="legal"] [data-slot="status"][data-status="degraded"] {
+  --status-dot: #c48a00;
+}
+
+[data-component="legal"] [data-slot="status"][data-status="outage"] {
+  --status-dot: #d93636;
+}

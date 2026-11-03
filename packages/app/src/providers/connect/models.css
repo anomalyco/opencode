@@ -56,9 +56,7 @@
 }
 
 @media (hover: hover) {
-  [data-component="first-provider-models"]
-    .provider-model-groups--dialog
-    .provider-model-group-trigger:not(:disabled):hover {
+  [data-component="first-provider-models"] .provider-model-groups--dialog .provider-model-group-header:hover {
     background-color: var(--v2-background-bg-layer-03);
   }
 }

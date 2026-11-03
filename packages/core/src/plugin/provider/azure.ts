@@ -1,23 +1,21 @@
-import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
-import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { App } from "../../app.js"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
-import { iife } from "../../util/iife.js"
+import { SharedCache } from "../../shared-cache.js"
 import { which } from "../../util/which.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
@@ -52,18 +50,8 @@ const decodeManagementDeployment = Schema.decodeUnknownOption(
     }),
   }),
 )
-const ResourceQuery = Schema.Struct({
-  query: Schema.String,
-  options: Schema.optional(Schema.Struct({ $top: Schema.Number })),
-})
+const ResourceQuery = Schema.Struct({ query: Schema.String })
 const Resources = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.NonEmptyString })) })
-const ResourceListing = Schema.Struct({ data: Schema.Array(Schema.Unknown) })
-const decodeProfile = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.NonEmptyArray(Schema.Unknown) })),
-)
-const decodeResourceListing = Schema.decodeUnknownOption(
-  Schema.Struct({ resourceName: Schema.NonEmptyString, resourceGroup: Schema.String, location: Schema.String }),
-)
 
 type Deployment = { readonly name: string; readonly model: string }
 
@@ -78,10 +66,9 @@ export function make(
     effect: Effect.fn(function* (ctx) {
       const configured = yield* configuredSettings(Provider.ID.azure)
       const processes = yield* AppProcess.Service
-      const fs = yield* FSUtil.Service
-      const bus = yield* Bus.Service
       const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
+      const cache = yield* SharedCache.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const tokens = new Map<string, { access: string; expires: number }>()
       // A resource keeps its Azure Resource Manager ID until it is deleted, so discovery looks it up once.
@@ -133,8 +120,6 @@ export function make(
 
       const available = Boolean(which("az"))
       const configuredResource = Boolean(resolveResourceName(configured) || typeof configured?.baseURL === "string")
-      // Undefined until the Azure CLI answers; a failed lookup leaves the form to manual entry.
-      const listing: { resources?: readonly Form.Option[] } = {}
 
       yield* ctx.integration.transform((editor) => {
         // The retired azure-cognitive-services provider's env var still connects Azure.
@@ -177,16 +162,7 @@ export function make(
                     placeholder: "e.g. my-models",
                     required: true,
                     pattern: resourcePattern.source,
-                    // Resources are listed once at startup, so one created later is typed in. Without a list the field
-                    // is a plain text input.
-                    ...iife(() => {
-                      if (!listing.resources) return { description: "Requests use your `az login` session." }
-                      if (listing.resources.length === 0)
-                        return {
-                          description: "No Azure OpenAI or AI Services resources found for your `az login` account.",
-                        }
-                      return { custom: true, options: listing.resources }
-                    }),
+                    description: "Enter the name of your Azure OpenAI or AI Services resource.",
                   },
                 ]),
           },
@@ -285,7 +261,9 @@ export function make(
       // https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/OpenAIAuthoring/stable/2022-12-01/azureopenai.json
       const deployments = (url: string, resource: string, credential: Credential.Key | Credential.External) =>
         credential.type === "external"
-          ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
+          ? managementDeployments(resource).pipe(
+              Effect.catch((error) => resourceDeployments(url, credential).pipe(Effect.mapError(() => error))),
+            )
           : resourceDeployments(url, credential)
 
       // Local and quick, so a switch rebinds the provider before discovery for the new connection calls Azure.
@@ -303,7 +281,7 @@ export function make(
           }),
         )
 
-      const discover = Effect.fn("AzurePlugin.discover")(function* () {
+      const discover = Effect.fn("AzurePlugin.discover")(function* (options: ProviderRefresh.Options) {
         const connection = loaded.connection
         const settings = (yield* providers.get(Provider.ID.azure))?.settings
         const name = loaded.resource ?? resolveResourceName(settings)
@@ -325,27 +303,39 @@ export function make(
         const credential = yield* ctx.integration.connection
           .resolve(connection)
           .pipe(Effect.orElseSucceed(() => undefined))
-        if (
-          !credential ||
-          credential.type === "oauth" ||
-          (credential.type === "external" && credential.methodID !== methodID)
-        )
-          return
-        const found = yield* deployments(url, name, credential).pipe(
-          // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
-          Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
-          Effect.catch((cause) =>
-            Effect.logWarning("failed to sync Azure deployments", { cause }).pipe(Effect.as(undefined)),
-          ),
-        )
-        if (!found) return
+        if (!usable(credential)) return
+        const found = yield* cache
+          .get({
+            key: deploymentsKey(connection, credential, url),
+            ...options,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                usable(current)
+                  ? deployments(url, name, current)
+                  : Effect.fail(new Error("Azure connection has no usable credential")),
+              ),
+              // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
+              Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return found && { connection, found }
+      })
+
+      const apply = (next: { connection: typeof loaded.connection; found: readonly Deployment[] } | undefined) =>
+        next ? loading.withPermit(publish(next.connection, next.found)).pipe(Effect.uninterruptible) : Effect.void
+
+      const publish = Effect.fn("AzurePlugin.publish")(function* (
+        connection: typeof loaded.connection,
+        found: readonly Deployment[],
+      ) {
         if (
           loaded.connection !== connection ||
           IntegrationConnection.key(connection) !==
             IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
         )
           return
-        if (JSON.stringify(found) === JSON.stringify(loaded.deployments)) return
+        if (Equal.equals(found, loaded.deployments)) return
         const catalog = new Map(
           Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
             id.toLowerCase(),
@@ -361,9 +351,9 @@ export function make(
         yield* ctx.model.reload()
       })
 
-      const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
+      const refresh = discover({}).pipe(Effect.flatMap(apply))
 
-      // The connection's resource wins for Azure itself, matching the runtime merge of credentials over settings.
+      // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
         provider.id === Provider.ID.azure
           ? (loaded.resource ?? resolveResourceName(provider.settings))
@@ -371,49 +361,9 @@ export function make(
 
       Object.assign(loaded, yield* load())
 
-      // Lists the resources the Azure CLI account can reach in the background, so the connect form can offer them
-      // without startup waiting on Azure. The CLI's profile shows a signed-in account without running the CLI.
-      // https://learn.microsoft.com/cli/azure/azure-cli-configuration#cli-configuration-file
-      const listResources = Effect.fn("AzurePlugin.listResources")(function* () {
-        const profile = yield* fs.readFileStringSafe(
-          path.join(process.env.AZURE_CONFIG_DIR ?? path.join(Global.Path.home, ".azure"), "azureProfile.json"),
-        )
-        // The Azure CLI writes the profile with a byte order mark.
-        if (Option.isNone(decodeProfile(profile?.replace(/^\uFEFF/, "")))) return
-        const response = yield* HttpClientRequest.post(
-          `${endpoints.management}/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01`,
-        ).pipe(
-          HttpClientRequest.schemaBodyJson(ResourceQuery)({ query: resourceListQuery, options: { $top: 1000 } }),
-          Effect.flatMap(management),
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(ResourceListing)),
-          Effect.timeout("10 seconds"),
-        )
-        listing.resources = response.data.flatMap((raw): Form.Option[] => {
-          const item = Option.getOrUndefined(decodeResourceListing(raw))
-          if (!item || !resourcePattern.test(item.resourceName)) return []
-          return [
-            {
-              value: item.resourceName,
-              label: item.resourceName,
-              description: `${item.resourceGroup} · ${item.location}`,
-            },
-          ]
-        })
-        yield* ctx.integration.reload()
-      })
-      if (available && !configuredResource)
-        yield* listResources().pipe(
-          Effect.catch((cause) => Effect.logDebug("failed to list Azure resources", { cause })),
-          Effect.forkScoped,
-        )
-
       yield* ctx.provider.transform((evt) => {
         for (const item of evt.list()) {
-          if (
-            item.provider.id !== Provider.ID.azure &&
-            !item.provider.package.startsWith("@opencode/ai/providers/azure/")
-          )
-            continue
+          if (!azureProvider(item.provider)) continue
           const resourceName = resourceFor(item.provider)
           const websocket = responsesWebSocketCapable(item.provider)
           if (!resourceName && !websocket) continue
@@ -440,19 +390,18 @@ export function make(
       })
       yield* ctx.model.transform((models) => {
         for (const item of models.provider.list()) {
-          if (
-            item.provider.id !== Provider.ID.azure &&
-            !item.provider.package.startsWith("@opencode/ai/providers/azure/")
-          )
-            continue
+          if (!azureProvider(item.provider)) continue
           const resourceName = resourceFor(item.provider)
-          for (const model of models.list(item.provider.id)) {
+          if (!resourceName) continue
+          for (const model of item.models.values()) {
+            if (typeof model.settings?.baseURL !== "string") continue
+            const baseURL = expandResourceName(
+              model.settings.baseURL,
+              resolveResourceName(model.settings, resourceName) ?? resourceName,
+            )
+            if (baseURL === model.settings.baseURL) continue
             models.update(item.provider.id, model.id, (draft) => {
-              if (resourceName && typeof draft.settings?.baseURL === "string")
-                draft.settings.baseURL = expandResourceName(
-                  draft.settings.baseURL,
-                  resolveResourceName(draft.settings, resourceName) ?? resourceName,
-                )
+              if (typeof draft.settings?.baseURL === "string") draft.settings.baseURL = baseURL
             })
           }
         }
@@ -470,22 +419,22 @@ export function make(
       })
 
       // A switch interrupts discovery for the previous connection instead of waiting for its Azure calls.
-      yield* bus.subscribe(Credential.Event.Switched).pipe(
-        Stream.filter((event) => event.data.integrationID === Integration.ID.make("azure")),
-        Stream.runForEach(() => refresh()),
-        Effect.forkScoped({ startImmediately: true }),
+      yield* ProviderRefresh.onSwitch(
+        "azure",
+        rebind().pipe(Effect.andThen(FiberHandle.run(discovery, ProviderRefresh.switched(discover, apply)))),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
-      // Later changes load when the connection changes, so a new deployment needs a reconnect or restart.
-      yield* refresh().pipe(Effect.forkScoped)
+      yield* rebind().pipe(Effect.andThen(FiberHandle.run(discovery, refresh)), Effect.forkScoped)
+      yield* Effect.sleep(SharedCache.interval).pipe(
+        Effect.andThen(FiberHandle.run(discovery, refresh, { onlyIfMissing: true })),
+        Effect.forever,
+        Effect.forkScoped,
+      )
 
       // Entra bearer tokens are minted per request from the target URL's scope, so they are injected
       // at the transport hooks rather than stored as a credential.
       const bearer = Effect.fn("AzurePlugin.bearer")(function* (url: string) {
-        const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
-        const credential = connection
-          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
+        const { credential } = yield* activeCredential(ctx, Provider.ID.azure)
         if (credential?.type !== "external" || credential.methodID !== methodID) return
         const target = new URL(url)
         const scope =
@@ -499,7 +448,6 @@ export function make(
         "http.request",
         (evt) =>
           Effect.gen(function* () {
-            if (evt.model.providerID !== Provider.ID.azure) return
             const authorization = yield* bearer(evt.request.url)
             if (!authorization) return
             evt.request.headers.delete("api-key")
@@ -513,7 +461,6 @@ export function make(
         "experimental.ws.handshake",
         (evt) =>
           Effect.gen(function* () {
-            if (evt.model.providerID !== Provider.ID.azure) return
             const authorization = yield* bearer(evt.url)
             if (!authorization) return
             delete evt.headers["api-key"]
@@ -529,6 +476,15 @@ export function make(
 
 export const AzurePlugin = make()
 
+function deploymentsKey(
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  credential: Credential.Key | Credential.External,
+  url: string,
+) {
+  const access = credential.type === "key" ? `:${SharedCache.fingerprint(credential.key)}` : ""
+  return `azure:${IntegrationConnection.key(connection)}${access}:${url}`
+}
+
 function resolveResourceName(settings: Readonly<Record<string, unknown>> | undefined, fallback?: string) {
   const configured = settings?.resourceName
   if (typeof configured === "string" && configured.trim() !== "") return configured
@@ -541,28 +497,23 @@ function expandResourceName(baseURL: string, resourceName: string) {
     .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
 }
 
-// The Azure CLI method stores the resource as credential metadata, the API key method as its form answer. API keys
-// imported from V1 keep their connect-form answer as metadata.
-function credentialResource(credential: Credential.Value | undefined) {
-  const resource =
-    credential?.type === "key"
-      ? (credential.configuration?.resourceName ?? credential.metadata?.resourceName)
-      : credential?.type === "external" && credential.methodID === methodID
-        ? credential.metadata?.resourceName
-        : undefined
-  return typeof resource === "string" && resource.trim() !== "" ? resource : undefined
+function azureProvider(provider: { readonly id: string; readonly package: string }) {
+  return provider.id === Provider.ID.azure || provider.package.startsWith("@opencode/ai/providers/azure/")
 }
 
-// Entra ID authentication requires a custom subdomain, which is the resource name every endpoint uses.
-// https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains
-const resourceListQuery = [
-  "resources",
-  "| where type =~ 'microsoft.cognitiveservices/accounts' and kind in~ ('AIServices', 'OpenAI')",
-  "| extend resourceName = tostring(properties.customSubDomainName)",
-  "| where isnotempty(resourceName)",
-  "| project resourceName, resourceGroup, location",
-  "| order by resourceName asc",
-].join(" ")
+// API keys and Azure CLI sessions can list deployments; other sign-ins cannot.
+function usable(credential: Credential.Value | undefined): credential is Credential.Key | Credential.External {
+  return credential?.type === "key" || (credential?.type === "external" && credential.methodID === methodID)
+}
+
+// Both the API key and Azure CLI methods store their resource form answer as credential metadata.
+function credentialResource(credential: Credential.Value | undefined) {
+  const resource =
+    credential?.type === "key" || (credential?.type === "external" && credential.methodID === methodID)
+      ? credential.metadata?.resourceName
+      : undefined
+  return typeof resource === "string" && resource.trim() !== "" ? resource : undefined
+}
 
 function resourceQuery(resource: string) {
   return [

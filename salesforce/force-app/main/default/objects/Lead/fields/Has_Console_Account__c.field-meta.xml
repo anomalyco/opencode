@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Has_Console_Account__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>True when this person has a verified OpenCode Console account. Existing records are not backfilled.</description>
+    <label>Has Console Account</label>
+    <type>Checkbox</type>
+</CustomField>

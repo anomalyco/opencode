@@ -121,7 +121,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     setLoading((prev) => new Set(prev).add(name))
     const target = current()
     const input = { server: name, location: { directory: target.directory } }
-    const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
+    const call = server.status.status === "connected" ? client.api.experimental.mcp.disconnect(input) : client.api.experimental.mcp.connect(input)
     void call.catch(toast.error).finally(() =>
       setLoading((prev) => {
         const next = new Set(prev)
@@ -138,6 +138,8 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
         fallback={
           <DialogSelect
             title="MCP servers"
+            searchInTitle
+            titlePlaceholder="Search MCP servers"
             options={options()}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
@@ -152,11 +154,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
                 },
               },
             ]}
-            footer={
-              <Show when={focusedError()}>
-                <text fg={theme.text.muted}>enter to view error</text>
-              </Show>
-            }
+            footerHints={focusedError() ? [{ title: "view error", label: "enter", group: "primary" }] : []}
           />
         }
       >

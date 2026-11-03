@@ -18,7 +18,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import stripAnsi from "strip-ansi"
+import { Effect, Option, Schema } from "effect"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
 import { type SessionSummary, useData } from "../context"
@@ -26,7 +26,7 @@ import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
 import { FileIcon } from "@opencode/ui/file-icon"
-import { Icon, type IconProps } from "@opencode/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Markdown } from "../components/markdown"
@@ -36,12 +36,16 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
-import { animate } from "motion"
+import { animate } from "@kitlangton/solid-motion"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type {
+  FileDiffInfo,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantTool,
   SessionMessageShell,
@@ -52,11 +56,16 @@ import {
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
-  executeToolFailed,
+  executeToolCallArgs,
+  executeToolCalls,
+  executeToolSubtitle,
   readImagePath,
+  type ExecuteToolCall,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { stripAnsi } from "./ansi"
 import { followShellOutput } from "./shell-output"
+import { LinkedText } from "../components/linked-text"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -70,7 +79,12 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
       }
 
       if (valueRef) {
-        animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
+        valueRef.animate?.(
+          { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] },
+          { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+        )
+        valueRef.style.opacity = "1"
+        valueRef.style.filter = "blur(0px)"
       }
     })
   })
@@ -92,54 +106,88 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
   )
 }
 
-interface Diagnostic {
-  range: {
-    start: { line: number; character: number }
-    end: { line: number; character: number }
-  }
-  message: string
-  severity?: number
+// Tool input and metadata are open records shared by every tool. Each field decodes on its own,
+// so a malformed value drops only that field. Plugin tools are untyped at runtime, so a record that
+// is not an object reads as empty instead of failing the render.
+function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
+  const field = Schema.optional(schema)
+
+  return Schema.catchDecoding<typeof field>(() => Effect.succeed(Option.none()))(field)
 }
 
-type QuestionInfo = { question: string }
+const toolInput = Schema.decodeUnknownSync(
+  Schema.Struct({
+    path: optional(Schema.String),
+    pattern: optional(Schema.String),
+    include: optional(Schema.String),
+    offset: optional(Schema.Number),
+    limit: optional(Schema.Number),
+    url: optional(Schema.String),
+    query: optional(Schema.String),
+    agent: optional(Schema.String),
+    description: optional(Schema.String),
+    command: optional(Schema.String),
+    code: optional(Schema.String),
+    oldString: optional(Schema.String),
+    newString: optional(Schema.String),
+    content: optional(Schema.String),
+    id: optional(Schema.String),
+    name: optional(Schema.String),
+    questions: optional(Schema.Array(Schema.Unknown)),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
+)
 
-type QuestionAnswer = string[]
+const toolMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    name: optional(Schema.String),
+    provider: optional(Schema.String),
+    sessionID: optional(Schema.String),
+    command: optional(Schema.String),
+    shellID: optional(Schema.String),
+    status: optional(Schema.String),
+    background: optional(Schema.Boolean),
+    count: optional(Schema.Finite),
+    matches: optional(Schema.Finite),
+    files: optional(Schema.Array(Schema.Unknown)),
+    loaded: optional(Schema.Array(Schema.Unknown)),
+    answers: optional(Schema.Array(Schema.Unknown)),
+    diagnostics: optional(Schema.Record(Schema.String, Schema.Array(Schema.Unknown))),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
+)
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
+type ToolInput = ReturnType<typeof toolInput>
+
+type ToolMetadata = ReturnType<typeof toolMetadata>
+
+const decodeString = Schema.decodeUnknownOption(Schema.String)
+
+const decodeQuestion = Schema.decodeUnknownOption(Schema.Struct({ question: Schema.String }))
+
+const decodeAnswer = Schema.decodeUnknownOption(Schema.Array(Schema.String))
+
+const decodeDiagnostic = Schema.decodeUnknownOption(
+  Schema.Struct({
+    range: Schema.Struct({ start: Schema.Struct({ line: Schema.Number, character: Schema.Number }) }),
+    message: Schema.String,
+    severity: Schema.optional(Schema.Number),
+  }),
+)
+
+type Diagnostic = Option.Option.Value<ReturnType<typeof decodeDiagnostic>>
+
+function questions(input: ToolInput) {
+  return (input.questions ?? []).flatMap((question) => Option.toArray(decodeQuestion(question)))
 }
 
-function questionInfo(value: unknown): value is QuestionInfo {
-  return record(value) && typeof value.question === "string"
-}
+function getDiagnostics(diagnosticsByFile: ToolMetadata["diagnostics"], filePath: string | undefined) {
+  if (!filePath) return []
 
-function questionAnswer(value: unknown): value is QuestionAnswer {
-  return Array.isArray(value) && value.every((answer) => typeof answer === "string")
-}
-
-function isDiagnostic(value: unknown): value is Diagnostic {
-  if (!value || typeof value !== "object") return false
-
-  if (!("message" in value) || typeof value.message !== "string") return false
-
-  if (!("range" in value) || !value.range || typeof value.range !== "object") return false
-
-  return "start" in value.range && !!value.range.start && typeof value.range.start === "object"
-}
-
-function getDiagnostics(diagnosticsByFile: unknown, filePath: string | undefined): Diagnostic[] {
-  if (!record(diagnosticsByFile) || !filePath) return []
-  const diagnostics = diagnosticsByFile[filePath]
-
-  if (!Array.isArray(diagnostics)) return []
-
-  return diagnostics
-    .filter(isDiagnostic)
-    .filter((diagnostic) => diagnostic.severity === 1)
+  return (diagnosticsByFile?.[filePath] ?? [])
+    .flatMap((value) => Option.toArray(decodeDiagnostic(value)).filter((diagnostic) => diagnostic.severity === 1))
     .slice(0, 3)
 }
 
-function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
+function DiagnosticsDisplay(props: { diagnostics: readonly Diagnostic[] }): JSX.Element {
   const i18n = useI18n()
 
   return (
@@ -188,270 +236,87 @@ function displayDirectory(path: string | undefined) {
 
 import { resolveFileDiff } from "../components/session-diff"
 
-export type ToolInfo = {
-  icon: IconProps["name"]
-  title: string
-  subtitle?: string
-}
-
-function agentTitle(i18n: UiI18n, type?: string) {
-  if (!type) return i18n.t("ui.tool.agent.default")
-
-  return i18n.t("ui.tool.agent", { type })
-}
-
-const agentTones: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
-  build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
-  plan: "var(--icon-agent-plan-base)",
-}
-
-const v2AgentTones: Record<string, string> = {
-  build: "var(--v2-agent-build-solid)",
-  explore: "var(--v2-agent-explore-solid)",
-  plan: "var(--v2-agent-plan-solid)",
-  review: "var(--v2-agent-review-solid)",
-  writer: "var(--v2-agent-writer-solid)",
-}
-
-const agentThemeColors: Record<string, string> = {
-  primary: "var(--text-interactive-base)",
-  secondary: "var(--text-base)",
-  accent: "var(--icon-info-base)",
-  success: "var(--icon-success-base)",
-  warning: "var(--icon-warning-base)",
-  error: "var(--icon-critical-base)",
-  info: "var(--icon-info-base)",
-}
-
-const v2AgentThemeColors: Record<string, string> = {
-  primary: "var(--v2-text-text-accent)",
-  secondary: "var(--v2-text-text-muted)",
-  accent: "var(--v2-icon-icon-accent)",
-  success: "var(--v2-state-fg-success)",
-  warning: "var(--v2-state-fg-warning)",
-  error: "var(--v2-state-fg-danger)",
-  info: "var(--v2-state-fg-info)",
-}
-
-const agentPalette = [
-  "var(--icon-agent-ask-base)",
-  "var(--icon-agent-build-base)",
-  "var(--icon-agent-docs-base)",
-  "var(--icon-agent-plan-base)",
-  "var(--syntax-info)",
-  "var(--syntax-success)",
-  "var(--syntax-warning)",
-  "var(--syntax-property)",
-  "var(--syntax-constant)",
-  "var(--text-diff-add-base)",
-  "var(--text-diff-delete-base)",
-  "var(--icon-warning-base)",
-]
-
-function tone(name: string) {
-  let hash = 0
-
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-
-  return agentPalette[hash % agentPalette.length]
-}
-
-function taskAgent(
-  raw: unknown,
-  list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string; v2Color?: string } {
-  if (typeof raw !== "string" || !raw) return {}
+export function taskAgentName(raw: string | undefined, list?: readonly { name: string }[]) {
+  if (!raw) return undefined
   const key = raw.toLowerCase()
-  const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
-  const v2Tone = item?.color ? undefined : v2AgentTones[key]
-  const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
-  const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
 
-  return {
-    name: item?.name ?? `${raw[0].toUpperCase()}${raw.slice(1)}`,
-    color,
-    v2Color,
-  }
+  return (
+    list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)?.name ??
+    `${raw[0].toUpperCase()}${raw.slice(1)}`
+  )
 }
 
-function agentColor(value: string | undefined, themeColors: Record<string, string>) {
-  if (!value) return undefined
+const webSearchProviderNames = new Map([
+  ["tinyfish", "TinyFish"],
+  ["opencode", "OpenCode"],
+])
 
-  return themeColors[value] ?? value
+function webSearchProviderLabel(provider: string | undefined, i18n: ReturnType<typeof useI18n>) {
+  if (!provider) return i18n.t("ui.tool.websearch")
+  const name = webSearchProviderNames.get(provider) ?? `${provider[0].toUpperCase()}${provider.slice(1)}`
+
+  return i18n.t("ui.tool.websearch.provider", { provider: name })
 }
 
-function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
-  const name =
-    typeof provider !== "string" || !provider
-      ? undefined
-      : provider === "tinyfish"
-        ? "TinyFish"
-        : provider === "opencode"
-          ? "OpenCode"
-          : `${provider[0].toUpperCase()}${provider.slice(1)}`
-
-  if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
-
-  return i18n.t("ui.tool.websearch")
-}
-
-function readToolPath(input: Record<string, unknown>) {
-  if (typeof input.path === "string") return input.path
-
-  return undefined
-}
-
-function readArgs(input: Record<string, unknown>) {
+function readArgs(input: ToolInput) {
   return [
-    ...(typeof input.offset === "number" ? [`offset=${input.offset}`] : []),
-    ...(typeof input.limit === "number" ? [`limit=${input.limit}`] : []),
+    ...(input.offset === undefined ? [] : [`offset=${input.offset}`]),
+    ...(input.limit === undefined ? [] : [`limit=${input.limit}`]),
   ]
 }
 
-function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
-  if (typeof metadata?.name === "string") return metadata.name
-
-  if (typeof input.id === "string") return input.id
-
-  if (typeof input.name === "string") return input.name
-
-  return undefined
+function skillToolName(input: ToolInput, metadata: ToolMetadata) {
+  return metadata.name ?? input.id ?? input.name
 }
 
-export function getToolInfo(
-  tool: string,
-  input: Record<string, unknown> = {},
-  metadata: Record<string, unknown> | undefined = {},
-): ToolInfo {
-  const i18n = useI18n()
+function currentSkillName(tool: SessionMessageAssistantTool) {
+  return skillToolName(toolInput(currentToolInput(tool)), toolMetadata(currentToolMetadata(tool)))
+}
 
-  switch (tool) {
-    case "read": {
-      const path = readToolPath(input)
-
-      return {
-        icon: "glasses",
-        title: i18n.t("ui.tool.read"),
-        subtitle: path ? getFilename(path) : undefined,
-      }
-    }
-
+// Context group labels name each tool once; detailed subtitles belong to the tool rows.
+function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
+  switch (tool.name) {
+    case "read":
+      return i18n.t("ui.tool.read")
     case "list":
-      return {
-        icon: "bullet-list",
-        title: i18n.t("ui.tool.list"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
-      }
+      return i18n.t("ui.tool.list")
     case "glob":
-      return {
-        icon: "magnifying-glass-menu",
-        title: i18n.t("ui.tool.glob"),
-        subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
-      }
+      return i18n.t("ui.tool.glob")
     case "grep":
-      return {
-        icon: "magnifying-glass-menu",
-        title: i18n.t("ui.tool.grep"),
-        subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
-      }
+      return i18n.t("ui.tool.grep")
     case "browser":
-      return {
-        icon: "window-cursor",
-        title: i18n.t("ui.tool.browser"),
-      }
+      return i18n.t("ui.tool.browser")
     case "webfetch":
-      return {
-        icon: "window-cursor",
-        title: i18n.t("ui.tool.webfetch"),
-        subtitle: typeof input.url === "string" ? input.url : undefined,
-      }
+      return i18n.t("ui.tool.webfetch")
     case "websearch":
-      return {
-        icon: "window-cursor",
-        title: webSearchProviderLabel(metadata?.provider, i18n),
-        subtitle: typeof input.query === "string" ? input.query : undefined,
-      }
-    case "subagent": {
-      const raw = input.agent
-      const type = typeof raw === "string" && raw ? raw[0].toUpperCase() + raw.slice(1) : undefined
-
-      return {
-        icon: "task",
-        title: agentTitle(i18n, type),
-        subtitle: typeof input.description === "string" ? input.description : undefined,
-      }
-    }
-
+      return webSearchProviderLabel(toolMetadata(currentToolMetadata(tool)).provider, i18n)
+    case "subagent":
+      return i18n.t("ui.tool.agent.default")
     case "shell":
-      return {
-        icon: "console",
-        title: i18n.t("ui.tool.shell"),
-        subtitle: typeof input.command === "string" ? input.command : undefined,
-      }
+      return i18n.t("ui.tool.shell")
     case "execute":
-      return {
-        icon: "console",
-        title: i18n.t("ui.tool.execute"),
-        subtitle: typeof input.code === "string" ? input.code : undefined,
-      }
+      return i18n.t("ui.tool.execute")
     case "edit":
-      return {
-        icon: "code-lines",
-        title: i18n.t("ui.messagePart.title.edit"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
-      }
+      return i18n.t("ui.messagePart.title.edit")
     case "write":
-      return {
-        icon: "code-lines",
-        title: i18n.t("ui.messagePart.title.write"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
-      }
+      return i18n.t("ui.messagePart.title.write")
     case "patch":
-      return {
-        icon: "code-lines",
-        title: i18n.t("ui.tool.patch"),
-        subtitle:
-          Array.isArray(input.files) && input.files.length
-            ? i18n.plural("ui.common.fileCount", input.files.length)
-            : undefined,
-      }
-    case "todowrite":
-      return {
-        icon: "checklist",
-        title: i18n.t("ui.tool.todos"),
-      }
+      return i18n.t("ui.tool.patch")
     case "question":
-      return {
-        icon: "bubble-5",
-        title: i18n.t("ui.tool.questions"),
-      }
+      return i18n.t("ui.tool.questions")
     case "skill":
-      return {
-        icon: "brain",
-        title: skillToolName(input, metadata) || i18n.t("ui.tool.skill"),
-      }
+      return i18n.t("ui.tool.skill")
     default:
-      return {
-        icon: "mcp",
-        title: tool,
-      }
+      return tool.name
   }
 }
 
 function urls(text: string | undefined) {
   if (!text) return []
-  const seen = new Set<string>()
 
-  return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)]
-    .map((item) => item[0].replace(/[),.;:!?]+$/g, ""))
-    .filter((item) => {
-      if (seen.has(item)) return false
-      seen.add(item)
-
-      return true
-    })
+  return [
+    ...new Set(Array.from(text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g), (item) => item[0].replace(/[),.;:!?]+$/g, ""))),
+  ]
 }
 
 function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
@@ -461,12 +326,11 @@ function sessionLink(id: string | undefined, href?: (id: string) => string | und
 }
 
 function taskSession(
-  input: Record<string, unknown>,
+  description: string | undefined,
   parentID: string | undefined,
   sessions: SessionSummary[] | undefined,
 ) {
   if (!parentID) return undefined
-  const description = typeof input.description === "string" ? input.description : ""
 
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
@@ -534,7 +398,7 @@ function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell"; id: string; render: () => JSX.Element }
+  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -565,28 +429,59 @@ export function CurrentContextToolGroup(props: {
         props.parts.flatMap((part) => {
           if (part.type !== "tool" && part.type !== "shell") return []
 
-          return [
-            part.type !== "tool"
-              ? i18n.t("ui.tool.shell")
-              : part.name === "skill"
-                ? i18n.t("ui.tool.skill")
-                : part.name === "subagent"
-                  ? i18n.t("ui.tool.agent.default")
-                  : getToolInfo(part.name, undefined, part.name === "websearch" ? currentToolMetadata(part) : undefined)
-                      .title,
-          ]
+          return [part.type === "tool" ? toolTitle(part, i18n) : i18n.t("ui.tool.shell")]
         }),
       ),
     ]),
   )
 
+  const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
+  // Thoughts alone are not finished work yet, so the live group reads as Thinking, in place of Working, rather than
+  // "Used 1 Thought".
+  const thinking = createMemo(() => props.busy && reasoning().length > 0 && reasoning().length === props.parts.length)
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    if (!thinking()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const elapsed = createMemo(() => {
+    const started = reasoning()[0]?.time?.created
+
+    if (!thinking() || started === undefined) return ""
+    const total = Math.max(0, Math.floor((now() - started) / 1000))
+    const numfmt = new Intl.NumberFormat(i18n.locale())
+
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+
+    if (total < 3600)
+      return i18n.t("ui.message.duration.minutesSeconds", {
+        minutes: numfmt.format(Math.floor(total / 60)),
+        seconds: numfmt.format(total % 60),
+      })
+
+    return i18n.t("ui.message.duration.hoursMinutes", {
+      hours: numfmt.format(Math.floor(total / 3600)),
+      minutes: numfmt.format(Math.floor(total / 60) % 60),
+    })
+  })
+
   const label = createMemo(() => {
-    const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+    const thoughts = reasoning().length
+
+    if (thinking()) {
+      const text = i18n.t("ui.sessionTurn.status.thinking")
+
+      return { text, title: text, before: "", count: undefined, between: "", after: "" }
+    }
 
     if (!names() && !thoughts) {
       const text = i18n.t("ui.messagePart.context.updates")
 
-      return { text, title: "", before: text, count: "", between: "", after: "" }
+      return { text, title: "", before: text, count: undefined, between: "", after: "" }
     }
 
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
@@ -598,13 +493,13 @@ export function CurrentContextToolGroup(props: {
     const countIndex = before.indexOf(countText)
     const after = text.slice(index + title.length).trim()
 
-    if (countIndex === -1) return { text, title, before, count: "", between: "", after }
+    if (countIndex === -1) return { text, title, before, count: undefined, between: "", after }
 
     return {
       text,
       title,
       before: before.slice(0, countIndex).trim(),
-      count: countText,
+      count,
       between: before.slice(countIndex + countText.length).trim(),
       after,
     }
@@ -642,11 +537,11 @@ export function CurrentContextToolGroup(props: {
       if (
         tool.name === "skill" &&
         tool.state.status !== "error" &&
-        skillToolName(currentToolInput(tool), currentToolMetadata(tool)) &&
+        currentSkillName(tool) &&
         Array.isArray(previous) &&
         previous?.[0]?.name === "skill" &&
         previous[0].state.status !== "error" &&
-        skillToolName(currentToolInput(previous[0]), currentToolMetadata(previous[0]))
+        currentSkillName(previous[0])
       ) {
         previous.push(tool)
 
@@ -706,14 +601,27 @@ export function CurrentContextToolGroup(props: {
                     {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
                   </Show>
                   <Show when={label().count}>
-                    {(count) => <span data-slot="context-tool-group-count">{count()}</span>}
+                    {(count) => (
+                      <span data-slot="context-tool-group-count">
+                        <AnimatedNumber value={count()} />
+                      </span>
+                    )}
                   </Show>
                   <Show when={label().between}>
                     {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
                   </Show>
                 </span>
               </Show>
-              <Show when={label().title}>{(title) => <span data-slot="basic-tool-tool-title">{title()}</span>}</Show>
+              <Show when={label().title}>
+                {(title) => (
+                  <span data-slot="basic-tool-tool-title">
+                    <Show when={thinking()} fallback={title()}>
+                      <TextShimmer text={title()} active />
+                    </Show>
+                  </span>
+                )}
+              </Show>
+              <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
@@ -739,7 +647,10 @@ export function CurrentContextToolGroup(props: {
               const callback = createMemo(() => {
                 const value = item()
 
-                return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
+                return !Array.isArray(value) &&
+                  (value.type === "notice" || value.type === "shell" || value.type === "text")
+                  ? value
+                  : undefined
               })
 
               return (
@@ -760,7 +671,8 @@ export function CurrentContextToolGroup(props: {
                             id={part().id}
                             content={part()}
                             streaming={part().streaming ?? false}
-                            defaultOpen={props.reasoningDefaultOpen}
+                            // The group already reads as Thinking, so opening it shows the thoughts themselves.
+                            defaultOpen={thinking() || props.reasoningDefaultOpen}
                             open={props.reasoningOpen?.(part().id)}
                             onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
                             onContentRendered={props.onSizeChange}
@@ -776,7 +688,7 @@ export function CurrentContextToolGroup(props: {
 
                     const skills = createMemo(() =>
                       group().flatMap((item) => {
-                        const name = skillToolName(currentToolInput(item), currentToolMetadata(item))
+                        const name = currentSkillName(item)
 
                         return name ? [name] : []
                       }),
@@ -946,8 +858,8 @@ export function CurrentReadToolGroup(props: {
 
   const files = createMemo(() =>
     props.tools.flatMap((tool) => {
-      const input = currentToolInput(tool)
-      const name = getFilename(readToolPath(input) ?? "")
+      const input = toolInput(currentToolInput(tool))
+      const name = getFilename(input.path ?? "")
 
       return name ? [{ id: tool.id, name, args: readArgs(input) }] : []
     }),
@@ -1030,17 +942,20 @@ export function CurrentFileToolGroup(props: {
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const files = createMemo((previous: { key: string; toolID: string; value: unknown }[]) => {
+  const files = createMemo((previous: { key: string; toolID: string; value: FileDiffInfo }[]) => {
     const next = props.tools.flatMap((tool) => {
-      const files = currentToolMetadata(tool).files
+      const files = toolMetadata(currentToolMetadata(tool)).files ?? []
 
-      if (Array.isArray(files) && files.length > 0)
-        return files.map((value, index) => ({ key: `${tool.id}:${index}`, toolID: tool.id, value }))
-      const input = currentToolInput(tool)
+      // Invalid entries render nothing, but metadata files still replace the input-derived preview.
+      if (files.length > 0)
+        return files.flatMap((value, index) =>
+          changedFileDiff(value) ? [{ key: `${tool.id}:${index}`, toolID: tool.id, value }] : [],
+        )
+      const input = toolInput(currentToolInput(tool))
 
-      if (typeof input.path !== "string") return []
+      if (input.path === undefined) return []
 
-      if (tool.name === "edit" && typeof input.oldString === "string" && typeof input.newString === "string") {
+      if (tool.name === "edit" && input.oldString !== undefined && input.newString !== undefined) {
         const changes = diffLines(input.oldString, input.newString)
 
         const additions = changes
@@ -1062,13 +977,13 @@ export function CurrentFileToolGroup(props: {
               patch: createTwoFilesPatch(input.path, input.path, input.oldString, input.newString),
               additions,
               deletions,
-              status: "modified",
+              status: "modified" as const,
             },
           },
         ]
       }
 
-      if (tool.name !== "write" || typeof input.content !== "string" || !input.content) return []
+      if (tool.name !== "write" || !input.content) return []
 
       return [
         {
@@ -1079,7 +994,7 @@ export function CurrentFileToolGroup(props: {
             patch: createTwoFilesPatch(input.path, input.path, "", input.content),
             additions: input.content.split("\n").length - Number(input.content.endsWith("\n")),
             deletions: 0,
-            status: "modified",
+            status: "modified" as const,
           },
         },
       ]
@@ -1090,14 +1005,14 @@ export function CurrentFileToolGroup(props: {
     const owners = new Set(props.tools.map((tool) => tool.id))
 
     const result = [
-      ...previous
-        .filter((entry) => owners.has(entry.toolID))
-        .map((entry) => {
-          if (!updates.has(entry.key)) return entry
-          const value = updates.get(entry.key)
+      ...previous.flatMap((entry) => {
+        if (!owners.has(entry.toolID)) return []
+        const value = updates.get(entry.key)
 
-          return samePatchFile(value, entry.value) ? entry : { ...entry, value }
-        }),
+        if (!value || samePatchFile(value, entry.value)) return [entry]
+
+        return [{ ...entry, value }]
+      }),
       ...next.filter((entry) => !existing.has(entry.key)),
     ]
 
@@ -1158,54 +1073,53 @@ function isFileChangeTool(tool: SessionMessageAssistantTool) {
   return tool.state.status !== "error" && (tool.name === "edit" || tool.name === "write" || tool.name === "patch")
 }
 
-function samePatchFile(a: unknown, b: unknown) {
-  if (a === b) return true
-
-  if (!record(a) || !record(b)) return false
-
+function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
   return (
-    a.file === b.file &&
-    a.patch === b.patch &&
-    a.additions === b.additions &&
-    a.deletions === b.deletions &&
-    a.status === b.status
+    a === b ||
+    (a.file === b.file &&
+      a.patch === b.patch &&
+      a.additions === b.additions &&
+      a.deletions === b.deletions &&
+      a.status === b.status)
   )
 }
 
 function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: ReturnType<typeof useI18n>) {
-  const input = currentToolInput(tool)
-  const metadata = currentToolMetadata(tool)
-  const path = typeof input.path === "string" ? input.path : "/"
-  const pattern = typeof input.pattern === "string" ? input.pattern : undefined
-  const include = typeof input.include === "string" ? input.include : undefined
-  const count = tool.name === "glob" ? metadata.count : tool.name === "grep" ? metadata.matches : undefined
+  const input = toolInput(currentToolInput(tool))
+  const metadata = toolMetadata(currentToolMetadata(tool))
+  const subtitle = displayDirectory(input.path ?? "/")
 
-  const matches =
-    typeof count === "number" && Number.isFinite(count) && count !== 0
-      ? i18n.plural("ui.messagePart.context.match", count)
-      : undefined
+  const matches = (count: number | undefined) =>
+    count ? i18n.plural("ui.messagePart.context.match", count) : undefined
 
-  if (tool.name === "list")
-    return { title: i18n.t("ui.tool.list"), subtitle: displayDirectory(path), args: [], matches: undefined }
+  if (tool.name === "list") return { title: i18n.t("ui.tool.list"), subtitle, args: [], matches: undefined }
 
   if (tool.name === "glob")
     return {
       title: i18n.t("ui.tool.glob"),
-      subtitle: displayDirectory(path),
-      args: pattern ? [`pattern=${pattern}`] : [],
-      matches,
+      subtitle,
+      args: input.pattern ? [`pattern=${input.pattern}`] : [],
+      matches: matches(metadata.count),
     }
 
   return {
     title: i18n.t("ui.tool.grep"),
-    subtitle: displayDirectory(path),
-    args: [...(pattern ? [`pattern=${pattern}`] : []), ...(include ? [`include=${include}`] : [])],
-    matches,
+    subtitle,
+    args: [
+      ...(input.pattern ? [`pattern=${input.pattern}`] : []),
+      ...(input.include ? [`include=${input.include}`] : []),
+    ],
+    matches: matches(metadata.matches),
   }
 }
 
+// SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
+// renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
+  error?: string
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   metadata: Record<string, unknown>
   tool: string
   sessionID?: string
@@ -1220,11 +1134,13 @@ export interface ToolProps {
   deferContent?: boolean
   virtualizeDiff?: boolean
   onContentRendered?: () => void
+  /** Paths the patch view lists, without change counts or diffs, instead of `metadata.files`. */
+  pendingFiles?: readonly string[]
   forceOpen?: boolean
   locked?: boolean
 }
 
-export type ToolComponent = Component<ToolProps>
+type ToolComponent = Component<ToolProps>
 
 const state: Record<
   string,
@@ -1234,13 +1150,13 @@ const state: Record<
   }
 > = {}
 
-export function registerTool(input: { name: string; render?: ToolComponent }) {
+function registerTool(input: { name: string; render?: ToolComponent }) {
   state[input.name] = input
 
   return input
 }
 
-export function getTool(name: string) {
+function getTool(name: string) {
   return state[name]?.render
 }
 
@@ -1297,14 +1213,10 @@ function FileAccordionGroup(props: { children: JSX.Element }) {
         if (index < 0) return
         event.preventDefault()
 
-        const next =
-          event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? triggers.length - 1
-              : (index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length
+        if (event.key === "Home") return triggers[0]?.focus()
 
-        triggers[next]?.focus()
+        if (event.key === "End") return triggers.at(-1)?.focus()
+        triggers[(index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length]?.focus()
       }}
     >
       {props.children}
@@ -1439,26 +1351,20 @@ export function ToolDisplay(
 
   const taskId = createMemo(() => {
     if (props.tool !== "subagent") return undefined
-    const value = props.metadata.sessionID
 
-    if (typeof value === "string" && value) return value
-
-    return undefined
+    return toolMetadata(props.metadata).sessionID || undefined
   })
 
   const taskHref = createMemo(() => sessionLink(taskId(), data.sessionHref))
 
   const taskSubtitle = createMemo(() => {
     if (props.tool !== "subagent") return undefined
-    const value = props.input.description
 
-    if (typeof value === "string" && value) return value
-
-    return taskId()
+    return toolInput(props.input).description || taskId()
   })
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
-  const error = createMemo(() => toolDisplayError(props, i18n.t("ui.toolErrorCard.failed")))
+  const error = createMemo(() => toolDisplayError(props))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
@@ -1472,7 +1378,7 @@ export function ToolDisplay(
               if (props.tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
-                    <span class="text-13-regular text-text-weak cursor-default">
+                    <span class="text-13-regular text-v2-text-text-faint cursor-default">
                       {i18n.t("ui.messagePart.questions.dismissed")}
                     </span>
                   </div>
@@ -1483,7 +1389,11 @@ export function ToolDisplay(
                 <ToolErrorCard
                   tool={props.tool}
                   error={error()}
-                  title={props.tool === "websearch" ? webSearchProviderLabel(props.metadata.provider, i18n) : undefined}
+                  title={
+                    props.tool === "websearch"
+                      ? webSearchProviderLabel(toolMetadata(props.metadata).provider, i18n)
+                      : undefined
+                  }
                   defaultOpen={props.defaultOpen}
                   open={props.open}
                   onOpenChange={props.onOpenChange}
@@ -1515,29 +1425,24 @@ export function ToolDisplay(
 // Each branch must stay in sync with its tool trigger's subtitle expression so
 // failed rows read like their non-error counterparts ("Shell sleep 30").
 function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
-  const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
+  const input = toolInput(props.input)
+  const metadata = toolMetadata(props.metadata)
 
-  if (props.tool === "shell") return text(props.input.command) ?? text(props.metadata.command)
+  if (props.tool === "shell") return input.command || metadata.command || undefined
 
-  if (props.tool === "execute") return text(props.input.code)
-
-  if (props.tool === "read") return getFilename(readToolPath(props.input) ?? "")
-
-  if (props.tool === "edit" || props.tool === "write") return getFilename(text(props.input.path) ?? "")
+  if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
-    return displayDirectory(text(props.input.path) ?? "/")
+    return displayDirectory(input.path || "/")
 
-  if (props.tool === "webfetch") return text(props.input.url)
+  if (props.tool === "webfetch") return input.url || undefined
 
-  if (props.tool === "websearch") return text(props.input.query)
+  if (props.tool === "websearch") return input.query || undefined
 
-  if (props.tool === "skill") return skillToolName(props.input, props.metadata)
+  if (props.tool === "skill") return skillToolName(input, metadata)
 
   if (props.tool === "patch") {
-    const count = new Set(
-      Array.isArray(props.metadata.files) ? props.metadata.files.filter(changedFileDiff).map((file) => file.file) : [],
-    ).size
+    const count = new Set((metadata.files ?? []).flatMap((file) => (changedFileDiff(file) ? [file.file] : []))).size
 
     if (count === 0) return undefined
 
@@ -1545,7 +1450,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   }
 
   if (props.tool === "question") {
-    const count = Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo).length : 0
+    const count = questions(input).length
 
     if (count === 0) return undefined
 
@@ -1555,16 +1460,13 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   return undefined
 }
 
-function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {
+function toolDisplayError(props: ToolProps & { error?: string }) {
+  // Code Mode failures render inline in the execution's call list.
+  if (props.tool === "execute") return undefined
+
   if (props.status === "error") return props.error
 
-  if (props.tool !== "execute") return undefined
-
-  if (!executeToolFailed(props.metadata)) return undefined
-
-  if (typeof props.output === "string" && props.output) return props.output
-
-  return fallback
+  return undefined
 }
 
 ToolRegistry.register({
@@ -1576,11 +1478,8 @@ ToolRegistry.register({
 
     const loaded = createMemo(() => {
       if (props.status !== "completed") return []
-      const value = props.metadata.loaded
 
-      if (!value || !Array.isArray(value)) return []
-
-      return value.filter((p): p is string => typeof p === "string")
+      return (toolMetadata(props.metadata).loaded ?? []).flatMap((path) => Option.toArray(decodeString(path)))
     })
 
     const paths = createMemo(() =>
@@ -1607,8 +1506,8 @@ ToolRegistry.register({
           }}
           trigger={{
             title: i18n.t("ui.tool.read"),
-            subtitle: getFilename(readToolPath(props.input) ?? ""),
-            args: readArgs(props.input),
+            subtitle: getFilename(toolInput(props.input).path ?? ""),
+            args: readArgs(toolInput(props.input)),
           }}
         >
           <Show when={image()} keyed>
@@ -1678,7 +1577,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.list"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
+          subtitle: displayDirectory(toolInput(props.input).path ?? "/"),
         }}
       >
         <Show when={props.output}>
@@ -1701,6 +1600,7 @@ ToolRegistry.register({
   name: "glob",
   render(props) {
     const i18n = useI18n()
+    const input = createMemo(() => toolInput(props.input))
 
     return (
       <BasicTool
@@ -1709,8 +1609,8 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.glob"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
-          args: typeof props.input.pattern === "string" ? ["pattern=" + props.input.pattern] : [],
+          subtitle: displayDirectory(input().path ?? "/"),
+          args: input().pattern === undefined ? [] : ["pattern=" + input().pattern],
         }}
       >
         <Show when={props.output}>
@@ -1733,11 +1633,12 @@ ToolRegistry.register({
   name: "grep",
   render(props) {
     const i18n = useI18n()
-    const args: string[] = []
+    const input = createMemo(() => toolInput(props.input))
 
-    if (typeof props.input.pattern === "string") args.push("pattern=" + props.input.pattern)
-
-    if (typeof props.input.include === "string") args.push("include=" + props.input.include)
+    const args = () => [
+      ...(input().pattern === undefined ? [] : ["pattern=" + input().pattern]),
+      ...(input().include === undefined ? [] : ["include=" + input().include]),
+    ]
 
     return (
       <BasicTool
@@ -1746,8 +1647,8 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.grep"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
-          args,
+          subtitle: displayDirectory(input().path ?? "/"),
+          args: args(),
         }}
       >
         <Show when={props.output}>
@@ -1772,13 +1673,7 @@ ToolRegistry.register({
     const i18n = useI18n()
     const pending = createMemo(() => props.status === "streaming" || props.status === "running")
 
-    const url = createMemo(() => {
-      const value = props.input.url
-
-      if (typeof value !== "string") return ""
-
-      return value
-    })
+    const url = createMemo(() => toolInput(props.input).url ?? "")
 
     return (
       <BasicTool
@@ -1791,7 +1686,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
-              <Show when={!pending() && url()}>
+              <Show when={props.status !== "streaming" && url()}>
                 <a
                   data-slot="basic-tool-tool-subtitle"
                   class="webfetch-link"
@@ -1817,15 +1712,9 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
 
-    const query = createMemo(() => {
-      const value = props.input.query
+    const query = createMemo(() => toolInput(props.input).query ?? "")
 
-      if (typeof value !== "string") return ""
-
-      return value
-    })
-
-    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider, i18n))
+    const title = createMemo(() => webSearchProviderLabel(toolMetadata(props.metadata).provider, i18n))
 
     return (
       <BasicTool
@@ -1850,28 +1739,21 @@ ToolRegistry.register({
     const i18n = useI18n()
     const delegating = () => props.status === "streaming"
 
-    const childSessionId = createMemo(() => {
-      const value = props.metadata.sessionID
+    const input = createMemo(() => toolInput(props.input))
+    const metadata = createMemo(() => toolMetadata(props.metadata))
 
-      if (typeof value === "string" && value) return value
+    const childSessionId = createMemo(
+      () => metadata().sessionID || taskSession(input().description, data.sessionID, data.store.session),
+    )
 
-      return taskSession(props.input, data.sessionID, data.store.session)
-    })
-
-    const agent = createMemo(() => taskAgent(props.input.agent, data.store.agent))
-    const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
-    const tone = createMemo(() => agent().color)
-    const v2Tone = createMemo(() => agent().v2Color)
+    const title = createMemo(() => taskAgentName(input().agent, data.store.agent) ?? i18n.t("ui.tool.agent.default"))
 
     const background = createMemo(() => {
-      return props.metadata.background === true || (props.status === "completed" && props.metadata.status === "running")
+      return metadata().background === true || (props.status === "completed" && metadata().status === "running")
     })
 
     const subtitle = createMemo(() => {
-      const value =
-        typeof props.input.description === "string" && props.input.description
-          ? props.input.description
-          : childSessionId()
+      const value = input().description || childSessionId()
 
       if (!value) return value
 
@@ -1916,29 +1798,12 @@ ToolRegistry.register({
     }
 
     const trigger = () => (
-      <div
-        data-component="task-tool-card"
-        style={{
-          "--task-agent-color": v2Tone(),
-          "--task-agent-color-fallback": tone(),
-        }}
-      >
+      <div data-component="task-tool-card">
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <Show
-                when={running()}
-                fallback={
-                  <span data-component="task-tool-icon">
-                    <Icon name="subagent" size="normal" />
-                  </span>
-                }
-              >
-                <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                  <SessionProgressIndicatorV2
-                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
-                  />
-                </span>
+              <Show when={running()}>
+                <SessionProgressIndicatorV2 />
               </Show>
               <span data-component="task-tool-title">{title()}</span>
               <Show when={subtitle()}>
@@ -1974,42 +1839,21 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 px-3 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base"
         >
-          <Icon name="subagent" size="normal" class="shrink-0 text-v2-icon-icon-faint" />
-          <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />
+          <SessionProgressIndicatorV2 />
+          <span class="min-w-0 truncate">{i18n.t("ui.tool.agent.delegating")}</span>
         </div>
       </Show>
     )
   },
 })
 
-function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "shell" }) {
+function ConsoleOutput(props: { command?: string; output: string }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!props.copy) return
-
-    if (!(await writeClipboard(props.copy))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
-    <div data-component="bash-output" data-variant={props.variant} dir="ltr">
-      <div data-slot="bash-copy">
-        <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-          <IconButton
-            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
-            size="normal"
-            variant="ghost-muted"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={copy}
-            aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-          />
-        </Tooltip>
-      </div>
+    <div data-component="bash-output" data-variant="shell" dir="ltr">
       <div
         data-slot="bash-scroll"
         data-scrollable
@@ -2017,10 +1861,59 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
       >
-        <pre data-slot="bash-pre">
-          <code>{props.children}</code>
-        </pre>
+        <Show when={props.command}>
+          {(command) => (
+            <div data-slot="bash-command">
+              <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              <pre data-slot="bash-pre">
+                <code>{command()}</code>
+              </pre>
+            </div>
+          )}
+        </Show>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-slot="bash-result">
+              <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
+              <pre data-slot="bash-pre">
+                <code>
+                  <LinkedText text={output()} />
+                </code>
+              </pre>
+            </div>
+          )}
+        </Show>
       </div>
+    </div>
+  )
+}
+
+// The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
+function ConsoleCopy(props: { text: string; label: string }) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+  const label = () => (copied() ? i18n.t("ui.message.copied") : props.label)
+
+  const copy = async () => {
+    if (!props.text) return
+
+    if (!(await writeClipboard(props.text))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div data-slot="bash-copy">
+      <Tooltip value={label()} placement="top">
+        <IconButton
+          icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+          size="normal"
+          variant="ghost-muted"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={copy}
+          aria-label={label()}
+        />
+      </Tooltip>
     </div>
   )
 }
@@ -2029,17 +1922,48 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
-    const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
-    const output = () => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+    const calls = createMemo(() => executeToolCalls(props.metadata))
+    const subtitle = createMemo(() => executeToolSubtitle(calls()))
+    const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
+
+    // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
+    const error = createMemo(() => {
+      if (props.status !== "error" && props.metadata.error !== true) return undefined
+      const fallback = i18n.t("ui.toolErrorCard.failed")
+      const text = stripAnsi((props.status === "error" ? props.error : undefined) || props.output || fallback)
+
+      return text.replace(/^Error:\s*/, "").trim() || fallback
+    })
+
+    const output = createMemo(() =>
+      error()
+        ? ""
+        : stripAnsi(props.output ?? "")
+            .replace(/\r\n?/g, "\n")
+            .trim(),
+    )
+
+    // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
+    const owner = createMemo(() => calls().findLastIndex((call) => call.status === "error"))
+
     const sawPending = pending()
+
+    // The script is complete once the call leaves streaming, so the dialog can show it while it runs.
+    const viewable = () => props.status !== "streaming" && !!code()
+
+    const openDetails = () =>
+      dialog.show(() => (
+        <ExecuteDetails code={code()} output={output()} error={error()} calls={calls().length} status={props.status} />
+      ))
 
     return (
       <BasicTool
         {...props}
         icon="console"
         rail={false}
-        hasContent
+        hasContent={calls().length > 0 || !!error() || !!output()}
         compact
         allowOpenWhilePending
         trigger={(open) => (
@@ -2048,21 +1972,278 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
               </span>
-              <Show when={!open() && code()}>
-                <ShellSubmessage text={code().split("\n", 1)[0]} animate={sawPending} />
+              <Show when={!open() && subtitle()}>
+                {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
               </Show>
             </div>
           </div>
         )}
+        action={
+          viewable() ? (
+            <Tooltip value={i18n.t("ui.tool.execute.viewCode")} placement="top">
+              <IconButton
+                icon={<Icon name="code-slash" size="small" />}
+                size="normal"
+                variant="ghost"
+                aria-label={i18n.t("ui.tool.execute.viewCode")}
+                aria-haspopup="dialog"
+                onClick={openDetails}
+              />
+            </Tooltip>
+          ) : undefined
+        }
       >
-        <ConsoleOutput copy={code()} variant="shell">
-          <span data-slot="bash-command">{code()}</span>
-          <Show when={output()}>{(value) => <span data-slot="bash-result">{value()}</span>}</Show>
-        </ConsoleOutput>
+        <div data-component="execute-tool-calls">
+          <Index each={calls()}>
+            {(call, index) => <ExecuteCallRow call={call()} error={index === owner() ? error() : undefined} />}
+          </Index>
+          <Show when={owner() === -1 && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
+          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+        </div>
       </BasicTool>
     )
   },
 })
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+  const i18n = useI18n()
+  const fileComponent = useFileComponent()
+  const lineCount = (text: string) => text.split("\n").length
+  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
+
+  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  const numberDigits = () =>
+    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
+
+  return (
+    <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
+      <DialogHeader>
+        <div data-slot="execute-details-title">
+          <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
+          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
+            {props.error
+              ? i18n.t("ui.toolErrorCard.failed")
+              : props.status === "running"
+                ? i18n.t("ui.tool.execute.running")
+                : i18n.t("ui.tool.execute.completed")}
+          </span>
+          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+        </div>
+      </DialogHeader>
+      <DialogBody class="min-h-0 flex-none overflow-y-auto">
+        <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
+          <ExecuteDetailsSection
+            label={i18n.t("ui.tool.execute.code")}
+            meta={lines(props.code)}
+            copy={props.code}
+            copyLabel={i18n.t("ui.tool.execute.copyCode")}
+          >
+            <Dynamic
+              component={fileComponent}
+              mode="text"
+              file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
+              overflow="wrap"
+            />
+          </ExecuteDetailsSection>
+          <Show
+            when={props.error}
+            fallback={
+              <Show when={props.output}>
+                {(output) => (
+                  <ExecuteDetailsSection
+                    label={i18n.t("ui.tool.execute.output")}
+                    meta={lines(output())}
+                    copy={output()}
+                    copyLabel={i18n.t("ui.tool.execute.copyOutput")}
+                  >
+                    <Dynamic
+                      component={fileComponent}
+                      mode="text"
+                      file={{
+                        // Code Mode returns structured results as JSON; highlight those, leave anything else plain.
+                        name: Option.isSome(decodeJson(output())) ? "output.json" : "output.txt",
+                        contents: output(),
+                        cacheKey: checksum(output()),
+                      }}
+                      overflow="wrap"
+                    />
+                  </ExecuteDetailsSection>
+                )}
+              </Show>
+            }
+          >
+            {(error) => (
+              <ExecuteDetailsSection
+                label={i18n.t("ui.tool.execute.error")}
+                copy={error()}
+                copyLabel={i18n.t("ui.toolErrorCard.copyError")}
+              >
+                <pre data-slot="execute-details-error">{error()}</pre>
+              </ExecuteDetailsSection>
+            )}
+          </Show>
+        </div>
+      </DialogBody>
+    </Dialog>
+  )
+}
+
+function ExecuteDetailsSection(props: {
+  label: string
+  meta?: string
+  copy: string
+  copyLabel: string
+  children: JSX.Element
+}) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+
+  const copy = async () => {
+    if (!(await writeClipboard(props.copy))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <section data-slot="execute-details-section">
+      <header data-slot="execute-details-section-header">
+        <span data-slot="execute-details-section-label">{props.label}</span>
+        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
+        <Tooltip value={copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+          <IconButton
+            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+            size="normal"
+            variant="ghost-muted"
+            aria-label={copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+            onClick={copy}
+          />
+        </Tooltip>
+      </header>
+      <div data-slot="execute-details-source">{props.children}</div>
+    </section>
+  )
+}
+
+function ExecuteOutputRow(props: { output: string }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div data-slot="execute-tool-call-item">
+      <div
+        data-slot="execute-tool-call"
+        data-kind="output"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open()}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          toggle()
+        }}
+      >
+        <span data-slot="execute-tool-call-marker">
+          <span data-slot="execute-tool-call-arrow">›</span>
+        </span>
+        <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
+        <span data-slot="execute-tool-call-args">
+          {i18n.plural("ui.tool.execute.lines", props.output.split("\n").length)}
+        </span>
+      </div>
+      <Show when={open()}>
+        <div data-slot="execute-tool-output">
+          <ConsoleOutput output={props.output} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
+  const [open, setOpen] = createSignal(false)
+  const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
+  const input = createMemo(() => Object.entries(props.call?.input ?? {}))
+  const failed = () => !props.call || props.call.status === "error"
+  const expandable = () => input().length > 0 || !!props.error
+  const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
+
+  const toggle = () => {
+    if (!expandable() || window.getSelection()?.toString()) return
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div data-slot="execute-tool-call-item">
+      <div
+        data-slot="execute-tool-call"
+        data-status={failed() ? "error" : props.call?.status}
+        data-expanded={open() ? "true" : undefined}
+        dir="ltr"
+        role={expandable() ? "button" : undefined}
+        tabIndex={expandable() ? 0 : undefined}
+        aria-expanded={expandable() ? open() : undefined}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          toggle()
+        }}
+      >
+        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
+        </Show>
+        <Show when={props.call}>
+          {(call) => (
+            <span data-slot="execute-tool-call-name">
+              <TextShimmer text={call().tool} active={call().status === "running"} />
+            </span>
+          )}
+        </Show>
+        <Show when={!open() && summary()}>
+          {(text) => (
+            <span data-slot="execute-tool-call-args" title={text()}>
+              {props.call ? `[${text()}]` : text()}
+            </span>
+          )}
+        </Show>
+        <Show when={props.error}>
+          <span data-slot="execute-tool-call-arrow">›</span>
+        </Show>
+      </div>
+      <Show when={open()}>
+        <Show when={input().length > 0}>
+          <dl data-slot="execute-tool-call-input" dir="ltr">
+            <For each={input()}>
+              {([key, value]) => (
+                <div data-slot="execute-tool-call-input-entry">
+                  <dt>{key}:</dt>
+                  <dd>{Option.getOrElse(decodeString(value), () => JSON.stringify(value, null, 2))}</dd>
+                </div>
+              )}
+            </For>
+          </dl>
+        </Show>
+        <Show when={props.error}>
+          {(error) => (
+            <div data-slot="execute-tool-error" dir="ltr">
+              <LinkedText text={error()} />
+            </div>
+          )}
+        </Show>
+      </Show>
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "shell",
@@ -2070,53 +2251,44 @@ ToolRegistry.register({
     const i18n = useI18n()
     const data = useData()
     const streaming = () => props.status === "streaming"
+    const metadata = createMemo(() => toolMetadata(props.metadata))
 
-    const pending = () =>
-      streaming() ||
-      props.status === "running" ||
-      (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
+    const pending = () => {
+      const id = metadata().shellID
+
+      return streaming() || props.status === "running" || (id !== undefined && data.shellRunning?.(id) === true)
+    }
 
     const sawStreaming = streaming()
-
-    const command = () => {
-      if (typeof props.input.command === "string") return props.input.command
-
-      if (typeof props.metadata.command === "string") return props.metadata.command
-
-      return ""
-    }
+    const command = createMemo(() => toolInput(props.input).command ?? metadata().command ?? "")
 
     function Output() {
       const [streamed, setStreamed] = createSignal("")
 
       // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
       const saved = createMemo(() =>
-        props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
+        metadata().status === "exited" || metadata().status === "timeout" || metadata().status === "killed"
           ? props.output
           : undefined,
       )
 
       createEffect(() => {
         if (saved() !== undefined) return
-        const id = props.metadata.shellID
+        const id = metadata().shellID
         const load = data.shellOutput
 
-        if (typeof id !== "string" || !load) return
+        if (id === undefined || !load) return
         onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
       })
 
       const output = createMemo(() =>
-        stripAnsi(
-          saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || ""),
-        ).replace(/\r\n?/g, "\n"),
+        stripAnsi(saved() ?? ((metadata().shellID !== undefined && streamed()) || props.output || "")).replace(
+          /\r\n?/g,
+          "\n",
+        ),
       )
 
-      return (
-        <ConsoleOutput copy={command()} variant="shell">
-          <span data-slot="bash-command">{command()}</span>
-          <Show when={output()}>{(value) => <span data-slot="bash-result">{value()}</span>}</Show>
-        </ConsoleOutput>
-      )
+      return <ConsoleOutput command={command()} output={output()} />
     }
 
     return (
@@ -2206,23 +2378,12 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
-    const inputPath = () => (typeof props.input.path === "string" ? props.input.path : "")
-
-    const diff = createMemo(() => {
-      const files = props.metadata.files
-
-      if (!Array.isArray(files)) return undefined
-
-      return files.find(changedFileDiff)
-    })
-
-    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, inputPath()))
-
-    const path = createMemo(() => {
-      const value = diff()
-
-      return typeof value?.file === "string" ? value.file : inputPath()
-    })
+    const input = createMemo(() => toolInput(props.input))
+    const metadata = createMemo(() => toolMetadata(props.metadata))
+    const inputPath = () => input().path ?? ""
+    const diff = createMemo(() => metadata().files?.find(changedFileDiff))
+    const diagnostics = createMemo(() => getDiagnostics(metadata().diagnostics, inputPath()))
+    const path = createMemo(() => diff()?.file ?? inputPath())
 
     const pending = () => props.status === "streaming" || props.status === "running"
 
@@ -2232,10 +2393,7 @@ ToolRegistry.register({
 
         if (!source) return undefined
 
-        return {
-          file: typeof source.file === "string" ? source.file : inputPath(),
-          patch: typeof source.patch === "string" ? source.patch : undefined,
-        }
+        return { file: source.file, patch: source.patch }
       },
       undefined,
       {
@@ -2257,11 +2415,11 @@ ToolRegistry.register({
       return {
         before: {
           name: path(),
-          contents: typeof props.input.oldString === "string" ? props.input.oldString : "",
+          contents: input().oldString ?? "",
         },
         after: {
           name: path(),
-          contents: typeof props.input.newString === "string" ? props.input.newString : "",
+          contents: input().newString ?? "",
         },
       }
     })
@@ -2305,9 +2463,9 @@ ToolRegistry.register({
   name: "write",
   render(props) {
     const fileComponent = useFileComponent()
-    const path = createMemo(() => (typeof props.input.path === "string" ? props.input.path : ""))
-    const content = createMemo(() => (typeof props.input.content === "string" ? props.input.content : ""))
-    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, path()))
+    const path = createMemo(() => toolInput(props.input).path ?? "")
+    const content = createMemo(() => toolInput(props.input).content ?? "")
+    const diagnostics = createMemo(() => getDiagnostics(toolMetadata(props.metadata).diagnostics, path()))
 
     return (
       <div data-component="write-tool">
@@ -2346,16 +2504,27 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
-    const files = createMemo(() => patchFileGroups(props.metadata.files))
+
+    const files = createMemo(
+      () =>
+        props.pendingFiles?.map((path) => ({
+          path,
+          type: "update" as const,
+          additions: 0,
+          deletions: 0,
+          views: [],
+        })) ?? patchFileGroups(props.metadata.files),
+    )
+
     const [expanded, setExpanded] = createSignal<string[]>([])
 
-    const title = createMemo(() =>
-      props.tool === "edit"
-        ? i18n.t("ui.messagePart.title.edit")
-        : props.tool === "write"
-          ? i18n.t("ui.messagePart.title.write")
-          : i18n.t("ui.tool.patch"),
-    )
+    const title = createMemo(() => {
+      if (props.tool === "edit") return i18n.t("ui.messagePart.title.edit")
+
+      if (props.tool === "write") return i18n.t("ui.messagePart.title.write")
+
+      return i18n.t("ui.tool.patch")
+    })
 
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()
@@ -2472,18 +2641,16 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
 
-    const questions = createMemo(() =>
-      Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo) : [],
-    )
+    const items = createMemo(() => questions(toolInput(props.input)))
 
     const answers = createMemo(() =>
-      Array.isArray(props.metadata.answers) ? props.metadata.answers.filter(questionAnswer) : [],
+      (toolMetadata(props.metadata).answers ?? []).flatMap((answer) => Option.toArray(decodeAnswer(answer))),
     )
 
     const completed = createMemo(() => answers().length > 0)
 
     const subtitle = createMemo(() => {
-      const count = questions().length
+      const count = items().length
 
       if (count === 0) return ""
 
@@ -2504,7 +2671,7 @@ ToolRegistry.register({
       >
         <Show when={completed()}>
           <div data-component="question-answers">
-            <For each={questions()}>
+            <For each={items()}>
               {(q, i) => {
                 const answer = () => answers()[i()] ?? []
 
@@ -2527,7 +2694,7 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const i18n = useI18n()
-    const name = createMemo(() => skillToolName(props.input, props.metadata))
+    const name = createMemo(() => skillToolName(toolInput(props.input), toolMetadata(props.metadata)))
     const running = createMemo(() => props.status === "streaming" || props.status === "running")
     const marker = "__OPENCODE_LOADED_SKILL__"
     const parts = createMemo(() => i18n.t("ui.tool.loadedSkill", { name: marker }).split(marker))

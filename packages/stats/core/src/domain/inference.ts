@@ -41,6 +41,11 @@ const WEEK_MS = 7 * DAY_MS
 // boundary. Use one exclusive handoff so the overlapping rows are never counted
 // from both sources.
 const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
+// Go Plus is a level of the Go subscription, but the lake records it as its own product.
+const GO_PRODUCTS = ["go", "go-plus"]
+// Requests rejected before routing (unknown model, auth, rate limit) never reach an upstream
+// and carry no usage. Counting them would publish any requested model name as a stats page.
+const ROUTED_ONLY = "attempts > 0"
 
 // R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
 // queries per day/week avoid combining costly distinct user/session aggregates
@@ -135,7 +140,8 @@ WITH normalized AS (
       (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
       OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
     )
-    AND product = 'go'
+    AND product IN (${GO_PRODUCTS.map(sqlString).join(", ")})
+    AND ${ROUTED_ONLY}
     AND model_requested IS NOT NULL
     AND model_requested <> ''
     AND __ingest_ts >= ${scanStartValue}
@@ -299,7 +305,8 @@ WITH normalized AS (
       (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
       OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
     )
-    AND (product = 'go' OR (${sourceFreeTier}))
+    AND (product IN (${GO_PRODUCTS.map(sqlString).join(", ")}) OR (${sourceFreeTier}))
+    AND ${ROUTED_ONLY}
     AND model_requested IS NOT NULL
     AND model_requested <> ''
     AND __ingest_ts >= ${periodStartValue}

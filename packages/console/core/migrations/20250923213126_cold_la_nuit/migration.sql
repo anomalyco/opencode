@@ -1,1 +1,0 @@
-ALTER TABLE `payment` ADD `time_refunded` timestamp(3);

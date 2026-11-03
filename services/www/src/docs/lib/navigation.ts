@@ -39,7 +39,7 @@ export const docsSections: DocsSection[] = [
           { title: "Commands", slug: "commands" },
           { title: "Plugins", slug: "plugins" },
           { title: "Providers", slug: "providers" },
-          { title: "Websearch", slug: "websearch" },
+          { title: "Web search", slug: "websearch" },
           { title: "Network", slug: "network" },
           { title: "Snapshots", slug: "snapshots" },
           { title: "Compaction", slug: "compaction" },
@@ -51,7 +51,6 @@ export const docsSections: DocsSection[] = [
           { title: "Permissions", slug: "permissions" },
           { title: "Policies", slug: "policies" },
           { title: "Instructions", slug: "instructions" },
-          { title: "Sharing", slug: "sharing" },
           { title: "Warming", slug: "warming" },
         ],
       },
@@ -90,8 +89,10 @@ export const docsSections: DocsSection[] = [
         title: "Plugins",
         items: [
           { title: "Overview", slug: "build/plugins" },
+          { title: "Server", slug: "build/plugins/server" },
+          { title: "TUI", slug: "build/plugins/cli" },
+          { title: "GUI", slug: "build/plugins/gui" },
           { title: "RPC", slug: "build/plugins/rpc" },
-          { title: "CLI", slug: "build/plugins/cli" },
           { title: "Migrate from V1", slug: "build/plugins/migrate-v1" },
         ],
       },
@@ -138,7 +139,7 @@ export const docsSections: DocsSection[] = [
           { title: "Intro", slug: "console" },
           { title: "Models", slug: "console/models" },
           { title: "Providers", slug: "console/providers" },
-          { title: "Web Search", slug: "console/websearch" },
+          { title: "Web search", slug: "console/websearch" },
           { title: "Go", slug: "console/go" },
         ],
       },
@@ -159,15 +160,28 @@ export const docsSections: DocsSection[] = [
           { title: "Overview", slug: "console/api" },
           { title: "Inference", slug: "console/api/inference" },
           { title: "Providers", slug: "console/api/providers" },
-          { title: "Budgets", slug: "console/api/budgets" },
+        ],
+      },
+      {
+        title: "Harnesses",
+        items: [
+          { title: "Overview", slug: "console/harnesses" },
+          { title: "Claude Code", slug: "console/harnesses/claude-code" },
+          { title: "Codex", slug: "console/harnesses/codex" },
+          { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "Pi", slug: "console/harnesses/pi" },
+          { title: "Raycast", slug: "console/harnesses/raycast" },
         ],
       },
     ],
   },
 ]
 
+// Prerendered pages are served as static assets, which redirect the trailing-slash form.
+const assetSlugs = new Set(["api"])
+
 export function docsHref(slug: string, anchor?: string) {
-  const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}/`
+  const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}${assetSlugs.has(slug) ? "" : "/"}`
   return `${import.meta.env.BASE_URL}docs/${path}${anchor ? `#${anchor}` : ""}`
 }
 
