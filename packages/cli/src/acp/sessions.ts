@@ -66,10 +66,20 @@ export const make = Effect.fnUntraced(function* (input: {
       const entry = sessions.get(event.data.sessionID)
       if (!entry) return Effect.void
       if (event.type === "session.renamed") {
-        return input.connection.sessionUpdate({
-          sessionId: event.data.sessionID,
-          update: { sessionUpdate: "session_info_update", title: event.data.title },
-        })
+        // Best-effort: one failed notification must not end the shared stream, which also
+        // carries selection changes for every attached session.
+        return input.connection
+          .sessionUpdate({
+            sessionId: event.data.sessionID,
+            update: { sessionUpdate: "session_info_update", title: event.data.title },
+          })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.void
+                : Effect.logWarning("ACP session title update failed", cause),
+            ),
+          )
       }
       return Queue.offer(
         entry.selected,
