@@ -5,15 +5,16 @@ import { Duration, Effect, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 
-export const endpoint = "https://api.scrape.do/plugin/google/search"
+export const endpoint = "https://api.scrape.do/search"
 
 const SearchResponse = Schema.Struct({
-  organic_results: Schema.optional(
+  results: Schema.optional(
     Schema.Array(
       Schema.Struct({
-        title: Schema.String,
-        link: Schema.String,
-        snippet: Schema.optional(Schema.String),
+        url: Schema.String,
+        title: Schema.optional(Schema.String),
+        content: Schema.optional(Schema.String),
+        description: Schema.optional(Schema.String),
       }),
     ),
   ),
@@ -61,12 +62,16 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                   orElse: () => Effect.fail(new Error("Scrape.do web search request timed out")),
                 }),
               )
-            return (response.organic_results ?? []).map((item) => ({
-              url: item.link,
-              title: item.title,
-              ...(item.snippet ? { content: item.snippet } : {}),
-              time: {},
-            }))
+            return (response.results ?? []).map((item) => {
+              // `content` is the query-specific snippet; `description` is the page's own summary when it has one.
+              const content = [item.content, item.description].filter(Boolean).join("\n\n")
+              return {
+                url: item.url,
+                ...(item.title ? { title: item.title } : {}),
+                ...(content ? { content } : {}),
+                time: {},
+              }
+            })
           }),
       })
     })

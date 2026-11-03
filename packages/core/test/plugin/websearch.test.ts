@@ -377,12 +377,13 @@ describe("built-in web search providers", () => {
     Effect.gen(function* () {
       resetWebSearchFixture(
         JSON.stringify({
-          organic_results: [
+          query: "effect typescript",
+          results: [
             {
-              position: 1,
+              url: "https://effect.website",
               title: "Effect",
-              link: "https://effect.website",
-              snippet: "Effect documentation",
+              content: "Effect documentation",
+              description: "Build robust TypeScript applications",
             },
           ],
         }),
@@ -410,7 +411,7 @@ describe("built-in web search providers", () => {
             {
               url: "https://effect.website",
               title: "Effect",
-              content: "Effect documentation",
+              content: "Effect documentation\n\nBuild robust TypeScript applications",
               time: {},
             },
           ],
@@ -424,13 +425,14 @@ describe("built-in web search providers", () => {
     }),
   )
 
-  it.effect("keeps Scrape.do results without snippets and treats missing results as empty", () =>
+  it.effect("keeps Scrape.do results without descriptions or snippets and treats missing results as empty", () =>
     Effect.gen(function* () {
       resetWebSearchFixture(
         JSON.stringify({
-          organic_results: [
-            { title: "Effect", link: "https://effect.website", snippet: "Effect documentation" },
-            { title: "Effect PDF", link: "https://effect.website/guide.pdf" },
+          query: "effect",
+          results: [
+            { url: "https://effect.website", title: "Effect", content: "Effect documentation" },
+            { url: "https://effect.website/guide.pdf", title: "Effect PDF" },
           ],
         }),
       )
