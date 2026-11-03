@@ -200,6 +200,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results
+  // A reasoning-only output-limit step has no answer or tool call to resume. Replaying it
+  // produces an empty assistant body on strict chat providers and rejects the recovery request.
+  if (message.finish === "length" && meaningful.every((part) => part.type === "reasoning")) return results
   return [Message.make({ id: message.id, role: "assistant", content: meaningful }), ...results]
 }
 

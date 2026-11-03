@@ -5973,10 +5973,13 @@ describe("SessionRunnerLLM", () => {
       yield* s.runPrompt("Complete the response")
 
       expect(s.requests).toHaveLength(2)
-      expect(s.requests[1]?.messages.at(-2)).toMatchObject({
-        role: "assistant",
-        content: [expect.objectContaining({ text: "Partial" })],
-      })
+      if (type === "text")
+        expect(s.requests[1]?.messages.at(-2)).toMatchObject({
+          role: "assistant",
+          content: [expect.objectContaining({ text: "Partial" })],
+        })
+      if (type === "reasoning")
+        expect(s.requests[1]?.messages.filter((message) => message.role === "assistant")).toEqual([])
       expect(s.requests[1]?.messages.at(-1)).toMatchObject({
         role: "user",
         content: [{ type: "text", text: nudge }],
