@@ -43,6 +43,7 @@ it.live("a cancelled borrower cannot strand a later failed instance construction
     const services = yield* host.runtime.contextEffect
     const instances = Context.get(services, Instance.Service)
     const sessions = Context.get(services, Session.Service)
+    const live = () => instances.live?.(session) ?? Effect.die("Instance selector has no live check")
     const session = yield* sessions.create({
       location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
     })
@@ -50,13 +51,16 @@ it.live("a cancelled borrower cannot strand a later failed instance construction
 
     const borrower = yield* Effect.void.pipe(instances.provide(session), Effect.forkScoped)
     const lookup = yield* Deferred.await(started)
+    expect(yield* live()).toBe(false)
     yield* Fiber.interrupt(borrower)
     expect(released).toEqual([])
     yield* Deferred.succeed(release, undefined)
     expect(Exit.isFailure(yield* Fiber.await(lookup).pipe(Effect.timeout("1 second")))).toBe(true)
     expect(released).toEqual([1])
+    expect(yield* live()).toBe(false)
 
     yield* Effect.void.pipe(instances.provide(session))
+    expect(yield* live()).toBe(true)
     expect(acquired).toEqual([1, 2])
     expect(released).toEqual([1])
 

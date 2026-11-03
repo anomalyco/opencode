@@ -7,9 +7,12 @@ import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -43,12 +46,44 @@ describe("Session.list", () => {
       const first = yield* session.list({ ...filter, limit: 2 })
       const second = yield* session.list({ cursor: first.cursor.next, limit: 2 })
       const back = yield* session.list({ cursor: second.cursor.previous, limit: 2 })
-      const end = yield* session.list({ cursor: second.cursor.next, limit: 2 })
 
       expect(expected).toHaveLength(3)
       expect([...first.data, ...second.data].map((item) => item.id)).toEqual(expected)
+      expect(second.cursor.next).toBeUndefined()
       expect(back.data.map((item) => item.id)).toEqual(expected.slice(0, 2))
-      expect(end).toEqual({ data: [], cursor: { previous: undefined, next: undefined } })
+    }),
+  )
+
+  it.effect("offers a cursor in the direction of travel only while more sessions exist", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      yield* Effect.forEach(Array.from({ length: 6 }), () => session.create({ location: project }), { discard: true })
+      const filter = { directory: project.directory, order: "asc" as const }
+      const store = yield* SessionStore.Service
+      const expected = (yield* store.list(filter)).map((item) => item.id)
+      const ids = (page: { data: ReadonlyArray<Session.Info> }) => page.data.map((item) => item.id)
+
+      const first = yield* session.list({ ...filter, limit: 2 })
+      const second = yield* session.list({ cursor: first.cursor.next, limit: 2 })
+      const last = yield* session.list({ cursor: second.cursor.next, limit: 2 })
+      const back = yield* session.list({ cursor: last.cursor.previous, limit: 2 })
+      const start = yield* session.list({ cursor: back.cursor.previous, limit: 2 })
+
+      expect(expected).toHaveLength(6)
+      expect([ids(first), ids(second), ids(last), ids(back), ids(start)]).toEqual([
+        expected.slice(0, 2),
+        expected.slice(2, 4),
+        expected.slice(4, 6),
+        expected.slice(2, 4),
+        expected.slice(0, 2),
+      ])
+      expect([first, second, last, back, start].map((page) => [!!page.cursor.previous, !!page.cursor.next])).toEqual([
+        [true, true],
+        [true, true],
+        [true, false],
+        [true, true],
+        [false, true],
+      ])
     }),
   )
 
@@ -67,6 +102,92 @@ describe("Session.list", () => {
       const error = yield* session.list({ cursor: Schema.decodeSync(Session.ListCursor)("invalid") }).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Session.InvalidListCursorError)
+    }),
+  )
+})
+
+describe("Session.family", () => {
+  const update = (sessionID: Session.ID, values: Partial<typeof SessionTable.$inferInsert>) =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      yield* database.db.update(SessionTable).set(values).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+    })
+
+  it.effect("returns the root first, then every descendant by creation time and ID", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const root = yield* session.create({ location: project })
+      const first = yield* session.create({ parentID: root.id })
+      const second = yield* session.create({ parentID: root.id })
+      const grandchild = yield* session.create({ parentID: first.id })
+      const fork = yield* session.create({ location: project })
+      yield* session.create({ location: project })
+      yield* update(fork.id, {
+        fork_session_id: root.id,
+        fork_boundary: { type: "through", messageID: SessionMessage.ID.make("msg_root") },
+      })
+      yield* update(root.id, { time_created: 4 })
+      // IDs descend with creation, so grandchild.id < second.id < first.id: the tie leaves grandchild before first.
+      yield* update(grandchild.id, { time_created: 1 })
+      yield* update(first.id, { time_created: 1 })
+      yield* update(second.id, { time_created: 2 })
+      yield* session.archive(second.id)
+
+      const family = yield* session.family(grandchild.id)
+
+      expect(family.rootID).toBe(root.id)
+      expect(family.sessions.map((item) => [item.id, item.status])).toEqual([
+        [root.id, "idle"],
+        [grandchild.id, "idle"],
+        [first.id, "idle"],
+        [second.id, "idle"],
+      ])
+      expect((yield* session.family(root.id)).sessions.map((item) => item.id)).toEqual(
+        family.sessions.map((item) => item.id),
+      )
+    }),
+  )
+
+  it.effect("treats the topmost ancestor as root and ends on a parent cycle", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const root = yield* session.create({ location: project })
+      const child = yield* session.create({ parentID: root.id })
+      const missing = Session.ID.make("ses_missing")
+
+      yield* update(root.id, { parent_id: missing })
+      expect((yield* session.family(child.id)).rootID).toBe(root.id)
+
+      yield* update(root.id, { parent_id: child.id })
+      expect(yield* session.family(child.id).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+      expect(yield* session.family(missing).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+    }),
+  )
+
+  it.effect("resolves the roots of many Sessions with the same root rule", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const root = yield* session.create({ location: project })
+      const child = yield* session.create({ parentID: root.id })
+      const grandchild = yield* session.create({ parentID: child.id })
+      const orphanParent = yield* session.create({ location: project })
+      const orphan = yield* session.create({ parentID: orphanParent.id })
+      const cycleA = yield* session.create({ location: project })
+      const cycleB = yield* session.create({ parentID: cycleA.id })
+      const missing = Session.ID.make("ses_missing")
+      yield* update(orphanParent.id, { parent_id: missing })
+      yield* update(cycleA.id, { parent_id: cycleB.id })
+
+      const roots = yield* store.roots([root.id, child.id, grandchild.id, orphan.id, cycleB.id, missing])
+
+      expect(Object.fromEntries(roots)).toEqual({
+        [root.id]: root.id,
+        [child.id]: root.id,
+        [grandchild.id]: root.id,
+        [orphan.id]: orphanParent.id,
+      })
+      expect((yield* store.roots([])).size).toBe(0)
     }),
   )
 })

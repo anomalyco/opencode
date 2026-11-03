@@ -1,7 +1,9 @@
+import type { Instance } from "@opencode/core/instance"
 import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, type LayerMap, RcMap } from "effect"
 import { tmpdir } from "./tmpdir"
 
 export function location(ref: Location.Ref, input: { projectDirectory?: AbsolutePath; vcs?: Project.Vcs } = {}) {
@@ -25,3 +27,10 @@ export const tempLocationLayer = Layer.unwrap(
     }),
   ),
 )
+
+/** Hand-built Location maps do not track starts, so they report every cached Location as running. */
+export function readyWhenCached<R>(
+  make: Effect.Effect<LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>, never, R>,
+) {
+  return Effect.map(make, (map) => LocationServiceMap.Service.of({ ...map, ready: (ref) => RcMap.has(map.rcMap, ref) }))
+}

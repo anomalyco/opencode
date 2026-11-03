@@ -26,14 +26,14 @@ import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 
 export interface Selection {
-  readonly session: SessionSchema.Info
+  readonly session: SessionSchema.Persisted
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly instructions: Instructions.List
   readonly tools: Tool.Snapshot
 }
 
 export interface Loaded {
-  readonly session: SessionSchema.Info
+  readonly session: SessionSchema.Persisted
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly model: SessionRunnerModel.Resolved
   readonly initial: ReadonlyArray<Instructions.Rendered>
@@ -53,10 +53,10 @@ export interface Interface {
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
-    session: SessionSchema.Info,
+    session: SessionSchema.Persisted,
   ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
   /** Selects auxiliary title capabilities without instruction or tool preflight. */
-  readonly selectTitle: (session: SessionSchema.Info) => Effect.Effect<
+  readonly selectTitle: (session: SessionSchema.Persisted) => Effect.Effect<
     | {
         readonly agent: Agent.Info
         readonly primary: SessionRunnerModel.Resolved | undefined
@@ -89,9 +89,9 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveModel = (session: SessionSchema.Persisted) => models.resolve(session, model.available)
 
-    const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
+    const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Persisted) {
       const agent = yield* agents.get(Agent.ID.make("title"))
       if (!agent) return
       const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))

@@ -18,6 +18,7 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
+import { readyWhenCached } from "./fixture/location"
 
 // Config the host hands the vanilla instance explicitly must survive discovery: false.
 const hostConfig: LayerNode.Replacements = [
@@ -45,7 +46,7 @@ const instances = Layer.effect(
         })
       },
       { idleTimeToLive: Duration.infinity },
-    )
+    ).pipe(readyWhenCached)
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
       offlineModels,

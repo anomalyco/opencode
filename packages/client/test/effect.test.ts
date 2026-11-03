@@ -74,6 +74,30 @@ test("session.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
+test("session reads decode responses from servers without status or rootID", async () => {
+  const { status: _, ...info } = session.data
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new URL(request.url).pathname === "/api/session/active"
+          ? Response.json({ data: { ses_test: { type: "running" } } })
+          : Response.json({ data: info }),
+      ),
+    ),
+  )
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return {
+      info: yield* client.session.get({ sessionID: Session.ID.make("ses_test") }),
+      active: yield* client.session.active(),
+    }
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result.info.status).toBeUndefined()
+  expect(result.active).toEqual({ ses_test: { type: "running" } })
+})
+
 test("session instructions methods use the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string; body?: unknown }> = []
   const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]
@@ -224,7 +248,10 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     }
     if (url.endsWith("/api/session/active")) {
       return Effect.succeed(
-        HttpClientResponse.fromWeb(request, Response.json({ data: { ses_test: { type: "running" } } })),
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({ data: { ses_test: { type: "running", rootID: "ses_test" } } }),
+        ),
       )
     }
     if (request.method === "POST" && url.endsWith("/api/session")) {
@@ -284,7 +311,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(DateTime.toEpochMillis(listed.time.created)).toBe(1_717_171_717_000)
   expect(DateTime.toEpochMillis(listed.time.idle)).toBe(1_717_171_717_002)
   expect(DateTime.toEpochMillis(listed.time.viewed)).toBe(1_717_171_717_001)
-  expect(result.active).toEqual({ ses_test: { type: "running" } })
+  expect(result.active).toEqual({ ses_test: { type: "running", rootID: "ses_test" } })
   expect(result.interrupted).toEqual({ interrupted: true })
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
@@ -343,6 +370,7 @@ const session = {
     },
     title: "Test",
     location: { directory: "/tmp/project" },
+    status: "idle",
   },
 }
 

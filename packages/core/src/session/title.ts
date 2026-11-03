@@ -35,7 +35,7 @@ const messagePrompt = (text: string) =>
   `Here is the first message of the conversation:\n\n<message>\n${text}\n</message>\n\nReply with only the title.`
 const conversationPrompt = (text: string) =>
   `Here is the conversation so far:\n\n<conversation>\n${text}\n</conversation>\n\nReply with only the title.`
-export const isUntitled = (session: SessionSchema.Info) =>
+export const isUntitled = (session: SessionSchema.Persisted) =>
   isExactRootFallback({
     title: session.title,
     time: { created: DateTime.toEpochMillis(session.time.created) },
@@ -51,7 +51,7 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
 
     const attempt = Effect.fn("SessionTitle.attempt")(function* (input: {
-      readonly session: SessionSchema.Info
+      readonly session: SessionSchema.Persisted
       readonly agent: Agent.Info
       readonly text: string
       readonly model: SessionRunnerModel.Resolved

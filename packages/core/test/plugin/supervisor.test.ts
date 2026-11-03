@@ -25,6 +25,7 @@ import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { advance } from "../lib/clock"
 import { testEffect } from "../lib/effect"
+import { readyWhenCached } from "../fixture/location"
 
 const id = Plugin.ID.make("account-prompts")
 
@@ -57,7 +58,7 @@ const instances = Layer.effect(
       (ref: Location.Ref) =>
         Instance.layer(ref, { discovery: false, plugins: [greeter("instance-greet")], replacements: bindings }),
       { idleTimeToLive: Duration.infinity },
-    )
+    ).pipe(readyWhenCached)
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
       offlineModels,

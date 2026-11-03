@@ -1,9 +1,9 @@
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionPersisted } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 
 export type SessionExportData = {
-  info: SessionInfo
+  info: SessionPersisted
   messages: SessionMessageInfo[]
 }
 
@@ -31,8 +31,11 @@ export async function fetchSessionExport(input: {
     )
   }
 
+  // Like the export endpoint, transcripts omit the live execution status.
+  const { status: _, ...persisted } = info
+
   return {
-    info,
+    info: persisted,
     messages: pages.flatMap((page) => page.data),
   }
 }

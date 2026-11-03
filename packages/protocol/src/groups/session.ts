@@ -5,7 +5,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
-import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, optional } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Context, Schema, SchemaGetter, Struct } from "effect"
@@ -40,6 +40,8 @@ import { PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
+  // Missing from servers that predate it; unknown, not the Session itself.
+  rootID: Session.ID.pipe(optional),
 }).annotate({ identifier: "SessionActive" })
 
 const PublicSessionInfo = Schema.Struct({
@@ -47,8 +49,13 @@ const PublicSessionInfo = Schema.Struct({
   location: Location.PublicRef,
 }).annotate({ identifier: "Session.Info" })
 
+const PublicSessionPersisted = Schema.Struct({
+  ...Struct.omit(Session.Persisted.fields, ["location"]),
+  location: Location.PublicRef,
+}).annotate({ identifier: "Session.Persisted" })
+
 const PublicSessionTransfer = Schema.Struct({
-  info: PublicSessionInfo,
+  info: PublicSessionPersisted,
   messages: Schema.Array(PublicSessionMessage),
 }).annotate({ identifier: "SessionTransfer.Data" })
 
@@ -116,6 +123,33 @@ export const SessionsQuery = Schema.Struct({
   ...Session.ListFilter.fields,
   cursor: Session.ListCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
+
+/** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
+export const SessionFamilyEndpoint = HttpApiEndpoint.get(
+  "sessionFamily.get",
+  "/api/experimental/session/:sessionID/family",
+  {
+    params: { sessionID: Session.ID },
+    success: Schema.Struct({
+      data: Schema.Struct({
+        rootID: Session.ID,
+        sessions: Schema.Array(PublicSessionInfo),
+        permissions: Schema.Array(Permission.Request),
+        forms: Schema.Array(Form.Info),
+      }).annotate({ identifier: "Session.Family" }),
+    }),
+    error: SessionNotFoundError,
+  },
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "experimental.sessionFamily.get",
+    summary: "Get session family",
+    description:
+      "Retrieve every session in the tree that contains the session, with the family's pending permission requests and forms. The result is complete, not paginated: the root comes first, then its descendants ordered by creation time. Pending requests come only from locations that are running; a location that is not running holds none. Experimental: may change without compatibility guarantees.",
+    // The route shares the `server.experimental` group with the persistent PTY prototype; tag it with sessions.
+    transform: (operation) => ({ ...operation, tags: ["session"] }),
+  }),
+)
 
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
   sessionLocationMiddleware: Context.Key<I, S>,
@@ -224,7 +258,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Each entry's `rootID` is the root of the family that contains the Session: the Session itself when it is a root.",
         }),
       ),
     )

@@ -61,6 +61,7 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "persistentPty",
     "media",
+    "sessionFamily",
     "schedule",
     "artifacts",
     "migration",
@@ -1053,7 +1054,8 @@ test("session methods use the public HTTP contract", async () => {
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
       if (url.includes("/message/")) return Response.json({ data: modelSwitchedMessage })
-      if (url.endsWith("/api/session/active")) return Response.json({ data: { ses_test: { type: "running" } } })
+      if (url.endsWith("/api/session/active"))
+        return Response.json({ data: { ses_test: { type: "running", rootID: "ses_test" } } })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
       if (url.includes("/interrupt")) return Response.json({ interrupted: true })
       if (init?.method === "POST") return new Response(null, { status: 204 })
@@ -1092,7 +1094,7 @@ test("session methods use the public HTTP contract", async () => {
 
   expect(page.cursor.next).toBe("next")
   expect(page.data[0].time).toMatchObject({ idle: 1_717_171_717_002, viewed: 1_717_171_717_001 })
-  expect(active).toEqual({ ses_test: { type: "running" } })
+  expect(active).toEqual({ ses_test: { type: "running", rootID: "ses_test" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")

@@ -115,6 +115,10 @@ describe("Session.shell", () => {
       const second = yield* launch(fixture, "second")
 
       expect(yield* fixture.execution.active).toContain(fixture.created.id)
+      expect((yield* fixture.session.get(fixture.created.id)).status).toBe("running")
+      expect((yield* fixture.session.list()).data.map((item) => [item.id, item.status])).toEqual([
+        [fixture.created.id, "running"],
+      ])
       expect(first.caller.pollUnsafe()).toBeUndefined()
       expect(second.caller.pollUnsafe()).toBeUndefined()
       expect(yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })).toMatchObject([
@@ -145,6 +149,9 @@ describe("Session.shell", () => {
       expect(fixture.control.wakes).toEqual([])
       yield* Deferred.succeed(fixture.control.release, undefined)
       yield* Fiber.join(model).pipe(Effect.timeout("5 seconds"))
+      yield* fixture.execution.awaitIdle(fixture.created.id)
+      expect((yield* fixture.session.get(fixture.created.id)).status).toBe("idle")
+      expect((yield* fixture.session.list()).data.map((item) => item.status)).toEqual(["idle"])
     }),
   )
 

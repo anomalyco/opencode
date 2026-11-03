@@ -62,7 +62,7 @@ for (const flag of [undefined, "0", "1", "true"]) {
           expect((yield* models.get(providerID, free))?.id).toBe(disabled ? undefined : free)
           expect((yield* models.small(providerID))?.id).toBe(disabled ? undefined : free)
           if (!disabled) return
-          const session = Session.Info.make({
+          const session = Session.Persisted.make({
             id: Session.ID.make("ses_free_model"),
             projectID: Project.ID.global,
             title: "test",

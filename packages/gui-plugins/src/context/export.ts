@@ -21,8 +21,11 @@ export async function fetchSessionExport(input: {
     )
   }
 
+  // Like the export endpoint, transcripts omit the live execution status.
+  const { status: _, ...persisted } = info
+
   return {
-    info,
+    info: persisted,
     messages: pages.flatMap((page) => page.data),
   }
 }

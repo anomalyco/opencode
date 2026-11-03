@@ -74,7 +74,7 @@ export interface Prepared<Event = SessionRequest> {
 }
 
 export interface Input {
-  readonly session: SessionSchema.Info
+  readonly session: SessionSchema.Persisted
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot

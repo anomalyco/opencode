@@ -47,6 +47,7 @@ import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { PromptInput } from "@opencode/schema/prompt-input"
+import { readyWhenCached } from "./fixture/location"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -112,7 +113,7 @@ const locations = makeGlobalNode({
             }),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
           ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      )
+      ).pipe(readyWhenCached)
     }),
   ),
   deps: [Bus.node],
@@ -273,11 +274,32 @@ const forkInlineParent = Effect.fnUntraced(function* (id: string, directory: str
 })
 
 describe("Session.prompt", () => {
-  it.effect("exposes the execution registry", () =>
+  it.effect("exposes the execution registry with each running Session's root", () =>
     Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const child = Session.ID.make("ses_prompt_test_child")
+      const missing = Session.ID.make("ses_prompt_test_missing")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: child,
+          parent_id: sessionID,
+          project_id: Project.ID.global,
+          slug: "child",
+          directory: "/project",
+          title: "child",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
       const session = yield* Session.Service
-      activeSessions.add(sessionID)
-      expect(Array.from(yield* session.active)).toEqual([sessionID])
+      activeSessions.add(sessionID).add(child).add(missing)
+      expect(Array.from(yield* session.active)).toEqual([
+        [sessionID, sessionID],
+        [child, sessionID],
+        [missing, missing],
+      ])
     }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
   )
 

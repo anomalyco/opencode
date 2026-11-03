@@ -95,6 +95,7 @@ const locations = Layer.effect(
       get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
       contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
       contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
+      ready: (ref: Location.Ref) => RcMap.has(map.rcMap, LocationServiceMap.canonical(ref)),
       invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
     }
   }),

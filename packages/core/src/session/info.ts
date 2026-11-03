@@ -9,8 +9,8 @@ import { Money } from "@opencode/schema/money"
 
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
-export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
-  return SessionSchema.Info.make({
+export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Persisted {
+  return SessionSchema.Persisted.make({
     id: row.id,
     projectID: row.project_id,
     title: row.title ?? undefined,

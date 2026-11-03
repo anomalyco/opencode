@@ -162,7 +162,9 @@ export type SessionCreateInput = {
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
 
-export type SessionActiveOutput = { readonly [x: Session.ID]: { readonly type: "running" } }
+export type SessionActiveOutput = {
+  readonly [x: Session.ID]: { readonly type: "running"; readonly rootID?: Session.ID | undefined }
+}
 export type SessionActiveOperation<E = never> = () => Effect.Effect<SessionActiveOutput, E>
 
 export type SessionGetInput = { readonly sessionID: Session.ID }
@@ -543,7 +545,7 @@ export type ExperimentalSessionStatsOperation<E = never> = (
 ) => Effect.Effect<ExperimentalSessionStatsOutput, E>
 
 export type ExperimentalSessionImportInput = {
-  readonly info: Session.Info
+  readonly info: Session.Persisted
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly location?: Location.PublicRef | undefined
 }
@@ -554,7 +556,7 @@ export type ExperimentalSessionImportOperation<E = never> = (
 
 export type ExperimentalSessionExportInput = { readonly sessionID: Session.ID; readonly sanitize?: boolean | undefined }
 export type ExperimentalSessionExportOutput = {
-  readonly info: Session.Info
+  readonly info: Session.Persisted
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }
 export type ExperimentalSessionExportOperation<E = never> = (
@@ -2380,6 +2382,17 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalSessionFamilyGetInput = { readonly sessionID: Session.ID }
+export type ExperimentalSessionFamilyGetOutput = {
+  readonly rootID: Session.ID
+  readonly sessions: ReadonlyArray<Session.Info>
+  readonly permissions: ReadonlyArray<Permission.Request>
+  readonly forms: ReadonlyArray<Form.Info>
+}
+export type ExperimentalSessionFamilyGetOperation<E = never> = (
+  input: ExperimentalSessionFamilyGetInput,
+) => Effect.Effect<ExperimentalSessionFamilyGetOutput, E>
+
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: Session.ID
   readonly name?: string | undefined
@@ -2505,6 +2518,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly sessionFamily: { readonly get: ExperimentalSessionFamilyGetOperation<E> }
   readonly schedule: {
     readonly create: ExperimentalScheduleCreateOperation<E>
     readonly list: ExperimentalScheduleListOperation<E>

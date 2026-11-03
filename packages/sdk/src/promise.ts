@@ -12,7 +12,7 @@ export interface InstanceConfiguration {
 
 export interface InstanceOptions {
   /** Select a sharing key within the Session's current Location. Must not initialize plugins. */
-  readonly key: (session: typeof Session.Info.Encoded) => string
+  readonly key: (session: typeof Session.Persisted.Encoded) => string
   /** Reconstruct configuration on a cache miss, including after a host restart. */
   readonly configure: (key: string) => InstanceConfiguration | Promise<InstanceConfiguration>
 }
@@ -40,7 +40,7 @@ export async function create(options: CreateOptions = {}, embed: EmbeddedHost.Em
         plugins: await adaptPlugins(plugins),
         instances: instances
           ? {
-              key: (session) => instances.key(Schema.encodeSync(Session.Info)(session)),
+              key: (session) => instances.key(Schema.encodeSync(Session.Persisted)(session)),
               configure: (key) =>
                 Effect.gen(function* () {
                   const { PluginPromise } = yield* Effect.promise(() => import("@opencode/core/plugin/promise"))

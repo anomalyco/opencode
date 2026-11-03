@@ -165,7 +165,16 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
     if (url.pathname.endsWith("/inbox") || url.pathname.endsWith("/permission")) return json({ data: [] })
     return undefined
   }, createEventStream())
-  const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
+  // The fixture synthesizes the family from in-process reads, so only requests through the server reach this log.
+  const requests: string[] = []
+  const server = Bun.serve({
+    port: 0,
+    idleTimeout: 0,
+    fetch: (request) => {
+      requests.push(new URL(request.url).pathname)
+      return calls.fetch(request)
+    },
+  })
   const { run } = await import("../src/app")
   const task = Effect.runPromise(
     run({
@@ -189,6 +198,70 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
     const x = lines[y].indexOf("General finished")
     await setup.mockMouse.click(x + 1, y)
     await setup.waitForFrame((frame) => frame.includes("Investigate authentication"))
+    // One family read loads both members, their pending requests, and serves the child's route.
+    expect(
+      requests
+        .filter((pathname) =>
+          /^\/api\/(session\/(active|[^/]+\/(permission|form))|experimental\/session\/[^/]+\/family)$/.test(pathname),
+        )
+        .toSorted(),
+    ).toEqual([`/api/experimental/session/${parent.id}/family`, "/api/session/active"])
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})
+
+test("a root session opens with its subagent's pending permission on a server without the family route", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 120, height: 30, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
+  setup.renderer.start()
+  const parent = {
+    id: "ses_parent",
+    title: "Parent session",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const child = { ...parent, id: "ses_child", title: "Diagnose authentication", parentID: parent.id }
+  const requests: string[] = []
+  // An older server: no family route, so the client reads the Session, its children, and each member's requests.
+  const calls = createFetch((url) => {
+    requests.push(url.pathname)
+    if (url.pathname.endsWith("/family")) return new Response(null, { status: 404 })
+    if (url.pathname === "/api/session") return json({ data: [child], cursor: {} })
+    if (url.pathname === `/api/session/${parent.id}`) return json({ data: parent })
+    if (url.pathname === `/api/session/${child.id}/permission`)
+      return json({ data: [{ id: "per_child", sessionID: child.id, action: "bash", resources: ["rm -rf build"] }] })
+    if (url.pathname.endsWith("/message")) return json({ data: [], cursor: {} })
+    if (url.pathname.endsWith("/inbox") || url.pathname.endsWith("/permission")) return json({ data: [] })
+    return undefined
+  }, createEventStream())
+  const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: {
+        get: async () => ({ animations: false, tabs: { mode: "off" } }),
+        update: async () => ({}),
+      },
+      packages: { prepare: async () => ({ directory: "" }) },
+      args: { sessionID: parent.id },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    // The prompt shows only for members of the route's family, so it also proves the subagent joined it.
+    await setup.waitForFrame((frame) => frame.includes("Permission required"))
+    expect(requests).toContain(`/api/experimental/session/${parent.id}/family`)
+    expect(requests).toContain(`/api/session/${child.id}/permission`)
   } finally {
     setup.renderer.destroy()
     await task

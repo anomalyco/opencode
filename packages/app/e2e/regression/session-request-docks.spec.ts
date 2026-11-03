@@ -268,7 +268,8 @@ test("loads a running subagent's question without polling idle subagents on ever
     ),
   )
   await expect(page.getByRole("heading", { name: "Renamed request docks", exact: true })).toBeVisible()
-  expect(forms.toSorted()).toEqual([`/api/session/${runningID}/form`, `/api/session/${sessionID}/form`].toSorted())
+  // The family read carries every member's forms, so at most the root and running subagent read their own.
+  expect(forms.filter((path) => path.includes("ses_request_idle_"))).toEqual([])
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
