@@ -82,6 +82,13 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  /** Shown beside Send, e.g. the voice call button. */
+  action?: JSX.Element
+  /**
+   * Takes over the controls row while set, e.g. a live call's controls. The add menu and agent and model controls stay
+   * mounted underneath, hidden, so their measurements survive.
+   */
+  controls?: () => JSX.Element
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -385,8 +392,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
         </div>
 
         <div class="flex h-11 shrink-0 items-center px-2">
+          <Show when={props.controls}>{(controls) => controls()()}</Show>
           <div
             class="flex shrink-0 items-center"
+            classList={{ hidden: !!props.controls }}
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
@@ -412,6 +421,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             data-overflow-start={overflow.start}
             data-overflow-end={overflow.end}
             class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            classList={{ hidden: !!props.controls }}
             onScroll={updateOverflow}
             // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
             onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
@@ -454,6 +464,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
               />
             </Show>
+            <Show when={state.mode === "normal" && !props.controls}>{props.action}</Show>
             <Show when={state.mode === "shell"}>
               <Button
                 data-action="composer-exit-shell"
@@ -472,16 +483,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 </span>
               </Button>
             </Show>
-            <ComposerEditorSubmitButton
-              mode={state.mode}
-              stopping={view.submit.stopping()}
-              held={view.submit.held?.() ?? false}
-              disabled={!props.controller.canSubmit()}
-              sendLabel={i18n.t("ui.promptInput.send")}
-              stopLabel={i18n.t("ui.promptInput.stop")}
-              onSubmit={() => props.controller.submit()}
-              onStop={props.controller.stop}
-            />
+            {/* Replaced controls keep Send only while it can act, so an idle row stays theirs. */}
+            <Show when={!props.controls || props.controller.canSubmit() || view.submit.stopping()}>
+              <ComposerEditorSubmitButton
+                mode={state.mode}
+                stopping={view.submit.stopping()}
+                held={view.submit.held?.() ?? false}
+                disabled={!props.controller.canSubmit()}
+                sendLabel={i18n.t("ui.promptInput.send")}
+                stopLabel={i18n.t("ui.promptInput.stop")}
+                onSubmit={() => props.controller.submit()}
+                onStop={props.controller.stop}
+              />
+            </Show>
           </div>
         </div>
       </form>

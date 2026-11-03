@@ -42,6 +42,16 @@ export const decodeArguments = Schema.decodeUnknownSync(
       delivery: Schema.optional(Schema.Literals(["steer", "queue"])),
       model: Schema.optional(Schema.String),
       variant: Schema.optional(Schema.String),
+      request_id: Schema.optional(Schema.String),
+      decision: Schema.optional(Schema.Literals(["once", "always", "reject"])),
+      note: Schema.optional(Schema.String),
+      form_id: Schema.optional(Schema.String),
+      answers: Schema.optional(
+        Schema.Record(
+          Schema.String,
+          Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]),
+        ),
+      ),
     }),
   ),
 )
