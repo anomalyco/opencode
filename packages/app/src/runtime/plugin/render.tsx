@@ -1,4 +1,15 @@
-import { createMemo, ErrorBoundary, For, onCleanup, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  ErrorBoundary,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
@@ -75,10 +86,32 @@ export function PluginStyles() {
   )
 }
 
-/** Lists each contributed theme in the theme picker, keyed by plugin, while it is contributed. */
-export function PluginThemes() {
+/**
+ * Lists each contributed theme in the theme picker, keyed by plugin, while it is contributed. Once every plugin the
+ * window runs has settled (`loaded`: the plugin list has arrived), a selected theme no plugin contributed is not
+ * coming, and the theme provider shows the default theme.
+ */
+export function PluginThemes(props: { loaded: () => boolean }) {
   const host = usePluginHost()
   const theme = useTheme()
+
+  const settled = createMemo(
+    () =>
+      props.loaded() &&
+      host.ready() &&
+      host.definitions().every((definition) => {
+        if (!definition.windowEntry) return true
+
+        const status = host.state.status[definition.id]
+
+        return status === "active" || status === "failed" || status === "disabled"
+      }),
+  )
+
+  // Hands the settled plugin set to the theme provider, outside the plugin host.
+  createEffect(() => {
+    if (settled()) theme.settle()
+  })
 
   return (
     <For each={host.items(Theme)}>

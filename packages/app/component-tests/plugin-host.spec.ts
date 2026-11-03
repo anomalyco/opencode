@@ -1468,24 +1468,65 @@ story(
 
       host.disable("acme")
       await until(() => root.dataset.theme === "oc-2")
-      const withdrawn = { listed: host.options().some((option: { id: string }) => option.id === "acme:midnight") }
-      const kept = host.selected()
+
+      const withdrawn = {
+        listed: host.options().some((option: { id: string }) => option.id === "acme:midnight"),
+        selected: host.selected(),
+        stored: localStorage.getItem("opencode-theme-id"),
+      }
 
       host.enable()
       await until(() => root.dataset.theme === "acme:midnight")
+      const restored = host.selected()
       host.unmount()
 
-      return { first: options[0], last: options.at(-1), withdrawn, kept }
+      return { first: options[0], last: options.at(-1), withdrawn, restored }
     }, fixture)
 
     expect(result).toEqual({
       first: { id: "amoled", name: "AMOLED" },
       last: { id: "acme:midnight", name: "Midnight" },
-      withdrawn: { listed: false },
-      kept: "acme:midnight",
+      withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
+      restored: "acme:midnight",
     })
   },
 )
+
+story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountThemes, until } = await import(fixture)
+    const root = document.documentElement
+    // The last run picked a theme whose plugin is now uninstalled, and cached its colors.
+    localStorage.setItem("opencode-theme-id", "gone:midnight")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#010203;")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#010203;")
+
+    const host = mountThemes({ definitions: [], pending: true })
+    // The window is ready to show on the cached colors while the plugin list is still on its way.
+    await until(() => host.applied() > 0)
+    const waiting = host.selected()
+    // The frame's own provider already shows the default theme; mark the root to see this provider apply it.
+    root.dataset.theme = "frame"
+
+    host.load()
+    await until(() => root.dataset.theme === "oc-2")
+
+    const settled = {
+      selected: host.selected(),
+      stored: localStorage.getItem("opencode-theme-id"),
+      cached: localStorage.getItem("opencode-theme-css-dark") ?? localStorage.getItem("opencode-theme-css-light"),
+    }
+
+    host.unmount()
+
+    return { waiting, settled }
+  }, fixture)
+
+  expect(result).toEqual({
+    waiting: "gone:midnight",
+    settled: { selected: "oc-2", stored: "gone:midnight", cached: null },
+  })
+})
 
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {

@@ -1,6 +1,6 @@
 // @refresh reload
 
-import { createEffect, onMount } from "solid-js"
+import { createEffect, createMemo, onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
@@ -19,6 +19,8 @@ type ThemeState = {
   mode: "light" | "dark"
   previewThemeId: string | null
   previewScheme: ColorScheme | null
+  /** Registered themes that have not arrived are not coming. */
+  settled: boolean
 }
 
 const STORAGE_KEYS = {
@@ -198,9 +200,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: {
     defaultTheme?: string
-    onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark", scheme: ColorScheme) => void
+    /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
+    onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
-    // An id no theme has yet stays selected: a registered theme can arrive after startup.
+    // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
     const themeId = read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || "oc-2"
     const colorScheme = readScheme()
     const mode = colorScheme === "system" ? getSystemMode() : colorScheme
@@ -214,6 +217,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode,
       previewThemeId: null,
       previewScheme: null,
+      settled: false,
+    })
+
+    // The selected theme, or the default while it is not loaded, registered or coming.
+    const active = createMemo(() => {
+      const id = store.themeId
+
+      return knownThemes().has(id) || store.themes[id] || !store.settled ? id : "oc-2"
     })
 
     const loads = new Map<string, Promise<DesktopTheme | undefined>>()
@@ -250,7 +261,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const applyTheme = (theme: DesktopTheme, themeId: string, mode: "light" | "dark", scheme: ColorScheme) => {
       applyThemeCss(theme, themeId, mode)
-      props.onThemeApplied?.(theme, mode, scheme)
+      props.onThemeApplied?.(mode, scheme)
     }
 
     const ids = () => {
@@ -317,19 +328,22 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      const theme = store.themes[store.themeId]
+      const id = active()
+      const theme = store.themes[id]
 
       if (theme) {
-        applyTheme(theme, store.themeId, store.mode, store.colorScheme)
+        // The selected theme is gone, so the next start paints the default theme instead of its cached colors. The
+        // choice stays stored and returns with the theme.
+        if (id !== store.themeId) clear()
+        applyTheme(theme, id, store.mode, store.colorScheme)
 
         return
       }
 
-      // Keep what is on screen while a bundled theme loads, and at startup, the CSS cached from the last run until a
-      // registered theme arrives. A registered theme missing later was withdrawn: show the default theme until it
-      // returns.
-      if (knownThemes().has(store.themeId) || !document.getElementById(THEME_STYLE_ID)) return
-      applyTheme(oc2Theme, "oc-2", store.mode, store.colorScheme)
+      // A bundled theme is loading: keep what is on screen until it arrives.
+      if (knownThemes().has(id)) return
+      // A registered theme may still arrive: the colors cached from the last run stay on screen meanwhile.
+      props.onThemeApplied?.(store.mode, store.colorScheme)
     })
 
     const setTheme = (id: string) => {
@@ -370,7 +384,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     return {
-      themeId: () => store.themeId,
+      themeId: active,
       colorScheme: () => store.colorScheme,
       mode: () => store.mode,
       ids,
@@ -394,6 +408,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           )
         }
       },
+      /**
+       * Every theme source has registered what it will: a selected theme that is still missing is not coming, so the
+       * window shows the default theme and keeps the choice for when it returns.
+       */
+      settle: () => setStore("settled", true),
       previewTheme: (id: string) => {
         const next = id
 
@@ -416,11 +435,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       previewColorScheme: (scheme: ColorScheme) => {
         setStore("previewScheme", scheme)
         const mode = scheme === "system" ? getSystemMode() : scheme
-        const id = store.previewThemeId ?? store.themeId
+        const id = store.previewThemeId ?? active()
         void load(id).then((theme) => {
           if (!theme) return
 
-          if ((store.previewThemeId ?? store.themeId) !== id) return
+          if ((store.previewThemeId ?? active()) !== id) return
 
           if (store.previewScheme !== scheme) return
           applyTheme(theme, id, mode, scheme)
@@ -441,9 +460,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       cancelPreview: () => {
         setStore("previewThemeId", null)
         setStore("previewScheme", null)
-        void load(store.themeId).then((theme) => {
-          if (!theme) return
-          applyTheme(theme, store.themeId, store.mode, store.colorScheme)
+        const id = active()
+        void load(id).then((theme) => {
+          if (!theme || active() !== id) return
+          applyTheme(theme, id, store.mode, store.colorScheme)
         })
       },
     }

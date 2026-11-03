@@ -562,14 +562,17 @@ export function mountSessionRegion(input: {
 /**
  * Mounts the real host's theme contributions into the app's theme provider, as the window does. `options` reads the
  * theme picker's choices as Settings › Appearance lists them; `disable` and `enable` toggle a plugin as
- * Extensions › Plugins does.
+ * Extensions › Plugins does. With `pending`, the plugin list has not arrived until `load()`. `applied` counts the
+ * provider's `onThemeApplied` calls, which show a desktop window.
  */
-export function mountThemes(input: { definitions: readonly Entry[] }) {
+export function mountThemes(input: { definitions: readonly Entry[]; pending?: true }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
+  const [loaded, setLoaded] = createSignal(!input.pending)
   const hosts: PluginHost[] = []
   const themes: ReturnType<typeof useTheme>[] = []
+  const applied = { count: 0 }
 
   function Capture() {
     hosts.push(usePluginHost())
@@ -580,7 +583,7 @@ export function mountThemes(input: { definitions: readonly Entry[] }) {
 
   const dispose = render(
     () => (
-      <ThemeProvider>
+      <ThemeProvider onThemeApplied={() => void applied.count++}>
         <LanguageProvider locale="en">
           <DialogProvider>
             <PluginHostProvider
@@ -589,7 +592,7 @@ export function mountThemes(input: { definitions: readonly Entry[] }) {
               apis={fakeApis(unused)}
               whenMounted={mounted}
             >
-              <PluginThemes />
+              <PluginThemes loaded={loaded} />
               <Capture />
             </PluginHostProvider>
           </DialogProvider>
@@ -604,6 +607,8 @@ export function mountThemes(input: { definitions: readonly Entry[] }) {
     options: () => themes[0]?.ids().map((id) => ({ id, name: themes[0]?.name(id) })) ?? [],
     select: (id: string) => themes[0]?.setTheme(id),
     selected: () => themes[0]?.themeId(),
+    applied: () => applied.count,
+    load: () => setLoaded(true),
     disable: (id: string) => setDisabled(new Set([id])),
     enable: () => setDisabled(new Set<string>()),
     unmount: () => {
