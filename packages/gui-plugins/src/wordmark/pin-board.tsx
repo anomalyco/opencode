@@ -1,7 +1,8 @@
-import { createEffect, onCleanup, onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { createQuads, type Quads, type Rgba } from "./pin-quads"
-import { PinSound } from "./pin-sound"
+import type { PinSound } from "./pin-sound"
 import { prefersReducedMotion } from "@opencode/ui/motion"
+import type { Hero } from "./wordmark"
 
 // The wordmark as a 78×14 pin grid: 1 = counter shadow, 2 = "open", 3 = "code".
 const GRID = [
@@ -53,6 +54,8 @@ export type PinBoardHandle = {
   steer: (x: number, y: number) => void
   /** Ends game mode and flies every pin home. */
   restore: () => void
+  /** Flies every pin home as the wordmark folds back; the board unmounts once the wordmark is flat. */
+  close: () => void
 }
 
 const REST_TILT = [0.42, 0.7] as const
@@ -60,8 +63,7 @@ const LIGHT = [0.55 / Math.hypot(0.55, 0.83), -0.83 / Math.hypot(0.55, 0.83)] as
 const SHADES = 16
 const LOOSE = 4
 const REVEAL = 0.75
-const INTERACTIVE =
-  'button, a, input, textarea, select, label, [contenteditable], [role], [data-component="composer"], [data-component="new-session-tip"]'
+const INTERACTIVE = "button, a, input, textarea, select, label, [contenteditable], [role]"
 
 type Pin = {
   c: number
@@ -101,20 +103,17 @@ type Pin = {
  */
 export function NewSessionPinBoard(props: {
   logo: HTMLElement
-  sound: () => boolean
+  hero: Hero
+  sound: PinSound
   entrance?: PinEntrance
-  closing?: boolean
   ref?: (board: PinBoardHandle) => void
 }) {
   let back!: HTMLCanvasElement
   let front!: HTMLCanvasElement
 
   onMount(() => {
-    const board = mountPinBoard(back, front, props.logo, props.sound, props.entrance)
+    const board = mountPinBoard(back, front, props.logo, props.hero, props.sound, props.entrance)
     props.ref?.(board.handle)
-    createEffect(() => {
-      if (props.closing) board.close()
-    })
     onCleanup(board.dispose)
   })
 
@@ -140,10 +139,11 @@ function mountPinBoard(
   back: HTMLCanvasElement,
   front: HTMLCanvasElement,
   logo: HTMLElement,
-  sound: () => boolean,
+  hero: Hero,
+  sound: PinSound,
   entrance: PinEntrance = "sweep",
 ) {
-  const stage = back.parentElement!
+  const stage = hero.stage
   // The pins behind the composer and the ones popped in front of it are each one layer of quads.
   const layers = { back: createQuads(back, () => wake()), front: createQuads(front, () => wake()) }
   const still = prefersReducedMotion()
@@ -196,7 +196,7 @@ function mountPinBoard(
   const layout = () => {
     const s = stage.getBoundingClientRect()
     const l = logo.getBoundingClientRect()
-    const composer = stage.querySelector('[data-component="composer"]')?.getBoundingClientRect()
+    const composer = hero.composer.box.getBoundingClientRect()
     const pitch = Math.max(3, Math.round(l.width / COLS))
     const x0 = Math.round(l.left - s.left + (l.width - pitch * COLS) / 2)
     const y0 = Math.round(l.top - s.top + (l.height - pitch * ROWS) / 2)
@@ -209,7 +209,7 @@ function mountPinBoard(
     view.pitch = pitch
     view.depth = view.pitch * 1.7
     view.size = view.pitch * 0.8
-    view.composer = composer && {
+    view.composer = {
       left: composer.left - s.left,
       right: composer.right - s.left,
       top: composer.top - s.top,
@@ -290,7 +290,7 @@ function mountPinBoard(
     if (!hits.length) return
     clock.knocked = now
     setRegion(true)
-    if (sound()) PinSound.knock(x, view.w)
+    sound.knock(x, view.w)
   }
 
   // Hitting a piled pin topples everything stacked above it.
@@ -364,8 +364,12 @@ function mountPinBoard(
     const cy = view.y0 + (ROWS * view.pitch) / 2
     // In game mode the board leans only slightly after the ball, so the bricks stay readable.
     const lean = view.game ? 0.12 : 0.6
-    const tx = pointer.inside ? lerp(REST_TILT[0], clamp(((cx - pointer.x) / (view.w * 0.5)) * 1.4), lean) : REST_TILT[0]
-    const ty = pointer.inside ? lerp(REST_TILT[1], clamp(((cy - pointer.y) / (view.h * 0.5)) * 1.4), lean) : REST_TILT[1]
+    const tx = pointer.inside
+      ? lerp(REST_TILT[0], clamp(((cx - pointer.x) / (view.w * 0.5)) * 1.4), lean)
+      : REST_TILT[0]
+    const ty = pointer.inside
+      ? lerp(REST_TILT[1], clamp(((cy - pointer.y) / (view.h * 0.5)) * 1.4), lean)
+      : REST_TILT[1]
     const ease = 1 - Math.exp(-dt * 4)
     tilt.x += (tx - tilt.x) * ease
     tilt.y += (ty - tilt.y) * ease
@@ -416,7 +420,7 @@ function mountPinBoard(
             z: clock.closed ? -0.2 : -0.8,
             zv: 0,
           })
-          if (sound()) PinSound.slot(p.c, COLS, p.hx, view.w)
+          sound.slot(p.c, COLS, p.hx, view.w)
           continue
         }
         const e = 1 - Math.pow(1 - k, 3)
@@ -448,7 +452,7 @@ function mountPinBoard(
         continue
       }
       p.y = surface - cell / 2
-      if (sound()) PinSound.bounce(p.x, view.w, p.vy)
+      sound.bounce(p.x, view.w, p.vy)
       p.vy = -p.vy * 0.34
       p.vx *= 0.55
       p.spin = -p.spin * 0.5 + (Math.random() - 0.5) * 4
@@ -570,12 +574,28 @@ function mountPinBoard(
         for (const p of band) {
           if (p.lv !== lv) continue
           const fx = p.hx + ox * p.fd + sx * half
-          quads.quad(fx, p.hy + oy * p.fd - half, ox * (p.bd - p.fd), oy * (p.bd - p.fd), 0, size, colors.side[lv][sideX])
+          quads.quad(
+            fx,
+            p.hy + oy * p.fd - half,
+            ox * (p.bd - p.fd),
+            oy * (p.bd - p.fd),
+            0,
+            size,
+            colors.side[lv][sideX],
+          )
         }
         for (const p of band) {
           if (p.lv !== lv) continue
           const fy = p.hy + oy * p.fd + sy * half
-          quads.quad(p.hx + ox * p.fd - half, fy, size, 0, ox * (p.bd - p.fd), oy * (p.bd - p.fd), colors.side[lv][sideY])
+          quads.quad(
+            p.hx + ox * p.fd - half,
+            fy,
+            size,
+            0,
+            ox * (p.bd - p.fd),
+            oy * (p.bd - p.fd),
+            colors.side[lv][sideY],
+          )
         }
       }
       for (const p of band)
@@ -692,8 +712,7 @@ function mountPinBoard(
   // Capturing the pointer keeps a long drag alive; without it the browser can start a text
   // selection or native drag mid-gesture and cancel the pointer stream.
   const onDown = (event: PointerEvent) => {
-    if (view.game || event.button !== 0 || (event.target instanceof Element && event.target.closest(INTERACTIVE)))
-      return
+    if (view.game || event.button !== 0 || !(event.target instanceof Element) || controls(event.target)) return
     event.preventDefault()
     stage.setPointerCapture(event.pointerId)
     toStage(event)
@@ -703,6 +722,9 @@ function mountPinBoard(
     knock(pointer.x, pointer.y, 24, 560, 0, 0, performance.now() / 1000)
     wake()
   }
+  // Presses on the panel's controls, the composer, or the tip are theirs; the board only plays on empty space.
+  const controls = (target: Element) =>
+    !!target.closest(INTERACTIVE) || hero.composer.box.contains(target) || !!hero.tip?.contains(target)
   const onUp = (event: Event) => {
     pointer.down = false
     if (event instanceof PointerEvent && stage.hasPointerCapture(event.pointerId))
@@ -740,9 +762,31 @@ function mountPinBoard(
   }
   layout()
   // The reveal staggers columns over 0.45 s and each rises over 0.3 s; the sweep spans the same window.
-  if (!still && sound()) PinSound.sweep({ duration: entrance === "sweep" ? REVEAL : 0.9, columns: COLS })
+  if (!still) sound.sweep({ duration: entrance === "sweep" ? REVEAL : 0.9, columns: COLS })
+
+  const close = () => {
+    if (clock.closed) return
+    const now = performance.now() / 1000
+    clock.closed = now
+    pointer.down = false
+    piles.top.fill(0)
+    piles.floor.fill(0)
+    for (const p of pins) {
+      if (p.state === HOME) continue
+      p.state = RETURN
+      p.x0 = p.x
+      p.y0 = p.y
+      p.rot0 = p.rot
+      p.t0 = now + (p.c / COLS) * 0.18
+      p.duration = 0.28 + Math.random() * 0.06
+      p.lift = 24 + Math.random() * 42
+    }
+    if (!still) sound.sweep({ duration: 0.95, columns: COLS, reverse: true })
+    wake()
+  }
 
   const handle: PinBoardHandle = {
+    close,
     collide: (x, y, radius, blast, vx, vy) => {
       const half = view.size / 2
       const reach = radius + blast + half
@@ -832,26 +876,6 @@ function mountPinBoard(
 
   return {
     handle,
-    close: () => {
-      if (clock.closed) return
-      const now = performance.now() / 1000
-      clock.closed = now
-      pointer.down = false
-      piles.top.fill(0)
-      piles.floor.fill(0)
-      for (const p of pins) {
-        if (p.state === HOME) continue
-        p.state = RETURN
-        p.x0 = p.x
-        p.y0 = p.y
-        p.rot0 = p.rot
-        p.t0 = now + (p.c / COLS) * 0.18
-        p.duration = 0.28 + Math.random() * 0.06
-        p.lift = 24 + Math.random() * 42
-      }
-      if (!still && sound()) PinSound.sweep({ duration: 0.95, columns: COLS, reverse: true })
-      wake()
-    },
     dispose: () => {
       cancelAnimationFrame(raf)
       resize.disconnect()

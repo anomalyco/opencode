@@ -28,11 +28,11 @@
 }
 
 /* The composer gives a little under the lodger while it is carried over it, hinting it can be dropped there. */
-[data-component="new-session"] [data-slot="new-session-composer"] {
+[data-lodger-drop] {
   transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-[data-component="new-session"] [data-slot="new-session-composer"][data-lodger-over] {
+[data-lodger-drop][data-lodger-over] {
   transform: translateY(3px) scale(0.985);
 }
 

@@ -1,8 +1,10 @@
+import type { SlotMap } from "@opencode/plugin/gui"
 import { Logo } from "@opencode/ui/logo"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { For, onCleanup, onMount, Show } from "solid-js"
-import { PinSound } from "./pin-sound"
-import "./wordmark.css"
+import type { PinSound } from "./pin-sound"
+
+export type Hero = SlotMap["new-session.hero"]
 
 // Each letter in the 234×42 logo viewBox, with its counter shadow, stem, and bottom-centre pivot.
 const LETTERS = [
@@ -114,8 +116,9 @@ type Parts = {
  */
 export function NewSessionWordmark(props: {
   ref: (element: HTMLDivElement) => void
+  hero: Hero
   pins?: boolean
-  sound?: () => boolean
+  sound: PinSound
   onOpen?: () => void
   onClose?: () => void
   onFlat?: () => void
@@ -142,7 +145,8 @@ export function NewSessionWordmark(props: {
         <Show when={lodger}>
           <WordmarkLodger
             box={box}
-            sound={props.sound ?? (() => false)}
+            hero={props.hero}
+            sound={props.sound}
             onOpen={() => props.onOpen?.()}
             onClose={() => props.onClose?.()}
             onFlat={() => props.onFlat?.()}
@@ -161,7 +165,8 @@ export function NewSessionWordmark(props: {
  */
 function WordmarkLodger(props: {
   box: HTMLDivElement
-  sound: () => boolean
+  hero: Hero
+  sound: PinSound
   onOpen: () => void
   onClose: () => void
   onFlat: () => void
@@ -184,6 +189,7 @@ function WordmarkLodger(props: {
     onCleanup(
       mountLodger(
         { box: props.box, stage, svg, flat, notch, letters, grip, neck, pin, critter, body, eyes, blink },
+        props.hero,
         props.sound,
         props.onOpen,
         props.onClose,
@@ -263,7 +269,8 @@ function WordmarkLodger(props: {
 
 function mountLodger(
   parts: Parts,
-  sound: () => boolean,
+  hero: Hero,
+  sound: PinSound,
   onOpen: () => void,
   onClose: () => void,
   onFlat: () => void,
@@ -307,7 +314,7 @@ function mountLodger(
   const pointer = { x: HOLE.x, y: HOLE.y, inside: false, downX: HOLE.x, downY: HOLE.y }
   const impacts: { at: number; amp: number }[] = []
   const timers = { raf: 0, blink: 0, last: 0 }
-  const panel = parts.box.closest<HTMLElement>('[data-component="new-session"]') ?? document.documentElement
+  const panel = hero.stage
   // The lodger's screen rect, read on resize and pointer entry so pointer moves never force a layout.
   const rect = { left: 0, top: 0, scale: 1, px: 0, py: 0 }
   // The composer, in lodger units while carrying; dropping the lodger on it starts the brick breaker.
@@ -333,10 +340,10 @@ function mountLodger(
   const fitStage = () => {
     const l = parts.box.getBoundingClientRect()
     if (!l.width) return
-    const s = parts.box.closest('[data-component="new-session"]')?.getBoundingClientRect()
+    const s = panel.getBoundingClientRect()
     const pitch = Math.max(3, Math.round(l.width / 78))
-    const x = s ? Math.round(l.left - s.left + (l.width - pitch * 78) / 2) - (l.left - s.left) : (l.width - pitch * 78) / 2
-    const y = s ? Math.round(l.top - s.top + (l.height - pitch * 14) / 2) - (l.top - s.top) : (l.height - pitch * 14) / 2
+    const x = Math.round(l.left - s.left + (l.width - pitch * 78) / 2) - (l.left - s.left)
+    const y = Math.round(l.top - s.top + (l.height - pitch * 14) / 2) - (l.top - s.top)
     parts.stage.style.left = `${x}px`
     parts.stage.style.top = `${y}px`
     parts.stage.style.width = `${pitch * 78}px`
@@ -437,7 +444,7 @@ function mountLodger(
     }
     if (out > 0.05 || Math.hypot(c.vx, c.vy) > 0.5) return
     restHidden()
-    if (sound()) PinSound.slot(70, 78, c.x, W)
+    sound.slot(70, 78, c.x, W)
     blinkOnce()
   }
 
@@ -478,7 +485,7 @@ function mountLodger(
     })
     placeGrip("none")
     onOpen()
-    if (sound()) PinSound.knock(c.x, W)
+    sound.knock(c.x, W)
     if (still) return settleIdle()
     wake()
   }
@@ -494,7 +501,7 @@ function mountLodger(
     {
       at: 1.35,
       run: () => {
-        if (sound()) PinSound.slot(75, 78, PIN_SLOT.x, W)
+        sound.slot(75, 78, PIN_SLOT.x, W)
       },
     },
     { at: 1.72, run: () => land(0.32) },
@@ -690,7 +697,7 @@ function mountLodger(
       fromY: c.y,
     })
     onClose()
-    if (sound()) PinSound.knock(c.x, W)
+    sound.knock(c.x, W)
     if (still) {
       onFlat()
       restHidden()
@@ -703,7 +710,7 @@ function mountLodger(
     {
       at: 0.95,
       run: () => {
-        if (sound()) PinSound.slot(75, 78, HOLE.x, W)
+        sound.slot(75, 78, HOLE.x, W)
       },
     },
     {
@@ -819,11 +826,11 @@ function mountLodger(
   }
   const land = (amp: number) => {
     impact(amp)
-    if (sound()) PinSound.knock(c.x, W)
+    sound.knock(c.x, W)
   }
   const tap = (amp: number) => {
     if (amp) impact(amp)
-    if (sound()) PinSound.bounce(c.x, W, 3000)
+    sound.bounce(c.x, W, 3000)
   }
   const blinkOnce = () => {
     if (still) return
@@ -959,15 +966,13 @@ function mountLodger(
     parts.grip.setPointerCapture(event.pointerId)
     measure()
     if (c.phase === "idle") {
-      drop.el = panel.querySelector<HTMLElement>('[data-slot="new-session-composer"]') ?? undefined
-      const r = drop.el?.querySelector('[data-component="composer"]')?.getBoundingClientRect()
-      if (r) {
-        const p = panel.getBoundingClientRect()
-        drop.l = (r.left - p.left - rect.px) / rect.scale
-        drop.r = (r.right - p.left - rect.px) / rect.scale
-        drop.t = (r.top - p.top - rect.py) / rect.scale
-        drop.b = (r.bottom - p.top - rect.py) / rect.scale
-      }
+      drop.el = hero.composer.area
+      const r = hero.composer.box.getBoundingClientRect()
+      const p = panel.getBoundingClientRect()
+      drop.l = (r.left - p.left - rect.px) / rect.scale
+      drop.r = (r.right - p.left - rect.px) / rect.scale
+      drop.t = (r.top - p.top - rect.py) / rect.scale
+      drop.b = (r.bottom - p.top - rect.py) / rect.scale
     }
     toUnits(event)
     Object.assign(pointer, { downX: pointer.x, downY: pointer.y })
@@ -1018,6 +1023,7 @@ function mountLodger(
   parts.grip.addEventListener("pointerup", onRelease)
   parts.grip.addEventListener("pointercancel", onRelease)
   parts.grip.addEventListener("lostpointercapture", onRelease)
+  hero.composer.area.setAttribute("data-lodger-drop", "")
   render()
 
   return () => {
@@ -1031,6 +1037,8 @@ function mountLodger(
     parts.grip.removeEventListener("pointerup", onRelease)
     parts.grip.removeEventListener("pointercancel", onRelease)
     parts.grip.removeEventListener("lostpointercapture", onRelease)
+    hero.composer.area.removeAttribute("data-lodger-drop")
+    hero.composer.area.removeAttribute("data-lodger-over")
   }
 }
 

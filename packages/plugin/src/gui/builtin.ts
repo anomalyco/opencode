@@ -119,7 +119,7 @@ export type BuiltinSlot = {
   [At in keyof BuiltinSlotMap]: {
     /** The slot; see `BuiltinSlotMap`. */
     readonly at: At
-    /** Slot contents render in ascending order. Defaults to 0. */
+    /** Slot contents render in ascending order; `new-session.hero` shows only the last. Defaults to 0. */
     readonly order?: number
     /**
      * Renders the content once; its own reactivity updates it.

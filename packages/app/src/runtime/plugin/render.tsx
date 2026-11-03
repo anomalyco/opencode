@@ -35,19 +35,23 @@ export function Contribution(props: { plugin: string; children: () => JSX.Elemen
   )
 }
 
+/** Renders a slot's contributions in `order`. With `single`, only the last one renders: the slot has one owner. */
 export function PluginSlot<At extends keyof BuiltinSlotMap>(props: {
   at: At
   input: BuiltinSlotMap[At]
   fallback?: JSX.Element
+  single?: boolean
 }) {
   const host = usePluginHost()
 
-  const items = createMemo(() =>
-    host
+  const items = createMemo(() => {
+    const sorted = host
       .items(BuiltinSlot)
       .filter((item) => item.value.at === props.at)
-      .toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0)),
-  )
+      .toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0))
+
+    return props.single ? sorted.slice(-1) : sorted
+  })
 
   return (
     <For each={items()} fallback={props.fallback}>
