@@ -79,7 +79,7 @@ import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, desc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -4940,6 +4940,112 @@ describe("SessionRunnerLLM", () => {
     const modelResult = JSON.stringify(s.requests[0]?.messages.at(-1))
     expect(modelResult).toContain("ses_existing_child")
     expect(modelResult).not.toContain("private")
+  })
+
+  scenario("settles only unfinished tools after the latest compaction after a process crash", function* (s) {
+    yield* s.admit("Recover after compaction")
+    yield* SessionInbox.promote(s.db, s.bus, sessionID, "steer")
+    const startStep = (assistantMessageID: SessionMessage.ID) =>
+      s.bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("fake-model"), providerID: Provider.ID.make("fake") },
+        started: 0,
+      })
+    const callTool = Effect.fnUntraced(function* (assistantMessageID: SessionMessage.ID, id: string, name: string) {
+      yield* s.bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id, name })
+      yield* s.bus.publish(SessionEvent.Tool.Input.Ended, { sessionID, assistantMessageID, id, text: "{}" })
+      yield* s.bus.publish(SessionEvent.Tool.Called, { sessionID, assistantMessageID, id, input: {}, executed: true })
+    })
+    const old = SessionMessage.ID.create()
+    yield* startStep(old)
+    yield* callTool(old, "call-old", "echo")
+    yield* s.bus.publish(SessionEvent.Compaction.Started, {
+      sessionID,
+      reason: "manual",
+      inputID: SessionMessage.ID.create(),
+    })
+    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+      sessionID,
+      reason: "manual",
+      text: "## Objective\n- Checkpoint",
+    })
+    const done = SessionMessage.ID.create()
+    yield* startStep(done)
+    yield* callTool(done, "call-done", "echo")
+    yield* s.bus.publish(SessionEvent.Tool.Success, {
+      sessionID,
+      assistantMessageID: done,
+      id: "call-done",
+      content: [{ type: "text", text: "done" }],
+      executed: true,
+    })
+    // Starting this step completes the previous assistant, as in a normal run.
+    const crashed = SessionMessage.ID.create()
+    yield* startStep(crashed)
+    yield* s.bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID,
+      assistantMessageID: crashed,
+      id: "call-streaming",
+      name: "read",
+    })
+    yield* callTool(crashed, "call-running", "subagent")
+    yield* s.db
+      .update(SessionMessageTable)
+      .set({
+        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
+      })
+      .where(eq(SessionMessageTable.id, crashed))
+      .run()
+      .pipe(Effect.orDie)
+    // An unfinished assistant behind the checkpoint is outside the history the runner settles.
+    yield* s.db
+      .update(SessionMessageTable)
+      .set({ data: sql`json_remove(${SessionMessageTable.data}, '$.time.completed')` })
+      .where(eq(SessionMessageTable.id, old))
+      .run()
+      .pipe(Effect.orDie)
+    yield* s.llm.push([])
+    yield* s.resume
+
+    const failed = yield* s.db
+      .select({ data: EventTable.data })
+      .from(EventTable)
+      .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, "session.tool.failed.2")))
+      .orderBy(asc(EventTable.seq))
+      .all()
+      .pipe(Effect.orDie)
+    expect(failed.map((row) => row.data)).toEqual([
+      {
+        sessionID,
+        assistantMessageID: crashed,
+        id: "call-streaming",
+        error: { type: "aborted", message: "Tool execution interrupted: read" },
+        executed: false,
+      },
+      {
+        sessionID,
+        assistantMessageID: crashed,
+        id: "call-running",
+        error: { type: "aborted", message: "Tool execution interrupted: subagent (sessionID: ses_child)" },
+        metadata: { sessionID: "ses_child" },
+        executed: true,
+      },
+    ])
+    const messages = yield* s.messages
+    const tools = (id: SessionMessage.ID) => {
+      const message = messages.find((message) => message.id === id)
+      return message?.type === "assistant"
+        ? message.content.flatMap((part) => (part.type === "tool" ? [[part.id, part.state.status]] : []))
+        : []
+    }
+    expect(tools(old)).toEqual([["call-old", "running"]])
+    expect(tools(done)).toEqual([["call-done", "completed"]])
+    expect(tools(crashed)).toEqual([
+      ["call-streaming", "error"],
+      ["call-running", "error"],
+    ])
   })
 
   scenario("durably fails hosted tools left running by a prior process before continuing inline", function* (s) {
