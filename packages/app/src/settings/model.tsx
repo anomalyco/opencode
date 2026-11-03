@@ -23,6 +23,9 @@ export type TimelineWidth = Settings["general"]["timelineWidth"]
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
+// The Inbox sidebar ships only in Beta and the dev server; other builds, prod included, show vertical tabs instead.
+export const inboxLayoutAvailable = import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
+
 export type ReduceMotion = Settings["appearance"]["reduceMotion"]
 
 export type NotificationSettings = Settings["notifications"]
@@ -456,7 +459,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
-        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        tabLayout: withFallback(() => {
+          const layout = store.appearance?.tabLayout
+
+          return layout === "inbox" && !inboxLayoutAvailable ? "vertical" : layout
+        }, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
         },
