@@ -1,7 +1,7 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { uuid } from "@opencode/util/uuid"
 import { decodeEvent, type VoiceEvent } from "./protocol"
-import { delegatorInstructions, liveInstructions, tools } from "./spec"
+import { tools } from "./spec"
 
 export class VoiceFailure extends Error {
   constructor(readonly reason: "unavailable" | "microphone" | "dropped" | "connection") {
@@ -14,7 +14,7 @@ export type VoiceClientEvent =
   | { type: "session.input_audio.mute" | "session.input_audio.unmute" | "response.create" }
   | { type: "session.update"; session: { delegation: { type: "responses"; responses: { instructions: string } } } }
   | { type: "response.item.create"; item: { type: "function_call_output"; call_id: string; output: string } }
-  | { type: "session.commentary.append"; delegation_id: null; content: string }
+  | { type: "session.commentary.append" | "session.instructions.append"; delegation_id: null; content: string }
 
 export class VoiceTransport {
   readonly abort = new AbortController()
@@ -83,7 +83,8 @@ export class VoiceTransport {
     void this.ready.promise.catch(() => undefined)
   }
 
-  async join(viewing: { id: string; title?: string }, tail: string) {
+  /** Starts the voice session with the voice agent's and the delegator's instructions. */
+  async join(instructions: { live: string; delegator: string }, voice: string) {
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(35_000)])
     await this.context.resume()
     const offered = await this.inputOptions.api.experimental.voice.models({ signal })
@@ -119,13 +120,13 @@ export class VoiceTransport {
         model: "gpt-live-1",
         session: {
           model: "gpt-live-1",
-          instructions: liveInstructions,
-          audio: { output: { voice: "marin" } },
+          instructions: instructions.live,
+          audio: { output: { voice } },
           delegation: {
             type: "responses",
             responses: {
               model: "gpt-6.1-sol",
-              instructions: delegatorInstructions(viewing, tail),
+              instructions: instructions.delegator,
               tools,
               reasoning: { effort: "low" },
             },
@@ -158,7 +159,7 @@ export class VoiceTransport {
     this.stream = stream
     this.input = this.analyser(stream)
     await sender.replaceTrack(stream.getAudioTracks()[0])
-    this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 100)
+    this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 50)
   }
 
   send(event: VoiceClientEvent) {

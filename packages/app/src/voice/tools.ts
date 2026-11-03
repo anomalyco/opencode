@@ -1,4 +1,4 @@
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { decodeArguments, type ToolCall } from "./protocol"
@@ -7,7 +7,32 @@ import { messageExcerpts } from "./messages"
 import { formatHandoff, headerLapse } from "./handoff"
 import { folder, matchModels, SessionSearch } from "./search"
 
-type Request = { id: string; sessionID: string; transcript: string[] }
+type Request = { id: string; sessionID?: string; transcript: string[] }
+
+type Pending = { permissions: PermissionRequest[]; forms: FormInfo[] }
+
+const held =
+  "This session is waiting on the request and would hold anything sent until it's resolved. A message never answers it. When the user approved, picked, or answered, that is the answer: answer_question with their option values, or reply_permission. If they answered only some of a question's fields, ask about the rest before answering. A request for more or other work isn't an answer: dismiss_question with a note in their words. A permission they want something else instead of: reply_permission reject with a note in their words. Otherwise ask them. Then send again."
+
+function described(session: SessionInfo, pending: Pending) {
+  return {
+    session: session.title ?? session.id,
+    permissions: pending.permissions.map((request) => ({
+      request_id: request.id,
+      action: request.action,
+      resources: request.resources,
+      message: request.message,
+    })),
+    questions: pending.forms.map((form) => ({ form_id: form.id, title: form.title, fields: form.fields })),
+  }
+}
+
+/** A tool that needs a session ran while the call was on a draft whose session couldn't be created. */
+class NoSession extends Error {
+  constructor() {
+    super("There's no session yet: the call's new session couldn't be created. Create one with create_session first.")
+  }
+}
 
 export class VoiceTools {
   readonly replies = new ReplyWatch()
@@ -23,6 +48,8 @@ export class VoiceTools {
       open: (session: SessionInfo, signal: AbortSignal) => Promise<void>
       /** Session IDs with an open tab. */
       tabs: () => string[]
+      /** While the call is on a new-session draft, the session the call creates for it. */
+      draft?: () => Promise<SessionInfo | undefined> | undefined
     },
   ) {}
 
@@ -33,8 +60,13 @@ export class VoiceTools {
 
     const result = this.execute(call, request, signal)
       .then(JSON.stringify)
-      .catch(() =>
-        JSON.stringify({ error: "Tool request failed. Do not claim it succeeded or resend an uncertain admission." }),
+      .catch((error) =>
+        JSON.stringify({
+          error:
+            error instanceof NoSession
+              ? error.message
+              : "Tool request failed. Do not claim it succeeded or resend an uncertain admission.",
+        }),
       )
 
     this.calls.set(call.call_id, result)
@@ -68,11 +100,58 @@ export class VoiceTools {
     return page()
   }
 
+  /** Pending permission requests and questions in a session and its subagents. */
+  async requests(session: SessionInfo, signal: AbortSignal) {
+    const api = this.ctx.sdk.api
+    const location = { directory: session.location.directory }
+
+    const [permissions, forms] = await Promise.all([
+      api.permission.request.list({ location }, { signal }),
+      api.form.list({ location }, { signal }),
+    ])
+
+    const family = new Map([[session.id, Promise.resolve(true)]])
+
+    const within = (sessionID: string): Promise<boolean> => {
+      const known = family.get(sessionID)
+
+      if (known) return known
+
+      const found = api.session.get({ sessionID }, { signal }).then(
+        (child) => (child.parentID ? within(child.parentID) : false),
+        () => false,
+      )
+
+      family.set(sessionID, found)
+
+      return found
+    }
+
+    const kept = async <T extends { sessionID: string }>(items: T[]) => {
+      const inside = await Promise.all(items.map((item) => within(item.sessionID)))
+
+      return items.filter((_, index) => inside[index])
+    }
+
+    return { permissions: await kept(permissions.data), forms: await kept(forms.data) }
+  }
+
   private async execute(call: ToolCall, request: Request, signal: AbortSignal) {
     signal.throwIfAborted()
     const args = decodeArguments(call.arguments)
     const api = this.ctx.sdk.api
-    const sessionID = args.session_id ?? request.sessionID
+
+    // The session a tool acts on: the one it names, else the one on screen, else, on a draft, the session the call
+    // is creating for it, which later tools in the request then default to.
+    const target = async () => {
+      const id = args.session_id ?? request.sessionID ?? (await this.screen.draft?.())?.id
+
+      if (!id) throw new NoSession()
+      request.sessionID ??= id
+
+      return id
+    }
+
     const options = { signal }
 
     const row = (session: SessionInfo) => ({
@@ -83,9 +162,64 @@ export class VoiceTools {
     })
 
     if (call.name === "list_sessions") {
-      const sessions = await api.session.list({ limit: args.limit ?? 15, parentID: null, archived: false }, options)
+      const [sessions, active] = await Promise.all([
+        api.session.list({ limit: args.limit ?? 15, parentID: null, archived: false }, options),
+        api.session.active(options),
+      ])
 
-      return sessions.data.map(row)
+      return sessions.data.map((session) => ({
+        ...row(session),
+        working: session.id in active,
+        outcome: session.outcome,
+      }))
+    }
+
+    if (call.name === "end_call") return { ending: "after your reply is spoken; make it a short goodbye" }
+
+    if (call.name === "list_requests") {
+      const session = await api.session.get({ sessionID: await target() }, options)
+
+      return described(session, await this.requests(session, signal))
+    }
+
+    if (call.name === "reply_permission") {
+      if (!args.request_id || !args.decision) throw new Error("request_id and decision required")
+      const session = await api.session.get({ sessionID: await target() }, options)
+      const request = (await this.requests(session, signal)).permissions.find((item) => item.id === args.request_id)
+
+      if (!request)
+        return { error: "No pending permission request with that ID. Call list_requests; nothing was answered." }
+      await api.permission.reply(
+        {
+          sessionID: request.sessionID,
+          requestID: request.id,
+          decision: args.decision,
+          message: args.decision === "reject" ? args.note : undefined,
+        },
+        options,
+      )
+
+      return { replied: args.decision, session: session.title ?? session.id }
+    }
+
+    if (call.name === "answer_question" || call.name === "dismiss_question") {
+      if (!args.form_id) throw new Error("form_id required")
+      const session = await api.session.get({ sessionID: await target() }, options)
+      const form = (await this.requests(session, signal)).forms.find((item) => item.id === args.form_id)
+
+      if (!form) return { error: "No pending question with that ID. Call list_requests; nothing was answered." }
+
+      if (call.name === "dismiss_question") {
+        await api.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message: args.note }, options)
+
+        return { dismissed: true, session: session.title ?? session.id }
+      }
+
+      if (!args.answers || !Object.keys(args.answers).length)
+        throw new Error("answers must map each field key to its value")
+      await api.session.form.reply({ sessionID: form.sessionID, formID: form.id, answer: args.answers }, options)
+
+      return { answered: form.id, session: session.title ?? session.id }
     }
 
     if (call.name === "search_sessions") {
@@ -141,14 +275,14 @@ export class VoiceTools {
       if (!projects.some((project) => project.canonical === directory || project.sandboxes.includes(directory)))
         return { error: "Directory is not a known project or worktree on this server. No session was created." }
 
-      const source = await api.session.get({ sessionID: request.sessionID }, options)
+      const source = request.sessionID ? await api.session.get({ sessionID: request.sessionID }, options) : undefined
       signal.throwIfAborted()
 
       const created = this.ctx.data.session.create({
         location: { directory },
         title: args.title,
-        model: source.model,
-        agent: source.agent,
+        model: source?.model,
+        agent: source?.agent,
       })
 
       await created.request
@@ -179,6 +313,7 @@ export class VoiceTools {
     }
 
     if (call.name === "interrupt_session") {
+      const sessionID = await target()
       await api.session.interrupt({ sessionID }, options)
 
       return { interrupted: sessionID }
@@ -186,6 +321,7 @@ export class VoiceTools {
 
     if (call.name === "send_message") {
       if (!args.text?.trim()) throw new Error("text required")
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       signal.throwIfAborted()
       const id = SessionMessage.ID.create()
@@ -193,6 +329,15 @@ export class VoiceTools {
       const prompt = { sessionID, promptID: id, title: session.title ?? session.id, instruction: args.text }
       const explained = this.explained.get(sessionID)
       const full = explained === undefined || Date.now() - explained > headerLapse
+
+      // A steer would wait behind a pending request, and never answers it, so the delegator gets the requests to
+      // answer or dismiss first. Unreadable requests don't hold the message.
+      if (delivery === "steer") {
+        const pending = await this.requests(session, signal).catch(() => undefined)
+
+        if (pending && (pending.permissions.length || pending.forms.length))
+          return { ...described(session, pending), not_sent: true, note: held }
+      }
 
       // Like a typed steer, move blocking shells and subagents to the background so the agent reads it next. Tried
       // once and briefly: the steer goes either way, and an idle session makes it a no-op.
@@ -237,6 +382,7 @@ export class VoiceTools {
     }
 
     if (call.name === "list_models") {
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       const catalog = await api.model.list({ location: { directory: session.location.directory } }, options)
       const current = session.model
@@ -268,6 +414,7 @@ export class VoiceTools {
       const wanted = args.model?.trim()
 
       if (!wanted) throw new Error("model required")
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       const catalog = await api.model.list({ location: { directory: session.location.directory } }, options)
       const enabled = catalog.data.filter((item) => item.enabled)
@@ -300,8 +447,13 @@ export class VoiceTools {
     }
 
     if (call.name === "read_session" || call.name === "wait_for_session") {
+      const sessionID = await target()
+
       if (call.name === "wait_for_session") {
-        await api.experimental.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
+        await api.experimental.session.wait(
+          { sessionID },
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) },
+        )
       }
 
       const [session, messages] = await Promise.all([
