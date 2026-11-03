@@ -30,6 +30,8 @@ import { makeSchedule } from "./schedule"
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
     const tickets = yield* PtyTicket.Service
+    const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
@@ -41,8 +43,6 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     // middleware/session-location.ts provides them. Resolution is best effort: terminals whose session or
     // location cannot be resolved keep the process-global environment shell, as before this change.
     const configuredShell = Effect.fn("PersistentPty.configuredShell")(function* (sessionID: Session.ID) {
-      const sessions = yield* Session.Service
-      const instances = yield* Instance.Service
       const session = yield* sessionInfo(sessions, sessionID).pipe(Effect.option)
       if (Option.isNone(session)) return undefined
       const shell = yield* instances
