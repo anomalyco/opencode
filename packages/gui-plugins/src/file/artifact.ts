@@ -199,10 +199,12 @@ function readProperty(head: string, rest: string[]): FrontmatterProperty | undef
     const quoted = /^"([^"\\]*)"$|^'([^']*)'$/.exec(value)
 
     if (!quoted || block.length > 0) return
+
     return { key, value: quoted[1] ?? quoted[2], code: false }
   }
 
   if (comment.test(value)) return
+
   if (block.length === 0) return { key, value, code: false }
   const indent = Math.min(...block.flatMap((line) => (line.trim() ? [line.length - line.trimStart().length] : [])))
   const lines = block.map((line) => line.slice(indent))
