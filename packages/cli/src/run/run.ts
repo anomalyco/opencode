@@ -25,6 +25,7 @@ export type RunCommandInput = {
   format: "default" | "json"
   file: string[]
   title?: string
+  archived?: boolean
   thinking?: boolean
   auto?: boolean
 }
@@ -140,11 +141,14 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   if (!target) return
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
-  if (!target.resume && input.title !== undefined) {
-    await client.session.update({
-      sessionID: target.session.id,
-      title: input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : ""),
-    })
+  const title =
+    !target.resume && input.title !== undefined
+      ? input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : "")
+      : undefined
+  // Archive before the first prompt is admitted, so the run never reaches an inbox as working or finished.
+  const archived = input.archived && (!target.resume || input.fork) ? true : undefined
+  if (title !== undefined || archived) {
+    await client.session.update({ sessionID: target.session.id, title, archived })
   }
 
   await runNonInteractivePrompt({
