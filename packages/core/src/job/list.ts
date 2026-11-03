@@ -4,7 +4,8 @@ import { Job } from "@opencode/schema/job"
 import { asc } from "drizzle-orm"
 import { Effect, Schema, SynchronizedRef } from "effect"
 import type { Database } from "../database/database.js"
-import { type Info, type Recovery, RecoverySchema } from "../job.js"
+import type { Info } from "../job.js"
+import { type Recovery, RecoverySchema } from "./recovery.js"
 import { JobTable } from "./sql.js"
 
 export type Item = Job.Info

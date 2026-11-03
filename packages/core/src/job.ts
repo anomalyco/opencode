@@ -5,31 +5,12 @@ import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Sc
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
 import { JobList } from "./job/list.js"
+import { type Recovery, RecoverySchema } from "./job/recovery.js"
 import { JobTable } from "./job/sql.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 
-export const RecoverySchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("shell"),
-    sessionID: SessionSchema.ID,
-    shellID: Schema.String,
-    command: Schema.String,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("subagent"),
-    parentSessionID: SessionSchema.ID,
-    childSessionID: SessionSchema.ID,
-    agent: Schema.String,
-    description: Schema.String,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("image"),
-    sessionID: SessionSchema.ID,
-    path: Schema.String,
-    model: Schema.String,
-  }),
-])
+export type { Recovery }
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -41,7 +22,6 @@ const Background = Schema.Struct({
 })
 
 export type Background = typeof Background.Type
-export type Recovery = Background["recovery"]
 export type Status = Background["status"]
 
 const decodeBackground = Schema.decodeUnknownResult(Background)
