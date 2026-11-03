@@ -205,19 +205,28 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   // Replay the images in order, dropping the oldest down to the target whenever the kept payload passes the trigger.
   // A new image then moves the cut only every (trigger - target) bytes instead of on every request, so the replaced
   // prefix, and with it the provider's prompt cache, stays the same between cuts.
+  // Zero-byte images (remote or provider-referenced) carry no inline payload, so they never
+  // take a cut slot: skipping them keeps the removal set to the oldest images that actually
+  // free bytes, instead of spending cuts on content that is free to keep.
+  const removed = new Set<number>()
   let cut = 0
   let kept = 0
   for (const size of sizes) {
     kept += size
     if (kept <= IMAGE_BYTES_TRIGGER) continue
-    while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
+    while (kept > IMAGE_BYTES_TARGET) {
+      const removedSize = sizes[cut++]!
+      if (removedSize === 0) continue
+      removed.add(cut - 1)
+      kept -= removedSize
+    }
   }
-  if (cut === 0) return messages
+  if (removed.size === 0) return messages
 
   let index = 0
   return replaceMedia(messages, (media) => {
     if (!isImage(media.mime)) return
-    return index++ < cut ? IMAGE_REMOVED : undefined
+    return removed.has(index++) ? IMAGE_REMOVED : undefined
   })
 }
 
