@@ -19,7 +19,7 @@ Stats is a separate site from the console. Runtime, database, and domain service
 
 The sync reads aggregates from R2 SQL and writes them to the stats PlanetScale database. It runs on the `dev` and `production` stages as a Cloudflare Workflow, `StatsSyncWorkflow`, defined in `infra/stats.ts`.
 
-Each run has a `plan` step, then one step per stat period (`week 2026-W45`, `day 2026-11-03`) and one per retention cohort (`retention 2026-10-05`). The plan snapshots the model catalog once, so every step attributes models the same way. Steps run one at a time and retry twice with exponential backoff. A rejected query (HTTP 400, 401 or 403) or a result over the 10,000-row limit fails its step without retrying, since a retry repeats the same R2 SQL spend. A failed step does not stop the others, but the run ends as errored.
+Each run has a `plan` step, then one step per stat period (`week 2026-W45`, `day 2026-11-03`) and one per retention cohort (`retention 2026-10-05`). The plan snapshots the model catalog once, so every step attributes models the same way. Steps run one at a time and retry twice with exponential backoff. A rejected query (HTTP 400, 401 or 403) or a result over the 10,000-row limit fails its step after one attempt, since a retry repeats the same R2 SQL spend. A failed step does not stop the others, but the run ends as errored and logs each failed step with its error. Because queries run per period, expect an hourly run to take about 15 to 25 minutes and a history run about 2 to 3.5 hours. These are estimates until measured on a deployed stage.
 
 The `StatsSyncCron` Worker starts runs on two schedules:
 
@@ -34,7 +34,7 @@ To start a run by hand, find the Workflow's name with `bunx wrangler workflows l
 bunx wrangler workflows trigger <workflow-name> '{"history":true}' --id stats-history-2026-11-03
 ```
 
-Omit `history` for an hourly run. If the ID already exists, that slot has run; wait for the next one. You can also trigger a run from the Workflow's page in the Cloudflare dashboard.
+Omit `history` for an hourly run. If the ID already exists, that slot has run; wait for the next one. You can also trigger a run from the Workflow's page in the Cloudflare dashboard; without params it runs as an hourly pass.
 
 To run one sync pass on your machine against a stage's resources, run `bun sst shell --stage=<stage> -- bun run --cwd packages/stats/server sync`, adding `--history` for a history pass. `sst dev` also offers it as the `StatsSync` command.
 
