@@ -64,6 +64,21 @@ for (const variant of ["classic", "experimental"] as const) {
     await files.click({ position: { x: 4, y: 4 } })
     await expect(files).not.toBeChecked()
   })
+
+  story(`${variant} question text links URLs`, async ({ mount, page }) => {
+    await page.addInitScript(
+      (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+      variant === "experimental",
+    )
+
+    const component = await mount("session-question-switch--link-prompt")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const url = "https://www.npmjs.com/auth/cli/2ff15723-dfa2-4eec-addd-53cb3ff7597f"
+    const link = question.locator('[data-slot="question-text"]').getByRole("link", { name: url, exact: true })
+
+    await expect(link).toHaveAttribute("href", url)
+    await expect(link).toHaveAttribute("target", "_blank")
+  })
 }
 
 story(
