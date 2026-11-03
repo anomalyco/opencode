@@ -3,15 +3,22 @@ import { Effect, Schema } from "effect"
 import { EnvironmentFiles } from "../environment/files.js"
 
 /** Confined discovery never installs packages or opens files through host filesystem services. */
-export function confined(files: EnvironmentFiles.Files, directory: string, bin: string) {
+export function confined(files: EnvironmentFiles.Files, directory: string, worktree: string, bin: string) {
   const exists = (target: string) => EnvironmentFiles.exists(files, target).pipe(Effect.orElseSucceed(() => false))
   const readFileString = (target: string) =>
     files.read(target).pipe(Effect.map((result) => new TextDecoder().decode(result.bytes)))
   const readJson = (target: string) =>
     readFileString(target).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))))
+  const directories: string[] = []
+  for (let current = path.resolve(directory); ; current = path.dirname(current)) {
+    directories.push(current)
+    if (current === path.resolve(worktree) || path.dirname(current) === current) break
+  }
   const findUp = (target: string) =>
-    // The Location is the workspace root; do not discover configuration above it.
-    exists(path.join(directory, target)).pipe(Effect.map((found) => (found ? [path.join(directory, target)] : [])))
+    Effect.forEach(directories, (current) => {
+      const file = path.join(current, target)
+      return exists(file).pipe(Effect.map((found) => (found ? [file] : [])))
+    }).pipe(Effect.map((found) => found.flat()))
   const findExecutable = (name: string) =>
     Effect.gen(function* () {
       const paths = [...(process.env.PATH ?? "").split(path.delimiter), bin]
@@ -24,8 +31,13 @@ export function confined(files: EnvironmentFiles.Files, directory: string, bin: 
     })
   const packageBinary = (pkg: string) => {
     const name = pkg === "@biomejs/biome" ? "biome" : pkg
-    const target = path.join(directory, "node_modules", ".bin", name)
-    return exists(target).pipe(Effect.map((found) => (found ? target : undefined)))
+    return Effect.gen(function* () {
+      for (const current of directories) {
+        const target = path.join(current, "node_modules", ".bin", name)
+        if (yield* exists(target)) return target
+      }
+      return undefined
+    })
   }
   return { findUp, readFileString, readJson, findExecutable, packageBinary }
 }

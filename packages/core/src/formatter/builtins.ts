@@ -28,7 +28,7 @@ export function make(input: {
 }) {
   const disabled = false as const
   const discovery = input.sandbox.enabled
-    ? FormatterDiscovery.confined(input.files, input.directory, input.bin)
+    ? FormatterDiscovery.confined(input.files, input.directory, input.worktree, input.bin)
     : undefined
   const findExecutable = (name: string) =>
     discovery ? discovery.findExecutable(name) : Effect.sync(() => which(name, undefined, input.bin))

@@ -13,6 +13,7 @@ import { FileAccess } from "../src/file-access"
 import { FileMutation } from "../src/file-mutation"
 import { Formatter } from "../src/formatter"
 import { make } from "../src/formatter/builtins"
+import { FormatterDiscovery } from "../src/formatter/discovery"
 import { Location } from "../src/location"
 import { Permission } from "../src/permission"
 import { Ripgrep } from "../src/ripgrep"
@@ -590,6 +591,51 @@ echo formatted >> formats.log
   }),
 )
 
+kernel("formatter discovery uses a readable project ancestor without host file access", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture()
+    const nested = path.join(f.directory, "nested")
+    const packageFile = path.join(f.directory, "package.json")
+    const prettier = path.join(f.directory, "node_modules", ".bin", "prettier")
+    yield* Effect.promise(async () => {
+      await fs.mkdir(nested)
+      await fs.mkdir(path.dirname(prettier), { recursive: true })
+      await fs.writeFile(packageFile, JSON.stringify({ devDependencies: { prettier: "*" } }))
+      await fs.writeFile(prettier, "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+    })
+    yield* Effect.gen(function* () {
+      const processes = yield* AppProcess.Service
+      for (const grant of [false, true]) {
+        const policy = yield* Effect.promise(() =>
+          MacSandbox.policy(
+            {
+              directory: nested,
+              scratch: f.host.scratch,
+              home: f.host.home,
+              config: f.host.config,
+              data: f.host.data,
+              state: f.host.state,
+            },
+            { readableRoots: grant ? [f.directory] : [] },
+          ),
+        )
+        const launch = MacSandbox.fileLaunch(
+          policy,
+          yield* Effect.promise(() => fs.realpath(process.execPath)),
+          SandboxFileWorker.configured(policy),
+        )
+        const files = SandboxFiles.make({ process: processes, launch, directory: nested, cwd: f.host.scratch })
+        const discovery = FormatterDiscovery.confined(files, nested, f.directory, f.directory)
+        expect((yield* Effect.exit(discovery.readJson(packageFile)))._tag).toBe(grant ? "Success" : "Failure")
+        if (grant) {
+          expect(yield* discovery.findUp("package.json")).toContain(packageFile)
+          expect(yield* discovery.packageBinary("prettier")).toBe(prettier)
+        }
+      }
+    }).pipe(Effect.provide(LayerNode.compile(AppProcess.node)))
+  }),
+)
+
 kernel("built-in formatter discovery confines probes and config reads and uses installed workspace packages", () =>
   Effect.gen(function* () {
     const f = yield* fixture()
@@ -613,6 +659,8 @@ echo uv >> "$3"
       )
       await fs.writeFile(path.join(f.directory, "a.py"), "")
       await fs.writeFile(path.join(f.directory, "a.js"), "")
+      await fs.mkdir(path.join(f.directory, "nested"))
+      await fs.writeFile(path.join(f.directory, "nested", "a.js"), "")
       await fs.writeFile(path.join(f.host.home, "package.json"), JSON.stringify({ devDependencies: { prettier: "*" } }))
     })
     yield* withEnv({ PATH: bin, OUTSIDE: f.host.home, PROBES: path.join(f.directory, "probes.log") }, () =>
@@ -638,6 +686,11 @@ echo uv >> "$3"
             yield* formatter.transform((editor) => make(input).forEach(editor.set))
             expect(yield* formatter.file(path.join(f.directory, "a.py"))).toBe(true)
             expect(yield* formatter.file(path.join(f.directory, "a.js"))).toBe(true)
+            yield* formatter.transform((editor) =>
+              make({ ...input, directory: path.join(f.directory, "nested") }).forEach(editor.set),
+            )
+            expect(yield* formatter.file(path.join(f.directory, "nested", "a.js"))).toBe(true)
+            yield* formatter.transform((editor) => make(input).forEach(editor.set))
             yield* Effect.promise(async () => {
               await fs.unlink(path.join(f.directory, "package.json"))
               await fs.symlink(path.join(f.host.home, "package.json"), path.join(f.directory, "package.json"))
@@ -650,6 +703,9 @@ echo uv >> "$3"
     )
     expect(yield* Effect.promise(() => fs.readFile(path.join(f.directory, "a.py"), "utf8"))).toBe("uv\n")
     expect(yield* Effect.promise(() => fs.readFile(path.join(f.directory, "a.js"), "utf8"))).toBe("prettier\n")
+    expect(yield* Effect.promise(() => fs.readFile(path.join(f.directory, "nested", "a.js"), "utf8"))).toBe(
+      "prettier\n",
+    )
     expect(yield* Effect.promise(() => fs.readFile(path.join(f.directory, "probes.log"), "utf8"))).toContain(
       "format --help\n",
     )
