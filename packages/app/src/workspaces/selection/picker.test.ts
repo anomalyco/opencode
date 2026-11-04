@@ -14,7 +14,6 @@ const remote = {
   status: { type: "ready", http: { url: "http://localhost:4096" } },
   authenticate: () => false,
   managed: true,
-  http: { url: "http://localhost:4096" },
 } as const
 
 describe("directoryPickerKind", () => {

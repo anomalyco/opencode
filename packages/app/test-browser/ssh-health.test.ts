@@ -13,7 +13,6 @@ function plugin(status: () => PluginServerStatus): ServerConnection.Plugin {
     key: "ssh:fixture",
     plugin: "ssh",
     managed: true,
-    http: { url: "http://127.0.0.1:0" },
     authenticate: () => false,
     get status() {
       return status()

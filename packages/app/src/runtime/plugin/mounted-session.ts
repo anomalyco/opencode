@@ -69,7 +69,7 @@ export function createMountedSession(session: SessionModel) {
       return server.ctx.sdk.url
     },
     get password() {
-      return server.conn.http.password
+      return server.ctx.sdk.http.password
     },
     get client() {
       return server.ctx.sdk.api

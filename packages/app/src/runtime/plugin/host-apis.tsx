@@ -526,7 +526,7 @@ export function createPluginAttachment(apis: HostApis) {
         return live().sdk.url
       },
       get password() {
-        return live().sdk.server.http.password
+        return live().sdk.http.password
       },
       get client() {
         return live().sdk.api

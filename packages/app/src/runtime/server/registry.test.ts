@@ -55,7 +55,7 @@ test("startup auth_token credentials override a persisted same-url server; witho
   })
 
   expect(kept).toHaveLength(1)
-  expect(kept[0]?.http).toEqual({ url, password: "saved" })
+  expect(kept[0] && ServerConnection.http(kept[0])).toEqual({ url, password: "saved" })
   expect(kept[0]?.type === "http" ? kept[0].authToken : true).toBeUndefined()
 })
 
@@ -71,14 +71,11 @@ test("treats WSL and mismatched-port loopback servers as remote connections", ()
         status: { type: "ready", http: { url: "http://127.0.0.1:4097" } },
         authenticate: () => false,
         managed: false,
-        http: { url: "http://127.0.0.1:4097" },
       },
       windowsSidecar,
     ),
   ).toBe(false)
-  expect(
-    ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } }),
-  ).toBe(true)
+  expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } })).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28894" } }, windowsSidecar)).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28894" } }, windowsSidecar)).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } }, windowsSidecar)).toBe(false)
