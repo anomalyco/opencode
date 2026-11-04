@@ -1114,6 +1114,7 @@ name = "opencode-parity"
 version = "0.1.0"
 dependencies = [
  "opentui",
+ "regex",
  "serde",
  "serde_json",
 ]
@@ -1174,6 +1175,7 @@ dependencies = [
  "opencode-latex",
  "opencode-local",
  "opencode-mermaid",
+ "opencode-parity",
  "opencode-plugin",
  "opencode-service",
  "opencode-store",
