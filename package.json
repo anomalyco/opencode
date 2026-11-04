@@ -51,7 +51,7 @@
       "@effect/sql-sqlite-node": "4.1.0",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.3",
-      "@hona/strobe": "0.2.0",
+      "@hona/strobe": "0.3.0",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@opentui/core": "0.8.1",
@@ -114,6 +114,7 @@
   },
   "devDependencies": {
     "@ast-grep/cli": "0.44.0",
+    "@hona/strobe": "catalog:",
     "@opencode/client": "workspace:*",
     "@oxlint/plugins": "1.60.0",
     "@tsconfig/bun": "catalog:",
