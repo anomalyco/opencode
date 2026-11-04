@@ -21,7 +21,7 @@ await renderComponent({
         {
           variant: "error",
           title: "Failed to load theme: mine",
-          message: "Color reference \"missing\" not found in defs or theme",
+          message: 'Color reference "missing" not found in defs or theme',
         },
       ]}
     />
