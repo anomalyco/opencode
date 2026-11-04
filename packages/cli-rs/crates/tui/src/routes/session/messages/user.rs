@@ -1,10 +1,11 @@
 //! User messages (E.6a): `UserMessage` (`routes/session/index.tsx:2354-2479`). The text on a raised
-//! surface behind a bar in the agent's color, its images (E.6b), then skill and file chips. The
-//! pending-steer and message dialogs are E.10b's and DLG38's.
+//! surface behind a bar in the agent's color, its images (E.6b), then skill and file chips. A click
+//! opens E.10b's pending steer or message actions dialog.
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
-use opencode_api::generated::{PromptFileSource, SessionMessageUser};
+use opencode_api::generated::{PromptFileSource, SessionInboxDelivery, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
 use opentui::prelude::*;
 
@@ -19,6 +20,8 @@ pub struct User {
     images: Images,
     color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
+    /// The message a click opens dialogs for.
+    id: Rc<RefCell<String>>,
 }
 
 impl User {
@@ -52,6 +55,28 @@ impl User {
         body.on_hover(move |_, hover| {
             target.bg(if hover { hovered } else { raised });
         });
+        // A release (`onMouseUp`) opens the pending steer dialog for a prompt waiting to steer, else the message
+        // actions (E.10b); a release that ends a text selection opens neither.
+        let id = Rc::new(RefCell::new(String::new()));
+        let (weak, session, clicked) = (cx.tui.weak(), cx.session.clone(), id.clone());
+        body.on_mouse(move |_, event| {
+            if event.kind != MouseEventKind::Up(MouseButton::Left) {
+                return;
+            }
+            let Some(tui) = weak.upgrade() else { return };
+            if tui.app.selected_text().is_some_and(|text| !text.is_empty()) {
+                return;
+            }
+            let message = clicked.borrow().clone();
+            let delivery = tui
+                .data
+                .read(|state| crate::routes::session::queued::delivery(state, &session, &message));
+            if delivery == Some(SessionInboxDelivery::Steer) {
+                crate::dialogs::pending_steer::show(&tui, session.clone(), message);
+                return;
+            }
+            crate::dialogs::message::show(&tui, session.clone(), message);
+        });
         let images = Images::new(cx, 2);
         let root = View::new(cx.app)
             .column()
@@ -68,6 +93,7 @@ impl User {
             images,
             color: Cell::new(None),
             rendered: RefCell::default(),
+            id,
         }
     }
 
@@ -76,8 +102,14 @@ impl User {
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageUser) {
-        // The bar takes the session's agent color, which changes when the agents load.
-        let color = cx.agent_color(cx.session_agent.unwrap_or("build"));
+        message.id.0.clone_into(&mut self.id.borrow_mut());
+        // The bar takes the session's agent color, which changes when the agents load; a prompt still in the inbox
+        // takes the border color.
+        let pending = crate::routes::session::queued::delivery(cx.state, cx.session, &message.id.0);
+        let color = match pending {
+            Some(_) => cx.theme.border.base,
+            None => cx.agent_color(cx.session_agent.unwrap_or("build")),
+        };
         if self.color.replace(Some(color)) != Some(color) {
             self.root.border_color(color);
         }

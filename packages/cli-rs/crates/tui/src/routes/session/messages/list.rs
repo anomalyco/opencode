@@ -455,11 +455,14 @@ impl Inner {
                 }
                 None => messages,
             };
-            let mut specs = grouping::project(
-                reduce(messages, self.turn_tokens.is_some()),
-                messages,
-                self.groups.verbosity.get(),
-            );
+            // Queued prompts show in the dock (E.10b), not the transcript (`rows.ts:63-67`).
+            let queued: HashSet<String> = crate::routes::session::queued::prompts(state, &session)
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
+            let mut rows = reduce(messages, self.turn_tokens.is_some());
+            rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id)));
+            let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
             // Compactions waiting in the inbox go last (`createSessionRows`).
             specs.extend(
                 state

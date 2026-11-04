@@ -10,9 +10,8 @@ use indexmap::IndexMap;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
     AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID,
-    SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionPromptInput,
-    SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
-    SessionSyntheticInput,
+    SessionInboxDelivery, SessionInboxInfo, SessionPromptInput, SessionRevertCommitInput,
+    SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput, SessionSyntheticInput,
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
@@ -456,27 +455,13 @@ fn steer_first_queued(tui: &Tui, session: &SessionID) -> bool {
     let Some(inbox) = queued else {
         return false;
     };
-    let client = tui.data.client().clone();
-    let input = SessionInboxUpdateInput {
-        session_id: session.clone(),
-        inbox_id: inbox,
-        delivery: SessionInboxDelivery::Steer,
-    };
-    let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_inbox_update(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts.show(
-                    ToastOptions::new(Variant::Error, error.to_string())
-                        .title("Failed to steer pending prompt"),
-                );
-            }
-        },
+    crate::routes::session::queued::mutate(
+        tui,
+        session,
+        crate::routes::session::queued::Action::Steer,
+        &inbox.0,
+        None,
+        |_, _| {},
     );
     true
 }
