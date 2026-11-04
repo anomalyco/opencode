@@ -3,11 +3,11 @@
 //! [`Dialogs`] is the `DialogProvider`: one host over the whole screen that shows the top entry inside the dimmed
 //! backdrop and panel, pushes the `modal` input mode while a dialog is open, and binds Escape and Ctrl+C to close
 //! it. A dialog's content is built by a closure that receives a [`DialogCx`]: the app, the keymap, the dialog
-//! surface of the theme, and layer registration tied to the entry's lifetime. [`header`], [`layout`], [`footer`],
-//! and [`legacy_button`] are `DialogHeader`, `DialogLayout`, `DialogFooter`, and the legacy footer button.
+//! surface of the theme, and layer registration tied to the entry's lifetime. [`header`], [`layout`], and
+//! [`footer`] are `DialogHeader`, `DialogLayout`, and `DialogFooter`.
 //!
-//! The kit draws the layout the TUI draws while the `new-designs` experiment is off, its default
-//! (`config/index.tsx:394-397`); [`Dialogs::set_new_designs`] switches the parts that differ.
+//! The kit draws the dialogs as the TUI does with the `new-designs` experiment on (`config/index.tsx:394-397`),
+//! the only design the Rust client implements.
 
 use crate::keymap::{KeymapLayer, TuiKeymap};
 use crate::theme::{Surface, Theme};
@@ -68,7 +68,6 @@ struct Inner {
     app: App,
     keymap: Rc<DialogKeymap>,
     theme: RefCell<Theme>,
-    new_designs: Cell<bool>,
     host: View,
     backdrop: View,
     panel: View,
@@ -105,7 +104,6 @@ impl Dialogs {
             app: app.clone(),
             keymap,
             theme: RefCell::new(theme),
-            new_designs: Cell::new(false),
             host,
             backdrop,
             panel,
@@ -221,7 +219,6 @@ impl Dialogs {
             dialogs: self.clone(),
             keymap: self.0.keymap.clone(),
             theme: self.0.theme.borrow().surface(Surface::Dialog),
-            new_designs: self.0.new_designs.get(),
             layers: RefCell::new(Vec::new()),
             editors: RefCell::new(Vec::new()),
             focus: RefCell::new(None),
@@ -370,11 +367,6 @@ impl Dialogs {
         self.layout_frame();
     }
 
-    /// The `new-designs` experiment for dialogs opened from now on.
-    pub fn set_new_designs(&self, on: bool) {
-        self.0.new_designs.set(on);
-    }
-
     pub fn keymap(&self) -> &Rc<DialogKeymap> {
         &self.0.keymap
     }
@@ -403,7 +395,6 @@ pub struct DialogCx {
     pub keymap: Rc<DialogKeymap>,
     /// The dialog surface of the theme (TS `useTheme().surface("dialog")`).
     pub theme: Theme,
-    pub new_designs: bool,
     layers: RefCell<Vec<Disposer>>,
     editors: RefCell<Vec<Box<dyn Fn() -> bool>>>,
     focus: RefCell<Option<AnyWidget>>,
@@ -453,7 +444,7 @@ pub struct HeaderProps {
     /// Runs when the close label is clicked; [`Dialogs::clear`] by default.
     pub on_close: Option<Rc<dyn Fn()>>,
     pub gap: Option<u32>,
-    /// Muted line below the title, under `new-designs`.
+    /// Muted line below the title.
     pub description: Option<String>,
 }
 
@@ -469,11 +460,7 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
             row.add(&view);
         }
         None => {
-            let title = Text::new(&cx.app, props.title).fg(theme.text.base);
-            if !cx.new_designs {
-                title.bold();
-            }
-            row.add(&title);
+            row.add(&Text::new(&cx.app, props.title).fg(theme.text.base));
         }
     }
     let close = Text::new(&cx.app, props.close_label.as_deref().unwrap_or("esc"))
@@ -490,7 +477,7 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
         }
     });
     row.add(&close);
-    match props.description.filter(|_| cx.new_designs) {
+    match props.description.filter(|description| !description.is_empty()) {
         Some(description) => View::new(&cx.app).child(&row).child(
             &Text::new(&cx.app, description)
                 .fg(theme.text.muted)
@@ -501,24 +488,35 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
 }
 
 /// `DialogLayout`: header, body, and footer, one blank row between each and one at the bottom, with the side
-/// padding. `footer` is shown under `new-designs`; `legacy_footer`, when given, replaces it otherwise.
+/// padding.
 pub fn layout(
     cx: &DialogCx,
     header: &impl Widget,
     body: &impl Widget,
     footer: Option<FooterProps>,
-    legacy_footer: Option<View>,
 ) -> View {
-    layout_with(cx, header, body, footer, legacy_footer, DIALOG_INSET, 1)
+    layout_with(cx, header, body, footer, DIALOG_INSET, 1)
 }
 
-/// [`layout`] with the side padding and, under `new-designs`, the rows between the body and the footer.
+/// [`layout`] with the side padding and the blank rows between the body and the footer (`footerGap`).
 pub fn layout_with(
     cx: &DialogCx,
     header: &impl Widget,
     body: &impl Widget,
     footer: Option<FooterProps>,
-    legacy_footer: Option<View>,
+    inset: u32,
+    footer_gap: u32,
+) -> View {
+    let footer = footer.map(|props| self::footer(cx, props));
+    layout_view(cx, header, body, footer.as_ref(), inset, footer_gap)
+}
+
+/// [`layout_with`] with a footer the caller built, such as a view it refills.
+pub fn layout_view(
+    cx: &DialogCx,
+    header: &impl Widget,
+    body: &impl Widget,
+    footer: Option<&View>,
     inset: u32,
     footer_gap: u32,
 ) -> View {
@@ -528,19 +526,12 @@ pub fn layout_with(
         .gap(1);
     root.add(header);
     let wrapper = View::new(&cx.app).child(body);
-    if cx.new_designs && footer.is_some() {
+    if footer.is_some() {
         wrapper.padding_edge(Edge::Bottom, footer_gap.saturating_sub(1));
     }
     root.add(&wrapper);
-    match legacy_footer.filter(|_| !cx.new_designs) {
-        Some(legacy) => {
-            root.add(&legacy);
-        }
-        None => {
-            if let Some(footer) = footer {
-                root.add(&self::footer(cx, footer));
-            }
-        }
+    if let Some(footer) = footer {
+        root.add(footer);
     }
     root
 }
@@ -600,10 +591,10 @@ pub struct FooterProps {
     pub children: Vec<AnyWidget>,
 }
 
-/// `DialogFooter`.
+/// `DialogFooter`: a raised band across the dialog, flush with its bottom, once it has anything to show. The
+/// secondary group wraps instead of overlapping the primary group, which keeps its width.
 pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     let theme = &cx.theme;
-    let new_designs = cx.new_designs;
     let narrow = cx.width() < 60;
     let resolve = |actions: Vec<FooterAction>| -> Vec<FooterAction> {
         actions
@@ -620,13 +611,18 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     };
     let secondary = resolve(props.secondary);
     let primary = resolve(props.primary);
-    let band =
-        new_designs && (!secondary.is_empty() || !primary.is_empty() || !props.children.is_empty());
+    // A hidden child is content that renders nothing in TS.
+    let band = !secondary.is_empty()
+        || !primary.is_empty()
+        || props.children.iter().any(|child| child.is_visible());
     let root = View::new(&cx.app)
         .row()
         .justify(Justify::SpaceBetween)
+        .gap(2)
         .shrink(0.0);
     if band {
+        // Hoverable actions carry one cell of padding on each side; the band gives that cell back so labels keep
+        // their column.
         let inset = DIALOG_INSET + props.inset.unwrap_or(0) - 1;
         root.margin_edge(Edge::Left, -(DIALOG_INSET as i32))
             .margin_edge(Edge::Right, -(DIALOG_INSET as i32))
@@ -637,20 +633,17 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     } else if let Some(inset) = props.inset {
         root.padding_x(inset);
     }
-    if new_designs {
-        root.gap(2);
-    }
-    let left = View::new(&cx.app).direction(if narrow {
-        FlexDirection::Column
-    } else {
-        FlexDirection::Row
-    });
-    if !narrow && !new_designs {
-        left.gap(2);
-    }
-    if new_designs {
-        // TS also sets `columnGap: 1` here; opentui-rust's `Widget` has no per-axis gap yet.
-        left.flex_wrap(Wrap::Wrap).shrink(1.0).min_width(0);
+    let left = View::new(&cx.app)
+        .direction(if narrow {
+            FlexDirection::Column
+        } else {
+            FlexDirection::Row
+        })
+        .flex_wrap(Wrap::Wrap)
+        .shrink(1.0)
+        .min_width(0);
+    if !narrow {
+        left.column_gap(1);
     }
     for child in &props.children {
         left.add(child);
@@ -658,12 +651,7 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     for action in secondary {
         left.add(&footer_item(cx, action, false));
     }
-    let right = View::new(&cx.app)
-        .row()
-        .gap(if new_designs { 1 } else { 2 });
-    if new_designs {
-        right.shrink(0.0);
-    }
+    let right = View::new(&cx.app).row().gap(1).shrink(0.0);
     for action in primary {
         right.add(&footer_item(cx, action, true));
     }
@@ -688,25 +676,6 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
         spans.push(format!(" {key}").fg(key_fg));
     }
     let text = Text::new(&cx.app, spans);
-    let trigger = {
-        let action = action.clone();
-        move || {
-            if action.disabled {
-                return;
-            }
-            if let Some(run) = &action.on_trigger {
-                run();
-            }
-        }
-    };
-    if !cx.new_designs {
-        text.on_mouse(move |_cx, event| {
-            if matches!(event.kind, MouseEventKind::Up(_)) {
-                trigger();
-            }
-        });
-        return text.as_any();
-    }
     let item = View::new(&cx.app).padding_x(1).shrink(0.0).child(&text);
     let hovered = if primary {
         theme.background.action.primary.hovered
@@ -723,29 +692,14 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
         });
     });
     item.on_mouse(move |_cx, event| {
-        if matches!(event.kind, MouseEventKind::Up(_)) {
-            trigger();
-        }
-    });
-    item.as_any()
-}
-
-/// The legacy footer's highlighted button, right-aligned, as `DialogAlert` and `DialogHelp` draw `ok`.
-pub fn legacy_button(cx: &DialogCx, label: &str, padding: u32, run: impl Fn() + 'static) -> View {
-    let theme = &cx.theme;
-    let button = View::new(&cx.app)
-        .padding_x(padding)
-        .bg(theme.background.action.primary.focused)
-        .child(&Text::new(&cx.app, label).fg(theme.text.action.primary.focused));
-    button.on_mouse(move |_cx, event| {
-        if matches!(event.kind, MouseEventKind::Up(_)) {
+        if matches!(event.kind, MouseEventKind::Up(_))
+            && !action.disabled
+            && let Some(run) = &action.on_trigger
+        {
             run();
         }
     });
-    View::new(&cx.app)
-        .row()
-        .justify(Justify::End)
-        .child(&button)
+    item.as_any()
 }
 
 /// Sends keys to the keymap before any widget, as the TUI's keymap provider does: a key the keymap handles does

@@ -78,6 +78,8 @@ pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>) -> View {
             .collect()
     });
     let mut props = SelectProps::dynamic("Commands", options);
+    props.search_in_title = true;
+    props.title_placeholder = Some("Search commands".into());
     props.flat = true;
     props.filter_threshold = 0.7;
     select(cx, props).0
