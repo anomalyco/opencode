@@ -6,8 +6,9 @@
 //! one writer queue, so they reach the client in the order they were sent.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use serde_json::{Map, Value, json};
@@ -21,6 +22,9 @@ use crate::error::{Failure, RpcError};
 pub const MAX_MESSAGE_BYTES: usize = 32 * 1024 * 1024;
 
 const CANCEL_REQUEST: &str = "$/cancel_request";
+
+/// How long a closed input waits for queued messages to be written.
+const DRAIN_ON_EOF: Duration = Duration::from_millis(500);
 
 /// Why the connection closed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +94,9 @@ struct Inner {
     incoming: Mutex<HashMap<String, CancellationToken>>,
     next_id: AtomicU64,
     closed: CancellationToken,
+    /// Messages queued and not yet written.
+    unwritten: AtomicUsize,
+    written: tokio::sync::Notify,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -115,6 +122,8 @@ impl Connection {
                 responded: Mutex::default(),
                 incoming: Mutex::default(),
                 next_id: AtomicU64::new(0),
+                unwritten: AtomicUsize::new(0),
+                written: tokio::sync::Notify::new(),
                 closed: CancellationToken::new(),
             }),
         };
@@ -130,6 +139,7 @@ impl Connection {
         if self.inner.closed.is_cancelled() {
             return Err(closed_failure());
         }
+        self.inner.unwritten.fetch_add(1, Ordering::SeqCst);
         self.inner
             .out
             .send(Outgoing {
@@ -379,6 +389,19 @@ where
         closed_sender,
     ));
     let reason = closed_receiver.recv().await.unwrap_or(Closed::Eof);
+    if reason == Closed::Eof {
+        // Answers already queued, such as protocol errors for the last lines, still go out.
+        let drained = async {
+            while connection.inner.unwritten.load(Ordering::SeqCst) > 0 {
+                let written = connection.inner.written.notified();
+                if connection.inner.unwritten.load(Ordering::SeqCst) == 0 {
+                    break;
+                }
+                written.await;
+            }
+        };
+        let _ = tokio::time::timeout(DRAIN_ON_EOF, drained).await;
+    }
     connection.close();
     read.abort();
     write.abort();
@@ -403,6 +426,8 @@ async fn write_loop<W: AsyncWrite + Unpin>(
             let _ = closed.send(Closed::Write(error.to_string()));
             return;
         }
+        connection.inner.unwritten.fetch_sub(1, Ordering::SeqCst);
+        connection.inner.written.notify_waiters();
         if let Some((id, ok)) = outgoing.response_to
             && let Some(sender) = lock(&connection.inner.responded).remove(&id)
         {
@@ -479,4 +504,86 @@ fn receive_line(connection: &Connection, handler: &Arc<dyn Handler>, line: &[u8]
         return;
     }
     connection.receive(handler, message);
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    use super::*;
+
+    struct Echo;
+
+    impl Handler for Echo {
+        fn request(
+            &self,
+            method: &str,
+            params: Value,
+            _context: RequestContext,
+        ) -> Option<BoxFuture<'static, Result<Value, RpcError>>> {
+            (method == "echo").then(|| Box::pin(async move { Ok(params) }) as BoxFuture<'static, _>)
+        }
+
+        fn notification(&self, _method: &str, _params: Value) {}
+    }
+
+    /// Writes `input`, closes it, and returns what the agent wrote and why it closed.
+    async fn exchange(input: &[u8]) -> (Vec<Value>, Closed) {
+        let (client, agent) = tokio::io::duplex(1 << 16);
+        let (agent_read, agent_write) = tokio::io::split(agent);
+        let (client_read, mut client_write) = tokio::io::split(client);
+        let (connection, writer) = Connection::new();
+        let served = tokio::spawn(run(
+            connection,
+            writer,
+            agent_read,
+            agent_write,
+            Arc::new(Echo),
+        ));
+        client_write.write_all(input).await.unwrap();
+        client_write.shutdown().await.unwrap();
+        drop(client_write);
+        let closed = served.await.unwrap();
+        let mut lines = BufReader::new(client_read).lines();
+        let mut messages = Vec::new();
+        while let Ok(Some(line)) = lines.next_line().await {
+            messages.push(serde_json::from_str(&line).unwrap());
+        }
+        (messages, closed)
+    }
+
+    #[tokio::test]
+    async fn answers_requests_and_protocol_errors_in_order() {
+        let (messages, closed) = exchange(
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"nope\"}\r\nnot json\n5\n\n[]\n{\"id\":2}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"echo\",\"params\":{\"a\":1}}",
+        )
+        .await;
+        assert_eq!(closed, Closed::Eof);
+        assert_eq!(
+            messages[..5],
+            [
+                json!({ "jsonrpc": "2.0", "id": 1, "error": { "code": -32601, "message": "\"Method not found\": nope", "data": { "method": "nope" } } }),
+                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
+                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": 5 } }),
+                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": [] } }),
+                json!({ "jsonrpc": "2.0", "id": 3, "result": { "a": 1 } }),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn closes_on_a_line_over_the_limit() {
+        let mut input = vec![b'x'; MAX_MESSAGE_BYTES + 1];
+        input.push(b'\n');
+        let (messages, closed) = exchange(&input).await;
+        assert_eq!(closed, Closed::TooLarge(MAX_MESSAGE_BYTES));
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn line_length_ignores_a_trailing_carriage_return() {
+        assert_eq!(line_length(b"ab", b"c\r"), 3);
+        assert_eq!(line_length(b"ab\r", b""), 2);
+        assert_eq!(line_length(b"", b"abc"), 3);
+    }
 }
