@@ -44,7 +44,6 @@ libc = "0.2"
 log = { version = "0.4", features = ["std"] }
 notify = "8"
 percent-encoding = "2"
-qrcode = { version = "0.14", default-features = false }
 rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "http2"] }

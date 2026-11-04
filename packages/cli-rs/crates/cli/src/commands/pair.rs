@@ -10,6 +10,7 @@ use opencode_api::client::{Client, RequestOptions};
 use opencode_local::service_config::Info;
 use opencode_service::delegate;
 use opencode_service::ts_command::TsCommand;
+use opencode_ui::qr;
 
 use super::Context;
 use super::client::block_on;
@@ -17,8 +18,6 @@ use super::service::Local;
 use crate::args::PairArgs;
 use crate::output::{Exit, print};
 use crate::prompt;
-
-mod qr;
 
 const NOT_ENABLED: &str = "Remote access was not enabled. To pair locally, run `opencode pair`.";
 

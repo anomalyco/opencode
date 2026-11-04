@@ -13,6 +13,7 @@ pub mod motion;
 pub mod palette;
 pub mod path;
 pub mod prompt;
+pub mod qr;
 pub mod select;
 pub mod theme;
 pub mod toast;
