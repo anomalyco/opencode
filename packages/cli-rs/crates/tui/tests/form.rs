@@ -2,6 +2,10 @@
 //! each answer sends one request (P-REQ: method, path, body, and the directory header of a global form). The
 //! server answers 204, as it does, and lists no forms once one settled. The flows follow
 //! `packages/tui/test/cli/tui/form.test.tsx`.
+//!
+//! P-COMP: `parity/component/E.9b-form.tsx` renders the TS prompt alone at 96x30, one fixture per field kind and
+//! the review; here the prompt sits in the session route of a 100x30 app, two columns in. The comparison covers
+//! the prompt's rows (those with its left border).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -12,6 +16,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::{FormField, FormValue, SessionID};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved};
+use opencode_parity::{Fixture as Cells, compare, fixtures_dir};
 use opencode_tui::routes::session::form::{
     display_value, initial_values, selected_row, set_multiselect_custom, set_url_opener,
     toggle_multiselect, validate, visible_fields,
@@ -532,4 +537,123 @@ fn the_helpers_follow_util_form() {
     assert_eq!(keys(&indexmap::IndexMap::new()), ["kind", "link"]);
     let answered = indexmap::IndexMap::from([("kind".to_owned(), FormValue::String("x".into()))]);
     assert_eq!(keys(&answered), ["kind", "detail", "link"]);
+}
+
+/// The fixture's form: the fields, with the message the TS script sets.
+fn parity_form(fields: Value) -> Harness {
+    let mut form = form("ses_root", "frm_1", "Deploy settings", fields);
+    form["metadata"] = json!({ "message": "Pick how to deploy." });
+    mount(
+        Fixture {
+            forms: vec![form],
+            ..Fixture::default()
+        },
+        Route::Session {
+            id: SessionID("ses_root".into()),
+        },
+    )
+}
+
+/// The rows of `cells` whose cell at `x` is the prompt's border, cut to `width` columns from `x`.
+fn panel(cells: &Cells, x: u32, width: u32) -> Cells {
+    let rows: Vec<u32> = (0..cells.height)
+        .filter(|&y| cells.cell(x, y).is_some_and(|cell| cell.symbol == "┃"))
+        .collect();
+    Cells {
+        width,
+        height: rows.len() as u32,
+        cells: rows
+            .iter()
+            .flat_map(|&y| (x..x + width).map(move |column| (column, y)))
+            .map(|(column, y)| cells.cell(column, y).unwrap().clone())
+            .collect(),
+    }
+}
+
+#[track_caller]
+fn assert_panel(harness: &Harness, name: &str) {
+    let expected = Cells::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
+    let expected = panel(&expected, 0, expected.width);
+    let actual = panel(
+        &Cells::from_capture(&harness.app.render()),
+        2,
+        expected.width,
+    );
+    let comparison = compare(&expected, &actual);
+    if !comparison.is_equal() {
+        let path = std::env::temp_dir()
+            .join("opencode-parity")
+            .join(format!("{name}.json"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, actual.to_json()).unwrap();
+    }
+    assert!(
+        expected.height == actual.height && comparison.is_equal(),
+        "P-COMP {name}: {} rows, Rust {}: {comparison}\n{}",
+        expected.height,
+        actual.height,
+        harness.app.text()
+    );
+}
+
+fn kinds() -> Value {
+    json!([
+        { "key": "name", "type": "string", "title": "Name", "required": true },
+        { "key": "count", "type": "integer", "title": "Replicas", "minimum": 1, "maximum": 5 },
+        { "key": "agree", "type": "boolean", "title": "Confirm", "description": "Restart the service?" },
+        { "key": "targets", "type": "multiselect", "title": "Targets", "custom": true, "default": ["a"],
+          "options": [{ "value": "a", "label": "Alpha" }, { "value": "b", "label": "Beta", "description": "The second region" }] },
+    ])
+}
+
+#[test]
+fn a_choice_matches_typescript() {
+    let harness = parity_form(json!([{
+        "key": "target", "type": "string", "custom": true,
+        "options": [{ "value": "staging", "label": "Staging" }, { "value": "production", "label": "Production", "description": "Live traffic" }],
+    }]));
+    harness.wait_for("Type your own answer");
+    harness.app.press("down");
+    assert_panel(&harness, "E.9b/choice");
+}
+
+#[test]
+fn each_field_kind_and_the_review_match_typescript() {
+    for (tabs, name, ready) in [
+        (None, "E.9b/text", "Type your answer"),
+        (Some(1), "E.9b/integer", "1-5"),
+        (Some(2), "E.9b/boolean", "Restart the service?"),
+        (Some(3), "E.9b/multiselect", "Type your own answer"),
+        (Some(4), "E.9b/review", "enter submit"),
+    ] {
+        let harness = parity_form(kinds());
+        harness.wait_for("Type your answer");
+        if let Some(tabs) = tabs {
+            harness.app.type_text("Ada");
+            harness.wait_for("Ada");
+            for _ in 0..tabs {
+                harness.app.press("tab");
+            }
+        }
+        harness.wait_for(ready);
+        assert_panel(&harness, name);
+    }
+}
+
+#[test]
+fn an_external_field_and_the_progress_line_match_typescript() {
+    let harness = parity_form(json!([{
+        "key": "authorization", "type": "external", "url": "https://example.com/authorize",
+        "title": "Authorize access", "description": "Sign in to continue.",
+    }]));
+    harness.wait_for("Sign in to continue.");
+    assert_panel(&harness, "E.9b/external");
+
+    let fields: Vec<Value> = ["first", "second", "third", "fourth"]
+        .iter()
+        .map(|key| json!({ "key": key, "type": "string", "title": format!("The {key} question that is long") }))
+        .collect();
+    let harness = parity_form(Value::Array(fields));
+    harness.wait_for("completed");
+    assert_panel(&harness, "E.9b/progress");
 }
