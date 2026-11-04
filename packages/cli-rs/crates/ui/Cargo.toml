@@ -13,6 +13,7 @@ workspace = true
 opentui.workspace = true
 opencode-api.workspace = true
 opencode-local.workspace = true
+chrono.workspace = true
 indexmap.workspace = true
 log.workspace = true
 serde.workspace = true
