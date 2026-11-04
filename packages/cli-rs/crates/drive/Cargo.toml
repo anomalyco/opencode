@@ -1,0 +1,13 @@
+[package]
+name = "opencode-drive"
+description = "The simulation UI endpoint, OPENCODE_DRIVE (H.4)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "opencode-latex"
+description = "The LaTeX plugin (P.2)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-plugin.workspace = true
