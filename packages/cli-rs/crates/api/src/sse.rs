@@ -29,14 +29,21 @@ pub enum Error {
 }
 
 /// Decodes a stream of body chunks into `data:` payloads.
+///
+/// It buffers raw bytes and splits lines on the LF, CRLF and CR bytes, which never occur inside a
+/// UTF-8 sequence, so only complete lines are decoded and a code point split across chunks waits for
+/// the rest of its line. Decoding a complete line with replacement gives the same text as the
+/// TypeScript streaming `TextDecoder`.
 #[derive(Default)]
 pub struct Decoder {
-    /// Normalized text after the last complete block.
-    buffer: String,
-    /// `buffer` length in UTF-16 code units.
-    units: usize,
-    /// Bytes of an incomplete UTF-8 sequence at the end of the last chunk.
-    partial: Vec<u8>,
+    /// Bytes of the unterminated last line.
+    line: Vec<u8>,
+    /// `line` length in UTF-16 code units.
+    line_units: usize,
+    /// `data:` values of the open block.
+    data: Vec<String>,
+    /// Length of the open block's complete lines, newlines included, in UTF-16 code units.
+    block_units: usize,
     /// A trailing CR held back because the next chunk may start with LF.
     carriage_return: bool,
     started: bool,
@@ -49,105 +56,85 @@ impl Decoder {
 
     /// Adds a chunk and returns the payloads of the blocks it completes.
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<String>, Error> {
-        let text = self.decode(chunk, false);
-        self.append(text, false)
+        // As the TypeScript reader, check the open text plus the raw chunk before normalizing it.
+        let open = self.block_units + self.line_units + usize::from(self.carriage_return);
+        if open + utf16_units(chunk) > MAX_EVENT_UNITS {
+            return Err(Error::EventTooLarge);
+        }
+        let mut payloads = Vec::new();
+        let mut rest = chunk;
+        if self.carriage_return && !rest.is_empty() {
+            self.carriage_return = false;
+            rest = rest.strip_prefix(b"\n").unwrap_or(rest);
+            self.end_line(&mut payloads);
+        }
+        while let Some(index) = rest.iter().position(|byte| matches!(byte, b'\n' | b'\r')) {
+            self.extend_line(&rest[..index]);
+            let crlf = rest[index] == b'\r' && rest.get(index + 1) == Some(&b'\n');
+            if rest[index] == b'\r' && index + 1 == rest.len() {
+                self.carriage_return = true;
+                return Ok(payloads);
+            }
+            rest = &rest[index + 1 + usize::from(crlf)..];
+            self.end_line(&mut payloads);
+        }
+        self.extend_line(rest);
+        Ok(payloads)
     }
 
     /// Ends the stream: an unterminated last block still counts, as in the TypeScript reader.
     pub fn finish(&mut self) -> Result<Vec<String>, Error> {
-        let text = self.decode(&[], true);
-        self.append(text, true)
-    }
-
-    fn append(&mut self, text: String, done: bool) -> Result<Vec<String>, Error> {
-        let raw_units = text.encode_utf16().count() + usize::from(self.carriage_return);
-        if self.units + raw_units > MAX_EVENT_UNITS {
-            return Err(Error::EventTooLarge);
-        }
-        let mut text = if self.carriage_return {
-            format!("\r{text}")
-        } else {
-            text
-        };
-        self.carriage_return = !done && text.ends_with('\r');
-        if self.carriage_return {
-            text.pop();
-        }
-        let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
-        // A boundary may span the old buffer and the new text, so search from the last old character.
-        let mut from = self.buffer.len().saturating_sub(1);
-        self.units += normalized.encode_utf16().count();
-        self.buffer.push_str(&normalized);
-        if done && !self.buffer.is_empty() {
-            self.buffer.push_str("\n\n");
-            self.units += 2;
-        }
-
         let mut payloads = Vec::new();
-        let mut start = 0;
-        while let Some(offset) = self.buffer[from..].find("\n\n") {
-            let end = from + offset;
-            let block = &self.buffer[start..end];
-            self.units -= block.encode_utf16().count() + 2;
-            let data = block
-                .split('\n')
-                .filter_map(|line| line.strip_prefix("data:"))
-                .map(|value| {
-                    value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}')
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            if !data.is_empty() {
-                payloads.push(data);
-            }
-            start = end + 2;
-            from = start;
+        if std::mem::take(&mut self.carriage_return) || !self.line.is_empty() {
+            self.end_line(&mut payloads);
         }
-        self.buffer.drain(..start);
+        self.dispatch(&mut payloads);
         Ok(payloads)
     }
 
-    /// UTF-8 decoding like `TextDecoder` with `stream`: a split code point waits for the next chunk,
-    /// invalid bytes become U+FFFD, and a leading BOM is dropped.
-    fn decode(&mut self, chunk: &[u8], done: bool) -> String {
-        let mut bytes = std::mem::take(&mut self.partial);
-        bytes.extend_from_slice(chunk);
-        let mut text = String::with_capacity(bytes.len());
-        let mut rest = bytes.as_slice();
-        loop {
-            match std::str::from_utf8(rest) {
-                Ok(valid) => {
-                    text.push_str(valid);
-                    break;
-                }
-                Err(error) => {
-                    let (valid, after) = rest.split_at(error.valid_up_to());
-                    text.push_str(std::str::from_utf8(valid).unwrap_or_default());
-                    match error.error_len() {
-                        Some(length) => {
-                            text.push('\u{fffd}');
-                            rest = &after[length..];
-                        }
-                        None if done => {
-                            text.push('\u{fffd}');
-                            break;
-                        }
-                        None => {
-                            self.partial = after.to_vec();
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if !self.started && !text.is_empty() {
-            self.started = true;
-            if let Some(stripped) = text.strip_prefix('\u{feff}') {
-                return stripped.to_owned();
-            }
-        }
-        text
+    fn extend_line(&mut self, bytes: &[u8]) {
+        self.line.extend_from_slice(bytes);
+        self.line_units += utf16_units(bytes);
     }
+
+    /// Decodes the buffered line: an empty one ends the block, a `data:` line adds to it.
+    fn end_line(&mut self, payloads: &mut Vec<String>) {
+        let mut bytes = std::mem::take(&mut self.line);
+        if !std::mem::replace(&mut self.started, true) && bytes.starts_with(b"\xef\xbb\xbf") {
+            bytes.drain(..3);
+        }
+        if bytes.is_empty() {
+            self.line_units = 0;
+            self.dispatch(payloads);
+            return;
+        }
+        self.block_units += std::mem::take(&mut self.line_units) + 1;
+        let line = String::from_utf8_lossy(&bytes);
+        if let Some(value) = line.strip_prefix("data:") {
+            let value = value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
+            self.data.push(value.to_owned());
+        }
+    }
+
+    fn dispatch(&mut self, payloads: &mut Vec<String>) {
+        self.block_units = 0;
+        let data = std::mem::take(&mut self.data).join("\n");
+        if !data.is_empty() {
+            payloads.push(data);
+        }
+    }
+}
+
+/// UTF-16 code units of UTF-8 bytes, counted per lead byte so a split code point counts once.
+fn utf16_units(bytes: &[u8]) -> usize {
+    bytes
+        .iter()
+        .map(|byte| match byte {
+            0x80..=0xbf => 0,
+            0xf0.. => 2,
+            _ => 1,
+        })
+        .sum()
 }
 
 /// Decodes a response body into events. `activity` runs for every chunk, including keepalive comments
@@ -382,6 +369,52 @@ mod tests {
             .push("\u{feff}data:a\ndata:  b\n\n".as_bytes())
             .unwrap();
         assert_eq!(payloads, vec!["a\nb"]);
+    }
+
+    // rs-ms1-accept problem 1: a chunk that ended in a multibyte character panicked on the next chunk.
+    #[test]
+    fn a_buffer_ending_in_a_multibyte_character_takes_the_next_chunk() {
+        let mut decoder = Decoder::new();
+        assert_eq!(
+            decoder.push("data: \u{2580}".as_bytes()).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(decoder.push(b"x\n\n").unwrap(), vec!["\u{2580}x"]);
+    }
+
+    #[test]
+    fn every_split_of_a_multibyte_character_decodes_as_one_chunk() {
+        let characters = [
+            "\u{e9}",                     // 2 bytes
+            "\u{2580}",                   // 3 bytes
+            "\u{1f600}",                  // 4 bytes
+            "\u{1f469}\u{200d}\u{1f4bb}", // ZWJ sequence
+        ];
+        let read = |chunks: &[&[u8]]| {
+            let mut decoder = Decoder::new();
+            let mut payloads = chunks
+                .iter()
+                .flat_map(|chunk| decoder.push(chunk).unwrap())
+                .collect::<Vec<_>>();
+            payloads.extend(decoder.finish().unwrap());
+            payloads
+        };
+        for character in characters {
+            let text = format!(
+                "data: {{\"text\":\"{character}\"}}\n\ndata: a{character}\r\ndata: {character}{character}\r\n\r\ndata: {character}"
+            );
+            let bytes = text.as_bytes();
+            let whole = read(&[bytes]);
+            assert_eq!(whole.len(), 3, "{character}");
+            for split in 1..bytes.len() {
+                let (first, second) = bytes.split_at(split);
+                assert_eq!(
+                    read(&[first, second]),
+                    whole,
+                    "{character} split at byte {split}"
+                );
+            }
+        }
     }
 
     #[test]
