@@ -377,6 +377,13 @@ impl Inner {
             mode.dispose();
         }
         (self.on_toggle)(tui, open);
+        // The session view hides the queued dock while the composer shows; a key that toggled it changed no store state.
+        let weak = tui.weak();
+        tui.app.defer(move |_| {
+            if let Some(tui) = weak.upgrade() {
+                tui.sync_view();
+            }
+        });
     }
 
     /// Redraws on the next turn, outside the mouse handler of a row it replaces.

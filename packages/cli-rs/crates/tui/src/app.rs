@@ -233,6 +233,14 @@ impl Tui {
         self.app.request_redraw();
     }
 
+    /// Syncs the route view with no store changes, after view state outside the store changed (E.13b's composer).
+    pub(crate) fn sync_view(&self) {
+        if let Some(view) = self.view.borrow().as_ref() {
+            view.sync(self, &opencode_store::Changes::default());
+        }
+        self.app.request_redraw();
+    }
+
     /// Runs `ThemeState` effects off the UI thread, shows a theme error, and repaints on a change.
     pub(crate) fn theme_changed(&self) {
         let (effects, error) = {
