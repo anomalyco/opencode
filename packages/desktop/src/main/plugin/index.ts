@@ -11,12 +11,10 @@ const LEVELS = { debug: "Debug", info: "Info", warn: "Warn", error: "Error" } as
 import { DesktopCli } from "../service/desktop-cli"
 import { DesktopStorage } from "../storage"
 import type { PluginHost } from "./host"
-
-/** The host once it loaded, and its load while one is in flight. */
-type LoadedHost = { host?: PluginHost; loading?: Promise<PluginHost> }
+import { createDriver, loadedHost } from "./machine"
 
 export interface Interface {
-  /** Loads the host on first use. Main plugins activate only through `start`. */
+  /** Loads the host on first use, and again after a load failed. Main plugins activate only through `start`. */
   readonly host: () => Promise<PluginHost>
   /** The host when something already loaded it. */
   readonly loaded: () => PluginHost | undefined
@@ -42,53 +40,51 @@ export const layer = Layer.effect(
     // Renderers subscribe and push servers while they boot, which can be before the host loads.
     const subscriptions = new Map<string, Set<number>>()
     const servers = new Map<number, readonly PluginEndpoint[]>()
-    const current: LoadedHost = {}
 
-    const host = () => {
-      current.loading ??= Promise.all([import("./host"), runPromise(desktopCli.resolve)]).then(([module, cli]) => {
-        current.host = module.createHost({
-          db: storage.db,
-          state: storage.state,
-          cli: {
-            version: cli.version,
-            command: cli.command,
-            binary: cli.binary,
-            development: !app.isPackaged && !cli.binary,
-          },
-          subscriptions,
-          servers,
-          appState: lifecycle.state,
-          restart: lifecycle.restart,
-          log: (message, data) => runFork(Effect.logError(message, data)),
-          write: (level, message, data) => runFork(Effect.logWithLevel(LEVELS[level])(message, data)),
-        })
+    const driver = createDriver({
+      load: async () => {
+        const [module, cli] = await Promise.all([import("./host"), runPromise(desktopCli.resolve)])
 
-        return current.host
-      })
-
-      return current.loading
-    }
-
-    // Plugins run only once the host loaded; until then there is nothing to stop or resume.
-    const remove = yield* shutdown.add({
-      stop: Effect.promise(async () => {
-        if (current.loading)
-          await current.loading.then(
-            (loaded) => loaded.stop(),
-            () => undefined,
-          )
-      }),
-      resume: Effect.tryPromise(async () => {
-        if (current.loading) await current.loading.then((loaded) => loaded.resume())
-      }).pipe(Effect.catch((error) => Effect.logError("plugins failed to resume", { error }))),
+        return () =>
+          module.createHost({
+            db: storage.db,
+            state: storage.state,
+            cli: {
+              version: cli.version,
+              command: cli.command,
+              binary: cli.binary,
+              development: !app.isPackaged && !cli.binary,
+            },
+            subscriptions,
+            servers,
+            appState: lifecycle.state,
+            restart: lifecycle.restart,
+            log: (message, data) => runFork(Effect.logError(message, data)),
+            write: (level, message, data) => runFork(Effect.logWithLevel(LEVELS[level])(message, data)),
+          })
+      },
+      subscribed: () => [...subscriptions].flatMap((entry) => (entry[1].size ? [entry[0]] : [])),
+      log: (message, data) => runFork(Effect.logError(message, data)),
     })
 
-    yield* Effect.addFinalizer(() => Effect.sync(remove))
+    const remove = yield* shutdown.add({
+      stop: Effect.promise(driver.stop),
+      resume: Effect.tryPromise(driver.resume).pipe(
+        Effect.catch((error) => Effect.logError("plugins failed to resume", { error })),
+      ),
+    })
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        remove()
+        driver.dispose()
+      }),
+    )
 
     return Service.of({
-      host,
-      loaded: () => current.host,
-      start: Effect.tryPromise(() => host().then((loaded) => loaded.start())).pipe(
+      host: driver.host,
+      loaded: () => loadedHost(driver.state()),
+      start: Effect.tryPromise(driver.start).pipe(
         Effect.catch((error) => Effect.logError("plugins failed to start", { error })),
       ),
       subscribe(ipc, window) {
@@ -97,12 +93,9 @@ export const layer = Layer.effect(
         subscriptions.set(ipc, ids)
         // A booting window waits on some Ipcs (e.g. server sources) before its first paint, so the
         // plugin that provides one starts now instead of with the deferred rest.
-        void host().then(
-          (loaded) => loaded.demand(ipc),
-          () => undefined,
-        )
+        driver.demand(ipc)
 
-        return current.host?.snapshot(ipc, window) ?? { available: false }
+        return loadedHost(driver.state())?.snapshot(ipc, window) ?? { available: false }
       },
       configure(window, list) {
         // Re-inserting keeps the most recent window last, which resolution prefers.
