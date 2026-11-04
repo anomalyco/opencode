@@ -209,6 +209,60 @@ describe("QuestionTool", () => {
     }),
   )
 
+  it.effect("strips carriage returns from model-emitted question input", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = false
+      deny = false
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-question-cr",
+            name: QuestionTool.name,
+            input: {
+              questions: [
+                {
+                  header: "验\r证\r插\r件",
+                  question: "这\r是\r一\r条\r带\r回\r车\r符\r的\r问\r题\r？",
+                  options: [
+                    { label: "显示\r正常", description: "问题\r显示连续\r，没有碎块" },
+                    { label: "还是\r碎块", description: "仍然\r出现\r断行" },
+                  ],
+                },
+              ],
+            },
+          },
+        }),
+      ).toEqual({
+        status: "completed",
+        output: { answers: [["Build"]] },
+        content: [
+          {
+            type: "text",
+            text: 'User has answered your questions: "这是一条带回车符的问题？"="Build". You can now continue with the user\'s answers in mind.',
+          },
+        ],
+        metadata: { answers: [["Build"]] },
+      })
+      expect(capturedInput()?.fields[0]).toEqual({
+        key: "q0",
+        title: "验证插件",
+        description: "这是一条带回车符的问题？",
+        options: [
+          { value: "显示正常", label: "显示正常", description: "问题显示连续，没有碎块" },
+          { value: "还是碎块", label: "还是碎块", description: "仍然出现断行" },
+        ],
+        custom: true,
+        type: "string",
+      })
+    }),
+  )
+
   it.effect("does not invent tool ownership metadata without a durable registry source", () =>
     Effect.gen(function* () {
       captured = undefined

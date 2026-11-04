@@ -3801,14 +3801,19 @@ export function parseQuestions(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.flatMap((item) => {
     const question = stringValue(recordValue(item)?.question)
-    return question ? [{ question }] : []
+    // Persisted inputs keep whatever the model emitted; stray \r would hard-break the block.
+    return question ? [{ question: question.replace(/\r/g, "") }] : []
   })
 }
 
 export function parseQuestionAnswers(value: unknown) {
   if (!Array.isArray(value)) return
   return value.map((answer) =>
-    Array.isArray(answer) ? answer.filter((item): item is string => typeof item === "string") : [],
+    Array.isArray(answer)
+      ? answer
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.replace(/\r/g, ""))
+      : [],
   )
 }
 
