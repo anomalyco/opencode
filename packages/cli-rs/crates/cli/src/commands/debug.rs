@@ -197,7 +197,7 @@ fn written_in(path: &str, directory: &str) -> bool {
 
 /// `path.normalize` without a trailing separator: collapses separators, `.`, and `..`. Windows
 /// paths keep their drive or UNC prefix and use `\`.
-fn normalize(path: &str, windows: bool) -> String {
+pub(super) fn normalize(path: &str, windows: bool) -> String {
     let separator = if windows { '\\' } else { '/' };
     let path = if windows {
         path.replace('/', "\\")
