@@ -41,6 +41,8 @@ import { SessionUsage } from "./usage.js"
 
 export type Settings = {
   auto: boolean
+  /** Target context window for automatic compaction in tokens, narrowed to the model's limits. */
+  window?: number
   /** Room kept free below the model's limits before compacting: a share such as "20%", or tokens. Unset keeps 15%, and at least 16k, free. */
   buffer?: number | string
   /** Tokens of recent conversation kept verbatim beside the summary. */
@@ -303,7 +305,7 @@ export const layer = Layer.effect(
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
       if (
         trigger.reason === "auto" &&
-        !due(context, calculateCeiling(context.model.limit, settings.buffer), trigger.estimate)
+        !due(context, calculateCeiling(autoLimit(context, settings.window), settings.buffer), trigger.estimate)
       )
         return { status: "skipped" }
       const held = precomputed.get(context.session.id)
@@ -353,7 +355,7 @@ export const layer = Layer.effect(
       if (!settings.precompute || !settings.auto) return
       const context = yield* load
       if (context.model.compaction?.type === "native") return
-      const ceiling = calculateCeiling(context.model.limit, settings.buffer)
+      const ceiling = calculateCeiling(autoLimit(context, settings.window), settings.buffer)
       if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
       if (due(context, ceiling, estimate)) return
@@ -1165,6 +1167,30 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
   if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+}
+
+/**
+ * The limits automatic compaction plans for: the model's, narrowed to the effective compaction window when smaller.
+ * An agent's `request.settings.compaction.window` (or `request.settings.compactionWindow`) overrides the model's or
+ * provider's `settings.compaction.window`, which overrides the top-level `compaction.window`. A larger override on a
+ * model, variant, or agent can therefore opt into the model's full window even when a lower global `compaction.window`
+ * is set. It never raises the model's own window, and it leaves the summary request's size to the model's limits.
+ */
+const autoLimit = (
+  context: SessionContext.Loaded,
+  configured?: number,
+): SessionContext.Loaded["model"]["limit"] => {
+  const settings = context.agent.info.request?.settings
+  const window =
+    settings?.compaction?.window ??
+    settings?.["compactionWindow"] ??
+    context.model.compaction?.window ??
+    configured
+  const limit = context.model.limit
+  if (typeof window !== "number" || !Number.isInteger(window) || window <= 0) return limit
+  const current = inputWindow(limit)
+  if (current > 0 && current <= window) return limit
+  return { ...limit, context: window, input: window }
 }
 
 /**

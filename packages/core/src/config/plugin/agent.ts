@@ -6,6 +6,7 @@ import { ConfigAgent } from "@opencode/schema/config/agent"
 import path from "path"
 import { Effect, Option, Schema } from "effect"
 import { Agent } from "../../agent.js"
+import { Provider } from "../../provider.js"
 import { Config } from "../../config.js"
 import { ConfigMarkdown } from "../markdown.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
@@ -89,6 +90,8 @@ export const Plugin = define({
                 ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
               }
             if (item.request !== undefined) {
+              if (item.request.settings !== undefined)
+                agent.request.settings = Provider.mergeOverlay(agent.request.settings, item.request.settings) ?? {}
               Object.assign(agent.request.headers, item.request.headers ?? {})
               Object.assign(agent.request.body, item.request.body ?? {})
             }

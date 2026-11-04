@@ -139,6 +139,86 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       yield* Effect.die(new Error("Timed out waiting for compaction config reload"))
     }),
   )
+
+  it.live("compaction.window lowers the automatic ceiling and reloads", () =>
+    Effect.gen(function* () {
+      const compaction = yield* SessionCompaction.Service
+      const config = yield* Config.Test
+      const bus = yield* Bus.Service
+
+      const session = Session.Info.make({
+        id: Session.ID.make("ses_compaction_window"),
+        projectID: Project.ID.global,
+        cost: Money.USD.zero,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
+      })
+
+      const input = (tokens: number) => {
+        const messages = [
+          Schema.decodeUnknownSync(SessionMessage.Assistant)({
+            id: SessionMessage.ID.make("msg_compaction_window"),
+            type: "assistant",
+            agent: Agent.defaultID,
+            model: { id: "test-model", providerID: "test-provider" },
+            content: [],
+            tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, completed: 0 },
+          }),
+        ]
+        return {
+          session,
+          resolved,
+          messages,
+          context: {
+            session,
+            model: resolved,
+            messages,
+            agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+            initial: [],
+            tools: { definitions: [], execute: () => Effect.die("unused") },
+          },
+        }
+      }
+
+      const due = (tokens: number) =>
+        compaction
+          .compact({ reason: "auto", context: input(tokens).context })
+          .pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+
+      // 50k window on a 100k model: ceiling = 50k - 16k = 34k
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ compaction: new ConfigCompaction.Info({ auto: true, window: 50_000 }) }),
+        }),
+      ])
+      yield* ConfigCompactionPlugin.Plugin.effect(host({ event: { subscribe: () => bus.subscribe(Event.Updated) } }))
+
+      expect(yield* due(30_000)).toBe(false)
+      expect(yield* due(35_000)).toBe(true)
+
+      // Reload with a window larger than the model's limit: ceiling returns to the default (100k - 16k = 84k)
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ compaction: new ConfigCompaction.Info({ auto: true, window: 200_000 }) }),
+        }),
+      ])
+      yield* bus.publish(Event.Updated, {})
+      yield* Effect.gen(function* () {
+        for (let attempt = 0; attempt < 200; attempt++) {
+          if (yield* due(90_000)) return
+          yield* Effect.sleep("10 millis")
+        }
+        yield* Effect.die(new Error("Timed out waiting for compaction config reload"))
+      })
+
+      expect(yield* due(80_000)).toBe(false)
+      expect(yield* due(90_000)).toBe(true)
+    }),
+  )
 })
 
 const session = Session.Info.make({
