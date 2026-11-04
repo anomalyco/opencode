@@ -4,7 +4,7 @@
 //! header        title
 //! transcript    messages::list (E.6a), sticky to the bottom
 //! working       the spinner while the session runs
-//! permission    permission::sync (E.9a)
+//! permission    permission::Permission (E.9a); the prompt hides while it shows
 //! prompt        prompt::editor::mount (E.2)
 //! ```
 //! The sidebar (E.14) mounts beside the column.
@@ -34,7 +34,7 @@ pub struct Session {
     header: Text,
     transcript: messages::list::Transcript,
     working: Spinner,
-    permission: View,
+    permission: permission::Permission,
     prompt: crate::prompt::editor::Prompt,
 }
 
@@ -49,7 +49,7 @@ impl Session {
             .label("Thinking")
             .animations(opencode_ui::motion::enabled(tui.config.info.animations))
             .visible(false);
-        let permission = View::new(app).column().shrink(0.0);
+        let permission = permission::Permission::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, &id);
         let column = View::new(app)
             .column()
@@ -63,7 +63,7 @@ impl Session {
             .child(&header)
             .child(transcript.root())
             .child(&working)
-            .child(&permission)
+            .child(permission.root())
             .child(prompt.root());
         let root = View::new(app)
             .row()
@@ -104,17 +104,26 @@ impl RouteView for Session {
             self.working.visible(running);
         }
         self.transcript.sync(tui, &self.id, changes);
-        permission::sync(tui, &self.permission, &self.id, changes);
+        let prompting = self.permission.active();
+        self.permission.sync(tui, changes);
+        if self.permission.active() != prompting {
+            self.prompt.root().visible(prompting);
+            if prompting {
+                self.prompt.focus(tui);
+            }
+        }
         self.prompt.sync(tui, changes);
     }
 
     fn focus(&self, tui: &Tui) {
-        self.prompt.focus(tui);
+        if !self.permission.active() {
+            self.prompt.focus(tui);
+        }
     }
 }
 
 /// Awaits a store read; a failure shows as an error toast.
-fn load(tui: &Tui, task: Task<()>) {
+pub(super) fn load(tui: &Tui, task: Task<()>) {
     let weak = tui.weak();
     tui.app.spawn(task, move |_, result| {
         if let (Err(error), Some(tui)) = (result, weak.upgrade()) {

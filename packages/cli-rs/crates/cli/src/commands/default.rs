@@ -6,7 +6,7 @@ use std::sync::Arc;
 use opencode_api::generated::SessionID;
 use opencode_api::transport::Reqwest;
 use opencode_local::channel::Channels;
-use opencode_local::cli_config::{CliConfig, Resolved};
+use opencode_local::cli_config::{CliConfig, Permissions, Resolved};
 use opencode_local::paths::{self, Paths};
 use opencode_service::connect::{self, Env, Options};
 use opencode_tui::{Deps, Launch, Route, app::Roots};
@@ -42,7 +42,11 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         log::warn!("failed to read cli.json: {error}");
         Default::default()
     });
-    let config = Resolved::new(info, |name| std::env::var(name).ok());
+    let mut config = Resolved::new(info, |name| std::env::var(name).ok());
+    // `--auto` wins over `session.permissions` (`context/permission.tsx`).
+    if args.permissions.auto() {
+        config.permissions = Permissions::Autoaccept;
+    }
     let route = match &args.session {
         Some(id) => Route::Session {
             id: SessionID(id.clone()),

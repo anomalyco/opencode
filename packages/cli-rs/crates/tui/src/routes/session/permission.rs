@@ -1,10 +1,1133 @@
-//! The permission prompt (E.9a). T.1 calls [`sync`] from the session route with the region above the
-//! prompt.
+//! The permission prompt (E.9a, row V17): `routes/session/permission.tsx`, `util/permission.ts`,
+//! `context/permission.tsx`, and the session route's permission parts (`routes/session/index.tsx:207-283`,
+//! `:1615-1622`).
+//!
+//! The session route owns one [`Permission`] in the region above the prompt. A root session prompts for the
+//! first pending request of itself and its descendants; a child session prompts for none. The prompt hides the
+//! session prompt while it shows. Ctrl+F (`permission.prompt.fullscreen`) moves it to a full-screen overlay. In
+//! `autoaccept` mode (`session.permissions` in `cli.json`, or `--auto`) every request is answered `once`
+//! instead.
 
-use opencode_api::generated::SessionID;
-use opencode_store::Changes;
-use opentui::prelude::View;
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::rc::{Rc, Weak};
+
+use opencode_api::generated::{
+    PermissionID, PermissionReply, PermissionReplyInput, PermissionRequest, SessionID,
+    SessionMessageAssistantContentItem, SessionMessageInfo,
+};
+use opencode_local::cli_config::{DiffView as ConfigDiffView, Permissions};
+use opencode_store::{Changes, State};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opencode_ui::theme::Theme;
+use opencode_ui::tool_info::{canonical_tool_name, finite_number, web_search_provider_label};
+use opentui::keymap::Disposer;
+use opentui::prelude::*;
+use opentui::widget::{DiffView, Textarea};
+use serde_json::{Map, Value};
 
 use crate::app::Tui;
 
-pub fn sync(_tui: &Tui, _region: &View, _session: &SessionID, _changes: &Changes) {}
+const FULLSCREEN: &str = "permission.prompt.fullscreen";
+
+pub struct Permission(Rc<Inner>);
+
+struct Inner {
+    tui: Weak<Tui>,
+    session: SessionID,
+    region: View,
+    /// The full-screen host, above the route and below dialogs.
+    overlay: View,
+    prompted: RefCell<Prompted>,
+    layer: RefCell<Option<Disposer>>,
+    reject: RefCell<Option<Textarea>>,
+    /// Sessions whose pending permissions were read.
+    synced: RefCell<HashSet<SessionID>>,
+    /// Requests answered by `autoaccept`.
+    approved: RefCell<HashSet<PermissionID>>,
+    resize: Cell<Option<HandlerId>>,
+}
+
+#[derive(Default)]
+struct Prompted {
+    request: Option<PermissionRequest>,
+    stage: Stage,
+    selected: usize,
+    expanded: bool,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Stage {
+    #[default]
+    Permission,
+    Reject,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Choice {
+    Once,
+    Always,
+    Reject,
+}
+
+impl Choice {
+    /// `permissionOptionLabel`.
+    fn label(self) -> &'static str {
+        match self {
+            Choice::Once => "Allow once",
+            Choice::Always => "Always allow",
+            Choice::Reject => "Reject",
+        }
+    }
+}
+
+impl Permission {
+    pub fn new(tui: &Tui, session: &SessionID) -> Self {
+        let overlay = View::new(&tui.app)
+            .absolute()
+            .position(Edge::Top, 0)
+            .position(Edge::Left, 0)
+            .position(Edge::Right, 0)
+            .position(Edge::Bottom, 0)
+            .z_index(2000)
+            .visible(false);
+        tui.app.root().add(&overlay);
+        let inner = Rc::new(Inner {
+            tui: tui.weak(),
+            session: session.clone(),
+            region: View::new(&tui.app).column().shrink(0.0),
+            overlay,
+            prompted: RefCell::default(),
+            layer: RefCell::default(),
+            reject: RefCell::default(),
+            synced: RefCell::default(),
+            approved: RefCell::default(),
+            resize: Cell::new(None),
+        });
+        let weak = Rc::downgrade(&inner);
+        inner.resize.set(Some(tui.app.on_resize(move |_, _, _| {
+            if let Some(inner) = weak.upgrade()
+                && inner.prompted.borrow().stage == Stage::Permission
+            {
+                inner.render();
+            }
+        })));
+        Self(inner)
+    }
+
+    pub fn root(&self) -> &View {
+        &self.0.region
+    }
+
+    /// Whether a request is prompted; the session prompt hides meanwhile.
+    pub fn active(&self) -> bool {
+        self.0.prompted.borrow().request.is_some()
+    }
+
+    pub fn sync(&self, tui: &Tui, changes: &Changes) {
+        let inner = &self.0;
+        let (requests, family) = tui.data.read(|state| {
+            let family = family(state, &inner.session);
+            let requests: Vec<PermissionRequest> = family
+                .iter()
+                .flat_map(|id| state.permissions(id).unwrap_or_default())
+                .cloned()
+                .collect();
+            (requests, family)
+        });
+        for id in family {
+            if inner.synced.borrow_mut().insert(id.clone()) {
+                super::load(tui, tui.data.permission_sync(&id));
+            }
+        }
+        if tui.config.permissions == Permissions::Autoaccept {
+            inner.auto_approve(tui, &requests);
+            return;
+        }
+        let head = requests.into_iter().next();
+        let current = inner
+            .prompted
+            .borrow()
+            .request
+            .as_ref()
+            .map(|r| r.id.clone());
+        if head.as_ref().map(|r| &r.id) != current.as_ref() {
+            *inner.prompted.borrow_mut() = Prompted {
+                request: head,
+                ..Prompted::default()
+            };
+            inner.stage_changed();
+            return;
+        }
+        // The presentation reads the tool call's input, which may still be arriving.
+        let stage = inner.prompted.borrow().stage;
+        if let Some(request) = head
+            && stage == Stage::Permission
+            && changes.any_message(&request.session_id)
+        {
+            inner.prompted.borrow_mut().request = Some(request);
+            inner.render();
+        }
+    }
+}
+
+impl Drop for Permission {
+    fn drop(&mut self) {
+        let inner = &self.0;
+        inner.layer.take();
+        inner.overlay.detach();
+        if let (Some(tui), Some(id)) = (inner.tui.upgrade(), inner.resize.take()) {
+            tui.app.remove_handler(id);
+        }
+    }
+}
+
+/// `useToolPermission`: whether the tool call `part` waits on the session's first pending request, so the
+/// transcript draws it in the warning color.
+pub fn tool_pending(tui: &Tui, session: &SessionID, part: &str) -> bool {
+    if tui.config.permissions == Permissions::Autoaccept {
+        return false;
+    }
+    tui.data.read(|state| {
+        state
+            .permissions(session)
+            .and_then(<[_]>::first)
+            .and_then(|request| request.source.as_ref())
+            .is_some_and(|source| source.r#type == "tool" && source.id == part)
+    })
+}
+
+/// The sessions whose requests a session prompts for: a root and its descendants, a child none.
+fn family(state: &State, session: &SessionID) -> Vec<SessionID> {
+    if state
+        .session(session)
+        .is_some_and(|info| info.parent_id.is_some())
+    {
+        return Vec::new();
+    }
+    std::iter::once(session.clone())
+        .chain(
+            state
+                .family(session)
+                .iter()
+                .filter(|id| *id != session)
+                .cloned(),
+        )
+        .collect()
+}
+
+impl Inner {
+    fn auto_approve(self: &Rc<Self>, tui: &Tui, requests: &[PermissionRequest]) {
+        for request in requests {
+            if !self.approved.borrow_mut().insert(request.id.clone()) {
+                continue;
+            }
+            let weak = Rc::downgrade(self);
+            let id = request.id.clone();
+            reply(
+                tui,
+                request,
+                PermissionReply::Once,
+                None,
+                Box::new(move || {
+                    if let Some(inner) = weak.upgrade() {
+                        inner.approved.borrow_mut().remove(&id);
+                    }
+                }),
+            );
+        }
+    }
+
+    fn choices(&self) -> Vec<Choice> {
+        let prompted = self.prompted.borrow();
+        let save = prompted
+            .request
+            .as_ref()
+            .and_then(|request| request.save.as_ref())
+            .is_some_and(|save| !save.is_empty());
+        if save {
+            return vec![Choice::Once, Choice::Always, Choice::Reject];
+        }
+        vec![Choice::Once, Choice::Reject]
+    }
+
+    /// Registers the stage's keys and draws it.
+    fn stage_changed(self: &Rc<Self>) {
+        self.layer.take();
+        self.reject.take();
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let stage = self.prompted.borrow().stage;
+        let prompting = self.prompted.borrow().request.is_some();
+        if prompting {
+            let layer = match stage {
+                Stage::Permission => self.question_layer(),
+                Stage::Reject => self.reject_layer(),
+            };
+            match tui.keymap.layer(layer) {
+                Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
+                Err(error) => log::error!("permission keymap layer: {error}"),
+            }
+            // The session prompt hides; it must not keep the keys.
+            tui.app.blur();
+        }
+        self.render();
+        if let Some(field) = self.reject.borrow().as_ref() {
+            field.focus();
+        }
+    }
+
+    /// `SessionQuestion`'s layer.
+    fn question_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
+        let run = |action: fn(&Rc<Inner>)| {
+            let weak = Rc::downgrade(self);
+            move |_: Option<&str>, _: Option<&KeyEvent>| {
+                if let Some(inner) = weak.upgrade() {
+                    action(&inner);
+                }
+            }
+        };
+        let mut commands = vec![
+            TuiCommand::new("app.exit", run(Inner::dismiss))
+                .title("Reject permission")
+                .group("Permission")
+                .bind(Bind::Off),
+            TuiCommand::new(FULLSCREEN, run(Inner::toggle_fullscreen))
+                .title("Toggle permission fullscreen")
+                .group("Permission")
+                .bind(Bind::Off),
+        ];
+        if self.choices().len() > 1 {
+            commands.push(
+                TuiCommand::inline("left,h", run(|inner| inner.move_selection(-1)))
+                    .title("Previous option")
+                    .group("Permission"),
+            );
+            commands.push(
+                TuiCommand::inline("right,l", run(|inner| inner.move_selection(1)))
+                    .title("Next option")
+                    .group("Permission"),
+            );
+        }
+        commands.push(
+            TuiCommand::inline(
+                "return",
+                run(|inner| {
+                    let selected = inner.prompted.borrow().selected;
+                    inner.select(inner.choices()[selected]);
+                }),
+            )
+            .title("Select option")
+            .group("Permission"),
+        );
+        commands.push(
+            TuiCommand::inline("escape", run(Inner::dismiss))
+                .title("Reject permission")
+                .group("Permission"),
+        );
+        KeymapLayer {
+            commands,
+            bindings: vec!["app.exit".to_owned(), FULLSCREEN.to_owned()],
+            ..KeymapLayer::default()
+        }
+    }
+
+    /// `RejectPrompt`'s layer.
+    fn reject_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
+        let exit = Rc::downgrade(self);
+        let escape = Rc::downgrade(self);
+        let confirm = Rc::downgrade(self);
+        KeymapLayer {
+            commands: vec![
+                TuiCommand::new("app.exit", move |_, event: Option<&KeyEvent>| {
+                    let Some(inner) = exit.upgrade() else { return };
+                    let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
+                    let field = inner.reject.borrow().clone();
+                    if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
+                        field.set_text("");
+                        return;
+                    }
+                    inner.cancel_reject();
+                })
+                .title("Cancel permission rejection")
+                .group("Permission"),
+                TuiCommand::inline("escape", move |_, _| {
+                    if let Some(inner) = escape.upgrade() {
+                        inner.cancel_reject();
+                    }
+                })
+                .title("Cancel permission rejection")
+                .group("Permission"),
+                TuiCommand::inline("return", move |_, _| {
+                    if let Some(inner) = confirm.upgrade() {
+                        inner.confirm_reject();
+                    }
+                })
+                .title("Confirm permission rejection")
+                .group("Permission"),
+            ],
+            ..KeymapLayer::default()
+        }
+    }
+
+    fn dismiss(self: &Rc<Self>) {
+        if self.prompted.borrow().expanded {
+            self.prompted.borrow_mut().expanded = false;
+            self.render();
+            return;
+        }
+        self.select(Choice::Reject);
+    }
+
+    fn toggle_fullscreen(self: &Rc<Self>) {
+        {
+            let mut prompted = self.prompted.borrow_mut();
+            prompted.expanded = !prompted.expanded;
+        }
+        self.render();
+    }
+
+    fn move_selection(self: &Rc<Self>, by: isize) {
+        let count = self.choices().len() as isize;
+        {
+            let mut prompted = self.prompted.borrow_mut();
+            prompted.selected = (prompted.selected as isize + by).rem_euclid(count) as usize;
+        }
+        self.render();
+    }
+
+    fn select(self: &Rc<Self>, choice: Choice) {
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let Some(request) = self.prompted.borrow().request.clone() else {
+            return;
+        };
+        let decision = match choice {
+            Choice::Once => PermissionReply::Once,
+            Choice::Always => PermissionReply::Always,
+            Choice::Reject => {
+                // A subagent's request asks what to do differently.
+                let child = tui.data.read(|state| {
+                    state
+                        .session(&request.session_id)
+                        .is_some_and(|info| info.parent_id.is_some())
+                });
+                if child {
+                    self.prompted.borrow_mut().stage = Stage::Reject;
+                    self.stage_changed();
+                    return;
+                }
+                PermissionReply::Reject
+            }
+        };
+        reply(&tui, &request, decision, None, Box::new(|| {}));
+    }
+
+    fn cancel_reject(self: &Rc<Self>) {
+        self.prompted.borrow_mut().stage = Stage::Permission;
+        self.stage_changed();
+    }
+
+    fn confirm_reject(self: &Rc<Self>) {
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let Some(request) = self.prompted.borrow().request.clone() else {
+            return;
+        };
+        let message = self
+            .reject
+            .borrow()
+            .as_ref()
+            .map(Textarea::text)
+            .filter(|text| !text.is_empty());
+        reply(
+            &tui,
+            &request,
+            PermissionReply::Reject,
+            message,
+            Box::new(|| {}),
+        );
+    }
+
+    fn render(self: &Rc<Self>) {
+        self.region.clear();
+        self.overlay.clear();
+        self.overlay.visible(false);
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let prompted = self.prompted.borrow();
+        let Some(request) = prompted.request.clone() else {
+            return;
+        };
+        let theme = tui.page();
+        let narrow = tui.app.size().0 < 80;
+        if prompted.stage == Stage::Reject {
+            let (view, field) = self.reject_view(&tui, &theme, narrow);
+            self.region.add(&view);
+            *self.reject.borrow_mut() = Some(field);
+            tui.app.request_redraw();
+            return;
+        }
+        let choices = self.choices();
+        let selected = choices[prompted.selected.min(choices.len() - 1)];
+        let expanded = prompted.expanded;
+        drop(prompted);
+        let view = self.question_view(&tui, &theme, &request, &choices, selected, narrow);
+        if expanded {
+            view.absolute()
+                .position(Edge::Top, 0)
+                .position(Edge::Bottom, 1)
+                .position(Edge::Left, 2)
+                .position(Edge::Right, 2);
+            self.overlay.add(&view);
+            self.overlay.visible(true);
+        } else {
+            self.region.add(&view.max_height(15));
+        }
+        tui.app.request_redraw();
+    }
+
+    fn question_view(
+        self: &Rc<Self>,
+        tui: &Tui,
+        theme: &Theme,
+        request: &PermissionRequest,
+        choices: &[Choice],
+        selected: Choice,
+        narrow: bool,
+    ) -> View {
+        let app = &tui.app;
+        let current = tui.data.read(|state| {
+            let (input, metadata) = source(state, request);
+            let directory = state
+                .session(&request.session_id)
+                .map(|info| info.location.directory.0.clone());
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let home = std::env::home_dir();
+            presentation(
+                &request.action,
+                &request.resources,
+                request.metadata.as_ref(),
+                &input,
+                &metadata,
+                &|path| {
+                    opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref())
+                },
+            )
+        });
+
+        let title_row = View::new(app)
+            .row()
+            .gap(1)
+            .shrink(0.0)
+            .child(&Text::new(app, "△").fg(theme.text.feedback.warning.base))
+            .child(&Text::new(app, "Permission required").fg(theme.text.base));
+        let header = View::new(app).column().child(&title_row);
+        if request.action != "shell" && !current.title.is_empty() {
+            header.add(
+                &View::new(app)
+                    .row()
+                    .gap(1)
+                    .padding_edge(Edge::Left, 2)
+                    .shrink(0.0)
+                    .child(
+                        &Text::new(app, current.icon)
+                            .fg(theme.text.muted)
+                            .shrink(0.0),
+                    )
+                    .child(&Text::new(app, current.title.clone()).fg(theme.text.base)),
+            );
+        }
+        let body = if selected == Choice::Always {
+            lines_view(
+                app,
+                &always_lines(&request.action, request.save.as_deref().unwrap_or_default()),
+                |index| {
+                    if index == 0 {
+                        theme.text.muted
+                    } else {
+                        theme.text.base
+                    }
+                },
+            )
+        } else {
+            presentation_body(tui, theme, request, &current)
+        };
+        let content = View::new(app)
+            .column()
+            .gap(1)
+            .padding_edge(Edge::Left, 1)
+            .padding_edge(Edge::Right, 3)
+            .padding_edge(Edge::Top, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .grow(1.0)
+            .basis(Length::Auto)
+            .min_height(0)
+            .child(
+                &View::new(app)
+                    .padding_edge(Edge::Left, 1)
+                    .shrink(0.0)
+                    .child(&header),
+            )
+            .child(&body);
+
+        let actions = View::new(app).row().gap(1).shrink(0.0);
+        for (index, choice) in choices.iter().copied().enumerate() {
+            let focused = choice == selected;
+            let option = View::new(app)
+                .padding_x(1)
+                .bg(if focused {
+                    theme.background.action.primary.focused
+                } else {
+                    theme.background.action.primary.base
+                })
+                .child(&Text::new(app, choice.label()).fg(if focused {
+                    theme.text.action.primary.focused
+                } else {
+                    theme.text.action.primary.base
+                }));
+            let hover = Rc::downgrade(self);
+            option.on_hover(move |_, over| {
+                let Some(inner) = hover.upgrade() else { return };
+                if over && inner.prompted.borrow().selected != index {
+                    inner.prompted.borrow_mut().selected = index;
+                    inner.render();
+                }
+            });
+            let click = Rc::downgrade(self);
+            option.on_click(move |_, _| {
+                if let Some(inner) = click.upgrade() {
+                    inner.prompted.borrow_mut().selected = index;
+                    inner.select(choice);
+                }
+            });
+            actions.add(&option);
+        }
+        let hints = View::new(app).row().gap(2).shrink(0.0);
+        let expanded = self.prompted.borrow().expanded;
+        if let Some(key) = tui.keymap.shortcut(FULLSCREEN) {
+            hints.add(&hint(
+                app,
+                theme,
+                &key,
+                if expanded { "minimize" } else { "fullscreen" },
+            ));
+        }
+        if choices.len() > 1 {
+            hints.add(&hint(app, theme, "⇆", "select"));
+        }
+        hints.add(&hint(app, theme, "enter", "confirm"));
+
+        View::new(app)
+            .column()
+            .bg(theme.background.raised.base)
+            .border(BorderStyle::Heavy)
+            .border_sides(Sides::LEFT)
+            .border_color(theme.background.action.primary.focused)
+            .child(&content)
+            .child(&footer(app, theme, narrow).child(&actions).child(&hints))
+    }
+
+    fn reject_view(self: &Rc<Self>, tui: &Tui, theme: &Theme, narrow: bool) -> (View, Textarea) {
+        let app = &tui.app;
+        let heading = View::new(app)
+            .column()
+            .gap(1)
+            .padding_edge(Edge::Left, 1)
+            .padding_edge(Edge::Right, 3)
+            .padding_edge(Edge::Top, 1)
+            .padding_edge(Edge::Bottom, 1)
+            .child(
+                &View::new(app)
+                    .row()
+                    .gap(1)
+                    .padding_edge(Edge::Left, 1)
+                    .child(&Text::new(app, "△").fg(theme.text.feedback.error.base))
+                    .child(&Text::new(app, "Reject permission").fg(theme.text.base)),
+            )
+            .child(&View::new(app).padding_edge(Edge::Left, 1).child(
+                &Text::new(app, "Tell OpenCode what to do differently").fg(theme.text.muted),
+            ));
+        let field = Textarea::new(app)
+            .grow(1.0)
+            .basis(Length::Auto)
+            .min_width(1)
+            .colors(theme.text.base, Color::TRANSPARENT)
+            .focused_colors(theme.text.base, Color::TRANSPARENT)
+            .cursor_color(theme.text.base);
+        let confirm = hint(app, theme, "enter", "confirm");
+        let weak = Rc::downgrade(self);
+        confirm.on_click(move |_, _| {
+            if let Some(inner) = weak.upgrade() {
+                inner.confirm_reject();
+            }
+        });
+        let cancel = hint(app, theme, "esc", "cancel");
+        let weak = Rc::downgrade(self);
+        cancel.on_click(move |_, _| {
+            if let Some(inner) = weak.upgrade() {
+                inner.cancel_reject();
+            }
+        });
+        let actions = View::new(app)
+            .row()
+            .gap(2)
+            .shrink(0.0)
+            .child(&confirm)
+            .child(&cancel);
+        let view = View::new(app)
+            .column()
+            .bg(theme.background.raised.base)
+            .border(BorderStyle::Heavy)
+            .border_sides(Sides::LEFT)
+            .border_color(theme.text.feedback.error.base)
+            .child(&heading)
+            .child(&footer(app, theme, narrow).child(&field).child(&actions));
+        (view, field)
+    }
+}
+
+/// Sends the reply; the store drops the request once the server took it. A failure shows as a toast.
+fn reply(
+    tui: &Tui,
+    request: &PermissionRequest,
+    decision: PermissionReply,
+    message: Option<String>,
+    failed: Box<dyn FnOnce()>,
+) {
+    let data = tui.data.clone();
+    let input = PermissionReplyInput {
+        session_id: request.session_id.clone(),
+        request_id: request.id.clone(),
+        decision,
+        message,
+    };
+    let weak = tui.weak();
+    tui.app.spawn(
+        async move { data.permission_reply(input).await },
+        move |_, result| {
+            let Err(error) = result else { return };
+            failed();
+            if let Some(tui) = weak.upgrade() {
+                tui.toasts.error(error.to_string());
+            }
+        },
+    );
+}
+
+/// The footer row both stages share; it stacks below 80 columns.
+fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
+    View::new(app)
+        .direction(if narrow {
+            FlexDirection::Column
+        } else {
+            FlexDirection::Row
+        })
+        .shrink(0.0)
+        .gap(1)
+        .padding_edge(Edge::Top, 1)
+        .padding_edge(Edge::Left, 2)
+        .padding_edge(Edge::Right, 3)
+        .padding_edge(Edge::Bottom, 1)
+        .bg(theme.decrease(&theme.background.raised.base, 1))
+        .justify(if narrow {
+            Justify::Start
+        } else {
+            Justify::SpaceBetween
+        })
+        .align_items(if narrow { Align::Start } else { Align::Center })
+}
+
+/// `key` in the text color, then `label` muted.
+fn hint(app: &App, theme: &Theme, key: &str, label: &str) -> View {
+    View::new(app)
+        .row()
+        .gap(1)
+        .shrink(0.0)
+        .child(&Text::new(app, key.to_owned()).fg(theme.text.base))
+        .child(&Text::new(app, label.to_owned()).fg(theme.text.muted))
+}
+
+fn lines_view(app: &App, lines: &[String], color: impl Fn(usize) -> Color) -> View {
+    let view = View::new(app).column().gap(1).padding_edge(Edge::Left, 1);
+    for (index, line) in lines.iter().enumerate() {
+        view.add(&Text::new(app, line.clone()).fg(color(index)));
+    }
+    view
+}
+
+fn presentation_body(
+    tui: &Tui,
+    theme: &Theme,
+    request: &PermissionRequest,
+    current: &Presentation,
+) -> View {
+    let app = &tui.app;
+    if request.action == "edit" {
+        return edit_body(tui, theme, current);
+    }
+    if request.action == "external_directory" {
+        let view = View::new(app).column().gap(1).padding_edge(Edge::Left, 1);
+        if current.lines.is_empty() {
+            return view;
+        }
+        let patterns = View::new(app).column();
+        for line in &current.lines {
+            patterns.add(&Text::new(app, line.clone()).fg(theme.text.base));
+        }
+        return view
+            .child(&Text::new(app, "Patterns").fg(theme.text.muted))
+            .child(&patterns);
+    }
+    let color = if matches!(request.action.as_str(), "shell" | "subagent" | "task") {
+        theme.text.base
+    } else {
+        theme.text.muted
+    };
+    let view = View::new(app).column().padding_edge(Edge::Left, 1);
+    for line in &current.lines {
+        view.add(&Text::new(app, line.clone()).fg(color));
+    }
+    view
+}
+
+/// `EditBody`: the diff, else the raw patch, else a note.
+fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
+    let app = &tui.app;
+    let syntax = opencode_ui::code::syntax_theme(theme);
+    let scroll = || {
+        ScrollBox::new(app)
+            .grow(1.0)
+            .basis(Length::Auto)
+            .min_height(0)
+    };
+    let column = View::new(app)
+        .column()
+        .gap(1)
+        .grow(1.0)
+        .basis(Length::Auto)
+        .min_height(0);
+    if let Some(diff) = &current.diff {
+        let view = match tui.config.info.diffs.as_ref().and_then(|diffs| diffs.view) {
+            Some(ConfigDiffView::Unified) => DiffView::Unified,
+            Some(ConfigDiffView::Split) => DiffView::Split,
+            _ if tui.app.size().0 > 120 => DiffView::Split,
+            _ => DiffView::Unified,
+        };
+        let file = current.file.as_deref().unwrap_or_default();
+        let filetype = opentui::syntax::filetype_for_path(file);
+        let diff =
+            opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
+        return column.child(&scroll().child(&diff));
+    }
+    if let Some(patch) = &current.patch {
+        let code =
+            opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
+        return column.child(&scroll().child(&code));
+    }
+    column.child(
+        &View::new(app)
+            .padding_edge(Edge::Left, 1)
+            .child(&Text::new(app, "No diff provided").fg(theme.text.muted)),
+    )
+}
+
+/// The tool call's input and metadata once it stopped streaming (`PermissionPrompt`'s `source`).
+fn source(state: &State, request: &PermissionRequest) -> (Value, Value) {
+    let found = request.source.as_ref().and_then(|source| {
+        let Some(SessionMessageInfo::Assistant(message)) =
+            state.message(&request.session_id, &source.message_id)
+        else {
+            return None;
+        };
+        message.content.iter().find_map(|item| match item {
+            SessionMessageAssistantContentItem::Tool(part) if part.id == source.id => {
+                serde_json::to_value(&part.state).ok()
+            }
+            _ => None,
+        })
+    });
+    match found {
+        Some(state) if state.get("status").and_then(Value::as_str) != Some("streaming") => (
+            state.get("input").cloned().unwrap_or(Value::Null),
+            state.get("metadata").cloned().unwrap_or(Value::Null),
+        ),
+        _ => (Value::Null, Value::Null),
+    }
+}
+
+/// `PermissionPresentation`.
+#[derive(Debug, Default, PartialEq)]
+pub struct Presentation {
+    pub icon: &'static str,
+    pub title: String,
+    pub lines: Vec<String>,
+    pub diff: Option<String>,
+    pub patch: Option<String>,
+    pub file: Option<String>,
+}
+
+/// `permissionPresentation`: what the prompt shows for a request, from the request and its tool call.
+pub fn presentation(
+    action: &str,
+    resources: &[String],
+    request_metadata: Option<&indexmap::IndexMap<String, Value>>,
+    input: &Value,
+    tool_metadata: &Value,
+    format_path: &dyn Fn(&str) -> String,
+) -> Presentation {
+    let canonical = canonical_tool_name(action);
+    let input = normalize_input(canonical, input);
+    let mut metadata = dict(tool_metadata);
+    if let Some(extra) = request_metadata {
+        metadata.extend(
+            extra
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+    }
+    let text = |map: &Map<String, Value>, key: &str| -> String {
+        map.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let first = resources.first().cloned().unwrap_or_default();
+    let or = |value: String, fallback: &str| {
+        if value.is_empty() {
+            fallback.to_owned()
+        } else {
+            value
+        }
+    };
+    let some = |value: String| (!value.is_empty()).then_some(value);
+
+    match canonical {
+        "edit" => {
+            let file = or(text(&input, "path"), &first);
+            let files = metadata.get("files").and_then(Value::as_array);
+            let changed = dict(
+                files
+                    .and_then(|files| files.first())
+                    .unwrap_or(&Value::Null),
+            );
+            let diff = some(or(
+                or(text(&changed, "patch"), &text(&changed, "diff")),
+                &text(&metadata, "diff"),
+            ));
+            Presentation {
+                icon: "→",
+                title: format!("Edit {}", format_path(&file)),
+                patch: if diff.is_some() {
+                    None
+                } else {
+                    some(text(&input, "patchText"))
+                },
+                diff,
+                file: Some(file),
+                ..Presentation::default()
+            }
+        }
+        "read" | "list" => {
+            let value = or(text(&input, "path"), &first);
+            let title = if canonical == "read" { "Read" } else { "List" };
+            Presentation {
+                icon: "→",
+                title: format!("{title} {}", format_path(&value)),
+                lines: some(value)
+                    .map(|value| vec![format!("Path: {}", format_path(&value))])
+                    .unwrap_or_default(),
+                ..Presentation::default()
+            }
+        }
+        "glob" | "grep" => {
+            let pattern = or(text(&input, "pattern"), &first);
+            let title = if canonical == "glob" { "Glob" } else { "Grep" };
+            Presentation {
+                icon: "✱",
+                title: format!("{title} \"{pattern}\""),
+                lines: some(pattern)
+                    .map(|pattern| vec![format!("Pattern: {pattern}")])
+                    .unwrap_or_default(),
+                ..Presentation::default()
+            }
+        }
+        "shell" => {
+            let command = text(&input, "command");
+            Presentation {
+                icon: "#",
+                title: "Shell command".to_owned(),
+                lines: match some(command) {
+                    Some(command) => vec![format!("$ {command}")],
+                    None => resources.iter().map(|item| format!("- {item}")).collect(),
+                },
+                ..Presentation::default()
+            }
+        }
+        "subagent" => {
+            let agent = or(text(&input, "agent"), "general");
+            Presentation {
+                icon: "#",
+                title: format!("{} Subagent", opencode_ui::confirm::titlecase(&agent)),
+                lines: some(text(&input, "description"))
+                    .map(|description| vec![format!("◉ {description}")])
+                    .unwrap_or_default(),
+                ..Presentation::default()
+            }
+        }
+        "webfetch" => {
+            let url = or(text(&input, "url"), &text(&metadata, "url"));
+            Presentation {
+                icon: "%",
+                title: format!("WebFetch {url}"),
+                lines: some(url)
+                    .map(|url| vec![format!("URL: {url}")])
+                    .unwrap_or_default(),
+                ..Presentation::default()
+            }
+        }
+        "websearch" => {
+            let query = or(text(&input, "query"), &text(&metadata, "query"));
+            let title = web_search_provider_label(metadata.get("provider").unwrap_or(&Value::Null));
+            Presentation {
+                icon: "◈",
+                title: if query.is_empty() {
+                    title
+                } else {
+                    format!("{title} \"{query}\"")
+                },
+                lines: some(query)
+                    .map(|query| vec![format!("Query: {query}")])
+                    .unwrap_or_default(),
+                ..Presentation::default()
+            }
+        }
+        "lsp" => {
+            let file = text(&input, "path");
+            let operation = or(text(&input, "operation"), "request");
+            let number = |key: &str| input.get(key).and_then(finite_number);
+            let position = number("line")
+                .zip(number("character"))
+                .map(|(line, character)| format!("{line}:{character}"));
+            let mut title = format!("LSP {operation}");
+            let mut lines = Vec::new();
+            if input.get("operation").is_some_and(truthy) {
+                lines.push(format!("Operation: {operation}"));
+            }
+            if !file.is_empty() {
+                title.push_str(&format!(" {}", format_path(&file)));
+                if let Some(position) = &position {
+                    title.push_str(&format!(":{position}"));
+                }
+                lines.push(format!("Path: {}", format_path(&file)));
+            }
+            if let Some(position) = position {
+                lines.push(format!("Position: {position}"));
+            }
+            Presentation {
+                icon: "→",
+                title,
+                lines,
+                ..Presentation::default()
+            }
+        }
+        "external_directory" => {
+            let raw = or(
+                or(text(&metadata, "parentDir"), &text(&metadata, "filepath")),
+                &first,
+            );
+            Presentation {
+                icon: "←",
+                title: format!(
+                    "Access external directory {}",
+                    format_path(&wildcard_directory(&raw))
+                ),
+                lines: resources.iter().map(|item| format!("- {item}")).collect(),
+                ..Presentation::default()
+            }
+        }
+        "doom_loop" => Presentation {
+            icon: "⟳",
+            title: "Continue after repeated failures".to_owned(),
+            lines: vec!["This keeps the session running despite repeated failures.".to_owned()],
+            ..Presentation::default()
+        },
+        _ => Presentation {
+            icon: "⚙",
+            title: format!("Call tool {action}"),
+            lines: vec![format!("Tool: {action}")],
+            ..Presentation::default()
+        },
+    }
+}
+
+/// `permissionAlwaysLines`.
+pub fn always_lines(action: &str, save: &[String]) -> Vec<String> {
+    if save.len() == 1 && save[0] == "*" {
+        return vec![format!("This will always allow {action} for this project.")];
+    }
+    std::iter::once("This will always allow the following patterns for this project.".to_owned())
+        .chain(save.iter().map(|item| format!("- {item}")))
+        .collect()
+}
+
+/// The directory before the first wildcard, without trailing separators unless it is a root.
+fn wildcard_directory(value: &str) -> String {
+    let Some(wildcard) = value.find('*') else {
+        return value.to_owned();
+    };
+    let prefix = &value[..wildcard];
+    let separators = |text: &str| !text.is_empty() && text.chars().all(|c| c == '/' || c == '\\');
+    let drive_root = {
+        let bytes = prefix.as_bytes();
+        bytes.len() == 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'/' | b'\\')
+    };
+    if separators(prefix) || drive_root {
+        return prefix.to_owned();
+    }
+    prefix.trim_end_matches(['/', '\\']).to_owned()
+}
+
+fn normalize_input(action: &str, value: &Value) -> Map<String, Value> {
+    let mut input = dict(value);
+    let text = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned)
+    };
+    let path = text("path")
+        .or_else(|| text("filePath"))
+        .or_else(|| text("filepath"));
+    let agent = text("agent").or_else(|| text("subagent_type"));
+    if let Some(path) = path.filter(|_| matches!(action, "read" | "edit" | "list" | "lsp")) {
+        input.insert("path".to_owned(), Value::String(path));
+    }
+    if let Some(agent) = agent.filter(|_| action == "subagent") {
+        input.insert("agent".to_owned(), Value::String(agent));
+    }
+    input
+}
+
+fn dict(value: &Value) -> Map<String, Value> {
+    value.as_object().cloned().unwrap_or_default()
+}
+
+/// JavaScript truthiness of a JSON value.
+fn truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0 && !n.is_nan()),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
+    }
+}
