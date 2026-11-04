@@ -432,6 +432,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     crate::features::highlights::install(&tui, deps.continue_);
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
+    crate::dialogs::integration::install(&tui);
     crate::plugins::host::install(&tui);
     tui.startup.aim(&deps.route, deps.continue_);
     tui.navigate(deps.route);
