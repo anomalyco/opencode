@@ -13,9 +13,9 @@ pub mod panel;
 pub mod plugins;
 pub mod prompt;
 pub mod routes;
-pub mod status;
 pub mod tabs;
 pub mod terminal;
 
-pub use app::{Deps, Launch, Tui, mount, run};
+pub use app::{Deps, Launch, Tui, mount, mount_with, run};
+pub use features::startup::Args;
 pub use routes::Route;

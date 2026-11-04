@@ -10,6 +10,7 @@ pub mod events;
 pub mod highlights;
 pub mod home_forms;
 pub mod links;
+pub mod location;
 pub mod overlays;
 pub mod quick_switch;
 pub mod route_missing;

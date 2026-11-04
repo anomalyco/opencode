@@ -6,9 +6,8 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
-use opencode_api::generated::{SessionListInput, SessionListInputOrder};
 use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigMode};
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
@@ -26,8 +25,8 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use opentui::widget::Textarea;
 
+use crate::features::startup::{Args, Startup};
 use crate::routes::{self, Route, RouteView};
-use crate::status::Status;
 
 /// What the TUI is built from. Tests pass an in-memory client and no roots.
 pub struct Deps {
@@ -53,6 +52,7 @@ pub struct Roots {
 /// What [`run`] needs besides [`Deps`].
 pub struct Launch {
     pub deps: Deps,
+    pub args: Args,
     /// Kept alive while the TUI runs: dropping a standalone connection stops its server.
     pub keep: Box<dyn std::any::Any>,
 }
@@ -76,6 +76,12 @@ pub struct Tui {
     pub settings: crate::dialogs::settings::Live,
     /// The model and agent state (E.16).
     pub local: Rc<crate::dialogs::model::Local>,
+    pub startup: Startup,
+    pub epilogue: crate::features::epilogue::Epilogue,
+    pub(crate) location: crate::features::location::LocationState,
+    pub(crate) overlays: crate::features::overlays::Overlays,
+    pub(crate) title: crate::features::title::Title,
+    pub(crate) events: crate::features::events::Events,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -84,7 +90,6 @@ pub struct Tui {
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     main: View,
-    status: Status,
     seen: Cell<u64>,
     connection: RefCell<Option<Connection>>,
     layers: RefCell<Vec<Disposer>>,
@@ -135,10 +140,15 @@ impl Tui {
 
     /// Replaces the route view and syncs the new one with everything.
     pub fn navigate(&self, route: Route) {
+        let remount = self.view.borrow().is_some() && self.route() == route;
         if let Some(view) = self.view.borrow_mut().take() {
             view.root().detach();
         }
         *self.route.borrow_mut() = route.clone();
+        // A remount (a theme change) keeps the home's location.
+        if route == Route::Home && !remount {
+            crate::features::location::home(self);
+        }
         let view = routes::mount(self, &route);
         self.main.add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
@@ -161,6 +171,16 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
+        crate::features::title::sync(self, &changes);
+        crate::features::events::sync(self, &changes);
+    }
+
+    /// Syncs the route view with everything, after state outside the store changed.
+    pub(crate) fn resync(&self) {
+        if let Some(view) = self.view.borrow().as_ref() {
+            view.sync(self, &opencode_store::Changes::everything());
+        }
+        self.app.request_redraw();
     }
 
     /// Runs `ThemeState` effects off the UI thread, shows a theme error, and repaints on a change.
@@ -203,6 +223,10 @@ impl Tui {
     /// Remounts the route view in the current theme, keeping the prompt focused if it was.
     fn restyle_route(&self) {
         self.restyle.set(false);
+        // Before the first route mounts there is nothing to repaint.
+        if self.view.borrow().is_none() {
+            return;
+        }
         let prompt = self
             .textarea
             .borrow()
@@ -218,6 +242,11 @@ impl Tui {
 
 /// Builds the TUI on `app`. The returned handle owns it; drop it after the app stops.
 pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
+    mount_with(app, deps, Args::default())
+}
+
+/// [`mount`] with the startup arguments.
+pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let runtime = app.runtime();
     let _guard = runtime.enter();
     let data = Data::with_runtime(
@@ -265,9 +294,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     app.set_theme(app_theme(&page));
     let shell = View::new(app).column().grow(1.0).basis(Length::Auto);
     let main = View::new(app).column().grow(1.0).basis(Length::Auto);
-    let status = Status::new(app, &page, &deps.directory);
     shell.add(&main);
-    shell.add(status.root());
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
@@ -307,13 +334,18 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
             deps.roots.as_ref().map(|roots| roots.paths.state.clone()),
         ),
         settings,
+        startup: Startup::new(args),
+        epilogue: Default::default(),
+        location: Default::default(),
+        overlays: Default::default(),
+        title: Default::default(),
+        events: Default::default(),
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
         painted: RefCell::new(page),
         restyle: Cell::new(false),
         main,
-        status,
         seen: Cell::new(0),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
@@ -332,10 +364,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
     tui.navigate(deps.route);
-    if deps.continue_ {
-        continue_latest(&tui);
-    }
-    crate::features::startup::run(&tui);
+    crate::features::startup::run(&tui, deps.continue_);
     tui
 }
 
@@ -345,15 +374,19 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
         exit_on_ctrl_c: false,
         // `ThemeState` follows the palette when the `system` theme is active.
         palette_size: 16,
-        title: Some("OpenCode".to_owned()),
         ..AppOptions::default()
     };
     let app = App::new(options)?;
-    let tui = mount(&app, launch.deps);
+    let tui = mount_with(&app, launch.deps, launch.args);
     let result = app.run();
+    let epilogue = crate::features::epilogue::text(&tui);
     drop(tui);
     drop(launch.keep);
-    result
+    result?;
+    if let Some(text) = epilogue {
+        println!("{text}");
+    }
+    Ok(())
 }
 
 fn install_keys(tui: &Rc<Tui>) {
@@ -400,11 +433,14 @@ fn install_keys(tui: &Rc<Tui>) {
     let commands = KeymapLayer {
         mode: Some(GLOBAL_MODE.to_owned()),
         commands: vec![
-            command("app.exit", |tui| tui.app.quit())
-                .title("Exit the app")
-                .group("System")
-                .palette()
-                .slash(slash("exit", &["quit", "q"])),
+            command("app.exit", |tui| {
+                crate::features::title::clear(tui);
+                tui.app.quit();
+            })
+            .title("Exit the app")
+            .group("System")
+            .palette()
+            .slash(slash("exit", &["quit", "q"])),
             command("help.show", |tui| help::show(&tui.dialogs))
                 .title("Help")
                 .group("System")
@@ -531,7 +567,7 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
     let weak = tui.weak();
     tui.app.on_message(move |_, StatusChanged(state)| {
         if let Some(tui) = weak.upgrade() {
-            tui.status.set(&tui.page(), state);
+            crate::features::overlays::connection_changed(&tui, state);
         }
     });
 
@@ -561,40 +597,6 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
         }
     });
     *tui.connection.borrow_mut() = Some(connection);
-}
-
-/// `--continue`: the newest root session of the default location (`app.tsx:689-715`).
-fn continue_latest(tui: &Rc<Tui>) {
-    let client = tui.data.client().clone();
-    let input = SessionListInput {
-        limit: Some(1),
-        order: Some(SessionListInputOrder::Desc),
-        parent_id: Some(None),
-        archived: Some(false),
-        directory: Some(tui.directory.clone().into()),
-        ..SessionListInput::default()
-    };
-    let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_list(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            match result {
-                Ok(response) => {
-                    if let Some(session) = response.data.into_iter().next() {
-                        let id = session.id.clone();
-                        tui.data.remember(session);
-                        tui.navigate(Route::Session { id });
-                    }
-                }
-                Err(error) => tui.toasts.error(error.to_string()),
-            }
-        },
-    );
 }
 
 fn textarea_focused(app: &App, textarea: &Rc<RefCell<Option<Textarea>>>) -> Condition {

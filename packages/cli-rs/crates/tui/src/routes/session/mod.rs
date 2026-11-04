@@ -38,6 +38,7 @@ pub struct Session {
     working: Spinner,
     permission: permission::Permission,
     form: form::SessionForms,
+    location: crate::routes::location_missing::LocationMissing,
     prompt: crate::prompt::editor::Prompt,
 }
 
@@ -55,6 +56,7 @@ impl Session {
             .visible(false);
         let permission = permission::Permission::new(tui, &id);
         let form = form::SessionForms::new(tui, &id);
+        let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
         let column = View::new(app)
             .column()
@@ -70,6 +72,7 @@ impl Session {
             .child(&working)
             .child(permission.root())
             .child(form.root())
+            .child(location.root())
             .child(prompt.root());
         let root = View::new(app)
             .row()
@@ -88,6 +91,7 @@ impl Session {
             working,
             permission,
             form,
+            location,
             prompt,
         }
     }
@@ -106,16 +110,18 @@ impl RouteView for Session {
                     .and_then(|session| session.title.clone())
             });
             self.header.set_text(title.unwrap_or_default());
+            crate::features::location::session(tui, &self.id);
         }
         if changes.status(&self.id) {
             let running = tui.data.read(|state| state.status(&self.id)) == SessionStatus::Running;
             self.working.visible(running);
         }
         self.transcript.sync(tui, &self.id, changes);
-        let prompting = self.permission.active() || self.form.active();
+        let prompting = self.permission.active() || self.form.active() || self.location.active();
         self.permission.sync(tui, changes);
         self.form.sync(tui, changes, self.permission.active());
-        if (self.permission.active() || self.form.active()) != prompting {
+        self.location.sync(tui);
+        if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
             if prompting {
                 self.prompt.focus(tui);
@@ -125,7 +131,7 @@ impl RouteView for Session {
     }
 
     fn focus(&self, tui: &Tui) {
-        if !self.permission.active() && !self.form.active() {
+        if !self.permission.active() && !self.form.active() && !self.location.active() {
             self.prompt.focus(tui);
         }
     }
