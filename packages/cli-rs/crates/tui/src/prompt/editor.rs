@@ -17,7 +17,7 @@ use opencode_api::generated::{
 use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::input::Keymap;
@@ -592,6 +592,22 @@ fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
     }
 }
 
+/// The skills dialog's pick: an `@skill` mention at the cursor (`prompt.skills`).
+fn insert_skill(prompt: Weak<Inner>) -> crate::dialogs::skill::OnSelect {
+    Rc::new(move |_, id| {
+        let Some(prompt) = prompt.upgrade() else {
+            return;
+        };
+        let text = prompt.textarea.text();
+        let cursor = prompt.textarea.cursor_offset();
+        let inserted =
+            crate::dialogs::skill::mention(&mut prompt.prompt.borrow_mut(), &text, cursor, id);
+        if let Some(inserted) = inserted {
+            prompt.textarea.insert(inserted);
+        }
+    })
+}
+
 /// The prompt's layers (`component/prompt/index.tsx:644-1096`).
 fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     let target = inner.textarea.id();
@@ -676,6 +692,20 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     },
                 )
                 .enabled(when(Inner::running)),
+                command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
+                    crate::dialogs::skill::show(
+                        tui,
+                        Some(prompt.location(tui)),
+                        insert_skill(prompt.this.clone()),
+                    );
+                    true
+                })
+                .palette()
+                .slash(Slash {
+                    name: "skills".to_owned(),
+                    aliases: Vec::new(),
+                    arguments: false,
+                }),
             ],
             ..KeymapLayer::default()
         },
@@ -685,7 +715,12 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             ..KeymapLayer::default()
         },
         KeymapLayer {
-            bindings: bindings(&["prompt.submit", "session.interrupt", "session.background"]),
+            bindings: bindings(&[
+                "prompt.submit",
+                "prompt.skills",
+                "session.interrupt",
+                "session.background",
+            ]),
             ..KeymapLayer::default()
         },
         // Ctrl+C clears a prompt with text; on an empty one it reaches `app.exit`.
