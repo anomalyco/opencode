@@ -2,6 +2,7 @@ export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { BasePath } from "@opencode/server/base-path"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
@@ -26,6 +27,7 @@ export type Options = {
   readonly mode: Mode
   readonly hostname?: string
   readonly port?: number
+  readonly basePath?: string
   readonly cors?: readonly string[]
 }
 
@@ -69,6 +71,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
+      const basePath = BasePath.normalize(options.basePath)
+      if (basePath === undefined) return yield* Effect.fail(BasePath.invalid(options.basePath))
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const findIncumbent =
@@ -96,7 +100,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
-      const transform = yield* WebUi.handler()
+      const transform = yield* WebUi.handler({ basePath })
       const remote = { urls: [] as ReadonlyArray<string> }
       const launch = start(
         {
@@ -107,6 +111,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           },
           hostname,
           port,
+          basePath,
           cors: options.cors ?? config.cors,
           password,
           pty: { handoff },
@@ -204,7 +209,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           }),
         )
       }
-      const url = HttpServer.formatAddress(server.address)
+      const url = HttpServer.formatAddress(server.address) + basePath
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
       return yield* options.mode === "service"
