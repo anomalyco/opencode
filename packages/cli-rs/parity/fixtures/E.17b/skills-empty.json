@@ -36,7 +36,7 @@
   "styles": [
     "#ffffffff #040404ff 0",
     "#ffffffff #141414ff 0",
-    "#eeeeeeff #141414ff 1",
+    "#eeeeeeff #141414ff 0",
     "#808080ff #141414ff 0"
   ],
   "runs": [
