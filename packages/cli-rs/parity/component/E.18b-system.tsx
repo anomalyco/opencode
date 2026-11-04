@@ -3,6 +3,14 @@
 // TUI with the same responses (keep `SERVERS` and the other data below in step with it) and compares the dialog
 // panel.
 import { onMount, type JSX } from "solid-js"
+import type { Context } from "@opencode/plugin/tui/context"
+// The plugin context registers every builtin, and the plugins dialog imports the context back, so the context
+// loads first, as in the app.
+import type { usePlugin } from "../../../tui/src/plugin/context"
+import "../../../tui/src/plugin/context"
+import { PluginsDialog } from "../../../tui/src/feature-plugins/system/plugins"
+import { usePathFormatter } from "../../../tui/src/context/path-format"
+import { useThemes } from "../../../tui/src/context/theme"
 import { DialogStatus } from "../../../tui/src/component/dialog-status"
 import { DialogThemeList } from "../../../tui/src/component/dialog-theme-list"
 import { ConfigProvider } from "../../../tui/src/config"
@@ -34,11 +42,72 @@ const SERVERS = [
 
 let servers: unknown[] = SERVERS
 
+// Server plugins: an outdated package, a failed local plugin, an internal built-in, and a package with only a TUI
+// part, which the dialog leaves out.
+const PLUGINS = [
+  {
+    id: "team.plugins",
+    source: { type: "package", target: "git+ssh://git@github.com/example/team-plugins.git", version: "dadba13", outdated: true },
+    features: { server: true },
+    state: { status: "active" },
+  },
+  {
+    id: "audit",
+    source: { type: "local", path: `${directory}/.opencode/plugins/audit.ts` },
+    features: { server: true },
+    state: { status: "failed", error: "Cannot find module 'zod' from audit.ts", ref: "err_audit" },
+  },
+  { id: "opencode.core", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } },
+  { id: "theme.pack", source: { type: "package", target: "theme-pack" }, features: { tui: true }, state: { status: "active" } },
+]
+
+// The Rust built-ins (crates/tui/src/plugins/host.rs) and the plugin crates/tui/tests/system.rs adds.
+const BUILTINS = [
+  "opencode.home.footer",
+  "opencode.prompt.footer",
+  "opencode.btw",
+  "opencode.sidebar.context",
+  "opencode.sidebar.limit",
+  "opencode.sidebar.mcp",
+  "opencode.sidebar.todo",
+  "opencode.sidebar.footer",
+  "opencode.notifications",
+  "opencode.plugins",
+  "opencode.stats",
+  "opencode.merman",
+  "opencode.latex",
+  "opencode.diffs",
+]
+
 const calls = createFetch((url) => {
   if (url.pathname === "/api/location") return json(location)
   if (url.pathname === "/api/mcp") return json({ location, data: servers })
+  if (url.pathname === "/api/plugin") return json({ location, data: PLUGINS })
   return undefined
 }, createEventStream())
+
+function Plugins() {
+  const themes = useThemes()
+  const paths = usePathFormatter()
+  const context = {
+    client: createApi(calls.fetch),
+    data: { location: { default: () => ({ directory }) }, on: () => () => {} },
+    get theme() {
+      return themes.currentTokens()
+    },
+    ui: { toast: { show: () => {} }, format: { path: (value: string) => paths.format(value) } },
+  } as unknown as Context
+  const plugins = {
+    registered: () => [
+      ...BUILTINS.map((id) => ({ id, source: "builtin", active: true })),
+      { id: "team.tui", source: "external", active: true },
+    ],
+    list: () => [{ target: "team.tui", id: "team.tui", status: "active" }],
+    activate: async () => true,
+    deactivate: async () => true,
+  } as unknown as ReturnType<typeof usePlugin>
+  return <PluginsDialog context={context} plugins={plugins} />
+}
 
 type Act = Parameters<typeof renderComponent>[0]["act"]
 
@@ -104,3 +173,43 @@ await render("E.18b/status", status, (f) => f.includes("MCP servers"), { mcp: tr
 servers = []
 await render("E.18b/status-empty", status, (f) => f.includes("No MCP servers"), { mcp: true })
 servers = SERVERS
+
+// Plugins: TUI rows first, then the server rows; built-ins show after ctrl+a.
+const plugins = () => <Plugins />
+const listed = (f: string) => f.includes("team.plugins")
+const large = { width: 100, height: 30 }
+await render("E.18b/plugins", plugins, listed, large)
+// Tall enough that the grown list needs no scroll: a Rust scroll right after the rows grow ends at the bottom
+// (follow-up in steps/rs-tui-system.md).
+await render("E.18b/plugins-internal", plugins, (f) => listed(f) || f.includes("hide internal"), {
+  ...large,
+  height: 60,
+  act: async (setup) => {
+    setup.mockInput.pressKey("a", { ctrl: true })
+    await Bun.sleep(50)
+  },
+})
+await render("E.18b/plugins-failed", plugins, listed, {
+  ...large,
+  act: async (setup) => {
+    setup.mockInput.pressArrow("down")
+    await Bun.sleep(50)
+  },
+})
+await render("E.18b/plugins-outdated", plugins, listed, {
+  ...large,
+  act: async (setup) => {
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    await Bun.sleep(50)
+  },
+})
+await render("E.18b/plugins-error", plugins, (f) => listed(f) || f.includes("plugin error"), {
+  ...large,
+  act: async (setup) => {
+    setup.mockInput.pressArrow("down")
+    await Bun.sleep(50)
+    setup.mockInput.pressEnter()
+    await Bun.sleep(100)
+  },
+})

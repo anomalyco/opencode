@@ -128,22 +128,8 @@ impl List {
                         }
                     }
                 }));
-                if let Some(on_close) = list.on_close.clone() {
-                    props.on_cancel = Some(on_close.clone());
-                    // `DialogSelect` binds Escape to `onCancel`; a mouse selection is cleared first.
-                    let app = cx.app.clone();
-                    props.bindings = vec![
-                        TuiCommand::inline("escape", move |_, _| {
-                            if app.selected_text().is_some() {
-                                app.clear_selection();
-                                return;
-                            }
-                            on_close();
-                        })
-                        .title("Back")
-                        .group("Dialog"),
-                    ];
-                }
+                // Escape and the close label run it.
+                props.on_cancel = list.on_close.clone();
                 let (view, handle) = select(cx, props);
                 if let Some(restore) = &restore {
                     if !restore.filter.is_empty() {

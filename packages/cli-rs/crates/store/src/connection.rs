@@ -385,6 +385,10 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::Rpc(_)
             // The worktrees dialog reads its list again (E.11b).
             | V2Event::WorktreeUpdated(_)
+            // The plugin manager and the update notification (E.18b).
+            | V2Event::PluginUpdated(_)
+            | V2Event::InstallationUpdateAvailable(_)
+            | V2Event::InstallationUpdated(_)
     )
 }
 
