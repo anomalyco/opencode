@@ -1,3 +1,5 @@
+import { Predicate } from "effect"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -27,73 +29,67 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
   return out
 }
 
-export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
-  const unwrapped = unwrapNamedError(error)
+export function formatServerError(cause: unknown, translate?: Translator, fallback?: string) {
+  const unwrapped = unwrapNamedError(cause)
 
   if (isConfigInvalidErrorLike(unwrapped)) return parseReadableConfigInvalidError(unwrapped, translate)
 
   if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)
 
   if (
-    typeof unwrapped === "object" &&
-    unwrapped !== null &&
-    "message" in unwrapped &&
-    typeof unwrapped.message === "string" &&
+    Predicate.isObjectOrArray(unwrapped) &&
+    Predicate.hasProperty(unwrapped, "message") &&
+    Predicate.isString(unwrapped.message) &&
     unwrapped.message
   )
     return unwrapped.message
 
-  if (error instanceof Error && error.message) return error.message
+  if (cause instanceof Error && cause.message) return cause.message
 
-  if (typeof error === "string" && error) return error
+  if (Predicate.isString(cause) && cause) return cause
 
   if (fallback) return fallback
 
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
-function unwrapNamedError(error: unknown): unknown {
-  if (!(error instanceof Error) || !error.cause || typeof error.cause !== "object") return error
+function unwrapNamedError(cause: unknown) {
+  if (!(cause instanceof Error) || !Predicate.isObjectOrArray(cause.cause)) return cause
 
-  if ("body" in error.cause) return (error.cause as Record<string, unknown>).body
+  if (Predicate.hasProperty(cause.cause, "body")) return cause.cause.body
 
-  return error.cause
+  return cause.cause
 }
 
-// Client-synthesized session not-found errors share one constructor and
-// predicate so the message contract cannot drift between route session
-// resolution (session-resolution.ts) and not-found fallback matching (session.tsx).
-const sessionNotFoundMessage = (sessionID: string) => `Session not found: ${sessionID}`
+export function isSessionNotFoundError(cause: unknown, sessionID: string) {
+  const unwrapped = unwrapNamedError(cause)
 
-export function sessionNotFoundError(sessionID: string) {
-  return new Error(sessionNotFoundMessage(sessionID))
-}
-
-export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
-  return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
-}
-
-export function isSessionNotFoundError(error: unknown, sessionID: string) {
-  const unwrapped = unwrapNamedError(error)
-
-  if (typeof unwrapped !== "object" || unwrapped === null) return false
-  const value = unwrapped as Record<string, unknown>
-
-  return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+  return (
+    Predicate.isObjectOrArray(unwrapped) &&
+    Predicate.isTagged(unwrapped, "SessionNotFoundError") &&
+    Predicate.hasProperty(unwrapped, "sessionID") &&
+    unwrapped.sessionID === sessionID
+  )
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
-  if (typeof error !== "object" || error === null) return false
-  const o = error as Record<string, unknown>
-
-  return o.name === "ConfigInvalidError" && typeof o.data === "object" && o.data !== null
+  return (
+    Predicate.isObjectOrArray(error) &&
+    Predicate.hasProperty(error, "name") &&
+    error.name === "ConfigInvalidError" &&
+    Predicate.hasProperty(error, "data") &&
+    Predicate.isObjectOrArray(error.data)
+  )
 }
 
 function isProviderModelNotFoundErrorLike(error: unknown): error is ProviderModelNotFoundError {
-  if (typeof error !== "object" || error === null) return false
-  const o = error as Record<string, unknown>
-
-  return o.name === "ProviderModelNotFoundError" && typeof o.data === "object" && o.data !== null
+  return (
+    Predicate.isObjectOrArray(error) &&
+    Predicate.hasProperty(error, "name") &&
+    error.name === "ProviderModelNotFoundError" &&
+    Predicate.hasProperty(error, "data") &&
+    Predicate.isObjectOrArray(error.data)
+  )
 }
 
 export function parseReadableConfigInvalidError(errorInput: ConfigInvalidError, translator?: Translator) {

@@ -2,7 +2,7 @@ import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promi
 import { useQueries, useQueryClient } from "@tanstack/solid-query"
 import { createStore } from "solid-js/store"
 import { createEffect, createMemo, createSignal, onCleanup, startTransition } from "solid-js"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
@@ -34,7 +34,7 @@ export type InboxEntry = {
   key: string
   conn: ServerConnection.Any
   server: ServerConnection.Key
-  ctx: ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>
+  ctx: ServerCtx
   session: SessionInfo
   status: InboxStatus
 }
@@ -57,7 +57,14 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   const timer = setInterval(() => setNow(Date.now()), 1_000)
   onCleanup(() => clearInterval(timer))
 
-  const connections = createMemo(() => servers.visible.map((conn) => ({ conn, ctx: global.ensureServerCtx(conn) })))
+  // A server that rejects our credentials has no controller, so it lists nothing until it signs in again.
+  const connections = createMemo(() =>
+    servers.visible.flatMap((conn) => {
+      const ctx = global.serverCtx(ServerConnection.key(conn))
+
+      return ctx ? [{ conn, ctx }] : []
+    }),
+  )
 
   // The inbox stays mounted and rarely refetches the index, so drop sessions the server no longer has.
   const forget = (conn: ServerConnection.Any, sessionID: string) => {
@@ -218,12 +225,14 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     while (queue.length) {
       await Promise.all(
-        queue.splice(0, BRANCH_BATCH).map((entry) =>
-          entry.ctx.data.location.vcs
-            .sync(entry.session.location)
+        queue.splice(0, BRANCH_BATCH).map((entry) => {
+          const location = entry.ctx.data.location
+
+          return (location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location))
+            .then(() => location.vcs.sync(entry.session.location))
             .catch(() => undefined)
-            .then(() => setVcs("settled", locationKey(entry), true)),
-        ),
+            .then(() => setVcs("settled", locationKey(entry), true))
+        }),
       )
     }
 
@@ -235,12 +244,6 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       const key = locationKey(entry)
 
       if (queued.has(key)) return
-
-      if (!entry.ctx.data.location.info(entry.session.location)) {
-        setVcs("settled", key, true)
-
-        return
-      }
 
       queued.add(key)
       queue.push(entry)

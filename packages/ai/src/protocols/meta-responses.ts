@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
-import { LLMEvent, type LLMRequest, Message, ToolResultPart } from "../schema/index.js"
+import { AssistantMessage, LLMEvent, type LLMRequest, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
@@ -65,27 +65,29 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
     {
       ...request,
       messages: request.messages.map((message) =>
-        Message.make({
-          ...message,
-          content: message.content.map((part) => {
-            if (
-              part.type !== "tool-result" ||
-              !part.providerExecuted ||
-              part.name !== "image_generation" ||
-              part.result.type !== "content" ||
-              part.providerMetadata?.[key]?.itemId !== part.id
-            )
-              return part
-            // Meta's signed image ID carries edit state; replay the handle, not the image bytes as a user message.
-            return ToolResultPart.make({
-              ...part,
-              result: {
-                type: "json",
-                value: { type: "image_generation_call", id: part.id, status: "completed", result: null },
-              },
-            })
-          }),
-        }),
+        message.role !== "assistant"
+          ? message
+          : new AssistantMessage({
+              ...message,
+              content: message.content.map((part) => {
+                if (
+                  part.type !== "tool-result" ||
+                  !part.providerExecuted ||
+                  part.name !== "image_generation" ||
+                  part.result.type !== "content" ||
+                  part.providerMetadata?.[key]?.itemId !== part.id
+                )
+                  return part
+                // Meta's signed image ID carries edit state; replay the handle, not the image bytes as a user message.
+                return ToolResultPart.make({
+                  ...part,
+                  result: {
+                    type: "json",
+                    value: { type: "image_generation_call", id: part.id, status: "completed", result: null },
+                  },
+                })
+              }),
+            }),
       ),
     },
     adapter,

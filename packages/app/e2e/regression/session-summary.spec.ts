@@ -322,7 +322,6 @@ for (const direction of ["ltr", "rtl"] as const) {
     for (const [name, empty] of [
       ["Plugins", "No plugins configured"],
       ["Skills", "No skills configured"],
-      ["LSP", "No LSP servers configured"],
     ]) {
       await summary.getByRole("button", { name, exact: true }).click()
       await expect(page.getByRole("group", { name, exact: true }).getByText(empty, { exact: true })).toBeVisible()
@@ -330,7 +329,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     }
 
     await page.keyboard.press("Escape")
-    await expect(page.getByRole("group", { name: "LSP", exact: true })).toBeHidden()
+    await expect(page.getByRole("group", { name: "Skills", exact: true })).toBeHidden()
     await page.keyboard.press("Escape")
     await expect(summary).toBeHidden()
 
@@ -344,19 +343,6 @@ for (const direction of ["ltr", "rtl"] as const) {
 test("summary catalogs load, refresh while cached, and tell errors from empty", async ({ page }) => {
   const state = { fail: true, extra: false, empty: false }
   const pluginDirectories: string[] = []
-
-  const lsp = [
-    {
-      type: "document",
-      info: {
-        lsp: {
-          typescript: { command: ["typescript-language-server", "--stdio"] },
-          rust: { command: ["rust-analyzer"] },
-        },
-      },
-    },
-    { type: "document", info: { lsp: { rust: { disabled: true } } } },
-  ]
 
   await mockStressTimeline(page, {
     mcp: () => (state.empty ? [] : [{ name: "summary-mcp", status: { status: "connected" } }]),
@@ -395,7 +381,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
             { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
             { id: "review-animations", name: "review-animations", path: "/skills/review/SKILL.md", content: "Review" },
           ],
-    configEntries: lsp,
   })
   await page.route(
     (url) => url.pathname === "/api/plugin",
@@ -449,10 +434,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   await expect(menu("Skills").getByText("find-skills", { exact: true })).toBeVisible()
   await expect(menu("Skills").getByText("review-animations", { exact: true })).toBeVisible()
   await expect(menu("Plugins")).toBeHidden()
-  await open("LSP")
-  await expect(menu("LSP").getByText("typescript", { exact: true })).toBeVisible()
-  await expect(menu("LSP").getByText("rust", { exact: true })).toHaveCount(0)
-  await expect(menu("LSP").locator(".session-service-dot")).toHaveCount(0)
   await open("MCP")
   await expect(
     menu("MCP").locator('[data-slot="truncated-text-label"]').filter({ hasText: "summary-mcp" }),
@@ -462,7 +443,6 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     { name: "MCP", path: "/api/mcp", item: "summary-mcp" },
     { name: "Plugins", path: "/api/plugin", item: "supermemory" },
     { name: "Skills", path: "/api/skill", item: "find-skills" },
-    { name: "LSP", path: "/api/config", item: "typescript" },
   ]) {
     await expectRefreshKeeps(page, service.name, service.path, service.item)
   }
@@ -472,13 +452,11 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   await expect(menu("Plugins").getByText("daytona", { exact: true })).toBeVisible()
 
   state.empty = true
-  lsp.length = 0
 
   for (const service of [
     { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured" },
     { name: "Plugins", path: "/api/plugin", empty: "No plugins configured" },
     { name: "Skills", path: "/api/skill", empty: "No skills configured" },
-    { name: "LSP", path: "/api/config", empty: "No LSP servers configured" },
   ]) {
     await open(service.name)
     await expectRefreshKeeps(page, service.name, service.path, service.empty)
@@ -781,7 +759,6 @@ test.describe("remote configuration", () => {
       { type: "document", path: `${home}/mcp.jsonc`, info: { mcp: { servers: {} } } },
       { type: "document", path: `${home}/plugins.json`, info: { plugins: [] } },
       { type: "document", path: `${home}/skills.jsonc`, info: { skills: [] } },
-      { type: "document", path: `${home}/lsp.json`, info: { lsp: false } },
       { type: "document", path: `${fixture.directory}/opencode.json`, info: {} },
       { type: "document", path: `${fixture.directory}/.opencode/agents/review.md`, info: {} },
     ]
@@ -806,7 +783,6 @@ test.describe("remote configuration", () => {
       { name: "MCP", path: `${home}/mcp.jsonc` },
       { name: "Plugins", path: `${home}/plugins.json` },
       { name: "Skills", path: `${home}/skills.jsonc` },
-      { name: "LSP", path: `${home}/lsp.json` },
     ].entries()) {
       await trigger.click()
       const item = summary.getByRole("button", { name: service.name, exact: true })

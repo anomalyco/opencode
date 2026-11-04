@@ -5,7 +5,8 @@ import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePluginServers } from "@/runtime/plugin/servers"
-import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
+import { createEffect, getOwner, onCleanup, startTransition, type Accessor } from "solid-js"
+import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
@@ -34,6 +35,7 @@ export type PendingSession = {
   message: SessionMessageUser
   selection: ComposerSelection
   composer: ComposerState
+  view: Accessor<NewSessionStartView>
 }
 
 export type TabInfo = typeof TabStorage.Info.Type
@@ -200,12 +202,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       navigate(href)
     }
 
+    const disposeTab = (tab: Tab) => {
+      const key = tabKey(tab)
+
+      memory.remove(key)
+      removeInfo(key)
+      removeRegions(key)
+
+      if (tab.type === "draft") removeDraftPersisted(tab.draftID)
+    }
+
     const removeTab = (index: number) => {
       const tab = store[index]
 
       if (!tab) return
       const key = tabKey(tab)
-      const draftID = tab.type === "draft" ? tab.draftID : undefined
       const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
       closing.add(key)
       void startTransition(() => {
@@ -222,11 +233,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (nextTab) navigateTab(nextTab)
       }).finally(() => closing.delete(key))
-      memory.remove(key)
-      removeInfo(key)
-      removeRegions(key)
-
-      if (draftID) removeDraftPersisted(draftID)
+      disposeTab(tab)
     }
 
     const actions = {
@@ -295,34 +302,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           }),
         )
       },
-      promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
-        // Keep the replacement and navigation atomic so /new-session never renders
-        // after its backing draft tab has been removed from the store.
-        const active = location.pathname === "/new-session" && location.query.draftId === draftID
-        const next = { type: "session" as const, ...session }
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
-
-              if (index !== -1) tabs[index] = next
-            }),
-          )
-
-          if (recent.key === `draft:${draftID}`) setRecentKey(tabKey(next))
-
-          if (active) navigateTab(next)
-        })
-        memory.remove(`draft:${draftID}`)
-        removeDraftPersisted(draftID)
-      },
       pendingSession(server: ServerConnection.Key, sessionID: string): PendingSession | undefined {
         return pending[tabKey({ type: "session", server, sessionId: sessionID })]
       },
       prepareSession(
         draftID: string,
         session: Omit<SessionTab, "type">,
-        preview: { message: SessionMessageUser; selection: ComposerSelection },
+        preview: Omit<PendingSession, "draft" | "composer">,
       ) {
         // Snapshot the draft before replacing its store entry; keep its composer alive for rollback.
         const draft = { ...actions.draft(draftID) }
@@ -418,6 +404,36 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
         removeTab(index)
+      },
+      closeTabs(keys: string[], keep: Tab) {
+        const removed = new Set(keys)
+
+        const entries = store.flatMap((tab, index) => (removed.has(tabKey(tab)) ? [{ tab, index }] : []))
+
+        // Recording right-to-left lets successive reopens restore the original positions.
+        updateClosed((stack) =>
+          entries
+            .toReversed()
+            .reduce((stack, entry) => pushClosedTab(stack, entry.tab, entry.index, info[tabKey(entry.tab)]), stack),
+        )
+
+        const active = recentKey()
+
+        entries.forEach((entry) => closing.add(tabKey(entry.tab)))
+        void startTransition(() => {
+          setStore((tabs) => tabs.filter((tab) => !removed.has(tabKey(tab))))
+
+          if (!active || !removed.has(active)) return
+
+          if (location.pathname === "/") {
+            setRecentKey(tabKey(keep))
+
+            return
+          }
+
+          navigateTab(keep)
+        }).finally(() => entries.forEach((entry) => closing.delete(tabKey(entry.tab))))
+        entries.forEach((entry) => disposeTab(entry.tab))
       },
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
         if (!closedReady()) {

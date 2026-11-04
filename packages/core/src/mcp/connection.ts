@@ -3,6 +3,7 @@ export * as McpConnection from "./connection.js"
 import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import type { McpClient } from "./client.js"
 
@@ -39,6 +40,8 @@ export interface Input {
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface
+  /** A remote server is reached with this fetch. */
+  readonly fetch: typeof globalThis.fetch
   /** Each attempt's scope is forked from this one. */
   readonly scope: Scope.Scope
   /** Serializes lifecycle work. Callbacks and recovery take it; `start` and `stop` expect the caller to hold it. */
@@ -165,6 +168,7 @@ export function make(input: Input): Connection {
       ).pipe(
         Effect.flatMap((client) => client.tools().pipe(Effect.map((tools) => ({ client, tools })))),
         Effect.provideService(Environment.Service, input.environment),
+        Effect.provideService(FetchHttpClient.Fetch, input.fetch),
         Scope.provide(scope),
         input.handshake,
         Effect.exit,

@@ -24,6 +24,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
@@ -299,7 +300,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               spellcheck={state.mode === "normal"}
               // @ts-expect-error
               autocomplete="off"
-              class="relative z-10 block w-full whitespace-pre-wrap bg-transparent ps-4 pe-[var(--composer-scroll-end)] pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+              class="relative z-10 block w-full whitespace-pre-wrap bg-transparent ps-4 pe-[var(--composer-scroll-end)] pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-v2-text-text-muted"
               classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell", "opacity-50": props.disabled }}
               style={{
                 "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
@@ -476,7 +477,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             <ComposerEditorSubmitButton
               mode={state.mode}
               stopping={view.submit.stopping()}
-              held={view.submit.held?.() ?? false}
+              busy={view.submit.busy?.() ?? false}
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
@@ -1273,7 +1274,7 @@ function ComposerEditorPopover(props: {
             </div>
           )}
         </Show>
-        <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+        <MenuScroll class="min-h-0 flex-1">
           <div id={listID} role="listbox" aria-label={i18n.t("ui.promptInput.history")} class="flex flex-col">
             <Show
               when={props.items.length}
@@ -1314,7 +1315,7 @@ function ComposerEditorPopover(props: {
               </For>
             </Show>
           </div>
-        </div>
+        </MenuScroll>
       </Show>
       <Show when={!props.history}>
         <Show when={props.search}>
@@ -1429,7 +1430,7 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
 function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
-  held?: boolean
+  busy?: boolean
   disabled: boolean
   sendLabel: string
   stopLabel: string
@@ -1448,13 +1449,13 @@ function ComposerEditorSubmitButton(props: {
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={
-          props.held && !props.stopping ? (
+          props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
             <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
           )
         }
-        aria-busy={props.held && !props.stopping}
+        aria-busy={props.busy && !props.stopping}
         variant="submit"
         class="size-7 rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
