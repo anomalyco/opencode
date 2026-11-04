@@ -66,10 +66,33 @@ test("adapts OpenTUI image and text reads", async () => {
   expect(requests).toEqual([{ preferredTypes: ["image/png", "text/plain"], selection: "clipboard" }])
 })
 
-test("returns undefined when the host clipboard has no representation", async () => {
-  const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
+const WSL_VARIABLES = ["WSL_DISTRO_NAME", "WSL_INTEROP"] as const
 
-  expect(await clipboard.read()).toBeUndefined()
+// The WSL fallback reads the real Windows clipboard, so these tests pin the variables that decide
+// whether it runs instead of inheriting the machine they happen to run on.
+async function withWSL(variables: Partial<Record<(typeof WSL_VARIABLES)[number], string>>, run: () => Promise<void>) {
+  const previous = WSL_VARIABLES.map((name) => [name, process.env[name]] as const)
+  for (const name of WSL_VARIABLES) {
+    const value = variables[name]
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  try {
+    await run()
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
+test("returns undefined when the host clipboard has no representation", async () => {
+  await withWSL({}, async () => {
+    const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
+
+    expect(await clipboard.read()).toBeUndefined()
+  })
 })
 
 // The interop fallback needs powershell.exe, which only runs inside WSL on Linux, so this path
@@ -77,16 +100,11 @@ test("returns undefined when the host clipboard has no representation", async ()
 test.skipIf(process.platform !== "linux" || Bun.which("powershell.exe") !== null)(
   "surfaces a missing WSL interop instead of returning undefined",
   async () => {
-    const previous = process.env.WSL_DISTRO_NAME
-    process.env.WSL_DISTRO_NAME = "Ubuntu"
-    try {
+    await withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
       const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "empty" } }))
 
-      expect(clipboard.read()).rejects.toThrow("needs powershell.exe interop")
-    } finally {
-      if (previous === undefined) delete process.env.WSL_DISTRO_NAME
-      else process.env.WSL_DISTRO_NAME = previous
-    }
+      await expect(clipboard.read()).rejects.toThrow("needs powershell.exe interop")
+    })
   },
 )
 
