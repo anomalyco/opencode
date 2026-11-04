@@ -233,15 +233,6 @@
     {
       "checkpoint": "docked",
       "until": "Getting started",
-      "masks": [
-        {
-          "x": 0,
-          "y": 8,
-          "width": 96,
-          "height": 9,
-          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
-        }
-      ],
       "fixture": "E.14/sidebar/docked"
     },
     {
@@ -253,15 +244,6 @@
     {
       "checkpoint": "folded",
       "until": "(1 active, 2 errors)",
-      "masks": [
-        {
-          "x": 0,
-          "y": 8,
-          "width": 96,
-          "height": 9,
-          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
-        }
-      ],
       "fixture": "E.14/sidebar/folded"
     },
     {
@@ -272,15 +254,6 @@
     },
     {
       "checkpoint": "hidden",
-      "masks": [
-        {
-          "x": 0,
-          "y": 8,
-          "width": 140,
-          "height": 9,
-          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
-        }
-      ],
       "fixture": "E.14/sidebar/hidden"
     },
     {
@@ -292,15 +265,6 @@
     {
       "checkpoint": "shown",
       "until": "Getting started",
-      "masks": [
-        {
-          "x": 0,
-          "y": 8,
-          "width": 96,
-          "height": 9,
-          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
-        }
-      ],
       "fixture": "E.14/sidebar/shown"
     }
   ],
