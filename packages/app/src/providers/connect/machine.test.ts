@@ -34,7 +34,7 @@ function replay(events: ProviderConnectEvent[], from = startProviderConnect().st
   )
 }
 
-const loaded = (methods: ProviderConnectMethod[], manual = false): ProviderConnectEvent => ({
+const loaded = (methods: ReadonlyArray<ProviderConnectMethod>, manual = false): ProviderConnectEvent => ({
   type: "integration.loaded",
   attempt: 0,
   catalog: { methods } satisfies ProviderCatalog,
