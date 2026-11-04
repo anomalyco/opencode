@@ -51,7 +51,9 @@ fn last<T>(mut items: Vec<T>, limit: usize) -> Vec<T> {
 }
 
 fn body<'a>(entries: impl Iterator<Item = &'a Value>) -> String {
-    entries.map(|entry| jsonc::stringify(entry) + "\n").collect()
+    entries
+        .map(|entry| jsonc::stringify(entry) + "\n")
+        .collect()
 }
 
 fn write_text(file: &Path, text: &str) {
@@ -244,7 +246,10 @@ pub fn parse_frecency(text: &str) -> Vec<Value> {
 }
 
 fn last_open(entry: &Value) -> f64 {
-    entry.get("lastOpen").and_then(Value::as_f64).unwrap_or(f64::NAN)
+    entry
+        .get("lastOpen")
+        .and_then(Value::as_f64)
+        .unwrap_or(f64::NAN)
 }
 
 /// `useFrecency`: how often and how recently files were opened, by absolute path.
@@ -353,14 +358,24 @@ mod tests {
     fn history_heals_appends_and_moves() {
         let state = tempfile::tempdir().unwrap();
         let file = state.path().join("prompt-history.jsonl");
-        fs::write(&file, "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n").unwrap();
+        fs::write(
+            &file,
+            "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n",
+        )
+        .unwrap();
         let mut history = History::load(state.path());
-        assert_eq!(fs::read_to_string(&file).unwrap(), "{\"text\":\"a\",\"pasted\":[]}\n");
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "{\"text\":\"a\",\"pasted\":[]}\n"
+        );
         history.append(prompt("b"));
         history.append(prompt("b"));
         assert_eq!(history.entries().len(), 2);
         assert_eq!(history.step(-1, ""), Some(prompt("b")));
-        assert_eq!(history.step(-1, "b"), Some(json!({"text": "a", "pasted": []})));
+        assert_eq!(
+            history.step(-1, "b"),
+            Some(json!({"text": "a", "pasted": []}))
+        );
         assert_eq!(history.step(-1, "a"), None);
         assert_eq!(history.step(1, "x"), None);
         assert_eq!(history.step(1, "a"), Some(prompt("b")));
@@ -405,8 +420,10 @@ mod tests {
         frecency.update("../a", 86_400_030);
         assert_eq!(frecency.score("/a", 86_400_030), 3.0);
         assert_eq!(frecency.score("/w/../a", 172_800_030), 1.5);
-        assert!(fs::read_to_string(&file)
-            .unwrap()
-            .ends_with("{\"path\":\"/a\",\"frequency\":3,\"lastOpen\":86400030}\n"));
+        assert!(
+            fs::read_to_string(&file)
+                .unwrap()
+                .ends_with("{\"path\":\"/a\",\"frequency\":3,\"lastOpen\":86400030}\n")
+        );
     }
 }

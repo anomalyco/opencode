@@ -210,9 +210,17 @@ literals!(MiniWorkSpinner {
 });
 literals!(CursorStyle { Block = "block", Underline = "underline", Line = "line", Default = "default" });
 
-section!(Theme { name: String, mode: ThemeMode });
-section!(Leader { timeout: PositiveInt });
-section!(Scroll { speed: ScrollSpeed, acceleration: bool });
+section!(Theme {
+    name: String,
+    mode: ThemeMode
+});
+section!(Leader {
+    timeout: PositiveInt
+});
+section!(Scroll {
+    speed: ScrollSpeed,
+    acceleration: bool
+});
 section!(AttentionSounds {
     default: String,
     question: String,
@@ -236,8 +244,15 @@ section!(Diffs {
     fullscreen: bool,
     view: DiffView,
 });
-section!(Terminal { title: bool, copy: TerminalCopy });
-section!(Prompt { editor: bool, paste: PromptPaste, image_preview: bool });
+section!(Terminal {
+    title: bool,
+    copy: TerminalCopy
+});
+section!(Prompt {
+    editor: bool,
+    paste: PromptPaste,
+    image_preview: bool
+});
 section!(Session {
     sidebar: Sidebar,
     scrollbar: bool,
@@ -270,8 +285,15 @@ section!(Mini {
     replay: bool,
     replay_limit: PositiveInt,
 });
-section!(Debug { devtools: bool, timing: bool, turn_tokens: TurnTokens });
-section!(Cursor { style: CursorStyle, blinking: bool });
+section!(Debug {
+    devtools: bool,
+    timing: bool,
+    turn_tokens: TurnTokens
+});
+section!(Cursor {
+    style: CursorStyle,
+    blinking: bool
+});
 
 section!(
     /// The decoded `cli.json` (`Config.Info`).
@@ -417,7 +439,10 @@ fn binding_item(value: &Value) -> Option<Value> {
 fn keystroke(value: &Value) -> Option<Value> {
     let map = value.as_object()?;
     let mut out = Map::new();
-    out.insert("name".into(), Value::String(String::decode(map.get("name")?)?));
+    out.insert(
+        "name".into(),
+        Value::String(String::decode(map.get("name")?)?),
+    );
     for key in ["ctrl", "shift", "meta", "super", "hyper"] {
         if let Some(flag) = field::<bool>(map, key)? {
             out.insert(key.into(), Value::Bool(flag));
@@ -470,13 +495,12 @@ pub fn decode_text(text: &str) -> Option<Info> {
 /// `merge(...values)`: normalizes legacy `tabs.enabled`, deep-merges plain objects left to right, and
 /// decodes the result, which is `{}` when it does not decode.
 pub fn merge(values: &[Option<Value>]) -> Info {
-    let merged = values
-        .iter()
-        .flatten()
-        .fold(Map::new(), |result, value| match normalize_legacy_tabs(value) {
+    let merged = values.iter().flatten().fold(Map::new(), |result, value| {
+        match normalize_legacy_tabs(value) {
             Value::Object(overlay) => merge_records(result, &overlay),
             _ => result,
-        });
+        }
+    });
     Info::decode(&Value::Object(merged)).unwrap_or_default()
 }
 
@@ -522,7 +546,12 @@ fn merge_records(mut base: Map<String, Value>, overlay: &Map<String, Value>) -> 
 type Edit = (Vec<Segment>, Option<Value>);
 
 // `changes(before, after)`: per-key edits for plain objects, a replacement for anything else.
-fn changes(before: Option<&Value>, after: Option<&Value>, path: &mut Vec<Segment>, out: &mut Vec<Edit>) {
+fn changes(
+    before: Option<&Value>,
+    after: Option<&Value>,
+    path: &mut Vec<Segment>,
+    out: &mut Vec<Edit>,
+) {
     match (before, after) {
         (Some(a), Some(b)) if jsonc::same(a, b) => {}
         (Some(Value::Object(a)), Some(Value::Object(b))) => {
@@ -664,7 +693,12 @@ impl CliConfig {
 
     fn locked<T>(&self, f: impl FnOnce() -> T) -> Result<T, Error> {
         let key = self.file.to_string_lossy();
-        Ok(lock::with_lock(&self.state.join("locks"), &key, &self.lock, f)?)
+        Ok(lock::with_lock(
+            &self.state.join("locks"),
+            &key,
+            &self.lock,
+            f,
+        )?)
     }
 }
 
@@ -738,7 +772,10 @@ impl Resolved {
                 sounds: attention.sounds.unwrap_or_default(),
             },
             leader_timeout: Duration::from_millis(
-                info.leader.as_ref().and_then(|l| l.timeout).map_or(2000, |t| t.0),
+                info.leader
+                    .as_ref()
+                    .and_then(|l| l.timeout)
+                    .map_or(2000, |t| t.0),
             ),
             mouse: info.mouse.unwrap_or(true),
             cursor_style: cursor.style.unwrap_or(CursorStyle::Block),
@@ -776,15 +813,21 @@ mod tests {
     #[test]
     fn decode_follows_effect_schema() {
         assert_eq!(
-            decode(json!({"mouse": true, "theme": {"mode": "dark", "name": "x", "extra": 1}, "zzz": 1, "$schema": "s"})),
+            decode(
+                json!({"mouse": true, "theme": {"mode": "dark", "name": "x", "extra": 1}, "zzz": 1, "$schema": "s"})
+            ),
             Some(json!({"$schema": "s", "theme": {"name": "x", "mode": "dark"}, "mouse": true}))
         );
         assert_eq!(
-            stringify_decoded(json!({"keybinds": {"session.new": {"name": "a", "key": "b", "foo": 1}, "app.exit": "ctrl+q", "nope": "x"}})),
+            stringify_decoded(
+                json!({"keybinds": {"session.new": {"name": "a", "key": "b", "foo": 1}, "app.exit": "ctrl+q", "nope": "x"}})
+            ),
             r#"{"keybinds":{"app.exit":"ctrl+q","session.new":{"name":"a"}}}"#
         );
         assert_eq!(
-            stringify_decoded(json!({"keybinds": {"app.exit": {"foo": 1, "key": {"name": "a", "x": 1}, "desc": "d", "event": "press"}}})),
+            stringify_decoded(
+                json!({"keybinds": {"app.exit": {"foo": 1, "key": {"name": "a", "x": 1}, "desc": "d", "event": "press"}}})
+            ),
             r#"{"keybinds":{"app.exit":{"key":{"name":"a"},"event":"press","foo":1,"desc":"d"}}}"#
         );
         for invalid in [
@@ -800,8 +843,12 @@ mod tests {
             assert_eq!(decode(invalid.clone()), None, "{invalid}");
         }
         assert_eq!(
-            decode(json!({"leader": {"timeout": 2000.0}, "attention": {"sounds": {"done": "x", "other": "y", "default": "z"}}})),
-            Some(json!({"leader": {"timeout": 2000}, "attention": {"sounds": {"default": "z", "done": "x"}}}))
+            decode(
+                json!({"leader": {"timeout": 2000.0}, "attention": {"sounds": {"done": "x", "other": "y", "default": "z"}}})
+            ),
+            Some(
+                json!({"leader": {"timeout": 2000}, "attention": {"sounds": {"default": "z", "done": "x"}}})
+            )
         );
     }
 
@@ -812,7 +859,9 @@ mod tests {
     #[test]
     fn merge_overlays_and_normalizes_tabs() {
         let merged = merge(&[
-            Some(json!({"tabs": {"enabled": true, "scope": "global"}, "theme": {"name": "a", "mode": "dark"}})),
+            Some(
+                json!({"tabs": {"enabled": true, "scope": "global"}, "theme": {"name": "a", "mode": "dark"}}),
+            ),
             Some(json!({"theme": {"name": "b"}})),
         ]);
         assert_eq!(

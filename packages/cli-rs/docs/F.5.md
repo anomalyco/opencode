@@ -12,7 +12,7 @@ which is the part that must keep a user's comments and formatting byte for byte.
 1. Diff the decoded config before and after the change (`changes`, `:151-168`). The diff gives a list of
    `(path, value | undefined)` edits.
 2. For each edit, call `jsonc-parser`'s `modify(text, path, value, { formattingOptions: { tabSize: 2,
-   insertSpaces: true } })` and apply the returned edits.
+insertSpaces: true } })` and apply the returned edits.
 3. Parse the result again. On a parse error or a schema failure, the update fails with "Invalid CLI config
    update".
 
@@ -43,14 +43,14 @@ compares bytes.
 
 ## Files and APIs
 
-| File | TS | Rust |
-| --- | --- | --- |
-| `cli.json` | `packages/cli/src/config/config.ts` | `cli_config::CliConfig` |
-| V1 migration | `packages/cli/src/config/migrate.ts` | `migrate::run`, `migrate::migrate_v1` |
-| storage | `packages/tui/src/context/storage.tsx` | `storage::Storage` |
-| JSONL | `prompt/history.tsx`, `prompt/stash.tsx`, `prompt/frecency.tsx` | `jsonl::{History, Stash, Frecency}` |
-| `model.json` | `packages/tui/src/model-preference.ts` | `model_pref::ModelPreferences` |
-| watches | `packages/tui/src/util/watch.ts` and the callers' debounce | `watch::watch` |
+| File         | TS                                                              | Rust                                  |
+| ------------ | --------------------------------------------------------------- | ------------------------------------- |
+| `cli.json`   | `packages/cli/src/config/config.ts`                             | `cli_config::CliConfig`               |
+| V1 migration | `packages/cli/src/config/migrate.ts`                            | `migrate::run`, `migrate::migrate_v1` |
+| storage      | `packages/tui/src/context/storage.tsx`                          | `storage::Storage`                    |
+| JSONL        | `prompt/history.tsx`, `prompt/stash.tsx`, `prompt/frecency.tsx` | `jsonl::{History, Stash, Frecency}`   |
+| `model.json` | `packages/tui/src/model-preference.ts`                          | `model_pref::ModelPreferences`        |
+| watches      | `packages/tui/src/util/watch.ts` and the callers' debounce      | `watch::watch`                        |
 
 ### `cli.json`
 

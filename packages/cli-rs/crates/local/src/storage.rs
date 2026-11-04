@@ -146,7 +146,10 @@ mod tests {
             .update("view", &initial, |value| value["open"] = json!(true))
             .unwrap();
         assert_eq!(next, json!({"open": true, "other": 1}));
-        assert_eq!(fs::read_to_string(&file).unwrap(), "{\"open\":true,\"other\":1}");
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "{\"open\":true,\"other\":1}"
+        );
         fs::write(&file, "5").unwrap();
         assert_eq!(storage.load("view", &initial).unwrap(), initial);
         assert!(matches!(storage.file("../x"), Err(Error::Segment(_))));
