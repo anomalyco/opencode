@@ -24,7 +24,9 @@ export type Method = {
 }
 
 export function emitMethod(types: Types, method: Method) {
-  const name = snake([...method.group.path, ...method.endpoint.clientPath].map((part) => snake(part).replace(/^r#/, "")).join("_"))
+  const name = snake(
+    [...method.group.path, ...method.endpoint.clientPath].map((part) => snake(part).replace(/^r#/, "")).join("_"),
+  )
   const idents = new Map<Field, string>()
   for (const field of method.fields) {
     let ident = snake(field.name)
@@ -81,7 +83,8 @@ export function emitMethod(types: Types, method: Method) {
                 : `call.field(${JSON.stringify(field.name)}, VALUE)?;`
             : undefined
     if (call === undefined) return []
-    if (field.optional) return [`if let Some(value) = &${access(field)} {\n            ${call.replace("VALUE", "value")}\n        }`]
+    if (field.optional)
+      return [`if let Some(value) = &${access(field)} {\n            ${call.replace("VALUE", "value")}\n        }`]
     return [call.replace("VALUE", `&${access(field)}`)]
   })
   if (method.endpoint.payloads.length > 0 && !method.binaryBody && !method.opaque) statements.unshift("call.object();")
