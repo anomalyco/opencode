@@ -146,14 +146,17 @@
   }
 
   /* An atomic inline such as inline-block leaves a line break opportunity before the label, so the icon stays an
-     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word. */
+     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word.
+     The artwork is a pseudo-element because an out-of-flow element is a block, and Chromium ends a triple-click
+     paragraph selection at a block. The hidden img only reports when the favicon has loaded. */
   .markdown-link-favicon {
     position: relative;
     padding-inline-start: 14px;
     margin-inline-end: 4px;
   }
 
-  .markdown-link-favicon-glyph {
+  .markdown-link-favicon::before {
+    content: "";
     position: absolute;
     inset: 0;
     height: 14px;
@@ -162,24 +165,18 @@
     mask: url("./markdown-globe.svg") center / contain no-repeat;
   }
 
-  .markdown-link-favicon[data-github] .markdown-link-favicon-glyph {
+  .markdown-link-favicon[data-github]::before {
     mask-image: url("./markdown-github.svg");
   }
 
-  .markdown-link-favicon img {
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 14px;
-    height: 14px;
-    margin: auto 0;
+  .markdown-link-favicon[data-loaded]::before {
     border-radius: 2px;
-    cursor: inherit;
-    opacity: 0;
+    background: var(--markdown-link-favicon) center / contain no-repeat;
+    mask: none;
   }
 
-  .markdown-link-favicon img[data-loaded] {
-    opacity: 1;
+  .markdown-link-favicon img {
+    display: none;
   }
 
   a[data-local-link] {
