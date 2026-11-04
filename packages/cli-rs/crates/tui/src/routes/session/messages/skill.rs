@@ -71,11 +71,15 @@ impl Notice {
         inner.root.on_click(move |_, _| {
             let Some(inner) = weak.upgrade() else { return };
             let child = match &*inner.rendered.borrow() {
-                Some(Line::Completion { child: Some(child), .. }) => child.clone(),
+                Some(Line::Completion {
+                    child: Some(child), ..
+                }) => child.clone(),
                 _ => return,
             };
             if let Some(tui) = inner.tui.upgrade() {
-                tui.navigate(Route::Session { id: SessionID(child) });
+                tui.navigate(Route::Session {
+                    id: SessionID(child),
+                });
             }
         });
         Self(inner)

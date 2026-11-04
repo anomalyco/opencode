@@ -14,9 +14,9 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::generated::{
-    AgentInfo, ModelInfo, ModelRef, SessionID, SessionMessageAssistant,
+    AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionMessageAssistant,
     SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
-    SessionInboxInfo, SessionMessageID, SessionMessageInfo,
+    SessionMessageID, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
@@ -451,12 +451,17 @@ impl Inner {
                 self.groups.verbosity.get(),
             );
             // Compactions waiting in the inbox go last (`createSessionRows`).
-            specs.extend(state.pending(&session).iter().filter_map(|item| match item {
-                SessionInboxInfo::Compaction(compaction) => {
-                    Some(Spec::CompactionQueued(compaction.id.0.clone()))
-                }
-                _ => None,
-            }));
+            specs.extend(
+                state
+                    .pending(&session)
+                    .iter()
+                    .filter_map(|item| match item {
+                        SessionInboxInfo::Compaction(compaction) => {
+                            Some(Spec::CompactionQueued(compaction.id.0.clone()))
+                        }
+                        _ => None,
+                    }),
+            );
             let catalogs = self
                 .location
                 .borrow()
@@ -508,11 +513,8 @@ impl Inner {
                 .collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
-            self.background.update(
-                messages,
-                keys.background.clone(),
-                errors::now(),
-            );
+            self.background
+                .update(messages, keys.background.clone(), errors::now());
             let revert = info.and_then(|info| info.revert.as_ref()).map(|revert| {
                 (
                     revert.message_id.as_str(),
