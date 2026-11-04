@@ -38,6 +38,8 @@ export class Types {
   private readonly names = new Set<string>()
   private readonly referenced = new Map<string, string>()
   private readonly defaultable = new Set<string>()
+  // `f64` and its aliases (`MoneyUSD`), whose fields serialize whole values as integers.
+  private readonly floats = new Set<string>(["f64"])
   private readonly visiting = new Set<string>()
   // Anonymous objects and unions by shape, so equal shapes (such as every `location` query) share one type.
   private readonly shapes = new Map<string, string>()
@@ -153,6 +155,7 @@ export class Types {
       if (/^[A-Z][A-Za-z0-9]*$/.test(type) && !["String"].includes(type)) return type
       const name = this.name(ref)
       if (this.isDefault(type)) this.defaultable.add(name)
+      if (this.floats.has(type)) this.floats.add(name)
       this.items.push(`/// \`${ref}\`\npub type ${name} = ${type};`)
       return name
     })()
@@ -227,6 +230,19 @@ export class Types {
         : rest.length === 1
           ? this.type(rest[0], hint)
           : this.type({ ...(r as SchemaRepresentation.Union), types: rest }, hint)
+    // JSON.stringify writes a whole number as `3`; serde writes an `f64` as `3.0`.
+    const float = this.floats.has(inner)
+    if (float && optional && nullable) throw new Error(`An optional and nullable number is not supported: ${hint}`)
+    if (float && (optional || nullable))
+      return {
+        type: `Option<${inner}>`,
+        attrs: [
+          "default",
+          'serialize_with = "crate::ser::option_number"',
+          ...(optional ? ['skip_serializing_if = "Option::is_none"'] : []),
+        ],
+      }
+    if (float) return { type: inner, attrs: ['serialize_with = "crate::ser::number"'] }
     if (optional && nullable) {
       return {
         type: `Option<Option<${inner}>>`,
@@ -539,7 +555,7 @@ export class Types {
     })
     const doc = ref === undefined ? "" : `/// \`${ref}\`\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n${attempts.join("\n")}\n        Ok(Self::Unknown(value))\n    }\n}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${[...seen].map(([variant, type]) => `    ${variant}(${this.floats.has(type) ? '#[serde(serialize_with = "crate::ser::number")] ' : ""}${type}),`).join("\n")}\n    /// A shape this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n${attempts.join("\n")}\n        Ok(Self::Unknown(value))\n    }\n}`,
     )
     return name
   }

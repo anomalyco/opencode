@@ -68,6 +68,26 @@
       "headers": {
         "authorization": "Basic b3BlbmNvZGU6c2VjcmV0"
       }
+    },
+    {
+      "name": "session.prompt numbers",
+      "method": "POST",
+      "url": "http://127.0.0.1:4096/prefix/api/session/ses_1/prompt",
+      "headers": {
+        "authorization": "Basic b3BlbmNvZGU6c2VjcmV0",
+        "content-type": "application/json"
+      },
+      "body": "{\"text\":\"@build x\",\"agents\":[{\"name\":\"build\",\"mention\":{\"start\":0,\"end\":6,\"text\":\"@build\"}},{\"name\":\"plan\",\"mention\":{\"start\":1.5,\"end\":0,\"text\":\"@plan\"}}]}"
+    },
+    {
+      "name": "session.form.reply numbers",
+      "method": "POST",
+      "url": "http://127.0.0.1:4096/prefix/api/session/ses_1/form/frm_1/reply",
+      "headers": {
+        "authorization": "Basic b3BlbmNvZGU6c2VjcmV0",
+        "content-type": "application/json"
+      },
+      "body": "{\"answer\":{\"count\":3,\"ratio\":2.5,\"big\":123456789012,\"tiny\":0.25,\"name\":\"x\"}}"
     }
   ],
   "query": [
