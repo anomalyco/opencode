@@ -102,7 +102,13 @@ export function readWindowState(file: string) {
 
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
 // the window is in its normal state so a maximized window restores to its previous size.
-export function manageWindowState(win: BrowserWindow, file: string, initial: WindowState, displays: Displays) {
+export function manageWindowState(
+  win: BrowserWindow,
+  file: string,
+  initial: WindowState,
+  displays: Displays,
+  onError: (error: Error) => void,
+) {
   const state = { ...initial }
 
   if (state.isMaximized) win.maximize()
@@ -143,7 +149,7 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
       writeFileSync(`${file}.tmp`, JSON.stringify(state))
       renameSync(`${file}.tmp`, file)
     } catch (error) {
-      console.warn("Failed to save window state", { file, error })
+      onError(error instanceof Error ? error : new Error(String(error)))
     }
   }
 

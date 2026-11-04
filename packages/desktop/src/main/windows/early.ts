@@ -26,6 +26,7 @@ export type EarlyWindow = {
   shownAt: number
   // Navigation policy is wired before the layers exist; the adopter swaps in the logged version.
   openExternal: (url: string) => void
+  reportStateError: (error: Error) => void
 }
 
 let pending: EarlyWindow | undefined
@@ -75,7 +76,20 @@ export function createEarlyWindow() {
     },
   })
 
-  manageWindowState(win, file, state, displays)
+  const record: EarlyWindow = {
+    id,
+    win,
+    state,
+    shownAt: Date.now(),
+    reportStateError: (error) => console.warn("failed to save window state", { file, error }),
+    openExternal: (url) => {
+      const target = resolveExternalURL(url)
+
+      if (target) void shell.openExternal(target)
+    },
+  }
+
+  manageWindowState(win, file, state, displays, (error) => record.reportStateError(error))
 
   if (deferReveal) win.show()
   // Closing the only window before the rest of the app has adopted it is a quit.
@@ -84,18 +98,6 @@ export function createEarlyWindow() {
     pending = undefined
     app.quit()
   })
-
-  const record: EarlyWindow = {
-    id,
-    win,
-    state,
-    shownAt: Date.now(),
-    openExternal: (url) => {
-      const target = resolveExternalURL(url)
-
-      if (target) void shell.openExternal(target)
-    },
-  }
 
   pending = record
   // The renderer boots while the main bundle and layers load, instead of after them. Everything the

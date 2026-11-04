@@ -159,15 +159,20 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
         },
       })
 
-    // The early window was secured and loaded when it was created; only its external-URL policy is
-    // upgraded to the logged one.
-    if (early) early.openExternal = (url) => runFork(openExternalURL(url))
+    const reportStateError = (error: Error) =>
+      runFork(scoped("window", Effect.logWarning("failed to save window state", { file: stateFile, error })))
+
+    // Upgrade the early window's callbacks once the logging layer is available.
+    if (early) {
+      early.openExternal = (url) => runFork(openExternalURL(url))
+      early.reportStateError = reportStateError
+    }
 
     if (!early) {
       allowRendererPermissions(win)
       wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
       wireRendererHeaders(win)
-      manageWindowState(win, stateFile, state, displays)
+      manageWindowState(win, stateFile, state, displays, reportStateError)
     }
 
     wireWindowRecovery(win, id, () => relaunchHandler())
@@ -239,5 +244,3 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
-
