@@ -27,4 +27,5 @@ tokio-util.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+bytes.workspace = true
 tempfile.workspace = true
