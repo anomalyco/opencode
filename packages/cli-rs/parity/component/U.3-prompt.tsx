@@ -30,5 +30,5 @@ await renderComponent({
   ...base,
   fixture: "U.3/prompt-busy",
   dialog: () => <DialogPrompt title="Connecting" value="token" busy busyText="Checking…" />,
-  ready: (frame) => frame.includes("processing"),
+  ready: (frame) => frame.includes("Checking…"),
 })
