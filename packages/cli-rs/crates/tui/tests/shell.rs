@@ -1,4 +1,4 @@
-//! The TUI shell (T.1) over a fixture server: the home lists sessions, Enter opens one, and its
+//! The TUI shell (T.1) over a fixture server: the session list opens a session from home, and its
 //! transcript shows and streams.
 
 use std::sync::Arc;
@@ -24,6 +24,12 @@ impl Transport for Fixture {
                 200,
                 json!({ "data": [session("ses_b", "Fix the parser", 2), session("ses_a", "Write docs", 1)], "cursor": {} }),
             ),
+            // The session list dialog's scope reads.
+            ("GET", "/api/location") => (
+                200,
+                json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
+            ),
+            ("GET", "/api/project") => (200, json!([])),
             ("GET", "/api/session/ses_b") => (
                 200,
                 json!({ "data": session("ses_b", "Fix the parser", 2) }),
@@ -89,11 +95,16 @@ fn wait_for(app: &TestApp, text: &str) -> String {
 }
 
 #[test]
-fn home_lists_sessions_and_enter_opens_the_transcript() {
+fn the_session_list_opens_a_session_and_its_transcript_streams() {
     // Tall enough for the palette's System group, which E.18a's commands joined.
     let app = TestApp::new(80, 30);
     let tui = mount(&app, Route::Home);
 
+    // The home shows the logo (E.1); the session list is a dialog (E.11a).
+    let home = wait_for(&app, "█▀▀█");
+    assert!(!home.contains("Fix the parser"), "{home}");
+    app.press("ctrl+x");
+    app.press("l");
     let home = wait_for(&app, "Fix the parser");
     assert!(home.contains("Write docs"), "{home}");
     // Most recently updated first.
@@ -128,8 +139,7 @@ fn home_lists_sessions_and_enter_opens_the_transcript() {
     // `session.new` (<leader>n) goes home.
     app.press("ctrl+x");
     app.press("n");
-    wait_for(&app, "Write docs");
-    assert_eq!(tui.route(), Route::Home);
+    assert!(app.wait_until(Duration::from_secs(5), || tui.route() == Route::Home));
 
     // Ctrl+P opens the palette with the shell's commands; Escape closes it. With sessions loaded,
     // `session.list` is suggested first.

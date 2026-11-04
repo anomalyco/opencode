@@ -75,7 +75,7 @@
           "y": 0,
           "width": 100,
           "height": 30,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         }
       ],
       "fixture": "E.11a/session-list/home"
@@ -95,28 +95,28 @@
           "y": 0,
           "width": 100,
           "height": 8,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 19,
           "width": 100,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 8,
           "width": 6,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 94,
           "y": 8,
           "width": 6,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         }
       ],
       "fixture": "E.11a/session-list/list"
@@ -135,28 +135,28 @@
           "y": 0,
           "width": 100,
           "height": 8,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 19,
           "width": 100,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 8,
           "width": 6,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 94,
           "y": 8,
           "width": 6,
           "height": 11,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         }
       ],
       "fixture": "E.11a/session-list/marked"
@@ -175,28 +175,28 @@
           "y": 0,
           "width": 100,
           "height": 8,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 18,
           "width": 100,
           "height": 12,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 0,
           "y": 8,
           "width": 6,
           "height": 10,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         },
         {
           "x": 94,
           "y": 8,
           "width": 6,
           "height": 10,
-          "reason": "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
         }
       ],
       "fixture": "E.11a/session-list/deleted"
