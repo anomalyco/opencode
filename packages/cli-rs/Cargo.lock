@@ -1053,8 +1053,10 @@ dependencies = [
  "opencode-tui",
  "opencode-ui",
  "regex",
+ "rustix",
  "serde_json",
  "tokio",
+ "unicode-width",
  "url",
 ]
 
