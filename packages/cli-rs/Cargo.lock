@@ -1099,6 +1099,7 @@ dependencies = [
  "regex",
  "rustix",
  "serde_json",
+ "tempfile",
  "tokio",
  "unicode-width",
  "url",

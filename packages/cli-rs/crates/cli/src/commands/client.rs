@@ -22,13 +22,25 @@ pub fn block_on<F: Future>(future: F) -> anyhow::Result<F::Output> {
         .block_on(future))
 }
 
+/// A client and the connection it uses. The connection is private so that a caller cannot drop
+/// it apart from the client: dropping a standalone connection stops its server.
+pub struct Connected {
+    pub client: Client,
+    _connection: Connection,
+}
+
 /// `ServerConnection.resolve()` with the command's `--server` and `--standalone`, and a client for it.
-pub async fn connect(context: &Context) -> anyhow::Result<(Connection, Client)> {
+/// Keep the result for as long as the command talks to the server.
+pub async fn connect(context: &Context) -> anyhow::Result<Connected> {
+    connect_in(context, &Paths::from_env()?, &Env::from_env()).await
+}
+
+async fn connect_in(context: &Context, paths: &Paths, env: &Env) -> anyhow::Result<Connected> {
     let transport: Arc<dyn Transport> = Arc::new(Reqwest::default());
     let connection = connect::resolve(
         transport.clone(),
-        &Paths::from_env()?,
-        &Env::from_env(),
+        paths,
+        env,
         &Options {
             server: context.server.server.clone(),
             standalone: context.server.standalone,
@@ -39,8 +51,10 @@ pub async fn connect(context: &Context) -> anyhow::Result<(Connection, Client)> 
         },
     )
     .await?;
-    let client = connection.endpoint.client(transport)?;
-    Ok((connection, client))
+    Ok(Connected {
+        client: connection.endpoint.client(transport)?,
+        _connection: connection,
+    })
 }
 
 /// `{ location: { directory: process.cwd() } }`, the location every read command sends.
@@ -98,6 +112,68 @@ fn primary(c: char) -> (u8, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::args::{GlobalArgs, ServerFlags};
+
+    // A standalone server: it prints its ready line, answers `/api/info`, and exits when its stdin
+    // lease closes.
+    const STANDALONE: &str = r#"
+const server = Bun.serve({ port: 0, fetch: () => Response.json({ version: "test", pid: process.pid, urls: [], paths: { tmp: "/tmp" } }) })
+console.log(JSON.stringify({ url: server.url.toString() }))
+for await (const _ of Bun.stdin.stream()) {}
+process.exit(0)
+"#;
+
+    #[tokio::test]
+    async fn a_standalone_server_lives_as_long_as_the_connection() {
+        if std::process::Command::new("bun")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipped: bun is not on PATH");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("standalone.ts");
+        std::fs::write(&script, STANDALONE).unwrap();
+        // `OPENCODE_TS_BIN` names one executable.
+        let program = dir.path().join("opencode-ts");
+        std::fs::write(
+            &program,
+            format!("#!/bin/sh\nexec bun {}\n", script.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            &program,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        let root = dir.path().to_owned();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(root.clone().into()),
+            "XDG_STATE_HOME" => Some(root.join("state").into()),
+            "XDG_CONFIG_HOME" => Some(root.join("config").into()),
+            "XDG_DATA_HOME" => Some(root.join("data").into()),
+            "XDG_CACHE_HOME" => Some(root.join("cache").into()),
+            _ => None,
+        })
+        .unwrap();
+        let env = Env {
+            ts_bin: Some(program.to_string_lossy().into_owned()),
+            ..Env::default()
+        };
+        let context = Context {
+            global: GlobalArgs::default(),
+            server: ServerFlags {
+                standalone: true,
+                server: None,
+            },
+        };
+        // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
+        let server = connect_in(&context, &paths, &env).await.unwrap();
+        let info = server.client.server_info(&RequestOptions::default()).await;
+        assert_eq!(info.unwrap().version, "test");
+    }
 
     #[test]
     fn locale_compare_matches_bun() {
