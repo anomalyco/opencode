@@ -10,7 +10,9 @@ use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Debug, Info, Resolved, Session, TurnTokens, Visibility};
+use opencode_local::cli_config::{
+    Bounded, Debug, Info, Resolved, Scroll, Session, TurnTokens, Visibility,
+};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -347,7 +349,15 @@ fn long_session() -> Harness {
             ]
         })
         .collect();
-    open(80, 20, "ses_w", messages, Info::default())
+    // One row per wheel step, so each step's top line can be followed (TS scrolls 3 by default).
+    let info = Info {
+        scroll: Some(Scroll {
+            speed: Some(Bounded(1.0)),
+            ..Scroll::default()
+        }),
+        ..Info::default()
+    };
+    open(80, 20, "ses_w", messages, info)
 }
 
 /// Scrolls up one wheel step at a time until `turn`'s question shows. Every step keeps the
