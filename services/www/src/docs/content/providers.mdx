@@ -615,11 +615,22 @@ OpenAI-compatible runtime and list the alias as a model.
       "settings": { "baseURL": "http://127.0.0.1:11434/v1" },
       "models": {
         "qwen3.5-9b": { "name": "Qwen3.5 9B" },
+        "qwen3.5-9b-fast": {
+          "modelID": "qwen3.5-9b",
+          "name": "Qwen3.5 9B (no reasoning)",
+          "body": { "reasoning_budget": 0 },
+        },
       },
     },
   },
+  "agents": {
+    "title": { "model": "qvac/qwen3.5-9b-fast" },
+  },
 }
 ```
+
+QVAC runs one request per model at a time. Reasoning models can spend minutes on a session title and delay the first
+response, so `qwen3.5-9b-fast` sends the same model `reasoning_budget: 0` for the hidden `title` agent.
 
 Then connect QVAC with `/connect` or `QVAC_API_KEY`. Without `--api-key`, a loopback server accepts any key; if you
 start it with `--api-key`, use the same value.
