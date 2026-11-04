@@ -7,6 +7,7 @@ import { Goal } from "@opencode/schema/goal"
 import { Session } from "@opencode/schema/session"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
+import { MessageContext } from "../session/message-context.js"
 import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
@@ -420,7 +421,7 @@ export const Plugin = define({
                 ...input.prompt,
                 sessionID: input.sessionID,
                 text: kickoff,
-                metadata,
+                metadata: { ...metadata, ...MessageContext.viaCommand("goal") },
                 delivery: input.delivery,
               })
             yield* ctx.session.synthetic({

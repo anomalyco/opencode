@@ -40,6 +40,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   artifacts: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
   }),
+  message_context: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Tell the agent who sent each message, such as another session, a schedule or a voice call, from its `opencode.origin` metadata. Defaults to false.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

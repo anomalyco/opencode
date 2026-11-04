@@ -84,6 +84,13 @@ const mediaBlob = Config.testLayer([
     info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
   }),
 ])
+const contextDirectory = "/context"
+const messageContext = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ message_context: true }) }),
+  }),
+])
 const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
@@ -95,7 +102,11 @@ const locations = makeGlobalNode({
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
             // Every real instance has its own config, so the caller's never shows through.
-            ref.directory === mediaDirectory ? mediaBlob : Config.testLayer([]),
+            ref.directory === mediaDirectory
+              ? mediaBlob
+              : ref.directory === contextDirectory
+                ? messageContext
+                : Config.testLayer([]),
             ref.directory === brokenDirectory ? Layer.effectDiscard(Effect.die("instance boot failed")) : Layer.empty,
             LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
@@ -532,6 +543,39 @@ describe("Session.prompt", () => {
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+    }),
+  )
+
+  it.effect("stores an origin exactly as sent, whatever the flag", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const receiverID = Session.ID.make("ses_prompt_context")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: receiverID,
+          project_id: Project.ID.global,
+          slug: receiverID,
+          directory: contextDirectory,
+          title: "receiver",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      for (const origin of [
+        { from: `session:${sessionID}` },
+        { from: "session:ses_prompt_deleted" },
+        { via: "voice:ios" },
+        { via: "seer", actor: "slack:U123" },
+      ])
+        for (const receiver of [receiverID, sessionID]) {
+          const metadata = { "opencode.origin": origin, source: "api" }
+          expect(
+            (yield* session.prompt({ sessionID: receiver, text: "from elsewhere", metadata, resume: false })).payload,
+          ).toMatchObject({ text: "from elsewhere", metadata })
+        }
     }),
   )
 

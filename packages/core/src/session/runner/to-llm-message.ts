@@ -14,6 +14,7 @@ import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
+import { MessageContext } from "../message-context.js"
 import { SessionRecentText } from "../recent-text.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
 
@@ -239,9 +240,10 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "user":
+      const text = MessageContext.withText(message.metadata, message.text)
       const content = [
         ...(message.skills ?? []).flatMap((skill) => (skill.text === undefined ? [] : [Message.text(skill.text)])),
-        ...(message.text === "" ? [] : [Message.text(message.text)]),
+        ...(text === "" ? [] : [Message.text(text)]),
         ...userAttachmentContent(message.files ?? []),
       ]
       if (content.length === 0) return []

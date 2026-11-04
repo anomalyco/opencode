@@ -40,6 +40,7 @@ describe("CommandPlugin.Plugin", () => {
         text: string
         files?: readonly { readonly uri: string }[]
         delivery?: "steer" | "queue"
+        metadata?: Readonly<Record<string, unknown>>
       }[] = []
       yield* CommandPlugin.Plugin.effect(
         host({
@@ -51,7 +52,12 @@ describe("CommandPlugin.Plugin", () => {
           session: {
             prompt: (input) =>
               Effect.sync(() => {
-                prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
+                prompts.push({
+                  text: input.text,
+                  files: input.files,
+                  delivery: input.delivery,
+                  metadata: input.metadata,
+                })
                 return SessionInbox.User.make({
                   id: SessionMessage.ID.make("msg_test"),
                   sessionID: input.sessionID,
@@ -115,21 +121,25 @@ describe("CommandPlugin.Plugin", () => {
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
           delivery: "queue",
+          metadata: { "opencode.origin": { via: "command:init" } },
         },
         {
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
           files: undefined,
           delivery: "steer",
+          metadata: { "opencode.origin": { via: "command:review" } },
         },
         {
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
+          metadata: { "opencode.origin": { via: "command:init" } },
         },
         {
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
+          metadata: { "opencode.origin": { via: "command:review" } },
         },
       ])
     }),

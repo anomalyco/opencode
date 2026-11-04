@@ -2548,6 +2548,7 @@ export type ConfigEntry =
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
           artifacts?: boolean
+          message_context?: boolean
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
@@ -3404,7 +3405,13 @@ export type SessionPromptInput = {
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
       }>
     | undefined
-  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+  readonly metadata?:
+    | ({
+        readonly "opencode.origin"?:
+          | { readonly from: string; readonly via?: never; readonly actor?: string }
+          | { readonly via: string; readonly from?: never; readonly actor?: string }
+      } & { readonly [x: string]: JsonValue })
+    | undefined
   readonly delivery?: ("steer" | "queue") | null | undefined
   readonly resume?: boolean | null | undefined
 }

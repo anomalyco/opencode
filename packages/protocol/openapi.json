@@ -2163,7 +2163,7 @@
                     }
                   },
                   "metadata": {
-                    "type": "object"
+                    "$ref": "#/components/schemas/MessageOrigin.Metadata"
                   },
                   "delivery": {
                     "anyOf": [
@@ -16710,6 +16710,9 @@
               "artifacts": {
                 "type": "boolean"
               },
+              "message_context": {
+                "type": "boolean"
+              },
               "subagent_depth": {
                 "type": "integer",
                 "minimum": 0,
@@ -20473,6 +20476,73 @@
           }
         },
         "required": ["_tag", "sessionID", "messageID", "message"],
+        "additionalProperties": false
+      },
+      "MessageOrigin": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/MessageOrigin.From"
+          },
+          {
+            "$ref": "#/components/schemas/MessageOrigin.Via"
+          }
+        ]
+      },
+      "MessageOrigin.From": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/MessageOrigin.Value"
+          },
+          "via": {
+            "not": {}
+          },
+          "actor": {
+            "$ref": "#/components/schemas/MessageOrigin.Value"
+          }
+        },
+        "required": ["from"],
+        "additionalProperties": false
+      },
+      "MessageOrigin.Metadata": {
+        "type": "object",
+        "properties": {
+          "opencode.origin": {
+            "$ref": "#/components/schemas/MessageOrigin"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        ]
+      },
+      "MessageOrigin.Value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+        "allOf": [
+          {
+            "pattern": "^[^\\p{Cc}\\u2028\\u2029]+$"
+          }
+        ]
+      },
+      "MessageOrigin.Via": {
+        "type": "object",
+        "properties": {
+          "via": {
+            "$ref": "#/components/schemas/MessageOrigin.Value"
+          },
+          "from": {
+            "not": {}
+          },
+          "actor": {
+            "$ref": "#/components/schemas/MessageOrigin.Value"
+          }
+        },
+        "required": ["via"],
         "additionalProperties": false
       },
       "Model.CacheFormat": {

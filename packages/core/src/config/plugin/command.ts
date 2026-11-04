@@ -11,6 +11,7 @@ import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Location } from "../../location.js"
 import { Session } from "../../session.js"
+import { MessageContext } from "../../session/message-context.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 import { ShellSelect } from "../../shell/select.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -83,6 +84,7 @@ export const Plugin = define({
                     ...input.prompt,
                     sessionID: child.id,
                     text: ["You are a subagent spawned by another session.", text].join("\n"),
+                    metadata: MessageContext.fromSession(parent.id),
                     resume: false,
                   })
                   const recovery = {
@@ -105,6 +107,7 @@ export const Plugin = define({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text,
+                  metadata: MessageContext.viaCommand(name),
                   delivery: input.delivery,
                 })
               }).pipe(Effect.asVoid),
