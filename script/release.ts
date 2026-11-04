@@ -100,7 +100,7 @@ if (!notes) throw new Error("Release review is missing its changelog markers")
 const releaseNotes = notes[1].trim()
 if (!releaseNotes) throw new Error("Release review has no changelog")
 
-const highlights = parse(releaseNotes)
+const highlights = parse(releaseNotes, "tui")
 highlights.problems.forEach((problem) => console.warn(`Warning: ${problem}`))
 console.log(
   highlights.items.length
