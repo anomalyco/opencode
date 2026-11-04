@@ -712,8 +712,9 @@ export function createTimelineVirtualizer(input: Input) {
 
     const anchor = input.follow.anchor()
 
-    // A held notice moves to the newest unread mark, or lets go once it is read.
-    if (anchor && !anchor.partID && anchor.key !== key)
+    // A held notice moves to the newest unread mark, or lets go once it is read. Every cached view reads the selected
+    // session's follow state, so only the active one may change it.
+    if (active() && anchor && !anchor.partID && anchor.key !== key)
       input.follow.dispatch(key ? { type: "anchor", anchor: { key } } : { type: "release" })
 
     if (active())
