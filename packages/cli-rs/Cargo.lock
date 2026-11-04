@@ -1185,6 +1185,7 @@ dependencies = [
  "opencode-ui",
  "opentui",
  "regex",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",
