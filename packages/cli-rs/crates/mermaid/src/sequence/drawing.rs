@@ -39,23 +39,65 @@ fn text(grid: &mut Grid, x: i32, y: i32, value: &str, style: Style) {
 fn arrow_head(head: Option<Head>, direction: i32) -> &'static str {
     let right = direction == 1;
     match head {
-        Some(Head::Open) => if right { ">" } else { "<" },
+        Some(Head::Open) => {
+            if right {
+                ">"
+            } else {
+                "<"
+            }
+        }
         Some(Head::Cross) => "✕",
-        Some(Head::Async) => if right { ")" } else { "(" },
-        None => if right { "►" } else { "◄" },
+        Some(Head::Async) => {
+            if right {
+                ")"
+            } else {
+                "("
+            }
+        }
+        None => {
+            if right {
+                "►"
+            } else {
+                "◄"
+            }
+        }
     }
 }
 
 fn departure_fade(grid: &mut Grid, x: i32, y: i32, direction: i32, response: bool) {
-    let fade = |step: u8| if response { Style::ResponseFade(step) } else { Style::RequestFade(step) };
-    set(grid, x, y, if direction == 1 { BORDER.left_t } else { BORDER.right_t }, fade(0));
+    let fade = |step: u8| {
+        if response {
+            Style::ResponseFade(step)
+        } else {
+            Style::RequestFade(step)
+        }
+    };
+    set(
+        grid,
+        x,
+        y,
+        if direction == 1 {
+            BORDER.left_t
+        } else {
+            BORDER.right_t
+        },
+        fade(0),
+    );
     for step in 2..=5 {
-        set(grid, x + direction * (step - 1), y, BORDER.horizontal, fade((step - 1) as u8));
+        set(
+            grid,
+            x + direction * (step - 1),
+            y,
+            BORDER.horizontal,
+            fade((step - 1) as u8),
+        );
     }
 }
 
 fn group_vertical(grid: &mut Grid, x: i32, y: i32) {
-    let blank = grid.cell(x, y).is_none_or(|cell| cell.ch == " " || cell.ch == BORDER.vertical);
+    let blank = grid
+        .cell(x, y)
+        .is_none_or(|cell| cell.ch == " " || cell.ch == BORDER.vertical);
     if blank {
         set(grid, x, y, BORDER.vertical, Style::Group);
     }
@@ -101,17 +143,39 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
     for participant in &plan.participants {
         let center = participant.center;
         for (index, line) in participant.label_lines.iter().enumerate() {
-            text(&mut grid, center - width(line).div_euclid(2), rows.header_y + index as i32, line, Style::Participant);
+            text(
+                &mut grid,
+                center - width(line).div_euclid(2),
+                rows.header_y + index as i32,
+                line,
+                Style::Participant,
+            );
         }
         if !compact {
             for x in participant.header_left..=participant.header_right {
-                set(&mut grid, x, rows.rule_y, BORDER.horizontal, Style::Participant);
+                set(
+                    &mut grid,
+                    x,
+                    rows.rule_y,
+                    BORDER.horizontal,
+                    Style::Participant,
+                );
             }
-            set(&mut grid, center, rows.rule_y, BORDER.top_t, Style::Participant);
+            set(
+                &mut grid,
+                center,
+                rows.rule_y,
+                BORDER.top_t,
+                Style::Participant,
+            );
         }
         for y in rows.lifeline_start..=rows.lifeline_end {
             let distance = y - rows.lifeline_start;
-            let style = if !compact && distance < 3 { Style::LifelineRamp(distance as u8) } else { Style::Lifeline };
+            let style = if !compact && distance < 3 {
+                Style::LifelineRamp(distance as u8)
+            } else {
+                Style::Lifeline
+            };
             set(&mut grid, center, y, BORDER.vertical, style);
         }
     }
@@ -122,7 +186,13 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
                     text(&mut grid, *x, y + index as i32, line, Style::NoteBadge);
                 }
             }
-            StepPlacement::Fragment { fragment, label, bounds, y, walls_before } => {
+            StepPlacement::Fragment {
+                fragment,
+                label,
+                bounds,
+                y,
+                walls_before,
+            } => {
                 if let Some(walls) = walls_before
                     && walls.end >= walls.start
                 {
@@ -142,8 +212,19 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
                     text(&mut grid, bounds.left + 2, *y, label, Style::FragmentLabel);
                 }
             }
-            StepPlacement::SelfMessage { message, label_lines, center, right, top, bottom } => {
-                let style = if message.dashed { Style::Response } else { Style::Request };
+            StepPlacement::SelfMessage {
+                message,
+                label_lines,
+                center,
+                right,
+                top,
+                bottom,
+            } => {
+                let style = if message.dashed {
+                    Style::Response
+                } else {
+                    Style::Request
+                };
                 departure_fade(&mut grid, *center, *top, 1, message.dashed);
                 for x in center + 5..*right {
                     set(&mut grid, x, *top, BORDER.horizontal, style);
@@ -158,8 +239,18 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
                 for x in center + 1..*right {
                     set(&mut grid, x, *bottom, BORDER.horizontal, style);
                 }
-                let head_x = if message.head.is_none() { *center } else { center + 1 };
-                set(&mut grid, head_x, *bottom, arrow_head(message.head, -1), style);
+                let head_x = if message.head.is_none() {
+                    *center
+                } else {
+                    center + 1
+                };
+                set(
+                    &mut grid,
+                    head_x,
+                    *bottom,
+                    arrow_head(message.head, -1),
+                    style,
+                );
                 set(&mut grid, *right, *bottom, BORDER.bottom_right, style);
             }
             StepPlacement::Message {
@@ -175,7 +266,11 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
                 direction,
                 inline_label,
             } => {
-                let style = if message.dashed { Style::Response } else { Style::Request };
+                let style = if message.dashed {
+                    Style::Response
+                } else {
+                    Style::Request
+                };
                 if inline_label.is_none() {
                     for (index, line) in label_lines.iter().enumerate() {
                         text(&mut grid, *label_x, label_y + index as i32, line, style);
@@ -185,7 +280,13 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
                     set(&mut grid, x, *arrow_y, BORDER.horizontal, style);
                 }
                 departure_fade(&mut grid, *from_x, *arrow_y, *direction, message.dashed);
-                set(&mut grid, *head_x, *arrow_y, arrow_head(message.head, *direction), style);
+                set(
+                    &mut grid,
+                    *head_x,
+                    *arrow_y,
+                    arrow_head(message.head, *direction),
+                    style,
+                );
                 if let Some(label) = inline_label {
                     text(&mut grid, *label_x, *label_y, label, style);
                 }
@@ -194,7 +295,10 @@ pub fn draw(diagram: &Diagram, compact: bool) -> Result<Grid, SizeError> {
     }
     for activation in &plan.activations {
         for y in activation.start..=activation.end {
-            if grid.cell(activation.center, y).is_some_and(|cell| cell.ch == BORDER.vertical) {
+            if grid
+                .cell(activation.center, y)
+                .is_some_and(|cell| cell.ch == BORDER.vertical)
+            {
                 set(&mut grid, activation.center, y, "┃", Style::Lifeline);
             }
         }

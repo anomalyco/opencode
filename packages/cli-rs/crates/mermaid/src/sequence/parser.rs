@@ -4,7 +4,9 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{Diagram, Fragment, FragmentKind, Group, Head, Message, Note, NoteSide, Participant, Step};
+use super::{
+    Diagram, Fragment, FragmentKind, Group, Head, Message, Note, NoteSide, Participant, Step,
+};
 use crate::core::text::{first_meaningful_line, js_trim, meaningful_lines, strip_quotes};
 use crate::{Kind, SyntaxError};
 
@@ -12,16 +14,21 @@ fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("sequence pattern")
 }
 
-static MESSAGE: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"^(.+?)\s*(-->>|->>|--x|-x|--\)|-\)|-->|->)([+-]?)\s*(.+?)\s*:\s*(.*)$"));
-static NOTE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^note\s+(over|left\s+of|right\s+of)\s+(.+?)\s*:\s*(.*)$"));
-static PARTICIPANT: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?$"));
-static ACTIVATION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(activate|deactivate)\s+(.+)$"));
+static MESSAGE: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(r"^(.+?)\s*(-->>|->>|--x|-x|--\)|-\)|-->|->)([+-]?)\s*(.+?)\s*:\s*(.*)$")
+});
+static NOTE: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^note\s+(over|left\s+of|right\s+of)\s+(.+?)\s*:\s*(.*)$"));
+static PARTICIPANT: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?$"));
+static ACTIVATION: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^(activate|deactivate)\s+(.+)$"));
 static BOX: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^box(?:\s+(.+))?$"));
 static ALT: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^alt\s+(.+)$"));
 static ELSE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^else(?:\s+(.+))?$"));
 static LOOP: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^loop\s+(.+)$"));
-static AUTONUMBER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$"));
+static AUTONUMBER: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$"));
 static BIDIRECTIONAL: LazyLock<Regex> = LazyLock::new(|| pattern(r"<<-{1,2}>>"));
 static OPERATOR: LazyLock<Regex> = LazyLock::new(|| pattern(r"-->>|->>|--x|-x|--\)|-\)|-->|->"));
 static HEX_COLOR: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^#[0-9a-f]{3,8}$"));
@@ -98,7 +105,9 @@ fn split_leading_box_token(value: &str) -> (&str, &str) {
 
 fn box_label(value: Option<&str>) -> String {
     let raw = js_trim(value.unwrap_or(""));
-    if (raw.starts_with('"') && raw.ends_with('"')) || (raw.starts_with('\'') && raw.ends_with('\'')) {
+    if (raw.starts_with('"') && raw.ends_with('"'))
+        || (raw.starts_with('\'') && raw.ends_with('\''))
+    {
         return strip_quotes(raw);
     }
     let label = strip_quotes(raw);
@@ -106,17 +115,32 @@ fn box_label(value: Option<&str>) -> String {
         return String::new();
     }
     let (token, rest) = split_leading_box_token(&label);
-    if is_box_color(token) { strip_quotes(rest) } else { label.clone() }
+    if is_box_color(token) {
+        strip_quotes(rest)
+    } else {
+        label.clone()
+    }
 }
 
-fn ensure_participant(participants: &mut Vec<Participant>, id: &str, label: Option<&str>, replace: bool) {
-    if let Some(existing) = participants.iter_mut().find(|participant| participant.id == id) {
+fn ensure_participant(
+    participants: &mut Vec<Participant>,
+    id: &str,
+    label: Option<&str>,
+    replace: bool,
+) {
+    if let Some(existing) = participants
+        .iter_mut()
+        .find(|participant| participant.id == id)
+    {
         if replace {
             existing.label = label.unwrap_or(id).to_string();
         }
         return;
     }
-    participants.push(Participant { id: id.to_string(), label: label.unwrap_or(id).to_string() });
+    participants.push(Participant {
+        id: id.to_string(),
+        label: label.unwrap_or(id).to_string(),
+    });
 }
 
 fn add_to_group(groups: &mut [Group], open: Option<usize>, id: &str) {
@@ -151,14 +175,21 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             return Err(error(source.number, line));
         }
         if let Some(captures) = AUTONUMBER.captures(line) {
-            next_number = Some(captures.get(1).map_or(1, |m| m.as_str().parse().unwrap_or(1)));
-            increment = captures.get(2).map_or(1, |m| m.as_str().parse().unwrap_or(1));
+            next_number = Some(
+                captures
+                    .get(1)
+                    .map_or(1, |m| m.as_str().parse().unwrap_or(1)),
+            );
+            increment = captures
+                .get(2)
+                .map_or(1, |m| m.as_str().parse().unwrap_or(1));
             continue;
         }
         if let Some(captures) = BOX.captures(line) {
-            diagram
-                .groups
-                .push(Group { label: box_label(captures.get(1).map(|m| m.as_str())), participant_ids: Vec::new() });
+            diagram.groups.push(Group {
+                label: box_label(captures.get(1).map(|m| m.as_str())),
+                participant_ids: Vec::new(),
+            });
             open_groups.push(diagram.groups.len() - 1);
             blocks.push((Block::Box, source.number, line.to_string()));
             continue;
@@ -179,34 +210,44 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             } else {
                 None
             };
-            let over: Vec<String> =
-                captures[2].split(',').map(strip_quotes).filter(|participant| !participant.is_empty()).collect();
+            let over: Vec<String> = captures[2]
+                .split(',')
+                .map(strip_quotes)
+                .filter(|participant| !participant.is_empty())
+                .collect();
             for participant in &over {
                 ensure_participant(&mut diagram.participants, participant, None, false);
             }
-            diagram.steps.push(Step::Note(Note { over, label: strip_quotes(&captures[3]), side }));
+            diagram.steps.push(Step::Note(Note {
+                over,
+                label: strip_quotes(&captures[3]),
+                side,
+            }));
             continue;
         }
         if let Some(captures) = ACTIVATION.captures(line) {
             let participant = strip_quotes(&captures[2]);
             ensure_participant(&mut diagram.participants, &participant, None, false);
-            diagram
-                .steps
-                .push(Step::Activation { participant, active: captures[1].to_lowercase() == "activate" });
+            diagram.steps.push(Step::Activation {
+                participant,
+                active: captures[1].to_lowercase() == "activate",
+            });
             continue;
         }
         if let Some(captures) = ALT.captures(line) {
             blocks.push((Block::Alt, source.number, line.to_string()));
-            diagram
-                .steps
-                .push(Step::Fragment(Fragment { kind: FragmentKind::Alt, label: strip_quotes(&captures[1]) }));
+            diagram.steps.push(Step::Fragment(Fragment {
+                kind: FragmentKind::Alt,
+                label: strip_quotes(&captures[1]),
+            }));
             continue;
         }
         if let Some(captures) = LOOP.captures(line) {
             blocks.push((Block::Loop, source.number, line.to_string()));
-            diagram
-                .steps
-                .push(Step::Fragment(Fragment { kind: FragmentKind::Loop, label: strip_quotes(&captures[1]) }));
+            diagram.steps.push(Step::Fragment(Fragment {
+                kind: FragmentKind::Loop,
+                label: strip_quotes(&captures[1]),
+            }));
             continue;
         }
         if let Some(captures) = ELSE.captures(line) {
@@ -219,7 +260,10 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                 ));
             }
             let label = strip_quotes(captures.get(1).map_or("", |m| m.as_str()));
-            diagram.steps.push(Step::Fragment(Fragment { kind: FragmentKind::Else, label }));
+            diagram.steps.push(Step::Fragment(Fragment {
+                kind: FragmentKind::Else,
+                label,
+            }));
             continue;
         }
         if line.to_lowercase() == "end" {
@@ -239,7 +283,10 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                 Block::Alt => "alt",
                 Block::Loop => "loop",
             };
-            diagram.steps.push(Step::Fragment(Fragment { kind: FragmentKind::End, label: label.to_string() }));
+            diagram.steps.push(Step::Fragment(Fragment {
+                kind: FragmentKind::End,
+                label: label.to_string(),
+            }));
             continue;
         }
         if let Some(captures) = MESSAGE.captures(line) {
