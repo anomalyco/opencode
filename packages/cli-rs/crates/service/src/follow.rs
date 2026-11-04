@@ -80,16 +80,40 @@ impl Transport for Follow {
             result
         })
     }
+
+    // The terminal socket's `ws:` URL has another origin than the client's `http:` one, so this compares host and
+    // port only.
+    fn route(&self, mut url: url::Url) -> url::Url {
+        let url::Origin::Tuple(_, host, port) = &self.origin else {
+            return url;
+        };
+        if url.host_str() != Some(&host.to_string()) || url.port_or_known_default() != Some(*port) {
+            return url;
+        }
+        point(&self.route.read().expect("route lock").url, &mut url);
+        url
+    }
+}
+
+// Points `url` at `route`'s host and port, keeping a socket scheme a socket scheme.
+fn point(route: &url::Url, url: &mut url::Url) {
+    let secure = route.scheme() == "https";
+    let scheme = match url.scheme() {
+        "ws" | "wss" if secure => "wss",
+        "ws" | "wss" => "ws",
+        _ => route.scheme(),
+    };
+    // The URL has a host, so these cannot fail.
+    let _ = url.set_scheme(scheme);
+    let _ = url.set_host(route.host_str());
+    let _ = url.set_port(route.port());
 }
 
 impl Follow {
     // Points `request` at the current route and returns the route's generation.
     fn reroute(&self, request: &mut Request) -> u64 {
         let route = self.route.read().expect("route lock");
-        // The URL has a host, so these cannot fail.
-        let _ = request.url.set_scheme(route.url.scheme());
-        let _ = request.url.set_host(route.url.host_str());
-        let _ = request.url.set_port(route.url.port());
+        point(&route.url, &mut request.url);
         request.headers.retain(|(name, _)| name != "authorization");
         if let Some(auth) = &route.auth {
             request.headers.push((
@@ -133,7 +157,10 @@ mod tests {
     use crate::probe::Endpoint;
     use crate::testing::{Reply, Server};
     use opencode_api::client::RequestOptions;
+    use opencode_api::generated::PtyID;
+    use opencode_api::pty;
     use std::ffi::OsString;
+    use std::sync::Mutex;
 
     const OLD: &str = "http://127.0.0.1:4096/api/info";
     const NEW: &str = "http://127.0.0.1:5000/api/info";
@@ -192,6 +219,62 @@ mod tests {
                 (OLD.to_owned(), basic("old")),
                 (NEW.to_owned(), basic("new")),
                 (NEW.to_owned(), basic("new")),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_terminal_socket_follows_a_restarted_service() {
+        const OLD_TOKEN: &str =
+            "http://127.0.0.1:4096/api/experimental/persistent-pty/pty_1/connect-token";
+        const NEW_TOKEN: &str =
+            "http://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect-token";
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(OsString::from(dir.path())),
+            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
+            _ => None,
+        })
+        .unwrap();
+        std::fs::create_dir_all(&paths.state).unwrap();
+        register(&paths, 4096, "old");
+        let server = Arc::new(
+            Server::default()
+                .reply(OLD, Reply::json(200, HEALTH))
+                .reply(OLD_TOKEN, Reply::Refused)
+                .reply(NEW, Reply::json(200, HEALTH))
+                .reply(
+                    NEW_TOKEN,
+                    Reply::json(200, r#"{"data":{"ticket":"t1","expires_in":60}}"#),
+                ),
+        );
+        let env = Env {
+            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
+            ..Env::default()
+        };
+        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default())
+            .await
+            .unwrap();
+        let client = client(server.clone(), &connection, &paths, &env).unwrap();
+        register(&paths, 5000, "new");
+        let input = pty::ConnectInput {
+            pty_id: PtyID("pty_1".to_owned()),
+            cursor: 0,
+            attachment_id: "attachment-1".to_owned(),
+            takeover: false,
+        };
+        let opened = Mutex::new(Vec::new());
+        let connector = |url: url::Url| {
+            opened.lock().unwrap().push(url.to_string());
+            Ok(pty::pair().0)
+        };
+        // The refused ticket request finds the restarted service; the next connect goes there.
+        assert!(pty::connect(&client, &connector, &input).await.is_err());
+        pty::connect(&client, &connector, &input).await.unwrap();
+        assert_eq!(
+            *opened.lock().unwrap(),
+            [
+                "ws://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect?ticket=t1&cursor=0&attachment_id=attachment-1&takeover=false&input_protocol=1"
             ]
         );
     }

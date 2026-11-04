@@ -252,7 +252,9 @@ pub async fn connect(
             &RequestOptions::default(),
         )
         .await?;
-    let url = url(client.base_url(), input, &token.ticket)?;
+    let url = client
+        .transport()
+        .route(url(client.base_url(), input, &token.ticket)?);
     let socket = connector
         .open(url.clone())
         .await
