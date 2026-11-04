@@ -10,6 +10,7 @@ import type {
   SlotMap,
   SlotPath,
   Toast,
+  ToolRender,
 } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -33,6 +34,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
 import { abbreviateHome } from "../util/path-format"
+import { PluginMarkdown } from "./render"
 
 export type Dispose = () => Promise<void>
 
@@ -51,13 +53,16 @@ const placements = ["prepend", "append", "before", "after", "replace"] as const 
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
+export type RegistryKind = "routes" | "slots" | "markdown" | "layout" | "tools"
+
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown" | "layout", name: string): boolean
+  has(kind: RegistryKind, name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
   set(kind: "layout", name: string, layout: Layout): void
-  remove(kind: "routes" | "slots" | "markdown" | "layout", name: string): void
+  set(kind: "tools", name: string, render: ToolRender): void
+  remove(kind: RegistryKind, name: string): void
   active(): boolean
 }
 
@@ -135,7 +140,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown" | "layout", name: string) => {
+  const registration = (kind: RegistryKind, name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -318,6 +323,12 @@ export function createPluginContext(input: {
         input.registry.set("layout", key, value)
         return registration("layout", key)
       },
+      tool(name, render) {
+        if (input.registry.has("tools", name)) throw new Error(`Tool renderer already registered: ${name}`)
+        input.registry.set("tools", name, (toolInput) => provide(() => render(toolInput)))
+        return registration("tools", name)
+      },
+      Markdown: PluginMarkdown,
     },
   }
   return context

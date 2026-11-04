@@ -25,7 +25,7 @@ import type {
   VcsInfo,
 } from "@opencode/client"
 import type { ResolvedTheme } from "@opencode/theme/tui"
-import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
+import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable, RGBA } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 
@@ -569,6 +569,30 @@ export interface Layout {
    * above and below the editor and the given prefix before it.
    */
   readonly composer?: { readonly chrome: "bar" } | { readonly chrome: "band"; readonly prefix?: string }
+  /**
+   * Transcript defaults for users who have not chosen. The user's `session`
+   * config wins over them. Fields merge across plugins one by one.
+   */
+  readonly transcript?: {
+    /** "auto" groups related tool calls into one row; "none" shows each call. The host default is "auto". */
+    readonly grouping?: "auto" | "none"
+    /** Whether reasoning shows in full. The host default is "hide". */
+    readonly thinking?: "show" | "hide"
+  }
+}
+
+/** Renders one tool call in the transcript. */
+export type ToolRender = (input: SessionPartInput & { readonly tool: string }) => JSX.Element
+
+/** Host markdown, styled with the current theme's syntax and every registered code-block renderer. */
+export type MarkdownProps = {
+  readonly content: string
+  /** True while the text may still grow, so a trailing block is not finalized. */
+  readonly streaming?: boolean
+  /** Text colour. The theme's markdown text by default. */
+  readonly fg?: RGBA
+  /** Background. The theme's base background by default. */
+  readonly bg?: RGBA
 }
 
 export interface UI {
@@ -625,6 +649,15 @@ export interface UI {
   readonly slot: (claim: SlotClaim) => () => void
   /** Sets host layout knobs until the returned cleanup runs; see Layout. */
   readonly layout: (layout: Layout) => () => void
+  /**
+   * Renders every call of one tool, by its canonical name (shell, patch,
+   * subagent, read, ...), until the returned cleanup runs. When several
+   * active plugins render one tool, the last-enabled one wins. A slot claim
+   * that replaces session.part.tool still wins over it.
+   */
+  readonly tool: (name: string, render: ToolRender) => () => void
+  /** The host's markdown renderer, for text that should read like the transcript. */
+  readonly Markdown: (props: MarkdownProps) => JSX.Element
 }
 
 export interface Context {

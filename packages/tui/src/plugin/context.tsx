@@ -16,7 +16,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
-import type { Layout, Page } from "@opencode/plugin/tui/context"
+import type { Layout, Page, ToolRender } from "@opencode/plugin/tui/context"
 import { Host } from "@opencode/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -27,7 +27,14 @@ import { useTuiLifecycle } from "../context/runtime"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
-import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
+import {
+  createPluginContext,
+  usePluginHost,
+  type Dispose,
+  type RegisteredSlot,
+  type RegistryKind,
+  type SlotRender,
+} from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverPluginTargets, localSource, mergePluginTargets } from "./discovery"
 import { createPluginSources } from "./source"
@@ -64,6 +71,8 @@ type Value = {
   readonly markdown: () => MarkdownOptions["renderNode"]
   /** Layout knobs merged across active plugins; later-enabled plugins win per field. */
   readonly layout: () => Layout
+  /** The renderer for one canonical tool name; the last-enabled active plugin that registered one wins. */
+  readonly tool: (name: string) => { readonly plugin: string; readonly render: ToolRender } | undefined
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -79,6 +88,7 @@ type Registration = {
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
   layout: Record<string, Layout>
+  tools: Record<string, ToolRender>
   cleanups: Dispose[]
 }
 
@@ -149,14 +159,30 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
     setStore("registrations", id, "layout", reconcileStore({}))
+    setStore("registrations", id, "tools", reconcileStore({}))
   }
+  // Registration-store key order is enable order, so later items win.
   const layout = createMemo<Layout>(() =>
-    Object.values(store.registrations).reduce<Layout>(
-      (merged, registration) =>
-        registration.active ? Object.values(registration.layout).reduce((all, item) => ({ ...all, ...item }), merged) : merged,
-      {},
-    ),
+    Object.values(store.registrations)
+      .flatMap((registration) => (registration.active ? Object.values(registration.layout) : []))
+      .reduce<Layout>(
+        (merged, item) => ({
+          ...merged,
+          ...item,
+          // Transcript defaults merge field by field, so two plugins may each set one.
+          transcript: item.transcript ? { ...merged.transcript, ...item.transcript } : merged.transcript,
+        }),
+        {},
+      ),
   )
+  const tools = createMemo(() => {
+    const result = new Map<string, { plugin: string; render: ToolRender }>()
+    for (const [plugin, registration] of Object.entries(store.registrations)) {
+      if (!registration.active) continue
+      for (const [name, render] of Object.entries(registration.tools)) result.set(name, { plugin, render })
+    }
+    return result
+  })
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
@@ -175,9 +201,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown" | "layout",
+          kind: RegistryKind,
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | Layout,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | Layout | ToolRender,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -620,6 +646,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         slots: { register: registerSlot, resolved },
         markdown,
         layout,
+        tool: (name) => tools().get(name),
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -721,6 +748,7 @@ function toRegistration(item: Desired): Registration {
     slots: {},
     markdown: {},
     layout: {},
+    tools: {},
     cleanups: [],
   }
 }

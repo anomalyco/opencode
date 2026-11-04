@@ -100,7 +100,7 @@ import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-too
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { Slot } from "../../plugin/render"
+import { PluginTool, Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import type { TranscriptRowKind } from "@opencode/plugin/tui/context"
 import {
@@ -242,11 +242,16 @@ export function Session(props: {
 
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
+  // The user's choice wins over a plugin's transcript default.
+  const thinkingMode = createMemo<ThinkingMode>(
+    () => config.session?.thinking ?? plugins.layout().transcript?.thinking ?? "hide",
+  )
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
-  const groupExploration = createMemo(() => config.session?.grouping !== "none")
+  const groupExploration = createMemo(
+    () => (config.session?.grouping ?? plugins.layout().transcript?.grouping) !== "none",
+  )
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
   // High opens exploration and instruction summaries by default; everything else starts collapsed.
   const groupExpanded = (groupID: string, kind: GroupKind) =>
@@ -2027,6 +2032,10 @@ function SessionPartView(props: {
   })
   const ctx = use()
   const input = () => ({ sessionID: ctx.sessionID, messageID: props.partRef.messageID, partID: props.partRef.partID })
+  const toolInput = () => {
+    const item = part()
+    return { ...input(), tool: item?.type === "tool" ? canonicalToolName(item.name) : "" }
+  }
   return (
     <Show when={part()}>
       {(item) => (
@@ -2050,11 +2059,10 @@ function SessionPartView(props: {
             </Slot>
           </Match>
           <Match when={item().type === "tool"}>
-            <Slot
-              path="session.part.tool"
-              input={{ ...input(), tool: canonicalToolName((item() as SessionMessageAssistantTool).name) }}
-            >
-              <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <Slot path="session.part.tool" input={toolInput()}>
+              <PluginTool input={toolInput()}>
+                <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+              </PluginTool>
             </Slot>
           </Match>
         </Switch>

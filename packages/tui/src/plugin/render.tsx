@@ -14,10 +14,12 @@ import {
   type ParentProps,
 } from "solid-js"
 import { isShallowEqual } from "remeda"
-import type { SlotMap, SlotPath } from "@opencode/plugin/tui/context"
+import type { MarkdownProps, SlotMap, SlotPath } from "@opencode/plugin/tui/context"
 import type { SlotRender } from "./api"
 import { contains, emptySlotted, type Claim } from "./structure"
+import { useConfig } from "../config"
 import { useRoute } from "../context/route"
+import { useTheme, useThemes } from "../context/theme"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { usePlugin } from "./context"
@@ -154,5 +156,44 @@ export function Slot<Path extends SlotPath>(props: SlotProps<Path>) {
       </SlotParent.Provider>
       <For each={slotted().after}>{contribution}</For>
     </>
+  )
+}
+
+// The renderer a plugin registered for one tool through ui.tool, contained
+// like a slot contribution; the host's own row when none did.
+export function PluginTool(props: ParentProps<{ readonly input: SlotMap["session.part.tool"] }>) {
+  const plugins = usePlugin()
+  const claim = createMemo(() => plugins.tool(props.input.tool))
+  return (
+    // Keyed so a hot reload or a new owner recreates the boundary.
+    <Show keyed when={claim()} fallback={props.children}>
+      {(item) => (
+        <PluginBoundary id={item.plugin} where={`tool ${props.input.tool}`}>
+          {createComponent(item.render, mergeProps(() => props.input))}
+        </PluginBoundary>
+      )}
+    </Show>
+  )
+}
+
+// ui.Markdown: the transcript's markdown, with the current syntax style,
+// every registered code-block renderer and the user's markdown mode.
+export function PluginMarkdown(props: MarkdownProps) {
+  const plugins = usePlugin()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const config = useConfig()
+  return (
+    <markdown
+      syntaxStyle={syntax()}
+      renderNode={plugins.markdown()}
+      content={props.content}
+      streaming={props.streaming ?? false}
+      internalBlockMode="top-level"
+      tableOptions={{ style: "grid", cellPaddingX: 1 }}
+      conceal={(config.data.session?.markdown ?? "rendered") === "rendered"}
+      fg={props.fg ?? theme.markdown.text}
+      bg={props.bg ?? theme.background.base}
+    />
   )
 }
