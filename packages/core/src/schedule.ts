@@ -293,6 +293,37 @@ const layer = Layer.effect(
     })
 
     /**
+     * Records a terminal check outcome. A prompt action wakes the Session once with the reason appended in brackets and
+     * counts the run; a shell action wakes nothing, so the bare reason goes in `last_run` and no command starts.
+     * `run_count` stays put for shell actions, because only commands that actually ran are counted.
+     */
+    const conclude = Effect.fnUntraced(function* (
+      row: Row,
+      session: SessionSchema.Info,
+      due: number,
+      now: number,
+      late: boolean,
+      reason: string,
+      meta: Record<string, unknown>,
+      values: Partial<Row>,
+    ) {
+      if (row.action.type === "shell") {
+        // Nothing ran, so `last_run` says why instead of the command starting.
+        yield* update(row, { ...values, last_run: { durationMs: 0, output: "", error: reason } })
+        return
+      }
+      const run = row.run_count + 1
+      const id = yield* admitWake(row, session.id, run, due, late, `${row.action.prompt}\n\n[${reason}]`, meta)
+      // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
+      yield* db
+        .update(ScheduleTable)
+        .set({ ...values, run_count: run, last_fired_at: now, last_message_id: id })
+        .where(eq(ScheduleTable.id, row.id))
+        .run()
+        .pipe(Effect.orDie)
+    })
+
+    /**
      * Runs one shell action in the background and records how it ended. Failures become the row's `last_run`; only
      * interrupts are re-raised, so shutdown and `remove` stop the run and leave the start marker in place.
      */
@@ -357,32 +388,25 @@ const layer = Layer.effect(
           })
           return
         }
-        const run = row.run_count + 1
-        const note = outcome.invalid
-          ? `[Schedule paused after invalid check: ${outcome.error}]`
-          : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
-        const values = {
-          status: "paused" as const,
-          failures: strikes,
-          run_count: run,
-          last_fired_at: now,
-          last_outcome: "failed" as const,
-          retry_at: null,
-          time_updated: now,
-        }
-        const id =
-          row.action.type === "prompt"
-            ? yield* admitWake(row, session.id, run, due, late, `${row.action.prompt}\n\n${note}`, {
-                error: outcome.error,
-                failures: strikes,
-              })
-            : undefined
-        yield* db
-          .update(ScheduleTable)
-          .set(id === undefined ? values : { ...values, last_message_id: id })
-          .where(eq(ScheduleTable.id, row.id))
-          .run()
-          .pipe(Effect.orDie)
+        const reason = outcome.invalid
+          ? `Schedule paused after invalid check: ${outcome.error}`
+          : `Schedule paused after ${strikes} failed checks: ${outcome.error}`
+        yield* conclude(
+          row,
+          session,
+          due,
+          now,
+          late,
+          reason,
+          { error: outcome.error, failures: strikes },
+          {
+            status: "paused",
+            failures: strikes,
+            last_outcome: "failed",
+            retry_at: null,
+            time_updated: now,
+          },
+        )
         return
       }
 
@@ -390,38 +414,26 @@ const layer = Layer.effect(
         const checks = row.checks + 1
         const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
         if (check.mode === "until" && ended) {
-          const run = row.run_count + 1
-          const values = {
-            status: "done" as const,
-            checks,
-            failures: 0,
-            state: outcome.state,
-            run_count: run,
-            last_fired_at: now,
-            last_outcome: "expired" as const,
-            next_due_at: null,
-            remaining_runs: 0,
-            retry_at: null,
-            time_updated: now,
-          }
-          const id =
-            row.action.type === "prompt"
-              ? yield* admitWake(
-                  row,
-                  session.id,
-                  run,
-                  due,
-                  late,
-                  `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
-                  { expired: true },
-                )
-              : undefined
-          yield* db
-            .update(ScheduleTable)
-            .set(id === undefined ? values : { ...values, last_message_id: id })
-            .where(eq(ScheduleTable.id, row.id))
-            .run()
-            .pipe(Effect.orDie)
+          yield* conclude(
+            row,
+            session,
+            due,
+            now,
+            late,
+            `Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}`,
+            { expired: true },
+            {
+              status: "done",
+              checks,
+              failures: 0,
+              state: outcome.state,
+              last_outcome: "expired",
+              next_due_at: null,
+              remaining_runs: 0,
+              retry_at: null,
+              time_updated: now,
+            },
+          )
           return
         }
         yield* update(row, {

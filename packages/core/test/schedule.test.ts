@@ -114,6 +114,8 @@ const shellState = {
   envs: [] as (Record<string, unknown> | undefined)[],
   cwds: [] as (string | undefined)[],
   missingNow: false,
+  die: undefined as string | undefined,
+  interrupts: 0,
 }
 const slack = { replies: 0, reads: 0, exports: 0, failing: false }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
@@ -132,7 +134,15 @@ const testEnvironment = Layer.effect(
         shellState.runs.push(script)
         shellState.envs.push(command._tag === "StandardCommand" ? command.options.env : undefined)
         shellState.cwds.push(command._tag === "StandardCommand" ? command.options.cwd : undefined)
-        if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
+        if (shellState.die !== undefined) return yield* Effect.die(new Error(shellState.die))
+        if (shellState.hangMs > 0)
+          yield* Effect.sleep(shellState.hangMs).pipe(
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                shellState.interrupts++
+              }),
+            ),
+          )
         const outBytes = new TextEncoder().encode(shellState.stdout)
         const errBytes = new TextEncoder().encode(shellState.stderr)
         return makeHandle({
@@ -333,6 +343,8 @@ const setup = (directory = enabledDirectory) =>
     shellState.envs = []
     shellState.cwds = []
     shellState.missingNow = false
+    shellState.die = undefined
+    shellState.interrupts = 0
     slack.replies = 0
     slack.reads = 0
     slack.exports = 0
@@ -1385,6 +1397,7 @@ describe("Schedule", () => {
         expect(info.lastRun?.exitCode).toBeUndefined()
         expect(info.lastRun?.error).toBe("Timed out after 1 second")
         expect(info.lastRun?.durationMs).toBe(1000)
+        expect(shellState.interrupts).toBe(1)
         expect(info).toMatchObject({ status: "done", lastOutcome: "fired" })
       }),
     )
@@ -1435,6 +1448,217 @@ describe("Schedule", () => {
         yield* schedules.tick
         expect(shellState.runs).toEqual(["probe", "deploy"])
         expect((yield* schedules.get(schedule.id)).lastRun).toMatchObject({ exitCode: 0, output: "ready" })
+        expect(yield* pending).toEqual([])
+      }),
+    )
+
+    it.effect("pauses a shell action after three failed checks without running it", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 1
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          if: { type: "shell", run: "probe", is: "ready" },
+          action: { type: "shell", run: "deploy" },
+        })
+        for (const _ of [1, 2]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "active",
+            lastOutcome: "failed",
+            runCount: 0,
+          })
+        }
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        const info = yield* schedules.get(schedule.id)
+        expect(info).toMatchObject({
+          status: "paused",
+          runCount: 0,
+          lastOutcome: "failed",
+          lastRun: { durationMs: 0, output: "" },
+        })
+        expect(info.lastRun?.error).toBe("Schedule paused after 3 failed checks: Command exited with code 1")
+        expect(info.lastRun?.exitCode).toBeUndefined()
+        expect(info.lastFiredAt).toBeUndefined()
+
+        expect(shellState.runs).toEqual(["probe", "probe", "probe"])
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+
+        const { db } = yield* Database.Service
+        const row = yield* db
+          .select()
+          .from(ScheduleTable)
+          .where(eq(ScheduleTable.id, schedule.id))
+          .get()
+          .pipe(Effect.orDie)
+        expect(row).toMatchObject({ failures: 3, retry_at: null })
+      }),
+    )
+
+    it.effect("pauses a shell action on an invalid code check at the first strike", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          if: {
+            type: "code",
+            code: `if (state === null) return { wake: false, state: { ok: true } }; return "not-a-check-result"`,
+          },
+          action: { type: "shell", run: "deploy" },
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+
+        const info = yield* schedules.get(schedule.id)
+        expect(info).toMatchObject({
+          status: "paused",
+          runCount: 0,
+          lastOutcome: "failed",
+          lastRun: { durationMs: 0, output: "" },
+        })
+        expect(info.lastRun?.error?.startsWith("Schedule paused after invalid check:")).toBe(true)
+        expect(info.lastRun?.exitCode).toBeUndefined()
+        expect(shellState.runs).toEqual([])
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+      }),
+    )
+
+    it.effect("expires a shell until check without running the command", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.stdout = "pending"
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "30 seconds" },
+          until: { type: "shell", run: "curl -sf http://localhost:3000", is: "ready" },
+          ends: { after: "1 minute" },
+          action: { type: "shell", run: "deploy" },
+        })
+        // The until check is seeded at creation, so the probe has already run once.
+        expect(shellState.runs).toEqual(["curl -sf http://localhost:3000"])
+
+        for (const _ of [1, 2]) {
+          yield* TestClock.adjust("30 seconds")
+          yield* schedules.tick
+        }
+
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "done",
+          runCount: 0,
+          lastOutcome: "expired",
+          nextDueAt: undefined,
+          remainingRuns: 0,
+          lastRun: {
+            durationMs: 0,
+            output: "",
+            error: "Schedule timed out without matching: curl -sf http://localhost:3000",
+          },
+        })
+        expect(shellState.runs).toEqual([
+          "curl -sf http://localhost:3000",
+          "curl -sf http://localhost:3000",
+          "curl -sf http://localhost:3000",
+        ])
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+      }),
+    )
+
+    it.effect("caps captured output at 32 KB", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.stdout = "x".repeat(40 * 1024)
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "in", in: "1 minute" },
+          action: { type: "shell", run: "yes x" },
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+
+        const info = yield* schedules.get(schedule.id)
+        expect(info.lastRun?.output).toBe("x".repeat(32 * 1024) + "\n[output truncated at 32 KB]")
+        expect(info.lastRun?.exitCode).toBe(0)
+        expect(info.lastRun?.error).toBeUndefined()
+      }),
+    )
+
+    it.effect("stops a command at the default 10 minute timeout", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.hangMs = 11 * 60_000
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "in", in: "1 minute" },
+          action: { type: "shell", run: "sleep 660" },
+        })
+        yield* TestClock.adjust("1 minute")
+        const ticking = yield* Effect.forkChild(schedules.tick)
+        // Give the run time to register its sleep and timeout before moving the clock past them.
+        yield* Effect.forEach(
+          Array.from({ length: 11 }, () => 1),
+          () => Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 minute")), Effect.andThen(Effect.yieldNow)),
+          { discard: true },
+        )
+        yield* Fiber.join(ticking)
+
+        const info = yield* schedules.get(schedule.id)
+        expect(info.lastRun?.exitCode).toBeUndefined()
+        expect(info.lastRun?.error).toBe("Timed out after 10 minutes")
+        expect(info.lastRun?.durationMs).toBe(600_000)
+        expect(shellState.interrupts).toBe(1)
+      }),
+    )
+
+    it.effect("records a spawn failure as an error without an exit code", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.die = "spawn boom"
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "in", in: "1 minute" },
+          action: { type: "shell", run: "echo hi" },
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "fired",
+          lastRun: { durationMs: 0, output: "", error: "spawn boom" },
+        })
+        expect((yield* schedules.get(schedule.id)).lastRun?.exitCode).toBeUndefined()
+        expect(yield* pending).toEqual([])
+      }),
+    )
+
+    it.effect("records a revoked run permission as an error without starting the command", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "in", in: "1 minute" },
+          action: { type: "shell", run: "echo hi" },
+        })
+        agentRules = [{ action: "shell", resource: "*", effect: "deny" }]
+        const locationsMap = yield* LocationServiceMap.Service
+        yield* locationsMap.invalidate(Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) }))
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+
+        const info = yield* schedules.get(schedule.id)
+        expect(info.lastRun?.exitCode).toBeUndefined()
+        expect(info.lastRun?.error).toBeTruthy()
+        expect(shellState.runs).toEqual([])
         expect(yield* pending).toEqual([])
       }),
     )
