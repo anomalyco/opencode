@@ -58,6 +58,11 @@ impl Data {
     }
 
     fn follow(&self, follow: Follow) {
+        // Reads start when their task is built, so check before building it, as `refresh` does
+        // before calling its load. A settle timer checks when it fires.
+        if !self.live() && !matches!(follow, Follow::Settle(..)) {
+            return;
+        }
         match follow {
             Follow::Session(id) => {
                 let task = self.session_sync(&id, false);
