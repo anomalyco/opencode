@@ -254,9 +254,10 @@ fn group_bounds(context: &Context, centers: &[i32], ranges: &[Range]) -> Vec<Gro
         .map(|range| {
             let mut left = centers[range.start];
             let mut right = centers[range.end];
-            for index in range.start..=range.end {
-                let header = header_width(&context.diagram.participants[index].label, context.compact);
-                let start = centers[index] - header.div_euclid(2);
+            let participants = &context.diagram.participants[range.start..=range.end];
+            for (participant, center) in participants.iter().zip(&centers[range.start..=range.end]) {
+                let header = header_width(&participant.label, context.compact);
+                let start = center - header.div_euclid(2);
                 left = left.min(start);
                 right = right.max(start + header - 1);
             }
