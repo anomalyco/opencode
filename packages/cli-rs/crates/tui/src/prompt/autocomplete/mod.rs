@@ -356,6 +356,18 @@ impl Autocomplete {
         self.0.on_input(value);
     }
 
+    /// Where an inserted mention starts: the open `@` query, which it replaces, else the cursor. Hides the
+    /// popup (`insertFileMention`).
+    pub fn mention_start(&self, cursor: u32) -> u32 {
+        let state = &self.0;
+        let start = match state.visible.get() {
+            Some(Mode::Reference) => state.index.get(),
+            _ => cursor,
+        };
+        state.hide(false);
+        start
+    }
+
     /// The store changed: catalogs may have arrived.
     pub fn sync(&self) {
         if self.0.visible.get().is_some() {

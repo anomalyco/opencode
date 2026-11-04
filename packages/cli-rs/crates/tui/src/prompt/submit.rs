@@ -12,6 +12,7 @@ use opencode_api::generated::{
     AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID,
     SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionPromptInput,
     SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
+    SessionSyntheticInput,
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
@@ -72,6 +73,14 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         prompt.clear(tui);
         tui.keymap.dispatch(&id, Some(&input));
         return true;
+    }
+    // The editor context goes once, before the prompt it came with (E.5).
+    let editor = prompt.editor_context(tui).filter(|_| {
+        tui.prompt.editor.label_state() == super::editor_context::LabelState::Pending
+    });
+    if queue && editor.is_some() {
+        warn(tui, "Editor context cannot be queued");
+        return false;
     }
 
     let Some(catalog) = prompt.catalog.borrow().clone() else {
@@ -249,10 +258,30 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 ..SessionPromptInput::default()
             };
             let entry = failure.entry.clone();
+            // The context is admitted first, hidden (`resume: false`), after the session exists.
+            let gate = editor.as_ref().map(|selection| -> Gate {
+                let client = tui.data.client().clone();
+                let input = SessionSyntheticInput {
+                    session_id: target.clone(),
+                    text: selection.reminder(),
+                    resume: Some(Some(false)),
+                    ..SessionSyntheticInput::default()
+                };
+                Box::pin(async move {
+                    if let Some(creation) = creation {
+                        creation.await?;
+                    }
+                    client
+                        .session_synthetic(&input, &RequestOptions::default())
+                        .await
+                        .map(drop)
+                        .map_err(Error::new)
+                })
+            });
             let send = move |tui: &Tui| {
                 let task = tui.data.prompt(Prompt {
                     input,
-                    gate: None,
+                    gate,
                     prepare: Some(Box::new(move || -> Gate { Box::pin(commit.run()) })),
                 });
                 tui.app.spawn(task, move |_, result| {
@@ -288,7 +317,13 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
             } else {
                 send(tui);
             }
+            if editor.is_some() {
+                tui.prompt.editor.mark_sent();
+            }
         }
+    }
+    if created && editor.is_some() {
+        tui.prompt.editor.preserve_from_new_session();
     }
 
     if created {
