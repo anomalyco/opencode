@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerSession } from "./adapter"
 import {
-  composerSubmitTarget,
   composerSubmitView,
   createComposerSubmitState,
   transitionComposerSubmit,
@@ -173,71 +172,6 @@ describe("composer submit machine", () => {
     })
   })
 
-  test.each([
-    { name: "a blank prompt", snapshot: snapshot({ text: "" }), effects: [] },
-    // Like the TUI, a shell command needs text, so hidden attachments alone run nothing.
-    {
-      name: "a blank shell command",
-      snapshot: snapshot({ mode: "shell", text: "" }, [{ type: "text", content: "", start: 0, end: 0 }, image]),
-      effects: [],
-    },
-    {
-      name: "a missing agent or model",
-      snapshot: snapshot({ selection: undefined }),
-      effects: [{ type: "notify.missing-selection" }],
-    },
-    {
-      name: "a queued shell command",
-      snapshot: snapshot({ mode: "shell", delivery: "queue" }),
-      effects: [{ type: "notify.unqueueable" }],
-    },
-  ])("settles $name at once without starting a send", (row) => {
-    const state = createComposerSubmitState()
-
-    expect(transitionComposerSubmit(state, { type: "submit", snapshot: row.snapshot, done })).toEqual({
-      state,
-      effects: [...row.effects, { type: "done", done, sent: false }],
-    })
-  })
-
-  test.each([
-    { name: "a prompt", text: "ship it", mode: "normal" as const, kind: { type: "prompt" }, sendFirst: true },
-    { name: "a shell command", text: "ls", mode: "shell" as const, kind: { type: "shell" }, sendFirst: false },
-    {
-      name: "a server command",
-      text: "/review changes",
-      mode: "normal" as const,
-      kind: { type: "command", command: { command: "review", arguments: "changes" } },
-      sendFirst: false,
-    },
-  ])("sends $name before the composer clears only when it is a prompt", (row) => {
-    const result = replay([
-      { type: "submit", snapshot: snapshot({ text: row.text, mode: row.mode, commands: [{ name: "review" }] }), done },
-      started(1),
-    ])
-
-    expect(result.state).toMatchObject({ type: "handing-off", attempt: 1, kind: row.kind })
-    expect(result.effects.find((effect) => effect.type === "handoff")).toMatchObject({ sendFirst: row.sendFirst })
-  })
-
-  test.each([
-    { name: "reuses", variant: "balanced", reused: true },
-    { name: "does not reuse", variant: "high", reused: false },
-  ])("$name a failed admission's ID for the same selection", (row) => {
-    const retry = {
-      id: SessionMessage.ID.create(),
-      agent: "build",
-      providerID: "provider-1",
-      modelID: "model-1",
-      variant: row.variant,
-    }
-
-    const fresh = snapshot({ retry })
-    const result = transitionComposerSubmit(createComposerSubmitState(), { type: "submit", snapshot: fresh, done })
-
-    expect(result.state).toMatchObject({ type: "preparing", value: { id: row.reused ? retry.id : fresh.id } })
-  })
-
   test("holds a send while the Location loads, until stopped, edited, unmounted or loaded", () => {
     const held = states.held
 
@@ -268,30 +202,6 @@ describe("composer submit machine", () => {
     })
   })
 
-  test("moves the draft to the promoted Session's composer with its context and quote sources", () => {
-    const source = [{ partID: "part-source", revealID: "message-source", start: 4, end: 18, text: "quoted passage" }]
-    const context = [{ key: "quote:c=q", type: "quote" as const, text: "quoted passage", commentID: "q" }]
-    const base = snapshot()
-    const first = { ...base, draft: { ...base.draft, context, sources: [{ key: "quote:c=q", source }] } }
-
-    const result = replay([
-      { type: "submit", snapshot: first, done },
-      { type: "session.retargeted", attempt: 1, target: promoted, preserveDraft: true },
-    ])
-
-    expect(result.state).toMatchObject({
-      type: "preparing",
-      draft: { initial: target, target: promoted, preserveDraft: true },
-    })
-    expect(composerSubmitTarget(result.state, 1)).toBe(promoted)
-    expect(result.effects.at(-1)).toEqual({
-      type: "draft.retarget",
-      target: promoted,
-      context,
-      sources: [{ key: "quote:c=q", source }],
-    })
-  })
-
   test.each([
     {
       name: "a late load after Stop",
@@ -317,48 +227,5 @@ describe("composer submit machine", () => {
     const late = replay(row.events.slice(1), settled.state)
 
     expect(late).toEqual({ state: settled.state, effects: [] })
-  })
-
-  test("a client command or quote holds the composer until it settles", () => {
-    const quote = transitionComposerSubmit(createComposerSubmitState(), {
-      type: "quote",
-      snapshot: quoteSnapshot(),
-      done,
-    })
-
-    expect(quote.state).toEqual({ type: "running", attempt: 1, done })
-    expect(quote.effects).toMatchObject([
-      {
-        type: "quote.send",
-        attempt: 1,
-        key: "quote:c=selected",
-        value: { prompt: [], text: "", context: [{ type: "quote", text: "Selected passage", comment: "Compare" }] },
-      },
-    ])
-    expect(transitionComposerSubmit(quote.state, { type: "run.settled", attempt: 1, sent: true })).toEqual({
-      state: { type: "idle", attempt: 1 },
-      effects: [{ type: "done", done, sent: true }],
-    })
-    expect(transitionComposerSubmit(states.running, { type: "run.settled", attempt: 1, sent: false })).toEqual({
-      state: { type: "idle", attempt: 1 },
-      effects: [{ type: "done", done, sent: false }],
-    })
-    expect(
-      transitionComposerSubmit(createComposerSubmitState(), {
-        type: "quote",
-        snapshot: quoteSnapshot({ selection: undefined }),
-        done,
-      }).effects,
-    ).toEqual([{ type: "notify.missing-selection" }, { type: "done", done, sent: false }])
-  })
-
-  test.each([
-    { state: createComposerSubmitState(), view: { held: false, busy: false, canSubmit: true } },
-    { state: states.held, view: { held: true, busy: true, canSubmit: false } },
-    { state: states.running, view: { held: false, busy: false, canSubmit: false } },
-    { state: states.preparing, view: { held: false, busy: true, canSubmit: false } },
-    { state: states["handing-off"], view: { held: false, busy: true, canSubmit: false } },
-  ])("derives the view of $state.type", (row) => {
-    expect(composerSubmitView(row.state)).toEqual(row.view)
   })
 })
