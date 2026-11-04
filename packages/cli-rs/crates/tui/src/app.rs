@@ -463,6 +463,9 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
         suspend_on_ctrl_z: false,
         // `ThemeState` follows the palette when the `system` theme is active.
         palette_size: 16,
+        // `--print-logs` records and stray stderr writes would draw over the screen; they go to the console and
+        // reach the real stderr once the terminal is restored.
+        capture_stderr: true,
         ..AppOptions::default()
     };
     options.host.terminal.mouse =
