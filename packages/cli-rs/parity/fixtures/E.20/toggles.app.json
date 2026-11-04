@@ -1,0 +1,592 @@
+{
+  "scenario": "E.20/toggles",
+  "width": 100,
+  "height": 30,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "experimental": {
+      "new-designs": true
+    },
+    "keybinds": {
+      "app.toggle.animations": "f5",
+      "app.toggle.diffwrap": "f6",
+      "app.toggle.file_context": "f7",
+      "app.toggle.paste_summary": "f8",
+      "terminal.title.toggle": "f9",
+      "opencode.settings": "f10"
+    },
+    "animations": false
+  },
+  "args": {},
+  "routes": [],
+  "steps": [
+    {
+      "checkpoint": "home",
+      "until": "Ask anything",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/home"
+    },
+    {
+      "keys": [
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10"
+      ]
+    },
+    {
+      "checkpoint": "settings",
+      "until": "Search settings",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/settings"
+    },
+    {
+      "type": "animations"
+    },
+    {
+      "checkpoint": "animations",
+      "until": "Animations",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/animations"
+    },
+    {
+      "keys": [
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace"
+      ]
+    },
+    {
+      "type": "diff wrap"
+    },
+    {
+      "checkpoint": "wrapping",
+      "until": "Wrapping",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/wrapping"
+    },
+    {
+      "keys": [
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace"
+      ]
+    },
+    {
+      "type": "editor context"
+    },
+    {
+      "checkpoint": "editor",
+      "until": "Editor context",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/editor"
+    },
+    {
+      "keys": [
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace"
+      ]
+    },
+    {
+      "type": "large pastes"
+    },
+    {
+      "checkpoint": "pastes",
+      "until": "Large pastes",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/pastes"
+    },
+    {
+      "keys": [
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace",
+        "backspace"
+      ]
+    },
+    {
+      "type": "window title"
+    },
+    {
+      "checkpoint": "title",
+      "until": "Window title",
+      "masks": [
+        {
+          "line": "Ask anything….*",
+          "reason": "the prompt placeholder is picked at random"
+        }
+      ],
+      "deviation": [
+        "T17-home-prompt",
+        "P01-read-only-prompt"
+      ],
+      "fixture": "E.20/toggles/title"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
