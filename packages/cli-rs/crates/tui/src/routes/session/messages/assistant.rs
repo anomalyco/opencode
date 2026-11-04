@@ -3,9 +3,7 @@
 
 use std::cell::{Cell, RefCell};
 
-use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantText,
-};
+use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::prelude::*;
 use opentui::widget::Markdown;
 

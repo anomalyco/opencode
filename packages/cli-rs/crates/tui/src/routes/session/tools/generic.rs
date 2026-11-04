@@ -8,8 +8,9 @@ use opencode_ui::tool_info::primitive_input_summary;
 use opentui::prelude::*;
 use serde_json::Value;
 
-use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status, strip_ansi};
+use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status};
 use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::shell::strip_ansi;
 
 pub struct Generic(Rc<Inner>);
 

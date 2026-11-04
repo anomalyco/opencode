@@ -30,10 +30,10 @@ use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::ScrollEdge;
 
+use super::super::tools;
 use super::{
     assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user,
 };
-use super::super::tools;
 use crate::app::Tui;
 use crate::routes::session::grouping;
 
