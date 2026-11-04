@@ -3,9 +3,8 @@
 //! Ports `ServerConnection.resolve` (`packages/cli/src/services/server-connection.ts:25-64`) with
 //! two changes (plan 6.6, decision O-21): a service is found through [`discover`], which tries more
 //! than one registration, and a service of another version is used with a warning, never
-//! replaced. Starting a service or a standalone server is F.9; until then those paths are errors.
+//! replaced. When none is found, [`ensure`] starts the TypeScript service (F.9, `docs/F.9.md`).
 
-use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,10 +14,14 @@ use opencode_api::error::Error as ApiError;
 use opencode_api::transport::Transport;
 use opencode_local::channel::Channels;
 use opencode_local::paths::Paths;
-use opencode_local::service_config::ServiceConfig;
+use opencode_local::registration;
+use opencode_local::service_config::{self, ServiceConfig};
 
-use crate::discover::{self, Missing};
+use crate::discover;
+use crate::ensure;
 use crate::probe::Endpoint;
+use crate::standalone;
+use crate::ts_command::TsCommand;
 
 /// How long `--server` waits for `/api/info` (`server-connection.ts:40`).
 pub const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -30,6 +33,11 @@ pub struct Options {
     pub standalone: bool,
     /// This client's version, for the mismatch warning.
     pub client_version: String,
+    /// Use a standalone server instead of starting the service when none runs (`autostart: false`,
+    /// which `run` uses so a one-off run leaves no service behind).
+    pub standalone_fallback: bool,
+    /// Runs once before the service is started, for "Starting background server...".
+    pub on_start: Option<fn()>,
 }
 
 /// The environment `resolve` reads.
@@ -41,6 +49,8 @@ pub struct Env {
     pub channel: Option<String>,
     /// `OPENCODE_PRINT_LOGS=1`, which `--print-logs` sets.
     pub print_logs: bool,
+    /// `OPENCODE_TS_BIN`, the TypeScript binary that serves.
+    pub ts_bin: Option<String>,
 }
 
 impl std::fmt::Debug for Env {
@@ -49,6 +59,7 @@ impl std::fmt::Debug for Env {
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("channel", &self.channel)
             .field("print_logs", &self.print_logs)
+            .field("ts_bin", &self.ts_bin)
             .finish()
     }
 }
@@ -64,7 +75,12 @@ impl Env {
             password: var("OPENCODE_PASSWORD").or_else(|| var("OPENCODE_SERVER_PASSWORD")),
             channel: var("OPENCODE_CHANNEL").filter(|channel| !channel.is_empty()),
             print_logs: var("OPENCODE_PRINT_LOGS").as_deref() == Some("1"),
+            ts_bin: var(TsCommand::VAR),
         }
+    }
+
+    fn ts(&self) -> TsCommand {
+        TsCommand::from_vars(|_| self.ts_bin.clone().map(Into::into))
     }
 }
 
@@ -85,8 +101,10 @@ pub struct Connection {
 pub enum Source {
     /// `--server`.
     Server,
-    /// A registered background service.
+    /// A registered background service, found or started.
     Service { channel: String, file: PathBuf },
+    /// A private server for this client; dropping the last handle stops it.
+    Standalone(Arc<standalone::Server>),
 }
 
 /// A connection failure, with the TypeScript client's text.
@@ -132,19 +150,40 @@ pub async fn resolve(
         "OPENCODE_CHANNEL" => env.channel.clone().map(Into::into),
         _ => None,
     });
-    let disabled = ServiceConfig::new(paths, &channels.channel)
+    let config = ServiceConfig::new(paths, &channels.channel)
         .read()
-        .map_err(|error| Error::new(format!("Failed to read the service config: {error}")))?
-        .disabled
-        == Some(true);
-    if options.standalone || disabled {
-        return Err(Error::new(
-            "A standalone server is not supported yet (plan step F.9); pass --server",
-        ));
+        .map_err(|error| Error::new(format!("Failed to read the service config: {error}")))?;
+    if options.standalone || config.disabled == Some(true) {
+        return start_standalone(env).await;
     }
-    let found = discover::discover(transport.as_ref(), paths, env.channel.as_deref())
-        .await
-        .map_err(|missing| not_found(paths, missing))?;
+    let found = match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
+        Ok(found) => found,
+        Err(_) if options.standalone_fallback => return start_standalone(env).await,
+        Err(_) => {
+            let mut ensure_options = ensure::Options::new(
+                registration::Files::new(paths, &channels.channel).file,
+                paths.state.clone(),
+                &env.ts(),
+            );
+            ensure_options.env = service_config::process_env(config.env.as_ref())
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            let on_start = options.on_start;
+            let ensured = ensure::ensure(transport.clone(), &ensure_options, &mut || {
+                if let Some(on_start) = on_start {
+                    on_start();
+                }
+            })
+            .await
+            .map_err(|error| Error::new(error.0))?;
+            discover::Found {
+                channel: discover::channel_of(&ensured.file),
+                service: ensured.service,
+                file: ensured.file,
+            }
+        }
+    };
     if env.print_logs {
         eprintln!(
             "INFO  service.connect channel={} file={} url={}",
@@ -219,15 +258,19 @@ fn connect_error(endpoint: &Endpoint, error: &ApiError) -> Error {
     ))
 }
 
-fn not_found(paths: &Paths, missing: Missing) -> Error {
-    let mut message = format!(
-        "No running OpenCode service found in {}. Start one with `opencode service start`, or pass --server.",
-        paths.state.display()
-    );
-    if let Some(reason) = missing.reason {
-        let _ = write!(message, " {reason}");
-    }
-    Error::new(message)
+async fn start_standalone(env: &Env) -> Result<Connection, Error> {
+    let directory = std::env::current_dir()
+        .map_err(|error| Error::new(format!("Failed to read the working directory: {error}")))?;
+    let server = standalone::start(&env.ts().standalone(), &directory, env.print_logs)
+        .await
+        .map_err(|error| Error::new(error.0))?;
+    Ok(Connection {
+        endpoint: server.endpoint.clone(),
+        // The child is the TS binary this client runs; its version is not asked for.
+        version: String::new(),
+        source: Source::Standalone(Arc::new(server)),
+        warning: None,
+    })
 }
 
 #[cfg(test)]
@@ -257,6 +300,8 @@ mod tests {
             server: server.map(str::to_owned),
             standalone: false,
             client_version: "1.0.0".to_owned(),
+            standalone_fallback: false,
+            on_start: None,
         }
     }
 
@@ -390,14 +435,41 @@ mod tests {
         assert_eq!(mismatch(&endpoint, "2.0.0", &same), None);
     }
 
+    // Never the real `opencode`: the child would inherit this process's real state directories.
+    fn missing_ts() -> Env {
+        Env {
+            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
+            ..Env::default()
+        }
+    }
+
     #[tokio::test]
-    async fn no_service_says_how_to_start_one() {
-        let (result, _) = run(Server::default(), Env::default(), options(None)).await;
+    async fn no_service_starts_the_typescript_one() {
+        let (result, _) = run(Server::default(), missing_ts(), options(None)).await;
         let text = message(result);
         assert!(
-            text.starts_with("No running OpenCode service found in "),
+            text.starts_with("Failed to start server: /nonexistent/opencode-ts: "),
             "{text}"
         );
-        assert!(text.contains("`opencode service start`"), "{text}");
+        assert!(text.contains("OPENCODE_TS_BIN"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn standalone_runs_the_typescript_binary() {
+        let standalone = Options {
+            standalone: true,
+            ..options(None)
+        };
+        let (result, _) = run(Server::default(), missing_ts(), standalone).await;
+        assert!(
+            message(result)
+                .starts_with("Failed to start standalone server: /nonexistent/opencode-ts: ")
+        );
+        let fallback = Options {
+            standalone_fallback: true,
+            ..options(None)
+        };
+        let (result, _) = run(Server::default(), missing_ts(), fallback).await;
+        assert!(message(result).starts_with("Failed to start standalone server: "));
     }
 }

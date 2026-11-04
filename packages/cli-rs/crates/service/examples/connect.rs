@@ -1,6 +1,8 @@
 //! Connects the way the CLI does and prints the server version from `/api/info`.
 //!
-//! `cargo run -p opencode-service --example connect [-- --print-logs] [--server URL]`
+//! `cargo run -p opencode-service --example connect [-- --print-logs] [--server URL]
+//! [--standalone] [--no-autostart]`. Without a running service it starts the TypeScript one
+//! (`OPENCODE_TS_BIN`, else `opencode`).
 
 use std::sync::Arc;
 
@@ -21,6 +23,8 @@ async fn main() -> anyhow::Result<()> {
             .and_then(|index| args.get(index + 1).cloned()),
         standalone: args.iter().any(|arg| arg == "--standalone"),
         client_version: "local".to_owned(),
+        standalone_fallback: args.iter().any(|arg| arg == "--no-autostart"),
+        on_start: Some(|| eprintln!("Starting background server...")),
     };
     let transport = Arc::new(Reqwest::default());
     let connection =
