@@ -422,8 +422,22 @@ impl SessionState {
         if fullscreen || focus {
             self.focus_right(tui);
         } else if !shown {
-            self.active.set(Pane::Session);
+            self.set_active(tui, Pane::Session);
         }
+    }
+
+    /// Sets the pane with the input; the session pane's views follow it (`InteractivityProvider`, E.14).
+    fn set_active(&self, tui: &Tui, pane: Pane) -> Pane {
+        let before = self.active.replace(pane);
+        if before != pane {
+            let weak = tui.weak();
+            tui.app.defer(move |_| {
+                if let Some(tui) = weak.upgrade() {
+                    tui.resync();
+                }
+            });
+        }
+        before
     }
 
     fn focus_session(&self, tui: &Tui) {
@@ -435,7 +449,7 @@ impl SessionState {
         {
             return;
         }
-        if self.active.replace(Pane::Session) == Pane::Right {
+        if self.set_active(tui, Pane::Session) == Pane::Right {
             tui.app.blur();
         }
         let textarea = tui.textarea.borrow().clone();
@@ -445,7 +459,7 @@ impl SessionState {
     }
 
     fn focus_right(&self, tui: &Tui) {
-        self.active.set(Pane::Right);
+        self.set_active(tui, Pane::Right);
         if let Some(host) = self.host.borrow().as_ref() {
             tui.app.focus(&host.root);
             return;
@@ -483,8 +497,16 @@ pub(crate) fn terminal_shown(tui: &Tui) -> bool {
 /// Focus moved into the right pane, as by a click on the terminal.
 pub(crate) fn right_focused(tui: &Tui) {
     if let Some(session) = tui.frame.session() {
-        session.active.set(Pane::Right);
+        session.set_active(tui, Pane::Right);
     }
+}
+
+/// Whether the session pane owns the input (`useInteractivity`): no right pane has it and no panel is full screen.
+pub(crate) fn session_interactive(tui: &Tui) -> bool {
+    tui.frame
+        .session()
+        .is_none_or(|session| session.active.get() == Pane::Session)
+        && !fullscreen_panel(tui)
 }
 
 /// `focusSession`.
