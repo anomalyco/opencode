@@ -2,8 +2,7 @@
 //! canonical name, and the shared rows the views are built from: `InlineTool` with `InlineToolRow`
 //! (`index.tsx:2802-2871`, `message-parts.tsx:202-317`) and `BlockTool` (`index.tsx:2896-2978`).
 //!
-//! E.7b's tools (webfetch, websearch, subagent, execute, patch, todowrite, question, skill) show as
-//! the generic tool until their views land.
+//! E.7b adds webfetch, websearch, subagent, execute, patch, todowrite, question, and skill.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -19,7 +18,10 @@ use opentui::prelude::*;
 use serde_json::{Map, Value};
 use unicode_width::UnicodeWidthStr;
 
-use super::{edit, generic, glob, grep, read, shell, write};
+use super::{
+    edit, execute, generic, glob, grep, patch, question, read, shell, skill, subagent, todo,
+    webfetch, websearch, write,
+};
 use crate::dialogs::open::truncate_file_path;
 use crate::routes::session::messages::images::{Images, tool_images};
 use crate::routes::session::messages::list::Context;
@@ -45,6 +47,14 @@ enum Body {
     Grep(grep::Grep),
     Write(write::Write),
     Edit(edit::Edit),
+    WebFetch(webfetch::WebFetch),
+    WebSearch(websearch::WebSearch),
+    Subagent(subagent::Subagent),
+    Execute(execute::Execute),
+    Patch(patch::Patch),
+    Todo(todo::Todo),
+    Question(question::Question),
+    Skill(skill::Skill),
     Generic(generic::Generic),
 }
 
@@ -86,6 +96,14 @@ impl Tool {
                 "grep" => Body::Grep(grep::Grep::new(cx)),
                 "write" => Body::Write(write::Write::new(cx)),
                 "edit" => Body::Edit(edit::Edit::new(cx)),
+                "webfetch" => Body::WebFetch(webfetch::WebFetch::new(cx)),
+                "websearch" => Body::WebSearch(websearch::WebSearch::new(cx)),
+                "subagent" => Body::Subagent(subagent::Subagent::new(cx)),
+                "execute" => Body::Execute(execute::Execute::new(cx)),
+                "patch" => Body::Patch(patch::Patch::new(cx)),
+                "todowrite" => Body::Todo(todo::Todo::new(cx)),
+                "question" => Body::Question(question::Question::new(cx)),
+                "skill" => Body::Skill(skill::Skill::new(cx)),
                 _ => Body::Generic(generic::Generic::new(cx)),
             };
             self.body.add(match &body {
@@ -95,6 +113,14 @@ impl Tool {
                 Body::Grep(view) => view.root(),
                 Body::Write(view) => view.root(),
                 Body::Edit(view) => view.root(),
+                Body::WebFetch(view) => view.root(),
+                Body::WebSearch(view) => view.root(),
+                Body::Subagent(view) => view.root(),
+                Body::Execute(view) => view.root(),
+                Body::Patch(view) => view.root(),
+                Body::Todo(view) => view.root(),
+                Body::Question(view) => view.root(),
+                Body::Skill(view) => view.root(),
                 Body::Generic(view) => view.root(),
             });
             *view = Some((display, body));
@@ -107,21 +133,37 @@ impl Tool {
             Body::Grep(view) => view.update(cx, &props),
             Body::Write(view) => view.update(cx, &props),
             Body::Edit(view) => view.update(cx, &props),
+            Body::WebFetch(view) => view.update(cx, &props),
+            Body::WebSearch(view) => view.update(cx, &props),
+            Body::Subagent(view) => view.update(cx, &props),
+            Body::Execute(view) => view.update(cx, &props),
+            Body::Patch(view) => view.update(cx, &props),
+            Body::Todo(view) => view.update(cx, &props),
+            Body::Question(view) => view.update(cx, &props),
+            Body::Skill(view) => view.update(cx, &props),
             Body::Generic(view) => view.update(cx, &props),
         }
         self.images.update(cx, tool_images(part));
     }
 }
 
-/// `toolDisplay`: the view for a tool name. E.7b's names fall back to the generic view for now.
+/// `toolDisplay`: the view for a tool name.
 fn display(name: &str) -> &'static str {
     match canonical_tool_name(name) {
         "shell" => "shell",
         "glob" => "glob",
         "read" => "read",
         "grep" => "grep",
+        "webfetch" => "webfetch",
+        "websearch" => "websearch",
         "write" => "write",
         "edit" => "edit",
+        "subagent" => "subagent",
+        "execute" => "execute",
+        "patch" => "patch",
+        "todowrite" => "todowrite",
+        "question" => "question",
+        "skill" => "skill",
         _ => "generic",
     }
 }
@@ -259,6 +301,10 @@ pub struct Inline {
     pub error: Option<String>,
     /// A click does something besides expanding the error.
     pub clickable: bool,
+    /// The `status` prop: a [`status_badge`] after the text.
+    pub badge: Option<String>,
+    /// `onErrorClick`: a click on a failed call runs the click handler instead of expanding the error.
+    pub error_click: bool,
 }
 
 impl Inline {
@@ -273,6 +319,8 @@ impl Inline {
             permission: props.permission,
             error: props.error().map(strip_ansi),
             clickable: false,
+            badge: None,
+            error_click: false,
         }
     }
 
@@ -315,6 +363,8 @@ struct InlineInner {
 enum Painted {
     None,
     Spinner(Spinner),
+    /// A bare spinner before the text and a badge.
+    Labeled(Spinner, Text),
     /// The icon and the text.
     Row(Text, Text),
 }
@@ -361,8 +411,12 @@ impl InlineTool {
             {
                 return;
             }
-            let failed = inner.state.borrow().as_ref().is_some_and(Inline::failed);
-            if failed {
+            let (failed, error_click) = inner
+                .state
+                .borrow()
+                .as_ref()
+                .map_or((false, false), |state| (state.failed(), state.error_click));
+            if failed && !error_click {
                 inner.expanded.set(!inner.expanded.get());
                 inner.paint_error();
                 return;
@@ -392,18 +446,49 @@ impl InlineTool {
         inner.root.clear();
         let fg = inner.fg(&inline);
         let error_color = inner.theme.text.feedback.error.base;
+        let badge = |app: &App| {
+            inline
+                .badge
+                .as_deref()
+                .map(|label| status_badge(app, &inner.theme, label, false))
+        };
+        // `InlineToolLabel`: the text, then the badge, wrapping under it when the row is full.
+        let label = |text: &Text, badge: Text| {
+            View::new(&inner.app)
+                .row()
+                .flex_wrap(Wrap::Wrap)
+                .column_gap(1)
+                .grow(1.0)
+                .child(&text.shrink(0.0).grow(0.0).max_width(Length::Percent(100.0)))
+                .child(&badge)
+        };
         let painted = if inline.spinner || !(inline.complete || inline.failed()) {
-            let label = if inline.spinner {
+            let text = if inline.spinner {
                 inline.text.clone()
             } else {
                 inline.pending.clone()
             };
             let spinner = Spinner::new(&inner.app)
                 .color(fg)
-                .label(label)
                 .animations(inner.animations);
-            inner.root.add(&spinner);
-            Painted::Spinner(spinner)
+            match badge(&inner.app).filter(|_| inline.spinner) {
+                Some(badge) => {
+                    let text = Text::new(&inner.app, text).fg(fg);
+                    inner.root.add(
+                        &View::new(&inner.app)
+                            .row()
+                            .gap(1)
+                            .child(&spinner)
+                            .child(&label(&text, badge)),
+                    );
+                    Painted::Labeled(spinner, text)
+                }
+                None => {
+                    spinner.set_label(Some(text));
+                    inner.root.add(&spinner);
+                    Painted::Spinner(spinner)
+                }
+            }
         } else {
             let failed = inline.failed();
             let icon = Text::new(&inner.app, inline.icon)
@@ -417,9 +502,12 @@ impl InlineTool {
                 icon.strikethrough();
                 text.strikethrough();
             }
-            inner
-                .root
-                .add(&View::new(&inner.app).row().child(&icon).child(&text));
+            let row = View::new(&inner.app).row().child(&icon);
+            match badge(&inner.app) {
+                Some(badge) => row.add(&label(&text, badge)),
+                None => row.add(&text),
+            };
+            inner.root.add(&row);
             Painted::Row(icon, text)
         };
         inner.root.add(&inner.error);
@@ -453,6 +541,10 @@ impl InlineInner {
         let fg = self.fg(state);
         match &*self.painted.borrow() {
             Painted::Spinner(spinner) => spinner.set_color(fg),
+            Painted::Labeled(spinner, text) => {
+                spinner.set_color(fg);
+                text.fg(fg);
+            }
             Painted::Row(icon, text) if !state.failed() => {
                 icon.fg(fg);
                 text.fg(fg);
@@ -496,6 +588,13 @@ pub struct Block {
     pub width: i64,
 }
 
+/// `BlockTool`'s `headerColor` and `errorColor`: overrides of the muted header and the error color.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BlockColors {
+    pub header: Option<Color>,
+    pub error: Option<Color>,
+}
+
 /// `BlockTool`: a raised panel with a left rule, a header, the view's children, and the error.
 pub struct BlockTool(Rc<BlockInner>);
 
@@ -509,6 +608,7 @@ struct BlockInner {
     children: View,
     error: Text,
     state: RefCell<Option<Block>>,
+    colors: Cell<BlockColors>,
     hover: Cell<bool>,
     click: RefCell<Option<Rc<dyn Fn()>>>,
 }
@@ -544,6 +644,7 @@ impl BlockTool {
             children,
             error,
             state: RefCell::default(),
+            colors: Cell::default(),
             hover: Cell::new(false),
             click: RefCell::default(),
         });
@@ -599,6 +700,13 @@ impl BlockTool {
         *self.0.click.borrow_mut() = Some(Rc::new(click));
     }
 
+    /// Sets the header and error colors the next [`BlockTool::set`] paints with.
+    pub fn colors(&self, colors: BlockColors) {
+        if self.0.colors.replace(colors) != colors {
+            self.0.state.take();
+        }
+    }
+
     /// Shows the children column when it has a visible child (an empty one would add a gap).
     pub fn show_children(&self, visible: bool) {
         self.0.children.visible(visible);
@@ -619,14 +727,20 @@ impl BlockTool {
         } else {
             raised
         });
-        let fg = if block.permission {
+        let colors = inner.colors.get();
+        let spinner_fg = if block.permission {
             theme.text.feedback.warning.base
         } else {
             theme.text.muted
         };
+        let fg = if block.permission {
+            theme.text.feedback.warning.base
+        } else {
+            colors.header.unwrap_or(theme.text.muted)
+        };
         let spinner = |label: &str| {
             Spinner::new(&inner.app)
-                .color(fg)
+                .color(spinner_fg)
                 .label(label.strip_prefix("# ").unwrap_or(label))
                 .animations(inner.animations)
         };
@@ -663,6 +777,9 @@ impl BlockTool {
         }
         let error = block.error.as_deref().map(strip_ansi).unwrap_or_default();
         inner.error.visible(!error.is_empty());
+        inner
+            .error
+            .fg(colors.error.unwrap_or(theme.text.feedback.error.base));
         inner.error.set_text(error);
         *inner.state.borrow_mut() = Some(block);
     }

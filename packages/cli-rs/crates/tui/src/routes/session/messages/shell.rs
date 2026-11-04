@@ -433,7 +433,11 @@ pub fn collapse_shell_output(
 }
 
 /// `collapseToolOutput`: the first `max_lines` lines and `max_chars` characters, and whether it cut.
-fn collapse_tool_output(output: &str, max_lines: usize, max_chars: usize) -> (String, bool) {
+pub(crate) fn collapse_tool_output(
+    output: &str,
+    max_lines: usize,
+    max_chars: usize,
+) -> (String, bool) {
     let lines: Vec<&str> = output.split('\n').collect();
     if lines.len() <= max_lines && output.chars().count() <= max_chars {
         return (output.to_owned(), false);
