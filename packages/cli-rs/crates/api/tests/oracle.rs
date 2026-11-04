@@ -42,7 +42,12 @@ async fn requests_match_the_typescript_client() {
         })
     };
     let _ = client
-        .config_get(&ConfigGetInput { location: location("/tmp/a b&c=d") }, &none)
+        .config_get(
+            &ConfigGetInput {
+                location: location("/tmp/a b&c=d"),
+            },
+            &none,
+        )
         .await;
     let _ = client
         .session_list(
@@ -59,7 +64,9 @@ async fn requests_match_the_typescript_client() {
         .await;
     let _ = client
         .session_get(
-            &SessionGetInput { session_id: "ses_1 /?#%".into() },
+            &SessionGetInput {
+                session_id: "ses_1 /?#%".into(),
+            },
             &RequestOptions::default().header("X-Opencode-Directory", "/override"),
         )
         .await;
@@ -107,7 +114,12 @@ async fn requests_match_the_typescript_client() {
         )
         .await;
     let _ = client
-        .session_remove(&SessionRemoveInput { session_id: "ses_2".into() }, &none)
+        .session_remove(
+            &SessionRemoveInput {
+                session_id: "ses_2".into(),
+            },
+            &none,
+        )
         .await;
 
     let actual = record.0.lock().unwrap();
@@ -118,15 +130,23 @@ async fn requests_match_the_typescript_client() {
         assert_eq!(request.method, expected["method"], "{name}: method");
         assert_eq!(request.url.as_str(), expected["url"], "{name}: url");
         let headers: BTreeMap<_, _> = request.headers.iter().cloned().collect();
-        let wanted: BTreeMap<String, String> = serde_json::from_value(expected["headers"].clone()).unwrap();
+        let wanted: BTreeMap<String, String> =
+            serde_json::from_value(expected["headers"].clone()).unwrap();
         assert_eq!(headers, wanted, "{name}: headers");
         let body = request.body.as_ref();
         match (&expected["body"], &expected["bodyBase64"]) {
             (Value::String(text), _) => {
-                assert_eq!(body.map(|body| String::from_utf8_lossy(body).into_owned()).as_deref(), Some(text.as_str()), "{name}: body")
+                assert_eq!(
+                    body.map(|body| String::from_utf8_lossy(body).into_owned())
+                        .as_deref(),
+                    Some(text.as_str()),
+                    "{name}: body"
+                )
             }
             (_, Value::String(encoded)) => {
-                let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap();
                 assert_eq!(body.map(|body| body.to_vec()), Some(bytes), "{name}: body")
             }
             _ => assert!(body.is_none(), "{name}: no body"),
@@ -139,6 +159,11 @@ fn query_values_match_append_query() {
     for case in fixture()["query"].as_array().unwrap() {
         let mut pairs = Vec::new();
         query::append(&mut pairs, "location", &case["value"]);
-        assert_eq!(query::encode(&pairs), case["search"].as_str().unwrap(), "{}", case["value"]);
+        assert_eq!(
+            query::encode(&pairs),
+            case["search"].as_str().unwrap(),
+            "{}",
+            case["value"]
+        );
     }
 }
