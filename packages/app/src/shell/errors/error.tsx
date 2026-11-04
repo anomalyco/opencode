@@ -319,11 +319,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   async function restart() {
     setStore({ restarting: true, actionError: undefined })
+
     // A service that failed to boot stays registered, so relaunching alone would reattach to it.
     const service =
       errorDescriptionKey(props.error) === "error.page.description.localServerStartup"
         ? platform.restartService
         : undefined
+
     await (service ? service() : platform.restart()).catch((err) => {
       setStore({ restarting: false, actionError: formatError(err, language.t) })
     })
