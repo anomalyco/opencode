@@ -795,6 +795,8 @@ name = "opencode-parity"
 version = "0.1.0"
 dependencies = [
  "opentui",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
