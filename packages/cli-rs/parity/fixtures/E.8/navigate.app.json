@@ -1,0 +1,1587 @@
+{
+  "scenario": "E.8/navigate",
+  "width": 100,
+  "height": 30,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "animations": false
+  },
+  "args": {
+    "sessionID": "ses_n"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_n",
+      "json": {
+        "data": {
+          "id": "ses_n",
+          "title": "Navigate",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_n/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_8b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_8a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 81100,
+                  "completed": 81200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_8b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 81100,
+                  "completed": 81200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 8 one.\n\nAnswer 8 two.\n\nAnswer 8 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 81000,
+              "completed": 83000
+            }
+          },
+          {
+            "id": "msg_8a",
+            "type": "user",
+            "text": "Question 8",
+            "time": {
+              "created": 80000
+            }
+          },
+          {
+            "id": "msg_7b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_7a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 71100,
+                  "completed": 71200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_7b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 71100,
+                  "completed": 71200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 7 one.\n\nAnswer 7 two.\n\nAnswer 7 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 71000,
+              "completed": 73000
+            }
+          },
+          {
+            "id": "msg_7a",
+            "type": "user",
+            "text": "Question 7",
+            "time": {
+              "created": 70000
+            }
+          },
+          {
+            "id": "msg_6b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_6a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 61100,
+                  "completed": 61200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_6b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 61100,
+                  "completed": 61200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 6 one.\n\nAnswer 6 two.\n\nAnswer 6 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 61000,
+              "completed": 63000
+            }
+          },
+          {
+            "id": "msg_6a",
+            "type": "user",
+            "text": "Question 6",
+            "time": {
+              "created": 60000
+            }
+          },
+          {
+            "id": "msg_5b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_5a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 51100,
+                  "completed": 51200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_5b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 51100,
+                  "completed": 51200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 5 one.\n\nAnswer 5 two.\n\nAnswer 5 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 51000,
+              "completed": 53000
+            }
+          },
+          {
+            "id": "msg_5a",
+            "type": "user",
+            "text": "Question 5",
+            "time": {
+              "created": 50000
+            }
+          },
+          {
+            "id": "msg_4b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_4a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 41100,
+                  "completed": 41200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_4b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 41100,
+                  "completed": 41200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 4 one.\n\nAnswer 4 two.\n\nAnswer 4 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 41000,
+              "completed": 43000
+            }
+          },
+          {
+            "id": "msg_4a",
+            "type": "user",
+            "text": "Question 4",
+            "time": {
+              "created": 40000
+            }
+          },
+          {
+            "id": "msg_3b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_3a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 31100,
+                  "completed": 31200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_3b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 31100,
+                  "completed": 31200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 3 one.\n\nAnswer 3 two.\n\nAnswer 3 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 31000,
+              "completed": 33000
+            }
+          },
+          {
+            "id": "msg_3a",
+            "type": "user",
+            "text": "Question 3",
+            "time": {
+              "created": 30000
+            }
+          },
+          {
+            "id": "msg_2b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_2a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 21100,
+                  "completed": 21200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_2b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 21100,
+                  "completed": 21200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 2 one.\n\nAnswer 2 two.\n\nAnswer 2 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 21000,
+              "completed": 23000
+            }
+          },
+          {
+            "id": "msg_2a",
+            "type": "user",
+            "text": "Question 2",
+            "time": {
+              "created": 20000
+            }
+          },
+          {
+            "id": "msg_1b",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "tool",
+                "id": "call_1a",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/a.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 11100,
+                  "completed": 11200
+                }
+              },
+              {
+                "type": "tool",
+                "id": "call_1b",
+                "name": "read",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "filePath": "src/b.rs"
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 11100,
+                  "completed": 11200
+                }
+              },
+              {
+                "type": "text",
+                "text": "Answer 1 one.\n\nAnswer 1 two.\n\nAnswer 1 three."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 11000,
+              "completed": 13000
+            }
+          },
+          {
+            "id": "msg_1a",
+            "type": "user",
+            "text": "Question 1",
+            "time": {
+              "created": 10000
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_n/inbox",
+      "json": {
+        "data": []
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "open",
+      "until": "Answer 8 three.",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer"
+      ],
+      "fixture": "E.8/navigate/open"
+    },
+    {
+      "keys": [
+        "pageup"
+      ]
+    },
+    {
+      "checkpoint": "page-up",
+      "until": "Jump to latest",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer",
+        "V15-navigation"
+      ],
+      "fixture": "E.8/navigate/page-up"
+    },
+    {
+      "keys": [
+        "ctrl+g"
+      ]
+    },
+    {
+      "checkpoint": "first",
+      "until": "Question 1",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer"
+      ],
+      "fixture": "E.8/navigate/first"
+    },
+    {
+      "keys": [
+        "end"
+      ]
+    },
+    {
+      "checkpoint": "last",
+      "until": "Answer 8 three.",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer"
+      ],
+      "fixture": "E.8/navigate/last"
+    },
+    {
+      "keys": [
+        "alt+end"
+      ]
+    },
+    {
+      "checkpoint": "last-user",
+      "until": "Jump to latest",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer"
+      ],
+      "fixture": "E.8/navigate/last-user"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_n/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_n"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_n",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_n",
+            "title": "Navigate",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_n/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_n/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_n/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_8b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_8a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 81100,
+                    "completed": 81200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_8b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 81100,
+                    "completed": 81200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 8 one.\n\nAnswer 8 two.\n\nAnswer 8 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 81000,
+                "completed": 83000
+              }
+            },
+            {
+              "id": "msg_8a",
+              "type": "user",
+              "text": "Question 8",
+              "time": {
+                "created": 80000
+              }
+            },
+            {
+              "id": "msg_7b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_7a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 71100,
+                    "completed": 71200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_7b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 71100,
+                    "completed": 71200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 7 one.\n\nAnswer 7 two.\n\nAnswer 7 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 71000,
+                "completed": 73000
+              }
+            },
+            {
+              "id": "msg_7a",
+              "type": "user",
+              "text": "Question 7",
+              "time": {
+                "created": 70000
+              }
+            },
+            {
+              "id": "msg_6b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_6a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 61100,
+                    "completed": 61200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_6b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 61100,
+                    "completed": 61200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 6 one.\n\nAnswer 6 two.\n\nAnswer 6 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 61000,
+                "completed": 63000
+              }
+            },
+            {
+              "id": "msg_6a",
+              "type": "user",
+              "text": "Question 6",
+              "time": {
+                "created": 60000
+              }
+            },
+            {
+              "id": "msg_5b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_5a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 51100,
+                    "completed": 51200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_5b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 51100,
+                    "completed": 51200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 5 one.\n\nAnswer 5 two.\n\nAnswer 5 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 51000,
+                "completed": 53000
+              }
+            },
+            {
+              "id": "msg_5a",
+              "type": "user",
+              "text": "Question 5",
+              "time": {
+                "created": 50000
+              }
+            },
+            {
+              "id": "msg_4b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_4a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 41100,
+                    "completed": 41200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_4b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 41100,
+                    "completed": 41200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 4 one.\n\nAnswer 4 two.\n\nAnswer 4 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 41000,
+                "completed": 43000
+              }
+            },
+            {
+              "id": "msg_4a",
+              "type": "user",
+              "text": "Question 4",
+              "time": {
+                "created": 40000
+              }
+            },
+            {
+              "id": "msg_3b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_3a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 31100,
+                    "completed": 31200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_3b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 31100,
+                    "completed": 31200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 3 one.\n\nAnswer 3 two.\n\nAnswer 3 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 31000,
+                "completed": 33000
+              }
+            },
+            {
+              "id": "msg_3a",
+              "type": "user",
+              "text": "Question 3",
+              "time": {
+                "created": 30000
+              }
+            },
+            {
+              "id": "msg_2b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_2a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 21100,
+                    "completed": 21200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_2b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 21100,
+                    "completed": 21200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 2 one.\n\nAnswer 2 two.\n\nAnswer 2 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 21000,
+                "completed": 23000
+              }
+            },
+            {
+              "id": "msg_2a",
+              "type": "user",
+              "text": "Question 2",
+              "time": {
+                "created": 20000
+              }
+            },
+            {
+              "id": "msg_1b",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "tool",
+                  "id": "call_1a",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/a.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 11100,
+                    "completed": 11200
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_1b",
+                  "name": "read",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "filePath": "src/b.rs"
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 11100,
+                    "completed": 11200
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "Answer 1 one.\n\nAnswer 1 two.\n\nAnswer 1 three."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 11000,
+                "completed": 13000
+              }
+            },
+            {
+              "id": "msg_1a",
+              "type": "user",
+              "text": "Question 1",
+              "time": {
+                "created": 10000
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_n/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_n"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
