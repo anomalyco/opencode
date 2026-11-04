@@ -1,0 +1,285 @@
+@property --file-tree-v2-row-overlay {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+[data-component="file-tree-v2"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-width: 100%;
+}
+
+[data-component="file-tree-v2"]:has(> file-tree-container) {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+file-tree-container.opencode-pierre-file-tree {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  cursor: pointer;
+}
+
+[data-theme="dark"] file-tree-container.opencode-pierre-file-tree,
+.dark file-tree-container.opencode-pierre-file-tree {
+  color-scheme: dark;
+}
+
+[data-theme="light"] file-tree-container.opencode-pierre-file-tree,
+.light file-tree-container.opencode-pierre-file-tree {
+  color-scheme: light;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"] {
+  --file-tree-v2-row-overlay: transparent;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-width: max-content;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-inline-end: 8px;
+  overflow: clip;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+  text-align: start;
+  cursor: pointer;
+  scroll-margin-block: 8px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    --file-tree-v2-row-overlay 120ms ease;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-label"] {
+  margin-inline-end: 12px;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"]:is(:hover, [data-item-context-hover="true"]) {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-hover);
+
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-pressed);
+
+  color: var(--v2-text-text-base);
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected]:hover {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"] > svg[data-icon-token] {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="astro"], [data-icon-token="database"], [data-icon-token="vite"]) {
+  color: light-dark(#a631be, #d568ea);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="babel"], [data-icon-token="browserslist"], [data-icon-token="javascript"]) {
+  color: light-dark(#d5a910, #ffd452);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="bash"], [data-icon-token="markdown"], [data-icon-token="svgo"], [data-icon-token="vue"]) {
+  color: light-dark(#199f43, #5ecc71);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is(
+    [data-icon-token="biome"],
+    [data-icon-token="c"],
+    [data-icon-token="cpp"],
+    [data-icon-token="docker"],
+    [data-icon-token="python"],
+    [data-icon-token="typescript"],
+    [data-icon-token="vscode"],
+    [data-icon-token="webpack"]
+  ) {
+  color: light-dark(#1a85d4, #69b1ff);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is(
+    [data-icon-token="bootstrap"],
+    [data-icon-token="css"],
+    [data-icon-token="eslint"],
+    [data-icon-token="terraform"],
+    [data-icon-token="wasm"]
+  ) {
+  color: light-dark(#693acf, #9d6afb);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected] > svg[data-icon-token="bun"] {
+  color: light-dark(#594c5b, #79697b);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is(
+    [data-icon-token="claude"],
+    [data-icon-token="html"],
+    [data-icon-token="json"],
+    [data-icon-token="rust"],
+    [data-icon-token="svg"],
+    [data-icon-token="swift"],
+    [data-icon-token="zig"],
+    [data-icon-token="zip"]
+  ) {
+  color: light-dark(#d47628, #ffa359);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="go"], [data-icon-token="react"], [data-icon-token="tailwind"]) {
+  color: light-dark(#1ca1c7, #68cdf2);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="graphql"], [data-icon-token="image"], [data-icon-token="sass"]) {
+  color: light-dark(#d32a61, #ff678d);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is([data-icon-token="mcp"], [data-icon-token="prettier"], [data-icon-token="table"]) {
+  color: light-dark(#17a5af, #64d1db);
+}
+
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-row"][data-selected]
+  > svg:is(
+    [data-icon-token="npm"],
+    [data-icon-token="postcss"],
+    [data-icon-token="ruby"],
+    [data-icon-token="svelte"],
+    [data-icon-token="yml"]
+  ) {
+  color: light-dark(#d52c36, #ff6762);
+}
+
+/* Every row ends in the change letter or a blank end that sticks inside the pane while long rows
+   scroll. It fades the label out over 16px like tab titles and redraws the row's rounded end, so a
+   row that runs past the pane edge looks like a row that fits. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"]) {
+  --file-tree-v2-end-inset: 8px;
+
+  flex: none;
+  align-self: stretch;
+  position: sticky;
+  inset-inline-end: var(--file-tree-v2-end-inset);
+  z-index: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-end"] {
+  --file-tree-v2-end-inset: 10px;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before,
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  pointer-events: none;
+}
+
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  inset-inline-end: 100%;
+  width: 16px;
+  background:
+    linear-gradient(to right, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to right, transparent, var(--v2-background-bg-base));
+}
+
+[data-component="file-tree-v2"]:dir(rtl)
+  :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+  background:
+    linear-gradient(to left, transparent, var(--file-tree-v2-row-overlay)),
+    linear-gradient(to left, transparent, var(--v2-background-bg-base));
+}
+
+/* The row through its rounded end. The shadow paints the pane past it, outside its corners too. */
+[data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  inset-inline: 0 calc(-1 * var(--file-tree-v2-end-inset));
+  z-index: -1;
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+  background:
+    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
+  box-shadow: 8px 0 0 6px var(--v2-background-bg-base);
+}
+
+[data-component="file-tree-v2"]:dir(rtl) :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::after {
+  box-shadow: -8px 0 0 6px var(--v2-background-bg-base);
+}
+
+@keyframes file-tree-v2-end-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Scrolled to the end, every label is whole, so the fade clears. */
+@supports (animation-timeline: scroll()) {
+  [data-component="file-tree-v2"] :is([data-slot="file-tree-v2-change"], [data-slot="file-tree-v2-end"])::before {
+    animation: file-tree-v2-end-fade linear both;
+    animation-timeline: scroll(nearest inline);
+    animation-range: calc(100% - 16px) 100%;
+  }
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  font-size: 11px;
+  font-weight: 530;
+  line-height: 1;
+  letter-spacing: -0.04px;
+  text-align: center;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    "tnum" on,
+    "lnum" on;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {
+  color: var(--v2-state-fg-info);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="added"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="deleted"] {
+  color: var(--v2-state-fg-danger);
+}

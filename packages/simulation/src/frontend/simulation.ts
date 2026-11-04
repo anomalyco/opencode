@@ -1,0 +1,32 @@
+import { createCliRenderer, type CliRendererConfig } from "@opentui/core"
+import { Config, Effect } from "effect"
+import { DriveManifest } from "../manifest"
+import { SimulationActions } from "./actions"
+import { SimulationRenderer } from "./renderer"
+import { SimulationServer } from "./server"
+
+/** Drive-mode renderer and control-server acquisition. */
+export const create = Effect.fn("Drive.create")(function* (options: CliRendererConfig, version: string) {
+  const headless = (yield* Config.String("OPENCODE_DRIVE_RENDERER").pipe(Config.withDefault("visible"))) === "headless"
+  const manifest = yield* DriveManifest.resolve()
+  const renderer = headless
+    ? yield* SimulationRenderer.create(options, manifest.recording?.timeline, manifest.viewport)
+    : yield* Effect.acquireRelease(
+        Effect.tryPromise(() => createCliRenderer(options)),
+        (renderer) =>
+          Effect.promise(async () => {
+            if (!renderer.isDestroyed) renderer.destroy()
+            await renderer.closed
+          }),
+      )
+  if (!headless && manifest.viewport) renderer.resize(manifest.viewport.cols, manifest.viewport.rows)
+  const server = yield* SimulationServer.start(
+    SimulationActions.createHarness(renderer),
+    manifest.endpoints.ui,
+    version,
+  )
+  yield* Effect.sync(() => process.stderr.write(`opencode drive ui websocket: ${server.url}\n`))
+  return renderer
+})
+
+export * as Drive from "./simulation"

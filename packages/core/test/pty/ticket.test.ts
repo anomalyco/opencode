@@ -1,21 +1,23 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { PtyID } from "@opencode-ai/core/pty/schema"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Pty } from "@opencode/core/pty"
+import { PtyTicket } from "@opencode/core/pty/ticket"
+import { Workspace } from "@opencode/core/workspace"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(PtyTicket.node))
 const itExpiring = testEffect(
-  LayerNode.compile(PtyTicket.node, [[PtyTicket.node, Layer.effect(PtyTicket.Service, PtyTicket.make(5))]]),
+  LayerNode.compile(PtyTicket.node, {
+    replacements: [PtyTicket.node.replace(Layer.effect(PtyTicket.Service, PtyTicket.make(5)))],
+  }),
 )
 
 describe("PTY websocket tickets", () => {
   it.live("consumes tickets once", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const scope = { ptyID: PtyID.ascending(), directory: "/tmp/a" }
+      const scope = { ptyID: Pty.ID.ascending(), directory: "/tmp/a" }
       const issued = yield* tickets.issue(scope)
 
       expect(yield* tickets.consume({ ...scope, ticket: issued.ticket })).toBe(true)
@@ -26,7 +28,7 @@ describe("PTY websocket tickets", () => {
   it.live("rejects tickets scoped to a different request", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
+      const ptyID = Pty.ID.ascending()
       const issued = yield* tickets.issue({ ptyID, directory: "/tmp/a" })
 
       expect(yield* tickets.consume({ ptyID, directory: "/tmp/b", ticket: issued.ticket })).toBe(false)
@@ -37,7 +39,7 @@ describe("PTY websocket tickets", () => {
   itExpiring.live("rejects tickets after the TTL elapses", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
+      const ptyID = Pty.ID.ascending()
       const issued = yield* tickets.issue({ ptyID })
 
       yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)))
@@ -49,14 +51,26 @@ describe("PTY websocket tickets", () => {
   it.live("rejects tickets scoped to a different workspace", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
-      const workspaceID = WorkspaceV2.ID.ascending()
+      const ptyID = Pty.ID.ascending()
+      const workspaceID = Workspace.ID.ascending()
       const issued = yield* tickets.issue({ ptyID, workspaceID })
 
-      expect(yield* tickets.consume({ ptyID, workspaceID: WorkspaceV2.ID.ascending(), ticket: issued.ticket })).toBe(
+      expect(yield* tickets.consume({ ptyID, workspaceID: Workspace.ID.ascending(), ticket: issued.ticket })).toBe(
         false,
       )
       expect(yield* tickets.consume({ ptyID, workspaceID, ticket: issued.ticket })).toBe(true)
+    }),
+  )
+
+  it.live("keeps PTY and client MCP targets apart", () =>
+    Effect.gen(function* () {
+      const tickets = yield* PtyTicket.Service
+      const pty = yield* tickets.issue({ ptyID: Pty.ID.ascending(), directory: "/tmp/a" })
+      const mcp = yield* tickets.issue({ mcpClient: "tui", directory: "/tmp/a" })
+
+      expect(yield* tickets.consume({ mcpClient: "tui", directory: "/tmp/a", ticket: pty.ticket })).toBe(false)
+      expect(yield* tickets.consume({ mcpClient: "web", directory: "/tmp/a", ticket: mcp.ticket })).toBe(false)
+      expect(yield* tickets.consume({ mcpClient: "tui", directory: "/tmp/a", ticket: mcp.ticket })).toBe(true)
     }),
   )
 })

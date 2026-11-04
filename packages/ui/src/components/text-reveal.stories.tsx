@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { onCleanup } from "solid-js"
+import { For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextReveal } from "./text-reveal"
 
@@ -100,6 +100,7 @@ export const Playground = {
       edge: 17,
       revealTravel: 0,
     })
+
     const index = () => state.index
     const cycling = () => state.cycling
     const growOnly = () => state.growOnly
@@ -121,13 +122,17 @@ export const Playground = {
         if (timer) clearTimeout(timer)
         timer = undefined
         setState("cycling", false)
+
         return
       }
+
       setState("cycling", true)
+
       const tick = () => {
         next()
         timer = window.setTimeout(tick, 700 + Math.floor(Math.random() * 600))
       }
+
       timer = window.setTimeout(tick, 700 + Math.floor(Math.random() * 600))
     }
 
@@ -181,11 +186,13 @@ export const Playground = {
         </div>
 
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
-          {TEXTS.map((t, i) => (
-            <button onClick={() => setState("index", i)} style={btn(index() === i)}>
-              {t ?? "(none)"}
-            </button>
-          ))}
+          <For each={TEXTS}>
+            {(t, i) => (
+              <button onClick={() => setState("index", i())} style={btn(index() === i())}>
+                {t ?? "(none)"}
+              </button>
+            )}
+          </For>
         </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>

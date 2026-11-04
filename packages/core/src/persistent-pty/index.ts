@@ -1,0 +1,451 @@
+export * as PersistentPty from "./index.js"
+
+import { stat } from "node:fs/promises"
+import path from "node:path"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import {
+  Added,
+  Handoff,
+  PersistentPty,
+  ReadLines,
+  Removed,
+  Updated,
+  type ReadResult,
+} from "@opencode/schema/persistent-pty"
+import { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
+import { Bus } from "../bus.js"
+import { Pty } from "@opencode/schema/pty"
+import { Global } from "@opencode/util/global"
+import { ShellSelect } from "../shell/select.js"
+import {
+  makeDaemonTransport,
+  type DaemonAttachment,
+  type DaemonTransport,
+  type Role,
+  type SubscribeInput,
+  type WireResponse,
+  type WireTerminal,
+} from "./daemon.js"
+import { resolveBinary } from "#persistent-pty-binary"
+
+export type { Role, StreamEvent } from "./daemon.js"
+export { Handoff } from "@opencode/schema/persistent-pty"
+export { available } from "#persistent-pty-binary"
+
+export const Options = Schema.Struct({
+  handoff: Schema.optional(Handoff),
+  /** Parent of per-server daemon runtime directories; defaults to `<state>/pty`. */
+  root: Schema.optional(Schema.String),
+})
+export type Options = typeof Options.Type
+
+export type Info = PersistentPty.Info
+
+export type Snapshot = PersistentPty.Snapshot
+
+export type Attachment = {
+  readonly info: Info
+  readonly role: Role
+  readonly generation: number
+  readonly replay: DaemonAttachment["replay"]
+  readonly activate: () => void
+  readonly detach: () => void
+}
+
+export class UnavailableError extends Schema.TaggedError<UnavailableError>()("PersistentPty.UnavailableError", {
+  message: Schema.String,
+}) {}
+
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("PersistentPty.NotFoundError", {
+  ptyID: Pty.ID,
+}) {}
+
+export class InvalidCwdError extends Schema.TaggedError<InvalidCwdError>()("PersistentPty.InvalidCwdError", {
+  cwd: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class UnsupportedError extends Schema.TaggedError<UnsupportedError>()("PersistentPty.UnsupportedError", {
+  feature: Schema.String,
+}) {}
+
+export interface Interface {
+  readonly list: (sessionID?: Session.ID) => Effect.Effect<Info[], UnavailableError>
+  readonly get: (id: Pty.ID) => Effect.Effect<Info, NotFoundError | UnavailableError>
+  readonly create: (
+    sessionID: Session.ID,
+    input: {
+      readonly command?: string
+      readonly args: readonly string[]
+      readonly cwd?: string
+      readonly title: string
+      readonly env: Readonly<Record<string, string>>
+      readonly cols?: number
+      readonly rows?: number
+    },
+  ) => Effect.Effect<Info, InvalidCwdError | UnavailableError>
+  readonly write: (
+    id: Pty.ID,
+    data: string,
+    attachmentID?: string,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly resize: (
+    id: Pty.ID,
+    cols: number,
+    rows: number,
+    attachmentID?: string,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly control: (
+    id: Pty.ID,
+    attachmentID: string,
+    cols: number,
+    rows: number,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly input: (
+    id: Pty.ID,
+    attachmentID: string,
+    cols: number,
+    rows: number,
+    data: Uint8Array,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly rename: (
+    id: Pty.ID,
+    title: string | null,
+  ) => Effect.Effect<Info, NotFoundError | UnsupportedError | UnavailableError>
+  readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
+  readonly read: (sessionID: Session.ID, lines?: number) => Effect.Effect<ReadResult | null, UnavailableError>
+  readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly shutdown: () => Effect.Effect<void, UnavailableError>
+  readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
+  readonly attach: (
+    id: Pty.ID,
+    input: SubscribeInput,
+  ) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/PersistentPty") {}
+
+const makeLayer = (options: Options = {}) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const global = yield* Global.Service
+      const context = yield* Effect.context()
+      const runFork = Effect.runForkWith(context)
+      let binary: Promise<string> | undefined
+      const daemon = yield* makeDaemonTransport(
+        options.root ?? path.join(global.state, "pty"),
+        crypto.randomUUID(),
+        () =>
+          (binary ??= resolveBinary(global.bin).catch((error) => {
+            binary = undefined
+            throw error
+          })),
+        options.handoff,
+      ).pipe(Effect.mapError(unavailable))
+      const removing = new Set<Pty.ID>()
+      // Controller activity selects a terminal; observer reads and pane visibility do not.
+      const current = new Map<Session.ID, Pty.ID>()
+
+      const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
+        const response = yield* optionalRequest(daemon, { op: "list" })
+        if (!response) return []
+        if (response.type !== "terminals") return yield* unexpected(response)
+        return response.terminals
+          .map(toInfo)
+          .filter((terminal) => sessionID === undefined || terminal.sessionID === sessionID)
+      })
+
+      const get = Effect.fn("PersistentPty.get")(function* (id: Pty.ID) {
+        const found = (yield* list()).find((terminal) => terminal.id === id)
+        if (!found) return yield* new NotFoundError({ ptyID: id })
+        return found
+      })
+
+      const create = Effect.fn("PersistentPty.create")(function* (
+        sessionID: Session.ID,
+        input: Parameters<Interface["create"]>[1],
+      ) {
+        const cwd = path.resolve(input.cwd ?? "/")
+        // opencode-pty's PTY library silently falls back to $HOME when the cwd is not a directory.
+        const directory = yield* Effect.promise(() =>
+          stat(cwd).then(
+            (info) => info.isDirectory(),
+            () => false,
+          ),
+        )
+        if (!directory) return yield* new InvalidCwdError({ cwd, message: `cwd is not a directory: ${cwd}` })
+        const response = yield* request(
+          daemon,
+          {
+            op: "create",
+            program: input.command ?? ShellSelect.environment(global.bin),
+            args: input.args,
+            cwd,
+            title: input.title,
+            group_id: sessionID,
+            env: input.env,
+            cols: input.cols ?? 80,
+            rows: input.rows ?? 24,
+          },
+          true,
+        )
+        if (response.type !== "created") return yield* unexpected(response)
+        const terminal = toInfo(response.terminal)
+        yield* bus.publish(Added, { sessionID, terminal })
+        return terminal
+      })
+
+      // Sends a terminal command that answers "ok"; `select` marks the terminal as its session's current one.
+      const command = (id: Pty.ID, op: string, body: object, select: boolean) =>
+        Effect.gen(function* () {
+          const terminal = yield* get(id)
+          const response = yield* request(daemon, { op, id: fromID(id), ...body })
+          if (response.type !== "ok") return yield* unexpected(response)
+          if (select) current.set(terminal.sessionID, id)
+        })
+
+      const write = Effect.fn("PersistentPty.write")((id: Pty.ID, data: string, attachmentID?: string) =>
+        command(
+          id,
+          "write",
+          { attachment_id: attachmentID ?? null, data_base64: Buffer.from(data).toString("base64") },
+          false,
+        ),
+      )
+
+      const resize = Effect.fn("PersistentPty.resize")((id: Pty.ID, cols: number, rows: number, attachmentID?: string) =>
+        command(id, "resize", { attachment_id: attachmentID ?? null, cols, rows }, true),
+      )
+
+      const control = Effect.fn("PersistentPty.control")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number) =>
+          command(id, "control", { attachment_id: attachmentID, cols, rows }, true),
+      )
+
+      const input = Effect.fn("PersistentPty.input")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number, data: Uint8Array) =>
+          command(
+            id,
+            "input",
+            { attachment_id: attachmentID, cols, rows, data_base64: Buffer.from(data).toString("base64") },
+            true,
+          ),
+      )
+
+      const rename = Effect.fn("PersistentPty.rename")(function* (id: Pty.ID, title: string | null) {
+        const terminal = yield* get(id)
+        // Daemons without the feature drop the connection on unknown requests.
+        if (!(yield* daemon.supports("rename").pipe(Effect.mapError(unavailable))))
+          return yield* new UnsupportedError({ feature: "rename" })
+        const response = yield* request(daemon, { op: "rename", id: fromID(id), title })
+        if (response.type !== "ok") return yield* unexpected(response)
+        const renamed = yield* get(id)
+        yield* bus.publish(Updated, { sessionID: terminal.sessionID, terminal: renamed })
+        return renamed
+      })
+
+      const snapshot = Effect.fn("PersistentPty.snapshot")(function* (id: Pty.ID) {
+        yield* get(id)
+        const response = yield* request(daemon, { op: "snapshot", id: fromID(id) })
+        if (response.type !== "snapshot") return yield* unexpected(response)
+        return {
+          info: toInfo(response.terminal),
+          text: response.text,
+          checkpoint: Buffer.from(response.checkpoint_base64, "base64"),
+          cursor: { x: response.cursor_x, y: response.cursor_y },
+        }
+      })
+
+      const read = Effect.fn("PersistentPty.read")(function* (sessionID: Session.ID, lines?: number) {
+        if (lines !== undefined && !Schema.is(ReadLines)(lines))
+          return yield* new UnavailableError({ message: "lines must be an integer between 1 and 65535" })
+        const id = current.get(sessionID)
+        if (!id) return null
+        const terminal = yield* get(id).pipe(Effect.catchTag("PersistentPty.NotFoundError", () => Effect.succeed(null)))
+        if (!terminal || terminal.sessionID !== sessionID) {
+          if (current.get(sessionID) === id) current.delete(sessionID)
+          return null
+        }
+        // Let the daemon choose the live height in the same snapshot when lines is omitted.
+        const response = yield* request(daemon, { op: "read_rows", id: fromID(id), rows: lines })
+        if (response.type !== "rows") return yield* unexpected(response)
+        const info = toInfo(response.terminal)
+        return {
+          ptyID: info.id,
+          title: info.title,
+          cwd: info.cwd,
+          foregroundProcess: info.foregroundProcess,
+          screen: {
+            text: response.lines.join("\n"),
+            cols: info.size.cols,
+            rows: info.size.rows,
+            cursor: { x: response.cursor_x, y: response.cursor_y },
+          },
+        }
+      })
+
+      const remove = Effect.fn("PersistentPty.remove")(function* (id: Pty.ID) {
+        const terminal = yield* get(id)
+        const response = yield* request(daemon, { op: "terminate", id: fromID(id) })
+        if (response.type !== "ok") return yield* unexpected(response)
+        if (current.get(terminal.sessionID) === id) current.delete(terminal.sessionID)
+        yield* bus.publish(Removed, { sessionID: terminal.sessionID, ptyID: id })
+        return undefined
+      })
+
+      const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
+        const response = yield* daemon.shutdown.pipe(Effect.mapError(unavailable))
+        current.clear()
+        if (!response) return
+        if (response.type !== "ok") return yield* unexpected(response)
+      })
+
+      const handoff = Effect.fn("PersistentPty.handoff")(() => daemon.handoff.pipe(Effect.mapError(unavailable)))
+
+      const removeVisibleExit = (id: Pty.ID) => {
+        if (removing.has(id)) return
+        removing.add(id)
+        runFork(
+          remove(id).pipe(
+            Effect.catchTags({
+              "PersistentPty.NotFoundError": () => Effect.void,
+              "PersistentPty.UnavailableError": (error) =>
+                Effect.logWarning("failed to remove visible exited terminal", { id, error: error.message }),
+            }),
+            Effect.ensuring(Effect.sync(() => removing.delete(id))),
+          ),
+        )
+      }
+
+      const removeSession = (sessionID: Session.ID) =>
+        list(sessionID).pipe(
+          Effect.flatMap((terminals) =>
+            Effect.forEach(
+              terminals,
+              (terminal) =>
+                remove(terminal.id).pipe(
+                  Effect.catchTags({
+                    "PersistentPty.NotFoundError": () => Effect.void,
+                    "PersistentPty.UnavailableError": (error) =>
+                      Effect.logWarning("failed to remove deleted session's terminal", {
+                        sessionID,
+                        id: terminal.id,
+                        error: error.message,
+                      }),
+                  }),
+                ),
+              { discard: true },
+            ),
+          ),
+          Effect.catchTag("PersistentPty.UnavailableError", (error) =>
+            Effect.logWarning("failed to list deleted session's terminals", { sessionID, error: error.message }),
+          ),
+          Effect.ensuring(Effect.sync(() => current.delete(sessionID))),
+        )
+
+      // Errors are handled per event so one failed cleanup does not end the subscription.
+      yield* bus.subscribe(SessionEvent.Deleted).pipe(
+        Stream.runForEach((event) => removeSession(event.data.sessionID)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      const attach = Effect.fn("PersistentPty.attach")(function* (
+        id: Pty.ID,
+        input: Parameters<Interface["attach"]>[1],
+      ) {
+        yield* get(id)
+        const attachment = yield* daemon
+          .subscribe(fromID(id), {
+            ...input,
+            onEvent: (event) => {
+              if (event.type === "exited") removeVisibleExit(id)
+              input.onEvent(event)
+            },
+          })
+          .pipe(Effect.mapError(unavailable))
+        if (attachment.role === "controller") current.set(attachment.terminal.group_id, id)
+        return {
+          info: toInfo(attachment.terminal),
+          role: attachment.role,
+          generation: attachment.generation,
+          replay: attachment.replay,
+          activate: attachment.activate,
+          detach: attachment.detach,
+        }
+      })
+
+      return Service.of({
+        list,
+        get,
+        create,
+        write,
+        resize,
+        control,
+        input,
+        rename,
+        snapshot,
+        read,
+        remove,
+        shutdown,
+        handoff,
+        attach,
+      })
+    }),
+  )
+
+export const layer = makeLayer()
+export const configured = (options?: Options) =>
+  makeGlobalNode({
+    service: Service,
+    layer: options === undefined ? layer : makeLayer(options),
+    deps: [Bus.node, Global.node],
+  })
+export const node = configured()
+
+const request = (daemon: DaemonTransport, value: object, start = false) =>
+  daemon.request(value, start).pipe(Effect.mapError(unavailable))
+
+const optionalRequest = (daemon: DaemonTransport, value: object) =>
+  daemon.requestIfRunning(value).pipe(Effect.mapError(unavailable))
+
+const unexpected = (response: WireResponse) =>
+  Effect.fail(new UnavailableError({ message: `unexpected opencode-pty response: ${response.type}` }))
+
+const unavailable = (error: unknown) =>
+  new UnavailableError({ message: error instanceof Error ? error.message : String(error) })
+
+function toInfo(value: WireTerminal): Info {
+  const status = value.lifecycle.status
+  return {
+    ...Pty.Info.make({
+      id: toID(value.id),
+      title: value.title,
+      command: value.command[0] || "",
+      args: value.command.slice(1),
+      cwd: value.cwd,
+      status: status === "running" ? "running" : "exited",
+      pid: value.pid ?? 0,
+      ...(status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
+    }),
+    sessionID: value.group_id,
+    userTitle: value.user_title ?? null,
+    foregroundProcess: value.foreground_process,
+    size: { cols: value.cols, rows: value.rows },
+    output: { head: value.output_head, tail: value.output_tail },
+  }
+}
+
+function toID(value: number) {
+  return Pty.ID.make(`pty_persistent_${value}`)
+}
+
+function fromID(value: Pty.ID) {
+  if (!value.startsWith("pty_persistent_")) throw new Error(`invalid persistent PTY ID: ${value}`)
+  const parsed = Number(value.slice("pty_persistent_".length))
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`invalid persistent PTY ID: ${value}`)
+  return parsed
+}

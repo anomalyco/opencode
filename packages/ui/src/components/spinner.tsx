@@ -1,52 +1,68 @@
-import { ComponentProps, For } from "solid-js"
+import { For, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { syncSpinPhase } from "../hooks/spin-phase"
+import { radarDots, radarKeyframes, radarLoop } from "./spinner-radar"
 
-const outerIndices = new Set([1, 2, 4, 7, 8, 11, 13, 14])
-const cornerIndices = new Set([0, 3, 12, 15])
-const squares = Array.from({ length: 16 }, (_, i) => ({
-  id: i,
-  x: (i % 4) * 4,
-  y: Math.floor(i / 4) * 4,
-  delay: Math.random() * 1.5,
-  duration: 1 + Math.random() * 1,
-  outer: outerIndices.has(i),
-  corner: cornerIndices.has(i),
-}))
+// Every AI activity spinner (busy session tabs, the activity chip, subagents, tool cards) shows Soft Radar. Non-AI
+// loading uses Loader.
 
-export function Spinner(props: {
-  class?: string
-  classList?: ComponentProps<"div">["classList"]
-  style?: ComponentProps<"div">["style"]
-}) {
+const keyframes = "spinner-radar"
+
+const dots = radarDots()
+
+// The keyframes are added to the document once, the first time a spinner renders.
+let added = false
+
+/**
+ * Each dot is its own SVG over the whole box, drawn exactly where it sat in one SVG. The compositor runs the opacity
+ * animation of an SVG element but not of a shape inside one, so a spinner no longer restyles and repaints on every
+ * frame. `width` and `height` size it like an SVG's attributes, below any CSS size.
+ */
+export function Spinner(
+  props: Omit<ComponentProps<"span">, "style"> & {
+    "data-component"?: string
+    width?: number
+    height?: number
+    style?: JSX.CSSProperties
+  },
+) {
+  const [local, rest] = splitProps(props, ["class", "classList", "data-component", "width", "height", "style"])
+
+  if (!added) {
+    added = true
+    const style = document.createElement("style")
+    style.textContent = radarKeyframes(keyframes)
+    document.head.append(style)
+  }
+
   return (
-    <svg
-      {...props}
-      viewBox="0 0 15 15"
-      data-component="spinner"
-      classList={{
-        ...props.classList,
-        [props.class ?? ""]: !!props.class,
+    <span
+      {...rest}
+      ref={syncSpinPhase}
+      data-component={local["data-component"] ?? "spinner"}
+      data-slot="spinner-dots"
+      classList={{ ...local.classList, [local.class ?? ""]: !!local.class }}
+      style={{
+        ...local.style,
+        "--spinner-width": local.width === undefined ? undefined : `${local.width}px`,
+        "--spinner-height": local.height === undefined ? undefined : `${local.height}px`,
       }}
-      fill="currentColor"
     >
-      <For each={squares}>
-        {(square) => (
-          <rect
-            x={square.x}
-            y={square.y}
-            width="3"
-            height="3"
-            rx="1"
+      <For each={dots}>
+        {(dot) => (
+          <svg
+            viewBox="0 0 16 16"
+            fill="currentColor"
             style={{
-              opacity: square.corner ? 0 : undefined,
-              animation: square.corner
+              "--still": dot.still,
+              animation: dot.steady
                 ? undefined
-                : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
-              "animation-fill-mode": square.corner ? undefined : "both",
-              "animation-delay": square.corner ? undefined : `${square.delay}s`,
+                : `${keyframes}-${dot.shape} calc(${radarLoop}s * var(--spinner-time, 1)) linear calc(${-radarLoop * (1 - dot.at)}s * var(--spinner-time, 1)) infinite`,
             }}
-          />
+          >
+            <rect x={dot.x} y={dot.y} width={dot.size} height={dot.size} rx={dot.size * 0.24} />
+          </svg>
         )}
       </For>
-    </svg>
+    </span>
   )
 }

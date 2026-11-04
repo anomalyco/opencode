@@ -210,27 +210,6 @@ description: 管理 LLM 可以使用的工具。
 
 ---
 
-### todowrite
-
-在編碼工作階段中管理待辦事項清單。
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todowrite": "allow"
-  }
-}
-```
-
-建立和更新任務清單以追蹤複雜操作的進度。LLM 使用此工具來組織多步驟任務。
-
-:::note
-該工具預設對子代理停用，但您可以手動啟用。[了解更多](/docs/agents/#permissions)
-:::
-
----
-
 ### webfetch
 
 擷取網頁內容。

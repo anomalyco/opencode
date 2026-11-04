@@ -1,10 +1,13 @@
 import { Effect } from "effect"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260410174513_workspace-name",
   up(tx) {
     return Effect.gen(function* () {
+      const columns = yield* tx.all<{ name: string }>(`PRAGMA table_info(\`workspace\`)`)
+      const name = columns.some((column) => column.name === "name") ? "`name`" : "''"
+
       yield* tx.run(`PRAGMA foreign_keys=OFF;`)
       yield* tx.run(`
         CREATE TABLE \`__new_workspace\` (
@@ -19,11 +22,13 @@ export default {
         );
       `)
       yield* tx.run(
-        `INSERT INTO \`__new_workspace\`(\`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\`) SELECT \`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\` FROM \`workspace\`;`,
+        `INSERT INTO \`__new_workspace\`(\`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\`) SELECT \`id\`, \`type\`, \`branch\`, ${name}, \`directory\`, \`extra\`, \`project_id\` FROM \`workspace\`;`,
       )
       yield* tx.run(`DROP TABLE \`workspace\`;`)
       yield* tx.run(`ALTER TABLE \`__new_workspace\` RENAME TO \`workspace\`;`)
       yield* tx.run(`PRAGMA foreign_keys=ON;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

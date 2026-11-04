@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, max, or } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
@@ -7,8 +7,8 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
-  isMissingUniqueUsersColumn,
   omitUniqueUsers,
   rankBy,
   statPeriodKey,
@@ -16,7 +16,9 @@ import {
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
+  withUniqueUsersFallback,
   type StatBaseAggregate,
+  type StatPeriodScope,
 } from "./stat"
 
 export type ModelStatRow = typeof modelStat.$inferInsert
@@ -43,9 +45,12 @@ export type ModelStatMetric = {
 export declare namespace ModelStatRepo {
   export interface Service {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
-    readonly lastSyncedAt: () => Effect.Effect<Date | null, DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
-    readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (
+      scope: StatPeriodScope,
+      hiddenModels: readonly string[],
+    ) => Effect.Effect<void, DatabaseError>
+    readonly deleteUnknownDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -59,31 +64,31 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
 
       const listDaily = Effect.fn("ModelStatRepo.listDaily")(function* () {
         return yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              return await db
-                .select({
-                  periodKey: modelStat.period_key,
-                  updatedAt: modelStat.updated_at,
-                  tier: modelStat.tier,
-                  provider: modelStat.provider,
-                  model: modelStat.model,
-                  sessions: modelStat.sessions,
-                  uniqueUsers: modelStat.unique_users,
-                  inputTokens: modelStat.input_tokens,
-                  outputTokens: modelStat.output_tokens,
-                  reasoningTokens: modelStat.reasoning_tokens,
-                  cacheReadTokens: modelStat.cache_read_tokens,
-                  totalTokens: modelStat.total_tokens,
-                  inputCostMicrocents: modelStat.input_cost_microcents,
-                  outputCostMicrocents: modelStat.output_cost_microcents,
-                  totalCostMicrocents: modelStat.total_cost_microcents,
-                })
-                .from(modelStat)
-                .where(modelDailyScope())
-                .orderBy(asc(modelStat.period_key))
-            } catch (cause) {
-              if (!isMissingUniqueUsersColumn(cause)) throw cause
+          try: () =>
+            withUniqueUsersFallback(async (includeUniqueUsers) => {
+              if (includeUniqueUsers)
+                return await db
+                  .select({
+                    periodKey: modelStat.period_key,
+                    updatedAt: modelStat.updated_at,
+                    tier: modelStat.tier,
+                    provider: modelStat.provider,
+                    model: modelStat.model,
+                    sessions: modelStat.sessions,
+                    uniqueUsers: modelStat.unique_users,
+                    inputTokens: modelStat.input_tokens,
+                    outputTokens: modelStat.output_tokens,
+                    reasoningTokens: modelStat.reasoning_tokens,
+                    cacheReadTokens: modelStat.cache_read_tokens,
+                    totalTokens: modelStat.total_tokens,
+                    inputCostMicrocents: modelStat.input_cost_microcents,
+                    outputCostMicrocents: modelStat.output_cost_microcents,
+                    totalCostMicrocents: modelStat.total_cost_microcents,
+                  })
+                  .from(modelStat)
+                  .where(modelDailyScope())
+                  .orderBy(asc(modelStat.period_key))
+
               return (
                 await db
                   .select({
@@ -106,18 +111,9 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   .where(modelDailyScope())
                   .orderBy(asc(modelStat.period_key))
               ).map((row) => ({ ...row, uniqueUsers: 0 }))
-            }
-          },
+            }),
           catch: (cause) => DatabaseError.make({ cause }),
         })
-      })
-
-      const lastSyncedAt = Effect.fn("ModelStatRepo.lastSyncedAt")(function* () {
-        const result = yield* Effect.tryPromise({
-          try: () => db.select({ value: max(modelStat.updated_at) }).from(modelStat),
-          catch: (cause) => DatabaseError.make({ cause }),
-        })
-        return result[0]?.value ?? null
       })
 
       const upsert = Effect.fn("ModelStatRepo.upsert")(function* (rows: ModelStatRow[]) {
@@ -125,14 +121,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: async () => {
-                try {
-                  return await upsertModelChunk(chunk, true)
-                } catch (cause) {
-                  if (!isMissingUniqueUsersColumn(cause)) throw cause
-                  return upsertModelChunk(chunk, false)
-                }
-              },
+              try: () => withUniqueUsersFallback((includeUniqueUsers) => upsertModelChunk(chunk, includeUniqueUsers)),
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },
@@ -175,25 +164,24 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
       }
 
       const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
-        rows: ModelStatRow[],
+        scope: StatPeriodScope,
+        hiddenModels: readonly string[],
       ) {
-        const scope = statRowScope(rows)
-        if (!scope) return
-
         yield* Effect.tryPromise({
           try: () =>
             db
               .delete(modelStat)
               .where(
                 and(
-                  inArray(modelStat.grain, scope.grains),
-                  inArray(modelStat.period_key, scope.periodKeys),
-                  inArray(modelStat.dataset, scope.datasets),
-                  inArray(modelStat.client, scope.clients),
-                  inArray(modelStat.source, scope.sources),
+                  eq(modelStat.grain, scope.grain),
+                  eq(modelStat.period_key, scope.periodKey),
+                  eq(modelStat.dataset, scope.dataset),
+                  eq(modelStat.client, "all"),
+                  eq(modelStat.source, "all"),
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
-                    inArray(modelStat.model, RETIRED_STAT_MODELS),
+                    inArray(modelStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),
+                    and(eq(modelStat.provider, "unknown"), eq(modelStat.model, "hy4-preview")),
                   ),
                 ),
               ),
@@ -201,7 +189,55 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         })
       })
 
-      return ModelStatRepo.of({ listDaily, lastSyncedAt, upsert, deleteRetiredDimensions })
+      const deleteUnknownDimensions = Effect.fn("ModelStatRepo.deleteUnknownDimensions")(function* (
+        rows: ModelStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+        const replacements = new Set(rows.map((row) => [statPeriodKey(row), row.model].join("\u0000")))
+        const stale = yield* Effect.tryPromise({
+          try: () =>
+            db
+              .select({
+                id: modelStat.id,
+                grain: modelStat.grain,
+                period_key: modelStat.period_key,
+                dataset: modelStat.dataset,
+                tier: modelStat.tier,
+                client: modelStat.client,
+                source: modelStat.source,
+                model: modelStat.model,
+              })
+              .from(modelStat)
+              .where(
+                and(
+                  eq(modelStat.provider, "unknown"),
+                  inArray(modelStat.grain, scope.grains),
+                  inArray(modelStat.period_key, scope.periodKeys),
+                  inArray(modelStat.dataset, scope.datasets),
+                  inArray(modelStat.client, scope.clients),
+                  inArray(modelStat.source, scope.sources),
+                  inArray(modelStat.model, [...new Set(rows.map((row) => row.model))]),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+        const ids = stale
+          .filter((row) => replacements.has([statPeriodKey(row), row.model].join("\u0000")))
+          .map((row) => row.id)
+        yield* Effect.forEach(
+          chunks(ids, UPSERT_CHUNK_SIZE),
+          (chunk) =>
+            Effect.tryPromise({
+              try: () =>
+                db.delete(modelStat).where(and(eq(modelStat.provider, "unknown"), inArray(modelStat.id, chunk))),
+              catch: (cause) => DatabaseError.make({ cause }),
+            }),
+          { discard: true },
+        )
+      })
+
+      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
     }),
   )
 }
@@ -211,7 +247,7 @@ function modelDailyScope() {
     eq(modelStat.grain, "day"),
     eq(modelStat.client, "all"),
     eq(modelStat.source, "all"),
-    inArray(modelStat.tier, ["Go", "go"]),
+    inArray(modelStat.tier, DATA_SITE_TIERS),
   )
 }
 
@@ -241,7 +277,7 @@ function rankRows(rows: ModelStatRow[]) {
   return Object.values(
     rows.reduce<Record<string, ModelStatRow[]>>((result, row) => {
       const key = statPeriodKey(row)
-      result[key] = [...(result[key] ?? []), row]
+      ;(result[key] ??= []).push(row)
       return result
     }, {}),
   ).flatMap((group) => {

@@ -1,0 +1,20 @@
+id: no-nested-effect-service-yield
+snapshots:
+  ? |
+    Effect.gen(function* () {
+      yield* (yield* Foo.Service).client.run()
+    })
+  : labels:
+      - source: (yield* Foo.Service).client.run()
+        style: primary
+        start: 35
+        end: 68
+  ? |
+    Effect.gen(function* () {
+      yield* (yield* Foo.Service).run()
+    })
+  : labels:
+      - source: (yield* Foo.Service).run()
+        style: primary
+        start: 35
+        end: 61

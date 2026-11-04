@@ -47,15 +47,17 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ---
 
-## OpenCode Zen
+<a id="opencode-zen"></a>
 
-OpenCode Zen 是由 OpenCode 團隊提供的模型列表，這些模型已經過測試和驗證，能夠與 OpenCode 良好配合使用。[了解更多](/docs/zen)。
+## OpenCode Models
+
+OpenCode Models 是由 OpenCode 團隊提供的模型列表，這些模型已經過測試和驗證，能夠與 OpenCode 良好配合使用。[了解更多](https://opencode.ai/v2/docs/console/)。
 
 :::tip
-如果您是新使用者，我們建議從 OpenCode Zen 開始。
+如果您是新使用者，我們建議從 OpenCode Models 開始。
 :::
 
-1. 在 TUI 中執行 `/connect` 指令，選擇 `OpenCode Zen`，然後前往 [opencode.ai/auth](https://opencode.ai/zen)。
+1. 在 TUI 中執行 `/connect` 指令，選擇 `OpenCode`，然後前往 [opencode.ai/auth](https://opencode.ai/auth)。
 
    ```txt
    /connect
@@ -86,7 +88,7 @@ OpenCode Zen 是由 OpenCode 團隊提供的模型列表，這些模型已經過
 
 OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供的流行開放編碼模型的可靠存取，這些模型已經過測試和驗證，能夠與 OpenCode 良好配合使用。
 
-1. 在 TUI 中執行 `/connect` 指令，選擇 `OpenCode Go`，然後前往 [opencode.ai/auth](https://opencode.ai/zen)。
+1. 在 TUI 中執行 `/connect` 指令，選擇 `OpenCode Go`，然後前往 [opencode.ai/auth](https://opencode.ai/auth)。
 
    ```txt
    /connect
@@ -554,7 +556,7 @@ Cloudflare AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -748,13 +750,12 @@ GitLab Duo 透過 GitLab 的 Anthropic 代理提供具有原生工具呼叫能�
 ##### 自架 GitLab
 
 :::note[合規說明]
-OpenCode 會使用一個小模型來執行部分 AI 任務，例如產生工作階段標題。預設情況下使用由 Zen 託管的 gpt-5-nano。如果您需要讓 OpenCode 僅使用您自己的 GitLab 託管實例，請在 `opencode.json` 檔案中新增以下內容。同時建議停用工作階段分享。
+OpenCode 會使用一個小模型來執行部分 AI 任務，例如產生工作階段標題。預設情況下使用由 OpenCode 託管的 gpt-5-nano。如果您需要讓 OpenCode 僅使用您自己的 GitLab 託管實例，請在 `opencode.json` 檔案中新增以下內容。
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1381,13 +1382,15 @@ Ollama 可以自動為 OpenCode 進行設定。詳見 [Ollama 整合文件](http
 
 ---
 
-### OpenCode Zen
+<a id="opencode-zen-1"></a>
 
-OpenCode Zen 是由 OpenCode 團隊提供的經過測試和驗證的模型列表。[了解更多](/docs/zen)。
+### OpenCode Models
 
-1. 登入 **<a href={console}>OpenCode Zen</a>** 並點擊 **Create API Key**。
+OpenCode Models 是由 OpenCode 團隊提供的經過測試和驗證的模型列表。[了解更多](https://opencode.ai/v2/docs/console/)。
 
-2. 執行 `/connect` 指令並搜尋 **OpenCode Zen**。
+1. 登入 **<a href={console}>OpenCode Console</a>** 並點擊 **Create API Key**。
+
+2. 執行 `/connect` 指令並搜尋 **OpenCode**。
 
    ```txt
    /connect

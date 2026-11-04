@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionOwnership } from "@/pages/session/session-ownership"
+import { createSessionOwnership } from "@/session/session-ownership"
 
 describe("createSessionOwnership", () => {
   test("invalidates captured work when its Solid owner is disposed", () => {

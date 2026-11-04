@@ -9,10 +9,11 @@ export class AppConfigValue extends Schema.Class<AppConfigValue>("AppConfigValue
 
 const decodeAppConfigValue = Schema.decodeUnknownSync(AppConfigValue)
 
+// Read the linked stage lazily, so importing this module in a Worker does not
+// touch bindings at module scope.
 const config = Config.all({
-  stage: Config.succeed(Resource.App.stage),
-  publicUrl: Config.string("PUBLIC_URL").pipe(Config.withDefault("http://localhost:3000")),
-}).pipe(Config.map(decodeAppConfigValue))
+  publicUrl: Config.String("PUBLIC_URL").pipe(Config.withDefault("http://localhost:3000")),
+}).pipe(Config.map((value) => decodeAppConfigValue({ ...value, stage: Resource.App.stage })))
 
 export class AppConfig extends Context.Service<AppConfig, AppConfigValue>()("@opencode/stats/AppConfig") {
   static readonly config = config

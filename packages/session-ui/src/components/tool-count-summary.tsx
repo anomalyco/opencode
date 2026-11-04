@@ -1,17 +1,18 @@
 import { Index, createMemo } from "solid-js"
+import { useI18n, type UiI18nPluralKey } from "@opencode/ui/context"
 import { AnimatedCountLabel } from "./tool-count-label"
 
 export type CountItem = {
-  key: string
+  key: UiI18nPluralKey
   count: number
-  one: string
-  other: string
 }
 
 export function AnimatedCountList(props: { items: CountItem[]; fallback?: string; class?: string }) {
-  const visible = createMemo(() => props.items.filter((item) => item.count > 0))
+  const i18n = useI18n()
+  const firstPositive = createMemo(() => props.items.findIndex((item) => item.count > 0))
+  const active = createMemo(() => props.items.flatMap((item, index) => (item.count > 0 ? [index] : [])))
   const fallback = createMemo(() => props.fallback ?? "")
-  const showEmpty = createMemo(() => visible().length === 0 && fallback().length > 0)
+  const showEmpty = createMemo(() => firstPositive() === -1 && fallback().length > 0)
 
   return (
     <span data-component="tool-count-summary" class={props.class}>
@@ -21,26 +22,17 @@ export function AnimatedCountList(props: { items: CountItem[]; fallback?: string
 
       <Index each={props.items}>
         {(item, index) => {
-          const active = createMemo(() => item().count > 0)
-          const hasPrev = createMemo(() => {
-            for (let i = index - 1; i >= 0; i--) {
-              if (props.items[i].count > 0) return true
-            }
-            return false
-          })
+          const visible = createMemo(() => item().count > 0)
+          const position = createMemo(() => active().indexOf(index))
 
           return (
             <>
-              <span data-slot="tool-count-summary-prefix" data-active={active() && hasPrev() ? "true" : "false"}>
-                ,
+              <span data-slot="tool-count-summary-prefix" data-active={visible() && position() > 0 ? "true" : "false"}>
+                {i18n.listSeparator(position(), active().length)}
               </span>
-              <span data-slot="tool-count-summary-item" data-active={active() ? "true" : "false"}>
+              <span data-slot="tool-count-summary-item" data-active={visible() ? "true" : "false"}>
                 <span data-slot="tool-count-summary-item-inner">
-                  <AnimatedCountLabel
-                    one={item().one}
-                    other={item().other}
-                    count={Math.max(0, Math.round(item().count))}
-                  />
+                  <AnimatedCountLabel plural={item().key} count={Math.max(0, Math.round(item().count))} />
                 </span>
               </span>
             </>

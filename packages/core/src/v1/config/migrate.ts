@@ -1,106 +1,34 @@
-export * as ConfigMigrateV1 from "./migrate"
+export * as ConfigMigrateV1 from "./migrate.js"
 
-import { ConfigV1 } from "./config"
-import { ConfigAgentV1 } from "./agent"
-import { ConfigMCPV1 } from "./mcp"
-import { ConfigPermissionV1 } from "./permission"
-import { ConfigProviderV1 } from "./provider"
-import { ConfigProviderOptionsV1 } from "./provider-options"
+import { ConfigAgent } from "@opencode/schema/config/agent"
+import { Schema } from "effect"
+import { ConfigAgentV1 } from "./agent.js"
+import { ConfigCommandV1 } from "./command.js"
+import { ConfigMCPV1 } from "./mcp.js"
+import { ConfigPermissionV1 } from "./permission.js"
+import { ConfigProviderV1 } from "./provider.js"
+import { ConfigProviderOptionsV1 } from "./provider-options.js"
+import { Provider } from "../../provider.js"
+import { Model } from "../../model.js"
 
-const keys = new Set([
-  "logLevel",
-  "server",
-  "command",
-  "reference",
-  "snapshot",
-  "plugin",
-  "autoshare",
-  "disabled_providers",
-  "enabled_providers",
-  "small_model",
-  "mode",
-  "agent",
-  "provider",
-  "permission",
-  "tools",
-  "attachment",
-  "layout",
-])
+const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
+const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 
-export function isV1(input: unknown) {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return false
-  return Object.keys(input).some((key) => keys.has(key))
-}
-
-export function migrate(info: typeof ConfigV1.Info.Type) {
-  return {
-    $schema: info.$schema,
-    shell: info.shell,
-    model: info.model,
-    default_agent: info.default_agent,
-    autoupdate: info.autoupdate,
-    share: info.share ?? (info.autoshare ? "auto" : undefined),
-    enterprise: info.enterprise,
-    username: info.username,
-    permissions: permissions(info.permission, info.tools),
-    agents: agents(info),
-    snapshots: info.snapshot,
-    watcher: info.watcher,
-    formatter: info.formatter,
-    lsp: info.lsp,
-    attachments: info.attachment,
-    tool_output: info.tool_output,
-    mcp: mcp(info),
-    compaction: info.compaction && {
-      auto: info.compaction.auto,
-      prune: info.compaction.prune,
-      keep: {
-        tokens: info.compaction.preserve_recent_tokens,
-      },
-      buffer: info.compaction.reserved,
-    },
-    skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
-    commands: info.command,
-    instructions: info.instructions,
-    references: info.references ?? info.reference,
-    plugins: info.plugin?.map((plugin) =>
-      typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
-    ),
-    experimental: info.experimental?.policies && { policies: info.experimental.policies },
-    providers: providers(info.provider),
-  }
-}
-
-function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {
-  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = Object.entries(
-    tools ?? {},
-  ).map(([action, enabled]) => ({
-    action: normalizeAction(action),
-    resource: "*",
-    effect: enabled ? ("allow" as const) : ("deny" as const),
-  }))
-  for (const [action, rule] of Object.entries(info ?? {})) {
-    if (!rule) continue
-    if (typeof rule === "string") {
-      rules.push({ action, resource: "*", effect: rule })
-      continue
-    }
-    rules.push(...Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect })))
-  }
+function permissions(info?: ConfigPermissionV1.Info) {
+  const rules = (info ?? []).flatMap(([key, rule]) => {
+    const action = normalizeAction(key)
+    if (typeof rule === "string") return [{ action, resource: "*", effect: rule }]
+    return rule.map(([resource, effect]) => ({ action, resource, effect }))
+  })
   return rules.length ? rules : undefined
 }
 
-function normalizeAction(action: string) {
-  return action === "write" || action === "patch" ? "edit" : action
-}
-
-function agents(info: typeof ConfigV1.Info.Type) {
-  const entries = [
-    ...Object.entries(info.agent ?? {}),
-    ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
-  ]
-  if (!entries.length) return undefined
-  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
+// Map v1 permission/tool keys onto their renamed v2 tool actions so migrated rules keep matching.
+export function normalizeAction(action: string) {
+  if (action === "write" || action === "patch" || action === "apply_patch") return "edit"
+  if (action === "task") return "subagent"
+  if (action === "bash") return "shell"
+  return action
 }
 
 export function migrateAgent(info: ConfigAgentV1.Info) {
@@ -109,33 +37,48 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
     ...(info.top_p === undefined ? {} : { top_p: info.top_p }),
   }
+  return decodeAgent(
+    JSON.stringify({
+      model: modelSelection(info.model, info.variant),
+      request: Object.keys(body).length ? { body } : undefined,
+      system: info.prompt,
+      description: info.description,
+      mode: info.mode,
+      hidden: info.hidden,
+      color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
+      steps: info.steps,
+      disabled: info.disable,
+      permissions: permissions(info.permission),
+    }),
+  )
+}
+
+export function migrateCommand(command: ConfigCommandV1.Info) {
   return {
-    model: info.model,
-    variant: info.variant,
-    request: Object.keys(body).length ? { body } : undefined,
-    system: info.prompt,
-    description: info.description,
-    mode: info.mode,
-    hidden: info.hidden,
-    color: info.color,
-    steps: info.steps,
-    disabled: info.disable,
-    permissions: permissions(info.permission),
+    template: command.template,
+    description: command.description,
+    agent: command.agent,
+    model: modelSelection(command.model, command.variant),
+    subagent: command.subtask,
   }
 }
 
-function mcp(info: typeof ConfigV1.Info.Type) {
-  const servers = Object.fromEntries(
-    Object.entries(info.mcp ?? {}).flatMap(([name, server]) =>
-      "type" in server ? [[name, migrateMcp(server)] as const] : [],
-    ),
-  )
-  const timeout = info.experimental?.mcp_timeout
-  if (!timeout && !Object.keys(servers).length) return undefined
-  return { timeout: timeout === undefined ? undefined : { request: timeout }, servers }
+export function modelSelection(input?: string, variant?: string) {
+  if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
+  const separator = input.indexOf("/")
+  return {
+    providerID: providerID(input.slice(0, separator)),
+    model: input.slice(separator + 1),
+    ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
+  }
 }
 
-function migrateMcp(info: ConfigMCPV1.Info) {
+// V1 had a single MCP timeout, so a bare number bounds every phase.
+export function migrateMcpTimeout(timeout: number) {
+  return { startup: timeout, catalog: timeout, execution: timeout }
+}
+
+export function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
     return {
@@ -144,7 +87,8 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       cwd: info.cwd,
       environment: info.environment,
       disabled,
-      timeout: info.timeout === undefined ? undefined : { request: info.timeout },
+      codemode: info.codemode,
+      timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
     }
   return {
     type: info.type,
@@ -158,41 +102,110 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       redirect_uri: info.oauth.redirectUri,
     },
     disabled,
-    timeout: info.timeout === undefined ? undefined : { request: info.timeout },
+    codemode: info.codemode,
+    timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
   }
 }
 
-function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
-  if (!info) return undefined
-  return Object.fromEntries(Object.entries(info).map(([name, provider]) => [name, migrateProvider(provider)]))
+export function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
+  if (sourceID === "azure-cognitive-services") return migrateAzureCognitiveServicesProvider(info)
+  if (sourceID === "google-vertex-anthropic") return migrateGoogleVertexAnthropicProvider(info)
+  return migrateStandardProvider(info)
 }
 
-function migrateProvider(info: ConfigProviderV1.Info) {
-  const lowerer = ConfigProviderOptionsV1.get(info.npm)
-  const options = lowerer.provider(info.options ?? {})
-  const url = info.api ?? options.url
+function migrateStandardProvider(info: ConfigProviderV1.Info) {
+  // V1 `setCacheKey` toggled `prompt_cache_key` for the whole provider; it is not a provider package setting.
+  const { setCacheKey, ...rest } = info.options ?? {}
+  const options = ConfigProviderOptionsV1.provider(rest)
   return {
     name: info.name,
     env: info.env,
-    api: info.npm
-      ? {
-          type: "aisdk" as const,
-          package: info.npm,
-          ...(url === undefined ? {} : { url }),
-          settings: options.settings ?? {},
-        }
-      : undefined,
-    request: info.options && { headers: options.headers, body: options.body },
+    package: info.npm ? packageSpecifier(info.npm) : undefined,
+    compatibility: setCacheKey === undefined ? undefined : { supportsPromptCacheKey: setCacheKey },
+    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
+    headers: info.options && options.headers,
+    body: info.options && options.body,
     models:
       info.models &&
       Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
   }
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: string) {
-  const packageID = info.provider?.npm ?? packageName
-  const lowerer = ConfigProviderOptionsV1.get(packageID)
-  const request = info.options && lowerer.request(info.options)
+function migrateAzureCognitiveServicesProvider(info: ConfigProviderV1.Info) {
+  const standard = migrateStandardProvider(info)
+  const migrated = {
+    ...standard,
+    env: standard.env?.filter((name) => name !== "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"),
+  }
+  if (info.npm !== "@ai-sdk/openai-compatible" || info.api) return migrated
+  return {
+    ...migrated,
+    settings: {
+      ...migrated.settings,
+      baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+    },
+  }
+}
+
+function migrateGoogleVertexAnthropicProvider(info: ConfigProviderV1.Info) {
+  const migrated = migrateStandardProvider(info)
+  const packageName = migrated.package ?? Provider.aisdk("@ai-sdk/google-vertex/anthropic")
+  return {
+    ...migrated,
+    // The current Google Vertex provider includes Gemini and Claude. Keep the Anthropic SDK on Claude models
+    // instead of changing the package inherited by every model on the provider.
+    package: undefined,
+    models:
+      migrated.models &&
+      Object.fromEntries(
+        Object.entries(migrated.models).map(([name, model]) => [
+          name,
+          model.package ? model : { ...model, package: packageName },
+        ]),
+      ),
+  }
+}
+
+// Built-in provider routes are already native package specifiers; only npm packages load through the AI SDK.
+function packageSpecifier(npm: string) {
+  const name = Provider.packageName(npm)
+  return name.startsWith("@opencode/ai/") ? name : Provider.aisdk(npm)
+}
+
+// Renames retired provider IDs in V1 fields and the shared top-level model.
+export function providerID(input: string) {
+  if (input === "azure-cognitive-services") return "azure"
+  if (input === "google-vertex-anthropic") return "google-vertex"
+  return input
+}
+
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | undefined) {
+  const disableThinkingBlockBinding =
+    info.options?.thinking?.blockBinding === false || info.options?.reasoningConfig?.blockBinding === false
+  const options = info.options && { ...info.options }
+
+  // Move the legacy opt-out to compatibility without mutating the input.
+  if (options && disableThinkingBlockBinding) {
+    for (const key of ["thinking", "reasoningConfig"]) {
+      if (options[key]?.blockBinding !== false) continue
+
+      const { blockBinding, ...rest } = options[key]
+      if (Object.keys(rest).length) {
+        options[key] = rest
+        continue
+      }
+      delete options[key]
+    }
+  }
+
+  const compatible = (info.provider?.npm ?? npm) === "@ai-sdk/openai-compatible"
+  const split = (input: Record<string, unknown>) =>
+    compatible
+      ? ConfigProviderOptionsV1.compatibleModel(input)
+      : { settings: ConfigProviderOptionsV1.model(input), body: undefined }
+  const migrated = options && split(options)
+  const settings = migrated?.settings
+  const compatibility = Model.compatibility(info.interleaved)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -210,35 +223,30 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
         ]
       : []),
   ]
+  const defaults = Model.Capabilities.default()
   const capabilities =
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
-      ? { tools: info.tool_call ?? false, input: info.modalities?.input ?? [], output: info.modalities?.output ?? [] }
+      ? {
+          tools: info.tool_call ?? defaults.tools,
+          input: info.modalities?.input ?? defaults.input,
+          output: info.modalities?.output ?? defaults.output,
+        }
       : undefined
   return {
+    modelID: info.id,
     family: info.family,
     name: info.name,
-    api: info.provider?.npm
-      ? {
-          ...(info.id === undefined ? {} : { id: info.id }),
-          type: "aisdk" as const,
-          package: info.provider.npm,
-          ...(info.provider.api === undefined ? {} : { url: info.provider.api }),
-          settings: {},
-        }
-      : info.id === undefined
-        ? undefined
-        : { id: info.id },
+    compatibility: disableThinkingBlockBinding
+      ? { ...compatibility, supportsThinkingBlockBinding: false }
+      : compatibility,
+    package: info.provider?.npm ? packageSpecifier(info.provider.npm) : undefined,
+    settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,
-    request: (info.headers || request) && {
-      headers: info.headers,
-      body: request,
-    },
+    headers: info.headers,
+    body: migrated?.body,
     variants:
       info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({
-        id,
-        body: lowerer.request(options),
-      })),
+      Object.entries(info.variants).map(([id, options]) => ({ id, ...split(options) })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {

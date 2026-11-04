@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Sýna eða fela villuleitarstiku",
+  providerAriaLabel: "Afkastagreining þjónustuveitu",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "Tími frá kvaðningunni sem hóf síðustu umferð þar til svarinu lauk.",
+  "tps.label": "TPS",
+  "tps.tip": "Úttaks- og rökhugsunartókar á sekúndu í líkansbeiðnum síðustu umferðar, án tíma verkfæra.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Þvingaðu fókusstíla á alla gagnvirka þætti",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "DIR",
+  "direction.tip": "Þvingaðu stefnu útlits forritsins í heild sinni án þess að breyta valnu tungumáli",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

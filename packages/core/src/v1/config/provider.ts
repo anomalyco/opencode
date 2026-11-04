@@ -1,7 +1,7 @@
-export * as ConfigProviderV1 from "./provider"
+export * as ConfigProviderV1 from "./provider.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { PositiveInt } from "../../schema.js"
 
 export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
 
@@ -16,9 +16,10 @@ export const Model = Schema.Struct({
   tool_call: Schema.optional(Schema.Boolean),
   interleaved: Schema.optional(
     Schema.Union([
-      Schema.Literal(true),
+      Schema.Boolean,
+      Schema.String,
       Schema.Struct({
-        field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
+        field: Schema.String,
       }),
     ]),
   ),
@@ -92,19 +93,10 @@ export const Info = Schema.Struct({
         setCacheKey: Schema.optional(Schema.Boolean).annotate({
           description: "Enable promptCacheKey for this provider (default false)",
         }),
-        timeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        timeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description: "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout.",
         }),
-        headerTimeout: Schema.optional(
-          Schema.Union([PositiveInt, Schema.Literal(false)]).annotate({
-            description:
-              "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
-          }),
-        ).annotate({
+        headerTimeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
           description:
             "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout.",
         }),

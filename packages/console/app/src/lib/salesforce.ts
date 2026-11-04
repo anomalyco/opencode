@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@opencode/console-resource"
 
 async function login() {
   const url = Resource.SALESFORCE_INSTANCE_URL.value.replace(/\/$/, "")
@@ -44,10 +44,31 @@ export interface SalesforceLeadInput {
   company?: string
   email: string
   phone?: string
+  country?: string
+  inferenceSpend?: string
+  inRegionRouting?: boolean
+  dpa?: boolean
   message: string
 }
 
-export async function createLead(input: SalesforceLeadInput): Promise<boolean> {
+export async function createLead(
+  input: SalesforceLeadInput,
+  submit?: (payload: Record<string, unknown>) => Promise<boolean>,
+): Promise<boolean> {
+  const payload = {
+    LastName: input.name,
+    Company: input.company?.trim() || "Website",
+    Email: input.email,
+    Phone: input.phone ?? null,
+    Title: input.role,
+    Country: input.country,
+    Description: input.message,
+    Current_Monthly_Inference_Spend__c: input.inferenceSpend,
+    In_Region_Routing__c: input.inRegionRouting ?? false,
+    DPA_Required__c: input.dpa ?? false,
+    LeadSource: "enterprise website form",
+  }
+  if (submit) return submit(payload)
   const auth = await login()
   if (!auth) return false
 
@@ -57,15 +78,7 @@ export async function createLead(input: SalesforceLeadInput): Promise<boolean> {
       Authorization: `Bearer ${auth.token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      LastName: input.name,
-      Company: input.company?.trim() || "Website",
-      Email: input.email,
-      Phone: input.phone ?? null,
-      Title: input.role,
-      Description: input.message,
-      LeadSource: "Website",
-    }),
+    body: JSON.stringify(payload),
   }).catch((err) => {
     console.error("Failed to create Salesforce lead:", err)
   })

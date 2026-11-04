@@ -1,0 +1,218 @@
+export * as TestLLM from "./testing.js"
+export { compileRequest } from "./route/client.js"
+
+import {
+  LLMClient,
+  generateWith,
+  type CompactionRequest,
+  type CheckpointRequest,
+  type EndpointCompactOptions,
+  type TriggerCompactOptions,
+} from "./route/client.js"
+import {
+  LLMEvent,
+  CompactionResponse,
+  CompactionCheckpointResponse,
+  type FinishReasonDetails,
+  type AIError,
+  type LLMRequest,
+  type ProviderMetadata,
+  type UsageInput,
+} from "./schema/index.js"
+import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
+
+export type Response =
+  | readonly LLMEvent[]
+  | Stream.Stream<LLMEvent, AIError>
+  | CompactionResponse
+  | CompactionCheckpointResponse
+
+export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
+
+type ClientInterface = Context.Service.Shape<typeof LLMClient.Service>
+
+export type Responder = (request: LLMRequest) => Response
+
+interface Controls {
+  /** Returns a snapshot of requests observed at execution time. */
+  readonly requests: () => Effect.Effect<readonly LLMRequest[]>
+  readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
+  /** Replaces the fallback without changing queued responses. */
+  readonly always: (response: Response) => Effect.Effect<void>
+  /** Answers requests after the one-shot queue is exhausted; receives the original request. */
+  readonly serve: (responder: Responder) => Effect.Effect<void>
+  /** Waits for request arrivals, not output or completion. */
+  readonly wait: (count: number) => Effect.Effect<void>
+  readonly gate: () => Effect.Effect<Gate, never, Scope.Scope>
+}
+
+export interface TestInterface extends ClientInterface, Controls {}
+
+export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
+
+export interface LayerOptions {
+  readonly transformRequest?: (request: LLMRequest) => LLMRequest
+  /** Used after the one-shot response queue is exhausted. Omit to defect on unexpected requests. */
+  readonly fallback?: Response
+}
+
+export const complete = (
+  options: {
+    readonly reason: FinishReasonDetails
+    readonly usage?: UsageInput
+    readonly providerMetadata?: ProviderMetadata
+  },
+  ...events: readonly LLMEvent[]
+) => [
+  LLMEvent.stepStart({ index: 0 }),
+  ...events,
+  LLMEvent.stepFinish({
+    index: 0,
+    reason: options.reason,
+    usage: options.usage,
+    providerMetadata: options.providerMetadata,
+  }),
+  LLMEvent.finish({ reason: options.reason, providerMetadata: options.providerMetadata }),
+]
+
+export const stop = (...events: readonly LLMEvent[]) => complete({ reason: { normalized: "stop" } }, ...events)
+
+export const toolCalls = (...events: readonly LLMEvent[]) =>
+  complete({ reason: { normalized: "tool-calls" } }, ...events)
+
+const textEvents = (value: string, id: string) => [
+  LLMEvent.textStart({ id }),
+  LLMEvent.textDelta({ id, text: value }),
+  LLMEvent.textEnd({ id }),
+]
+
+export const text = (value: string, id: string) => stop(...textEvents(value, id))
+
+export const textWithUsage = (value: string, id: string, inputTokens: number) =>
+  complete(
+    { reason: { normalized: "stop" }, usage: { inputTokens, nonCachedInputTokens: inputTokens } },
+    ...textEvents(value, id),
+  )
+
+export const toolCall = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
+
+export const failAfter = (error: AIError, ...events: readonly LLMEvent[]) =>
+  Stream.fromIterable(events).pipe(Stream.concat(Stream.fail(error)))
+
+export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Stream.fromIterable(events), Stream.never)
+
+const make = (options: LayerOptions) =>
+  Effect.sync(() => {
+    const script = makeScript(options)
+    const stream: ClientInterface["stream"] = (request) =>
+      Stream.unwrap(
+        script.take(request).pipe(
+          Effect.map((response) => {
+            if (response instanceof CompactionResponse || response instanceof CompactionCheckpointResponse)
+              return Stream.die("TestLLM generation requires an event response")
+            return Stream.isStream(response) ? response : Stream.fromIterable(response)
+          }),
+        ),
+      )
+    function compact(
+      request: LLMRequest & Pick<CompactionRequest, "model">,
+      options?: EndpointCompactOptions,
+    ): Effect.Effect<CompactionResponse, AIError>
+    function compact(
+      request: LLMRequest & Pick<CheckpointRequest, "model">,
+      options: TriggerCompactOptions,
+    ): Effect.Effect<CompactionCheckpointResponse, AIError>
+    function compact(
+      request: LLMRequest,
+      options?: EndpointCompactOptions | TriggerCompactOptions,
+    ): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> {
+      return script.take(request).pipe(
+        Effect.flatMap((response): Effect.Effect<CompactionResponse | CompactionCheckpointResponse> => {
+          if (options?.mechanism === "trigger")
+            return response instanceof CompactionCheckpointResponse
+              ? Effect.succeed(response)
+              : Effect.die("TestLLM trigger compaction requires a CompactionCheckpointResponse")
+          return response instanceof CompactionResponse
+            ? Effect.succeed(response)
+            : Effect.die("TestLLM compaction requires a CompactionResponse")
+        }),
+      )
+    }
+    return Test.of({
+      ...script.controls,
+      compact,
+      stream,
+      generate: generateWith(stream),
+    })
+  })
+
+/** Provides one shared implementation under the normal client and test-control tags. */
+export const testLayer = (options: LayerOptions = {}) =>
+  Layer.effectContext(
+    Effect.map(make(options), (test) => Context.make(LLMClient.Service, test).pipe(Context.add(Test, test))),
+  )
+
+/** The response queue, fallback, request log, and gates behind the test controls. */
+const makeScript = (options: LayerOptions) => {
+  const requests: LLMRequest[] = []
+  const responses: Response[] = []
+  let started = Deferred.makeUnsafe<void>()
+  const initial = options.fallback
+  let fallback: Responder | undefined = initial === undefined ? undefined : () => initial
+  let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
+  const wait = (count: number): Effect.Effect<void> =>
+    Effect.suspend(() =>
+      requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
+    )
+
+  const take = (request: LLMRequest) =>
+    Effect.suspend(() => {
+      const count = requests.push(options.transformRequest?.(request) ?? request)
+      const waiting = started
+      started = Deferred.makeUnsafe()
+      const gate = activeGate
+      try {
+        const response = responses.shift() ?? fallback?.(request)
+        if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
+        if (!gate) return Effect.succeed(response)
+        return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
+      } finally {
+        // Waiters can resume synchronously; assign the reply and gate before notifying them.
+        Deferred.doneUnsafe(waiting, Effect.void)
+      }
+    })
+
+  const controls: Controls = {
+    requests: () => Effect.sync(() => [...requests]),
+    push: (...input) =>
+      Effect.sync(() => {
+        responses.push(...input)
+      }),
+    always: (response) =>
+      Effect.sync(() => {
+        fallback = () => response
+      }),
+    serve: (responder) =>
+      Effect.sync(() => {
+        fallback = responder
+      }),
+    wait,
+    gate: () =>
+      Effect.gen(function* () {
+        const gate = {
+          started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
+          release: yield* Latch.make(),
+        }
+        activeGate = gate
+        const release = Effect.sync(() => {
+          if (activeGate === gate) activeGate = undefined
+        }).pipe(Effect.andThen(gate.release.open), Effect.asVoid)
+        yield* Effect.addFinalizer(() => release)
+        return {
+          started: Queue.take(gate.started),
+          release,
+        }
+      }),
+  }
+  return { take, controls }
+}

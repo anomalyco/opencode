@@ -48,16 +48,6 @@ OpenCode CLI takođe ima sljedeće naredbe.
 
 ---
 
-### agent
-
-Upravljajte OpenCode agentima.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Priključite terminal na već pokrenut OpenCode backend server pokrenut putem `serve` ili `web` naredbi.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |        | Forkuj sesiju prilikom nastavka (koristite sa `--continue` ili `--session`)                   |
 | <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
 | <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
-
----
-
-#### create
-
-Kreirajte novog agenta s prilagođenom konfiguracijom.
-
-```bash
-opencode agent create
-```
-
-Ova naredba će vas voditi kroz kreiranje novog agenta sa prilagođenim sistemskim promptom i konfiguracijom alata.
-
----
-
-#### list
-
-Navedite sve dostupne agente.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -342,7 +310,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavite posljednju sesiju                                                                   |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
 | <nobr><code>{"--fork"}</code></nobr>     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`)                      |
-| <nobr><code>{"--share"}</code></nobr>    |        | Podijelite sesiju                                                                             |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`   | Model za korištenje u obliku provider/model                                                   |
 | <nobr><code>{"--agent"}</code></nobr>    |        | Agent za korištenje                                                                           |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`   | Fajlovi koje treba priložiti poruci                                                           |
@@ -439,17 +406,14 @@ Ako ne unesete ID sesije, od vas će biti zatraženo da odaberete neku od dostup
 
 ### import
 
-Uvezite podatke sesije iz JSON datoteke ili OpenCode dijeljenog URL-a.
+Uvezite podatke sesije iz JSON datoteke.
 
 ```bash
 opencode import <file>
 ```
 
-Možete uvesti iz lokalne datoteke ili OpenCode dijeljenog URL-a.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -561,7 +525,6 @@ OpenCode se može konfigurirati pomoću varijabli okruženja.
 
 | Varijabla                             | Tip     | Opis                                                               |
 | ------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Automatski dijeli sesije                                           |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Putanja do Git Bash izvršne datoteke na Windows-u                  |
 | `OPENCODE_CONFIG`                     | string  | Putanja do konfiguracijskog fajla                                  |
 | `OPENCODE_TUI_CONFIG`                 | string  | Putanja do TUI konfiguracijskog fajla                              |
@@ -606,7 +569,6 @@ Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mog
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Omogući eksperimentalne Exa funkcije                    |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Omogući TY LSP za python datoteke                       |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Omogući Plan mod                                        |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Omogući pozadinske zadatke subagenata                   |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Omogući eksperimentalni sistem događaja                 |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Omogući nativnu putanju LLM zahtjeva                    |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Omogući paralelno izvršavanje web pretrage              |

@@ -1,24 +1,41 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { rm } from "fs/promises"
+import { createHash } from "node:crypto"
+import { mkdir, rm } from "fs/promises"
 import path from "path"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opencode/script"
+import { embed } from "@opencode/script/highlights"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import type { BunPlugin } from "bun"
 import pkg from "../package.json"
-import { modelsData } from "./generate"
+import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
+import { buildAppArchive } from "./app-assets"
+import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
+import { resolveOpencodePty } from "./opencode-pty"
+import { NativeArch } from "../../../script/native-arch"
+import { bundledModelsSnapshot, modelsSnapshotPlugin } from "../../core/script/models-snapshot"
 
 const dir = path.resolve(import.meta.dirname, "..")
-const binary = "lildax"
+const binary = "opencode"
+const outdir = path.resolve(
+  dir,
+  process.argv.find((arg) => arg.startsWith("--outdir="))?.slice("--outdir=".length) ?? "dist",
+)
+if (outdir === dir) throw new Error("--outdir must not be the package directory")
 process.chdir(dir)
 
-await rm("dist", { recursive: true, force: true })
+await rm(outdir, { recursive: true, force: true })
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
+const requestedTarget = process.env.OPENCODE_TARGET
 const skipInstall = process.argv.includes("--skip-install")
-const sourcemapsFlag = process.argv.includes("--sourcemaps")
-const plugin = createSolidTransformPlugin()
+const skipWebUi = process.argv.includes("--skip-web-ui")
+const solidPlugin = createSolidTransformPlugin()
+const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
+const releaseAssets = new Map<string, Promise<Map<string, string>>>()
+const modelsSnapshot = modelsSnapshotPlugin(await bundledModelsSnapshot())
 
 const allTargets: {
   os: string
@@ -40,36 +57,136 @@ const allTargets: {
   { os: "win32", arch: "x64", avx2: false },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) return false
-      if (item.avx2 === false) return baselineFlag
-      return item.abi === undefined
-    })
-  : allTargets
+const targets =
+  requestedTarget !== undefined
+    ? allTargets.filter((item) => targetName(item) === `${binary}-${requestedTarget}`)
+    : singleFlag
+      ? allTargets.filter((item) => {
+          if (item.os !== process.platform || item.arch !== process.arch) return false
+          if (item.avx2 === false) return baselineFlag
+          return item.abi === undefined
+        })
+      : allTargets
+if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
-if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+// Bun 1.4.4 skips native packages for the other libc by default, but the musl targets need them.
+if (!skipInstall)
+  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode/pty@${pkg.dependencies["@opencode/pty"]}`
+const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
+await Bun.write(appArchive, await buildAppArchive(Script.channel, { skipBuild: skipWebUi }))
+const appAssetsPlugin: BunPlugin = {
+  name: "opencode-app-assets",
+  setup(build) {
+    build.onResolve({ filter: /^virtual:opencode-app-assets$/ }, () => ({
+      path: "opencode-app-assets",
+      namespace: "opencode",
+    }))
+    build.onLoad({ filter: /^opencode-app-assets$/, namespace: "opencode" }, () => ({
+      loader: "js",
+      // Embedded as a file, not a string: its bytes go into the executable once and unencoded.
+      contents: `import { readFileSync } from "node:fs"
+import archive from ${JSON.stringify(appArchive.replaceAll("\\", "/"))} with { type: "file" }
+export default () => readFileSync(archive)`,
+    }))
+  },
+}
+const pluginRuntimeEntries = discoverPluginRuntimeSpecifiers()
+const pluginRuntimeModulesSource = [
+  "export const resolveHostPackageRoots = () => []",
+  "const modules = {",
+  ...[...pluginRuntimeEntries.keys()].map(
+    (specifier) => `  ${JSON.stringify(specifier)}: ${pluginRuntimeLoaderCode(specifier, pluginRuntimeEntries)},`,
+  ),
+  "}",
+  "export const loadRuntimeModules = () => modules",
+].join("\n")
+const pluginRuntimePlugin: BunPlugin = {
+  name: "opencode-plugin-runtime",
+  setup(build) {
+    build.onLoad({ filter: /plugin[/\\]src[/\\]runtime-modules\.ts$/ }, () => ({
+      contents: pluginRuntimeModulesSource,
+      loader: "ts",
+    }))
+    build.onLoad({ filter: /[/\\]internal[/\\]httpApi(?:Scalar|Swagger)\.js$/ }, () => ({
+      contents:
+        'export const css = ""; export const javascript = \'document.body.textContent = "Scalar/Swagger UI assets are not bundled in OpenCode"\'',
+      loader: "js",
+    }))
+  },
+}
+// Bun drops `export * from "ws"` in this sideEffects-free module, leaving NodeWS.WebSocketServer undefined and
+// failing every WebSocket upgrade in the compiled binary. Bun's built-in ws has no PerMessageDeflate.
+const wsReexportPlugin: BunPlugin = {
+  name: "ws-named-reexports",
+  setup(build) {
+    build.onLoad({ filter: /platform-node-shared[/\\]dist[/\\]NodeWS\.js$/ }, () => ({
+      contents:
+        'export { createWebSocketStream, extension, Receiver, Sender, subprotocol, WebSocket, WebSocketServer } from "ws"',
+      loader: "js",
+    }))
+  },
+}
 
 for (const item of targets) {
-  const target = [
-    binary,
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const opencodePty = await resolveOpencodePty({
+    platform: item.os,
+    arch: item.arch,
+    ...(item.os === "linux" ? { libc: item.abi ?? "glibc" } : {}),
+  })
+  const opencodePtyPlugin: BunPlugin = {
+    name: "opencode-pty-binary",
+    setup(build) {
+      build.onLoad({ filter: /persistent-pty[/\\]pty-binding\.ts$/ }, () => ({
+        loader: "js",
+        contents: opencodePty
+          ? `import file from ${JSON.stringify(opencodePty.source)} with { type: "file" }
+export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sha256: ${JSON.stringify(opencodePty.sha256)} }`
+          : "export default undefined",
+      }))
+    },
+  }
+  const simulationInputs = new Set<string>()
+  const simulationGraphPlugin: BunPlugin = {
+    name: "opencode-simulation-graph",
+    setup(build) {
+      build.onLoad(
+        { filter: /packages[/\\]simulation[/\\]src[/\\](frontend[/\\](simulation|server)|control-server)\.ts$/ },
+        (args) => void simulationInputs.add(args.path),
+      )
+    },
+  }
+  const parcelWatcherPackage = `@parcel/watcher-${item.os}-${item.arch}${item.os === "linux" ? `-${item.abi ?? "glibc"}` : ""}`
+  const parcelWatcherPlugin: BunPlugin = {
+    name: "parcel-watcher-binding",
+    setup(build) {
+      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () => ({
+        contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`,
+        loader: "js",
+      }))
+    },
+  }
+  const target = targetName(item)
   const name = target.replace(binary, "cli")
+  const executablePath = await compileExecutable(item)
   console.log(`building ${name}`)
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts"],
+    entrypoints: ["./src/index.ts", "./src/photon-worker.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [
+      appAssetsPlugin,
+      solidPlugin,
+      parcelWatcherPlugin,
+      opencodePtyPlugin,
+      pluginRuntimePlugin,
+      wsReexportPlugin,
+      simulationGraphPlugin,
+      modelsSnapshot,
+    ],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    sourcemap: sourcemapsFlag ? "linked" : "none",
+    bytecode: true,
+    sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
       autoloadBunfig: false,
@@ -77,15 +194,23 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
-      outfile: `./dist/${name}/bin/${binary}`,
-      execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--"],
+      ...(executablePath ? { executablePath } : {}),
+      outfile: path.join(outdir, name, "bin", binary),
+      execArgv: [
+        "--smol",
+        `--user-agent=opencode/${Script.channel}/${Script.version}/cli`,
+        "--use-system-ca",
+        "--no-warnings",
+        "--",
+      ],
       windows: {},
     },
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
-      OPENCODE_CLI_NAME: `'${binary}'`,
-      OPENCODE_MODELS_DEV: modelsData,
+      OPENCODE_CLI_NAME: "'opencode'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_ARTIFACT: `'cli'`,
+      ...(highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(highlights) } : {}),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",
@@ -97,12 +222,14 @@ for (const item of targets) {
     for (const log of result.logs) console.error(log)
     process.exit(1)
   }
+  verifySimulationGraph(simulationInputs)
+  await NativeArch.verify(path.join(outdir, name, "bin", item.os === "win32" ? `${binary}.exe` : binary), item.arch)
 
   await Bun.write(
-    `./dist/${name}/package.json`,
+    path.join(outdir, name, "package.json"),
     JSON.stringify(
       {
-        name: `@opencode-ai/${name}`,
+        name: `@opencode/${name}`,
         version: Script.version,
         license: "MIT",
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
@@ -113,4 +240,106 @@ for (const item of targets) {
       2,
     ),
   )
+  await verifyArtifact(path.join(outdir, name))
+}
+
+async function compileExecutable(item: (typeof allTargets)[number]) {
+  const release = process.env.BUN_COMPILE_RELEASE
+  if (!release) return
+
+  const platform = item.os === "win32" ? "windows" : item.os
+  const name = [
+    "bun",
+    platform,
+    item.arch === "arm64" ? "aarch64" : item.arch,
+    item.abi,
+    item.avx2 === false ? "baseline" : undefined,
+  ]
+    .filter(Boolean)
+    .join("-")
+  const cache = path.join(outdir, ".bun", release)
+  const executable = path.join(cache, name, item.os === "win32" ? "bun.exe" : "bun")
+  if (await Bun.file(executable).exists()) return executable
+
+  await mkdir(cache, { recursive: true })
+  const archive = path.join(cache, `${name}.zip`)
+  const assets = await compileReleaseAssets(release)
+  const url = assets.get(`${name}.zip`)
+  if (!url) throw new Error(`Bun release ${release} does not include ${name}.zip`)
+  const sumsUrl = assets.get("SHASUMS256.txt")
+  if (!sumsUrl) throw new Error(`Bun release ${release} does not include SHASUMS256.txt`)
+  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+  const headers = { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+  const [response, sums] = await Promise.all([fetch(url, { headers }), fetch(sumsUrl, { headers })])
+  if (!response.ok) throw new Error(`Failed to download ${name} from Bun release ${release}: ${response.status}`)
+  if (!sums.ok) throw new Error(`Failed to download Bun release ${release} checksums: ${sums.status}`)
+  const expected = (await sums.text())
+    .split("\n")
+    .find((line) => line.trimEnd().endsWith(`  ${name}.zip`))
+    ?.split(/\s+/)[0]
+  if (!expected) throw new Error(`Missing checksum for ${name}.zip in Bun release ${release}`)
+  // Stream to disk instead of `Bun.write(archive, response)`: passing the Response object
+  // hangs forever if it gets GC'd mid-download (https://github.com/oven-sh/bun/issues/40278).
+  const hash = createHash("sha256")
+  const sink = Bun.file(archive).writer()
+  for await (const chunk of response.body!) {
+    hash.update(chunk)
+    await sink.write(chunk)
+  }
+  await sink.end()
+  if (hash.digest("hex") !== expected) {
+    await rm(archive)
+    throw new Error(`Checksum mismatch for ${name}.zip in Bun release ${release}`)
+  }
+  await $`unzip -oq ${archive} -d ${cache}`
+  await rm(archive)
+  return executable
+}
+
+function compileReleaseAssets(release: string) {
+  const existing = releaseAssets.get(release)
+  if (existing) return existing
+  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+  // Beta builds each CLI in its own job; authenticated requests avoid the per-IP limit on shared runners.
+  const pending = fetch(`https://api.github.com/repos/oven-sh/bun/releases/tags/${release}?cache=${Date.now()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Failed to resolve Bun release ${release}: ${response.status}`)
+      const data: unknown = await response.json()
+      if (typeof data !== "object" || data === null || !("assets" in data) || !Array.isArray(data.assets)) {
+        throw new Error(`Bun release ${release} returned invalid metadata`)
+      }
+      return new Map(
+        data.assets
+          .filter(
+            (asset): asset is { name: string; url: string } =>
+              typeof asset === "object" &&
+              asset !== null &&
+              "name" in asset &&
+              typeof asset.name === "string" &&
+              "url" in asset &&
+              typeof asset.url === "string",
+          )
+          .map((asset) => [asset.name, asset.url]),
+      )
+    })
+    .catch((error) => {
+      releaseAssets.delete(release)
+      throw error
+    })
+  releaseAssets.set(release, pending)
+  return pending
+}
+
+function targetName(item: (typeof allTargets)[number]) {
+  return [
+    binary,
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
 }

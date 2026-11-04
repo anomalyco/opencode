@@ -112,6 +112,7 @@ test("forensic: proves detached same-node viewport leaves TanStack's bottom rang
     .poll(() =>
       page.evaluate(() => {
         const value = window.timelineSuspense.snapshot()
+
         return value.nativeOffset > 0 && value.coreOffset === value.nativeOffset
       }),
     )
@@ -156,6 +157,7 @@ async function prepare(page: Page) {
   expect(before.sameMountedRows).toBe(true)
   expect(before.rangeStart).toBeGreaterThan(1_900)
   expect(before.nativeOffset).toBe(before.coreOffset)
+
   return before
 }
 
@@ -171,6 +173,7 @@ async function resolveSuspension(page: Page) {
   await expect.poll(() => page.evaluate(() => window.timelineSuspense.snapshot().resourceState)).toBe("ready")
   await expect.poll(() => page.evaluate(() => window.timelineSuspense.snapshot().routeConnected)).toBe(true)
   await page.evaluate(() => window.timelineSuspense.frames(3))
+
   return page.evaluate(() => window.timelineSuspense.snapshot())
 }
 

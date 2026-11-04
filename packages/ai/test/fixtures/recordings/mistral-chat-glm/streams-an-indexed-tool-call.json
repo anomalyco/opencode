@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "zai-glm-5-2",
+    "tags": [
+      "prefix:mistral-chat-glm",
+      "provider:mistral",
+      "protocol:mistral-chat",
+      "hosted-model",
+      "tool",
+      "tool-call"
+    ],
+    "name": "mistral-chat-glm/streams-an-indexed-tool-call",
+    "recordedAt": "2026-08-30T17:38:02.921Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"zai-glm-5-2\",\"messages\":[{\"role\":\"system\",\"content\":\"Call lookup_weather exactly once with Paris.\"},{\"role\":\"user\",\"content\":\"What is the weather?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\"}},\"stream\":true,\"max_tokens\":256,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"f139bf0e4b984e51aabf6a83c237674d\",\"object\":\"chat.completion.chunk\",\"created\":1788111482,\"model\":\"zai-glm-5-2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"f139bf0e4b984e51aabf6a83c237674d\",\"object\":\"chat.completion.chunk\",\"created\":1788111482,\"model\":\"zai-glm-5-2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"index\":0,\"content\":\"\"},\"finish_reason\":null,\"logprobs\":null}]}\n\ndata: {\"id\":\"f139bf0e4b984e51aabf6a83c237674d\",\"object\":\"chat.completion.chunk\",\"created\":1788111482,\"model\":\"zai-glm-5-2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"chatcmpl-tool-8cc4d8f9f07b298a\",\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"arguments\":\"{\\\"city\\\": \\\"\"},\"index\":0}],\"index\":0,\"content\":\"\"},\"finish_reason\":null,\"logprobs\":null}]}\n\ndata: {\"id\":\"f139bf0e4b984e51aabf6a83c237674d\",\"object\":\"chat.completion.chunk\",\"created\":1788111482,\"model\":\"zai-glm-5-2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"\",\"arguments\":\"Paris\\\"}\"},\"index\":0}],\"index\":0,\"content\":\"\"},\"finish_reason\":null,\"logprobs\":null}]}\n\ndata: {\"id\":\"f139bf0e4b984e51aabf6a83c237674d\",\"object\":\"chat.completion.chunk\",\"created\":1788111482,\"model\":\"zai-glm-5-2\",\"choices\":[{\"index\":0,\"delta\":{\"index\":0,\"content\":\"\"},\"finish_reason\":\"stop\",\"logprobs\":null}],\"usage\":{\"prompt_tokens\":171,\"total_tokens\":182,\"completion_tokens\":11,\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

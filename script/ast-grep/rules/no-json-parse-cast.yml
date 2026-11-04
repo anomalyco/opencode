@@ -1,0 +1,6 @@
+id: no-json-parse-cast
+language: TypeScript
+message: Prefer Effect Schema JSON decoding over JSON.parse casts.
+severity: error
+rule:
+  pattern: JSON.parse($INPUT) as $TYPE

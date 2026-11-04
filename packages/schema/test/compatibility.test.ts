@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { FileSystem } from "../src/filesystem"
+import { FileSystem } from "../src/filesystem.js"
 
 describe("schema compatibility", () => {
   test("moved class schemas remain constructible", () => {

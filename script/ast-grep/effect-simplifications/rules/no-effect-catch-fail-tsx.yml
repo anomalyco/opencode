@@ -1,0 +1,75 @@
+id: no-effect-catch-fail-tsx
+language: Tsx
+message: Use mapError instead of catching only to fail with a transformed error.
+severity: error
+rule:
+  all:
+    - pattern: $MODULE.catch($$$ARGS)
+    - any:
+        - pattern: Effect.catch($$$SELF, ($ERROR) => Effect.fail($MAPPED))
+        - pattern: Effect.catch($$$SELF, $ERROR => Effect.fail($MAPPED))
+        - pattern: Effect.catch($$$SELF, ($ERROR) => { return Effect.fail($MAPPED) })
+        - pattern: Effect.catch($$$SELF, $ERROR => { return Effect.fail($MAPPED) })
+        - pattern: "Effect.catch($$$SELF, ($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE> => Effect.fail($MAPPED))"
+        - pattern: "Effect.catch($$$SELF, ($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE> => { return Effect.fail($MAPPED) })"
+        - pattern: "Effect.catch($$$SELF, ($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => Effect.fail($MAPPED))"
+        - pattern: "Effect.catch($$$SELF, ($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => { return Effect.fail($MAPPED) })"
+        - pattern: Stream.catch($$$SELF, ($ERROR) => Stream.fail($MAPPED))
+        - pattern: Stream.catch($$$SELF, $ERROR => Stream.fail($MAPPED))
+        - pattern: Stream.catch($$$SELF, ($ERROR) => { return Stream.fail($MAPPED) })
+        - pattern: Stream.catch($$$SELF, $ERROR => { return Stream.fail($MAPPED) })
+        - pattern: "Stream.catch($$$SELF, ($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE> => Stream.fail($MAPPED))"
+        - pattern: "Stream.catch($$$SELF, ($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE> => { return Stream.fail($MAPPED) })"
+        - pattern: "Stream.catch($$$SELF, ($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => Stream.fail($MAPPED))"
+        - pattern: "Stream.catch($$$SELF, ($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => { return Stream.fail($MAPPED) })"
+    - not:
+        pattern: $MODULE.catch($_FIRST, $_SECOND, $$$REST)
+constraints:
+  MAPPED:
+    not:
+      any:
+        - kind: identifier
+        - kind: parenthesized_expression
+rewriters:
+  - id: unwrap-effect-fail-with-return-type-tsx
+    rule:
+      any:
+        - pattern: "($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE> => Effect.fail($MAPPED)"
+        - pattern: "($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE> => { return Effect.fail($MAPPED) }"
+        - pattern: "($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => Effect.fail($MAPPED)"
+        - pattern: "($ERROR): Effect.Effect<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => { return Effect.fail($MAPPED) }"
+    fix: "($ERROR): $ERROR_TYPE => $MAPPED"
+  - id: unwrap-stream-fail-with-return-type-tsx
+    rule:
+      any:
+        - pattern: "($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE> => Stream.fail($MAPPED)"
+        - pattern: "($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE> => { return Stream.fail($MAPPED) }"
+        - pattern: "($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => Stream.fail($MAPPED)"
+        - pattern: "($ERROR): Stream.Stream<$_SUCCESS, $ERROR_TYPE, $_REQUIREMENTS> => { return Stream.fail($MAPPED) }"
+    fix: "($ERROR): $ERROR_TYPE => $MAPPED"
+  - id: unwrap-effect-fail-tsx
+    rule:
+      any:
+        - pattern: ($ERROR) => Effect.fail($MAPPED)
+        - pattern: $ERROR => Effect.fail($MAPPED)
+        - pattern: ($ERROR) => { return Effect.fail($MAPPED) }
+        - pattern: $ERROR => { return Effect.fail($MAPPED) }
+    fix: ($ERROR) => $MAPPED
+  - id: unwrap-stream-fail-tsx
+    rule:
+      any:
+        - pattern: ($ERROR) => Stream.fail($MAPPED)
+        - pattern: $ERROR => Stream.fail($MAPPED)
+        - pattern: ($ERROR) => { return Stream.fail($MAPPED) }
+        - pattern: $ERROR => { return Stream.fail($MAPPED) }
+    fix: ($ERROR) => $MAPPED
+transform:
+  MAPPED_ARGS:
+    rewrite:
+      rewriters:
+        - unwrap-effect-fail-with-return-type-tsx
+        - unwrap-stream-fail-with-return-type-tsx
+        - unwrap-effect-fail-tsx
+        - unwrap-stream-fail-tsx
+      source: $$$ARGS
+fix: $MODULE.mapError($MAPPED_ARGS)

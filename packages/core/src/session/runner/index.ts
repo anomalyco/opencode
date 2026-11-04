@@ -1,28 +1,44 @@
-export * as SessionRunner from "./index"
+export * as SessionRunner from "./index.js"
 
-import type { LLMError } from "@opencode-ai/llm"
-import { Context, Effect } from "effect"
-import { SessionSchema } from "../schema"
-import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"
-import { SessionRunnerModel } from "./model"
-import type { SystemContext } from "../../system-context/index"
-import type { ToolOutputStore } from "../../tool-output-store"
+import type { FileSystem } from "../../filesystem.js"
+import type { AIError } from "@opencode/ai/effect"
+import { Context, Data, Effect } from "effect"
+import { SessionSchema } from "../schema.js"
+import type { Promotable } from "../inbox.js"
+import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
+import { SessionRunnerModel } from "./model.js"
+import type { Instructions } from "../../instructions/index.js"
 
 export type RunError =
-  | LLMError
+  | AIError
   | SessionRunnerModel.Error
   | MessageDecodeError
-  | ContextSnapshotDecodeError
-  | SystemContext.InitializationBlocked
-  | ToolOutputStore.Error
+  | AgentNotFoundError
+  | StepFailedError
+  | Instructions.InitializationBlocked
+  | FileSystem.DirectoryNotFoundError
+
+export type Continuation = { readonly step: number }
+
+export type DrainResult = Data.TaggedEnum<{
+  Complete: {}
+  Moved: { readonly continuation?: Continuation; readonly stepped?: true }
+  Reloaded: { readonly force: boolean; readonly continuation?: Continuation; readonly stepped?: true }
+}>
+export const DrainResult = Data.taggedEnum<DrainResult>()
 
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
-  /** Drains eligible durable work. Explicit runs perform one provider attempt even when no work is eligible. */
-  readonly run: (input: {
+  /** Drains eligible durable work, returning transient state when execution must continue at a new Location. */
+  readonly drain: (input: {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
-  }) => Effect.Effect<void, RunError>
+    readonly continuation?: Continuation
+    /** "steer" settles the active intent without promoting queued next-turn work. */
+    readonly promotable?: Promotable
+    /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
+    readonly stepped?: boolean
+  }) => Effect.Effect<DrainResult, RunError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunner") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunner") {}

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 
 export const UPSERT_CHUNK_SIZE = 500
+export const DATA_SITE_TIERS = ["Go", "go", "Free", "free"]
 const DAY_MS = 86_400_000
 
 export type StatGrain = "day" | "week"
@@ -151,6 +152,15 @@ export function isMissingUniqueUsersColumn(cause: unknown): boolean {
   return errorText(cause).includes("Unknown column 'unique_users'")
 }
 
+export async function withUniqueUsersFallback<T>(write: (includeUniqueUsers: boolean) => Promise<T>) {
+  try {
+    return await write(true)
+  } catch (cause) {
+    if (!isMissingUniqueUsersColumn(cause)) throw cause
+    return write(false)
+  }
+}
+
 export function omitUniqueUsers<T extends { unique_users?: number }>(rows: T[]) {
   return rows.map((row) => {
     const result = { ...row }
@@ -162,6 +172,9 @@ export function omitUniqueUsers<T extends { unique_users?: number }>(rows: T[]) 
 export function statPeriodKey(row: StatBaseRow) {
   return [row.grain, row.period_key, row.dataset, row.tier, row.client, row.source].join("\u0000")
 }
+
+// One synced period. The sync writes only the all-client, all-source rows.
+export type StatPeriodScope = { grain: StatGrain; periodKey: string; dataset: string }
 
 export function statRowScope(rows: StatBaseRow[]) {
   if (rows.length === 0) return
@@ -211,7 +224,7 @@ export function rankRowsWithMarketShare<T extends StatBaseRow>(
   return Object.values(
     rows.reduce<Record<string, T[]>>((result, row) => {
       const key = groupKey(row)
-      result[key] = [...(result[key] ?? []), row]
+      ;(result[key] ??= []).push(row)
       return result
     }, {}),
   ).flatMap((group) => {
@@ -276,7 +289,12 @@ export function weightedAverage(
 }
 
 export function normalizeTier(value: string) {
-  if (value === "Paid") return "Zen"
+  const normalized = value.toLowerCase()
+  if (normalized === "paid" || normalized === "zen") return "Zen"
+  if (normalized === "go") return "Go"
+  if (normalized === "free") return "Free"
+  if (normalized === "enterprise") return "Enterprise"
+  if (normalized === "all") return "all"
   return value
 }
 

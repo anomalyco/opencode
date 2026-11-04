@@ -1,33 +1,28 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Location } from "@opencode-ai/core/location"
-import { Pty } from "@opencode-ai/core/pty"
-import type { PtyID } from "@opencode-ai/core/pty/schema"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Pty } from "@opencode/core/pty"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ShellSelect } from "@opencode/core/shell/select"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
-type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
+type PtyEvent = { type: "created" | "exited" | "deleted"; id: Pty.ID }
 
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/tmp") })),
 )
-const configLayer = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
-    [Config.node, configLayer],
-    [Location.node, locationLayer],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node]), [Location.node.replace(locationLayer)]),
 )
 const ptyTest = process.platform === "win32" ? it.live.skip : it.live
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
-  const source = yield* EventV2.Service
+  const source = yield* Bus.Service
   const events = yield* Queue.unbounded<PtyEvent>()
   const unsubscribe = yield* source.listen((event) => {
     if (event.type === Pty.Event.Created.type)
@@ -50,7 +45,7 @@ const createPty = Effect.fn("PtySessionTest.createPty")(function* (command: stri
   )
 })
 
-const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) =>
+const waitForEvents = (events: Queue.Queue<PtyEvent>, id: Pty.ID, count: number) =>
   Effect.gen(function* () {
     const picked: Array<PtyEvent["type"]> = []
     while (picked.length < count) {
@@ -65,7 +60,7 @@ const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) 
     }),
   )
 
-const attachCollecting = Effect.fn("PtySessionTest.attachCollecting")(function* (id: PtyID, cursor?: number) {
+const attachCollecting = Effect.fn("PtySessionTest.attachCollecting")(function* (id: Pty.ID, cursor?: number) {
   const pty = yield* Pty.Service
   const output = yield* Queue.unbounded<string>()
   const ended = yield* Deferred.make<{ exitCode?: number }>()
@@ -94,7 +89,7 @@ describe("pty", () => {
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service
-      const id = "pty_missing" as PtyID
+      const id = Pty.ID.make("pty_missing")
 
       for (const result of [
         yield* pty.get(id).pipe(Effect.asVoid, Effect.exit),
@@ -206,28 +201,17 @@ describe("pty", () => {
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")
 const configuredIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
-    [
-      Config.node,
-      Layer.mock(Config.Service)({
-        entries: () =>
-          Effect.succeed(
-            configuredShell
-              ? [new Config.Document({ type: "document", info: new Config.Info({ shell: configuredShell }) })]
-              : [],
-          ),
-      }),
-    ],
-    [Location.node, locationLayer],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Pty.node, Bus.node, ShellSelect.node]), [Location.node.replace(locationLayer)]),
 )
 const configuredTest = process.platform === "win32" ? configuredIt.live.skip : configuredIt.live
 
 describe("pty create defaults", () => {
-  configuredTest("defaults command, login args, and cwd from config and location", () =>
+  configuredTest("defaults command, login args, and cwd from shell selection and location", () =>
     Effect.gen(function* () {
       if (!configuredShell) return
       const pty = yield* Pty.Service
+      const shell = yield* ShellSelect.Service
+      yield* shell.transform((editor) => editor.configure(configuredShell))
       const info = yield* Effect.acquireRelease(pty.create({ title: "configured" }), (created) =>
         pty.remove(created.id).pipe(Effect.ignore),
       )

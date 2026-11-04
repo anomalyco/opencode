@@ -1,14 +1,15 @@
-export * as Permission from "./permission"
+export * as Permission from "./permission.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema"
-import { define, inventory } from "./event"
-import { ascending } from "./identifier"
-import { SessionID } from "./session-id"
-import { statics } from "./schema"
+import { optional } from "./schema.js"
+import { ephemeral, inventory } from "./event.js"
+import { ascending } from "./identifier.js"
+import { SessionID } from "./session-id.js"
+import { statics } from "./schema.js"
 
-export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
-  Schema.brand("PermissionV2.ID"),
+export const ID = Schema.String.check(Schema.isStartingWith("per")).pipe(
+  Schema.brand("Permission.ID"),
+  Schema.annotate({ identifier: "Permission.ID" }),
   statics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + ascending()) })),
 )
 export type ID = typeof ID.Type
@@ -17,9 +18,9 @@ export const Source = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("tool"),
     messageID: Schema.String,
-    callID: Schema.String,
+    id: Schema.String,
   }),
-]).annotate({ identifier: "PermissionV2.Source" })
+]).annotate({ identifier: "Permission.Source" })
 export type Source = typeof Source.Type
 
 const RequestFields = {
@@ -29,20 +30,21 @@ const RequestFields = {
   save: Schema.Array(Schema.String).pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   source: Source.pipe(optional),
+  message: Schema.String.pipe(optional),
 }
 
 export const Request = Schema.Struct({
   id: ID,
   ...RequestFields,
-}).annotate({ identifier: "PermissionV2.Request" })
+}).annotate({ identifier: "Permission.Request" })
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 
-export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "PermissionV2.Reply" })
+export const Reply = Schema.Literals(["once", "always", "reject"]).annotate({ identifier: "Permission.Reply" })
 export type Reply = typeof Reply.Type
 
-const Asked = define({ type: "permission.v2.asked", schema: Request.fields })
-const Replied = define({
-  type: "permission.v2.replied",
+const Asked = ephemeral({ type: "permission.asked", schema: Request.fields })
+const Replied = ephemeral({
+  type: "permission.replied",
   schema: {
     sessionID: SessionID,
     requestID: ID,
@@ -51,7 +53,7 @@ const Replied = define({
 })
 export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
 
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionV2.Effect" })
+export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Effect" })
 export type Effect = typeof Effect.Type
 
 export interface Rule extends Schema.Schema.Type<typeof Rule> {}
@@ -59,7 +61,7 @@ export const Rule = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
   effect: Effect,
-}).annotate({ identifier: "PermissionV2.Rule" })
+}).annotate({ identifier: "Permission.Rule" })
 
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionV2.Ruleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
 export type Ruleset = typeof Ruleset.Type

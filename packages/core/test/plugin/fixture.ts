@@ -1,52 +1,148 @@
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { CommandV2 } from "@opencode-ai/core/command"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
-import { Npm } from "@opencode-ai/core/npm"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { Reference } from "@opencode-ai/core/reference"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { Agent } from "@opencode/core/agent"
+import { Artifact } from "@opencode/core/artifact"
+import { AISDK } from "@opencode/core/aisdk"
+import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
+import { Credential } from "@opencode/core/credential"
+import { Database } from "@opencode/core/database/database"
+import { Environment } from "@opencode/core/environment/index"
+import { FileAccess } from "@opencode/core/file-access"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
+import { AppProcess } from "@opencode/util/process"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { FileSystem } from "@opencode/core/filesystem"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Form } from "@opencode/core/form"
+import { Generate } from "@opencode/core/generate"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { Integration } from "@opencode/core/integration"
+import { Job } from "@opencode/core/job"
+import { KV } from "@opencode/core/kv"
+import { Location } from "@opencode/core/location"
+import { Mcp } from "@opencode/core/mcp/index"
+import { Model } from "@opencode/core/model"
+import { Npm } from "@opencode/util/npm"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
+import { SharedCache } from "@opencode/core/shared-cache"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Permission } from "@opencode/core/permission"
+import { Reference } from "@opencode/core/reference"
+import { Rpc } from "@opencode/core/rpc"
+import { Skill } from "@opencode/core/skill"
+import { SkillDiscovery } from "@opencode/core/skill/discovery"
+import { Watcher } from "@opencode/core/filesystem/watcher"
+import { Tool } from "@opencode/core/tool"
+import { Vcs } from "@opencode/core/vcs"
+import { WebSearch } from "@opencode/core/websearch"
+import { Worktree } from "@opencode/core/worktree"
+import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
+import { emptyMcpLayer } from "../fixture/mcp"
+import { offlineModels } from "../fixture/models"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-    install: () => Effect.void,
-    which: () => Effect.succeed(undefined),
+    add: (name) => Effect.succeed({ directory: "", name }),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
+    check: () => Effect.succeed(false),
+    update: (name) => Effect.succeed({ directory: "", name }),
+    which: () => Effect.undefined,
   }),
 )
 
-export const PluginTestLayer = AppNodeBuilder.build(
-  LayerNode.group([
-    FileSystem.node,
-    FSUtil.node,
-    Location.node,
-    Npm.node,
-    Credential.node,
-    EventV2.node,
-    LayerNodePlatform.httpClient,
-    PluginV2.node,
-    AgentV2.node,
-    AISDK.node,
-    Catalog.node,
-    CommandV2.node,
-    Integration.node,
-    Reference.node,
-    SkillV2.node,
-  ]),
-  [
-    [Location.node, tempLocationLayer],
-    [Npm.node, npmLayer],
-  ],
+const generateLayer = Layer.succeed(
+  Generate.Service,
+  Generate.Service.of({
+    text: () => Effect.succeed(""),
+    image: () => Effect.die("unused"),
+    decisions: () => Effect.die("unused"),
+  }),
 )
+
+const configLayer = Config.testLayer()
+
+const permissionLayer = Layer.succeed(
+  Permission.Service,
+  Permission.Service.of({
+    close: Effect.void,
+    ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
+    assert: () => Effect.void,
+    assertNotDenied: () => Effect.void,
+    allows: () => Effect.succeed(false),
+    reply: () => Effect.void,
+    get: () => Effect.succeed(undefined),
+    forSession: () => Effect.succeed([]),
+    list: () => Effect.succeed([]),
+  }),
+)
+
+export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer, mcp = emptyMcpLayer) =>
+  AppNodeBuilder.build(
+    LayerNode.group([
+      AppProcess.node,
+      FileSystem.node,
+      FSUtil.node,
+      Location.node,
+      Npm.node,
+      Credential.node,
+      Config.node,
+      Database.node,
+      Environment.node,
+      FileAccess.node,
+      Global.node,
+      Bus.node,
+      Form.node,
+      Generate.node,
+      LayerNodePlatform.httpClient,
+      Plugin.node,
+      Agent.node,
+      Artifact.node,
+      AISDK.node,
+      Provider.node,
+      Model.node,
+      Command.node,
+      InstructionDiscovery.node,
+      Integration.node,
+      Job.node,
+      KV.node,
+      Mcp.node,
+      Session.node,
+      SharedCache.node,
+      InstructionEntry.node,
+      PersistentPty.node,
+      LocationServiceMap.node,
+      Permission.node,
+      PluginHooks.node,
+      Reference.node,
+      Rpc.node,
+      Skill.node,
+      SkillDiscovery.node,
+      Tool.node,
+      Vcs.node,
+      Watcher.node,
+      WebSearch.node,
+      Worktree.node,
+      WorktreeStrategies.node,
+    ]),
+    [
+      Location.node.replace(tempLocationLayer),
+      Npm.node.replace(npmLayer),
+      Config.node.replace(configLayer),
+      Mcp.node.replace(mcp),
+      Generate.node.replace(generate),
+      Permission.node.replace(permission),
+      offlineModels,
+    ],
+  ).pipe(Layer.provideMerge(configLayer))
+
+export const PluginTestLayer = makePluginTestLayer()

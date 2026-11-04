@@ -1,14 +1,15 @@
-import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { type FilteredListProps, useFilteredList } from "@opencode/ui/hooks"
 import { createEffect, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
-import { Icon, type IconProps } from "./icon"
-import { IconButton } from "./icon-button"
+import { Icon, type IconProps } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { TextField } from "./text-field"
 
 function findByKey(container: HTMLElement, key: string) {
   const nodes = container.querySelectorAll<HTMLElement>('[data-slot="list-item"][data-key]')
+
   for (const node of nodes) {
     if (node.getAttribute("data-key") === key) return node
   }
@@ -58,11 +59,13 @@ export interface ListRef {
 export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
   const i18n = useI18n()
   let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
+
   const [store, setStore] = createStore({
     mouseActive: false,
     scrollRef: undefined as HTMLDivElement | undefined,
     internalFilter: "",
   })
+
   const scrollRef = () => store.scrollRef
   const setScrollRef = (el: HTMLDivElement | undefined) => setStore("scrollRef", el)
   const internalFilter = () => store.internalFilter
@@ -75,6 +78,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const bottom = top + nodeRect.height
     const viewTop = container.scrollTop
     const viewBottom = viewTop + container.clientHeight
+
     const target =
       block === "center"
         ? top - container.clientHeight / 2 + nodeRect.height / 2
@@ -83,6 +87,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           : bottom > viewBottom
             ? bottom - container.clientHeight
             : viewTop
+
     const max = Math.max(0, container.scrollHeight - container.clientHeight)
     container.scrollTop = Math.max(0, Math.min(target, max))
   }
@@ -108,13 +113,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     // This is important for programmatic changes like Tab completion.
     if (prev === value) {
       void refetch()
+
       return
     }
+
     queueMicrotask(() => refetch())
   }
 
   createEffect(() => {
     if (props.filter === undefined) return
+
     if (props.filter === internalFilter()) return
     setInternalFilter(props.filter)
     onInput(props.filter)
@@ -131,29 +139,24 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   )
 
   createEffect(() => {
-    const scroll = scrollRef()
-    if (!scroll) return
-    if (!props.current) return
-    const key = props.key(props.current)
-    requestAnimationFrame(() => {
-      const element = findByKey(scroll, key)
-      if (!element) return
-      scrollIntoView(scroll, element, "center")
-    })
-  })
-
-  createEffect(() => {
     const all = flat()
+
     if (store.mouseActive || all.length === 0) return
     const scroll = scrollRef()
+
     if (!scroll) return
+
     if (active() === props.key(all[0])) {
       scroll.scrollTo(0, 0)
+
       return
     }
+
     const key = active()
+
     if (!key) return
     const element = findByKey(scroll, key)
+
     if (!element) return
     scrollIntoView(scroll, element, "center")
   })
@@ -171,6 +174,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const handleKey = (e: KeyboardEvent) => {
     setStore("mouseActive", false)
+
     if (e.key === "Escape") return
 
     const all = flat()
@@ -182,12 +186,15 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
+
       if (selected) handleSelect(selected, index)
     } else if (props.search) {
       if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")) {
         onKeyDown(e)
+
         return
       }
+
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         onKeyDown(e)
       }
@@ -204,7 +211,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const renderAdd = () => {
     const add = addProps()
+
     if (!add) return null
+
     return (
       <div data-slot="list-item-add" classList={{ [add.class ?? ""]: !!add.class }}>
         {add.render()}
@@ -221,6 +230,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     createEffect(() => {
       const scroll = scrollRef()
       const node = state.header
+
       if (!scroll || !node) return
 
       const handler = () => {
@@ -242,12 +252,15 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const emptyMessage = () => {
     if (grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
+
     if (props.emptyMessage) return props.emptyMessage
 
     const query = filter()
+
     if (!query) return i18n.t("ui.list.empty")
 
     const suffix = i18n.t("ui.list.emptyWithFilter.suffix")
+
     return (
       <>
         <span>{i18n.t("ui.list.emptyWithFilter.prefix")}</span>
@@ -268,6 +281,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             classList={{ [searchProps().class ?? ""]: !!searchProps().class }}
             onPointerDown={(event) => {
               const container = event.currentTarget
+
               if (!(container instanceof HTMLElement)) return
 
               const node = container.querySelector("input, textarea")
@@ -302,7 +316,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             </div>
             <Show when={internalFilter()}>
               <IconButton
-                icon="circle-x"
+                icon={<Icon name="circle-x" />}
                 variant="ghost"
                 onClick={() => {
                   setInternalFilter("")
@@ -327,6 +341,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           <For each={grouped.latest}>
             {(group, groupIndex) => {
               const isLastGroup = () => groupIndex() === grouped.latest.length - 1
+
               return (
                 <div data-slot="list-group">
                   <Show when={group.category}>
@@ -367,12 +382,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                                 </span>
                               )}
                             </Show>
-                            {props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup())) && (
+                            <Show
+                              when={props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup()))}
+                            >
                               <span data-slot="list-item-divider" />
-                            )}
+                            </Show>
                           </button>
                         )
+
                         if (props.itemWrapper) return props.itemWrapper(item, node)
+
                         return node
                       }}
                     </For>

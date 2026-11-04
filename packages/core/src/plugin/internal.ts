@@ -1,153 +1,324 @@
-export * as PluginInternal from "./internal"
+export * as PluginInternal from "./internal.js"
 
-import { makeLocationNode } from "../effect/app-node"
-import { httpClient } from "../effect/app-node-platform"
-import type { PluginContext } from "@opencode-ai/plugin/v2/effect"
-import { Effect, Layer, Scope } from "effect"
-import { AgentV2 } from "../agent"
-import { Catalog } from "../catalog"
-import { CommandV2 } from "../command"
-import { Config } from "../config"
-import { ConfigAgentPlugin } from "../config/plugin/agent"
-import { ConfigCommandPlugin } from "../config/plugin/command"
-import { ConfigExternalPlugin } from "../config/plugin/external"
-import { ConfigProviderPlugin } from "../config/plugin/provider"
-import { ConfigReferencePlugin } from "../config/plugin/reference"
-import { ConfigSkillPlugin } from "../config/plugin/skill"
-import { EventV2 } from "../event"
-import { FileSystem } from "../filesystem"
-import { FSUtil } from "../fs-util"
-import { Global } from "../global"
-import { Integration } from "../integration"
-import { Location } from "../location"
-import { ModelsDev } from "../models-dev"
-import { Npm } from "../npm"
-import { PluginV2 } from "../plugin"
-import { Reference } from "../reference"
-import { SkillV2 } from "../skill"
-import { State } from "../state"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
-import { AgentPlugin } from "./agent"
-import { CommandPlugin } from "./command"
-import { ModelsDevPlugin } from "./models-dev"
-import { ProviderPlugins } from "./provider"
-import { SkillPlugin } from "./skill"
-import { VariantPlugin } from "./variant"
+import { LLMClient } from "@opencode/ai/effect"
+import type { Plugin } from "@opencode/plugin/effect/plugin"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import type { Generation } from "./service.js"
+import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
+import { AppProcess } from "@opencode/util/process"
+import { Context, Effect, Scope } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/http"
+import { Agent } from "../agent.js"
+import { Artifact } from "../artifact.js"
+import { Model } from "../model.js"
+import { Provider } from "../provider.js"
+import { Command } from "../command.js"
+import { Config } from "../config.js"
+import { ConsoleAccess } from "../console-access.js"
+import { Credential } from "../credential.js"
+import { llmClient } from "../effect/app-node-platform.js"
+import { ConfigAgentPlugin } from "../config/plugin/agent.js"
+import { ConfigCommandPlugin } from "../config/plugin/command.js"
+import { ConfigCompactionPlugin } from "../config/plugin/compaction.js"
+import { ConfigFormatterPlugin } from "../config/plugin/formatter.js"
+import { ConfigImagePlugin } from "../config/plugin/image.js"
+import { ConfigInstructionPlugin } from "../config/plugin/instruction.js"
+import { ConfigLocationWatcherPlugin } from "../config/plugin/location-watcher.js"
+import { ConfigMcpPlugin } from "../config/plugin/mcp.js"
+import { ConfigProviderPlugin } from "../config/plugin/provider.js"
+import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
+import { ConfigReferencePlugin } from "../config/plugin/reference.js"
+import { ConfigShellPlugin } from "../config/plugin/shell.js"
+import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
+import { ConfigSkillPlugin } from "../config/plugin/skill.js"
+import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
+import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
+import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
+import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { Worktree } from "../worktree.js"
+import { WorktreeStrategies } from "../worktree/strategies.js"
+import { Bus } from "../bus.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
+import { Formatter } from "../formatter.js"
+import { Generate } from "../generate.js"
+import { Form } from "../form.js"
+import { FileSystem } from "../filesystem.js"
+import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Image } from "../image.js"
+import { InstructionDiscovery } from "../instruction-discovery.js"
+import { Integration } from "../integration.js"
+import { Job } from "../job.js"
+import { KV } from "../kv.js"
+import { Location } from "../location.js"
+import { ModelsDev } from "../models-dev.js"
+import { Mcp } from "../mcp/index.js"
+import { Npm } from "@opencode/util/npm"
+import { Permission } from "../permission.js"
+import { Reference } from "../reference.js"
+import { WebSearch } from "../websearch.js"
+import { Ripgrep } from "../ripgrep.js"
+import { Schedule } from "../schedule.js"
+import { Session } from "../session.js"
+import { SessionCompaction } from "../session/compaction.js"
+import { SessionInstructions } from "../session/instructions.js"
+import { SubagentJob } from "../session/subagent-job.js"
+import { SharedCache } from "../shared-cache.js"
+import { Shell } from "../shell.js"
+import { ShellSelect } from "../shell/select.js"
+import { Snapshot } from "../snapshot.js"
+import { Skill } from "../skill.js"
+import { SkillDiscovery } from "../skill/discovery.js"
+import { Watcher } from "../filesystem/watcher.js"
+import { PatchTool } from "../tool/plugin/patch.js"
+import { EditTool } from "../tool/plugin/edit.js"
+import { GlobTool } from "../tool/plugin/glob.js"
+import { GrepTool } from "../tool/plugin/grep.js"
+import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
+import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
+import { OpenCodeTools } from "../tool/plugin/opencode.js"
+import { QuestionTool } from "../tool/plugin/question.js"
+import { ReadToolFileSystem } from "../tool/read-filesystem.js"
+import { ReadTool } from "../tool/plugin/read.js"
+import { ArtifactTools } from "../tool/plugin/artifact.js"
+import { ScheduleTools } from "../tool/plugin/schedule.js"
+import { ShellTool } from "../tool/plugin/shell.js"
+import { SkillTool } from "../tool/plugin/skill.js"
+import { SubagentTool } from "../tool/plugin/subagent.js"
+import { TodoTool } from "../tool/plugin/todo.js"
+import { Tool } from "../tool.js"
+import { ToolOutput } from "../tool-output.js"
+import { WebFetchTool } from "../tool/plugin/webfetch.js"
+import { WebSearchTool } from "../tool/plugin/websearch.js"
+import { WellKnown } from "../wellknown.js"
+import { WriteTool } from "../tool/plugin/write.js"
+import { AgentPlugin } from "./agent.js"
+import BrowserPlugin from "@opencode/plugin-browser"
+import { CommandPlugin } from "./command.js"
+import { IdentityPlugin } from "./identity.js"
+import { PlanPlugin } from "./plan.js"
+import { GoalPlugin } from "./goal.js"
+import { ModelsDevPlugin } from "./models-dev.js"
+import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
+import { ProviderPlugins } from "./provider.js"
+import { DynamicProviderPlugin } from "./provider/dynamic.js"
+import { OpencodePlugin } from "./provider/opencode.js"
+import { WebSearchPlugins } from "./websearch/index.js"
+import { SkillPlugin } from "./skill.js"
+import { VcsHgPlugin } from "./vcs/hg.js"
+import { ToolInputRepairPlugin } from "./tool-input-repair.js"
+import { OptimizePlugin } from "./optimize.js"
+import { VcsGitPlugin } from "./vcs/git.js"
+import { VerbosityPlugin } from "./verbosity.js"
+import { WarmingPlugin } from "./warming.js"
+import { WellKnownPlugin } from "../wellknown/plugin.js"
 
-export type Requirements =
-  | AgentV2.Service
-  | Catalog.Service
-  | CommandV2.Service
-  | Config.Service
-  | EventV2.Service
-  | FileSystem.Service
-  | FSUtil.Service
-  | Global.Service
-  | HttpClient.HttpClient
-  | Integration.Service
-  | Location.Service
-  | ModelsDev.Service
-  | Npm.Service
-  | Reference.Service
-  | SkillV2.Service
+const services = [
+  Agent.Service,
+  FetchHttpClient.Fetch,
+  ConsoleAccess.Options,
+  Artifact.Service,
+  AppProcess.Service,
+  Provider.Service,
+  Model.Service,
+  Command.Service,
+  Config.Service,
+  Credential.Service,
+  Bus.Service,
+  Environment.Service,
+  FileAccess.Service,
+  FileMutation.Service,
+  FileWrite.Service,
+  Formatter.Service,
+  Generate.Service,
+  LocationWatcherPolicy.Service,
+  FileSystem.Service,
+  FSUtil.Service,
+  Global.Service,
+  HttpClient.HttpClient,
+  Image.Service,
+  InstructionDiscovery.Service,
+  Integration.Service,
+  Job.Service,
+  KV.Service,
+  LLMClient.Service,
+  Location.Service,
+  ModelsDev.Service,
+  Mcp.Service,
+  Npm.Service,
+  Permission.Service,
+  Form.Service,
+  ReadToolFileSystem.Service,
+  Reference.Service,
+  WebSearch.Service,
+  Ripgrep.Service,
+  Schedule.Service,
+  Session.Service,
+  SessionCompaction.Service,
+  SessionInstructions.Service,
+  SubagentJob.Service,
+  SharedCache.Service,
+  Shell.Service,
+  ShellSelect.Service,
+  Snapshot.Service,
+  Skill.Service,
+  SkillDiscovery.Service,
+  Tool.Service,
+  ToolOutput.Service,
+  Watcher.Service,
+  WellKnown.Service,
+  Worktree.Service,
+  WorktreeStrategies.Service,
+] as const
 
-export interface Plugin<R = never> {
-  readonly id: string
-  readonly effect: (context: PluginContext) => Effect.Effect<void, never, R | Scope.Scope>
-}
+export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
-export function define<R>(plugin: Plugin<R>) {
-  return plugin
-}
+export const requirements = LayerNode.group([
+  Agent.node,
+  ConsoleAccess.node,
+  Artifact.node,
+  AppProcess.node,
+  Provider.node,
+  Model.node,
+  Command.node,
+  Config.node,
+  Credential.node,
+  Bus.node,
+  Environment.node,
+  FileAccess.node,
+  FileMutation.node,
+  FileWrite.node,
+  Formatter.node,
+  Generate.node,
+  LocationWatcherPolicy.node,
+  FileSystem.node,
+  FSUtil.node,
+  Global.node,
+  httpClient,
+  httpFetch,
+  Image.node,
+  InstructionDiscovery.node,
+  Integration.node,
+  Job.node,
+  KV.node,
+  llmClient,
+  Location.node,
+  ModelsDev.node,
+  Mcp.node,
+  Npm.node,
+  Permission.node,
+  Form.node,
+  ReadToolFileSystem.node,
+  Reference.node,
+  WebSearch.node,
+  Ripgrep.node,
+  Schedule.node,
+  Session.node,
+  SessionCompaction.node,
+  SessionInstructions.node,
+  SubagentJob.node,
+  SharedCache.node,
+  Shell.node,
+  ShellSelect.node,
+  Snapshot.node,
+  Skill.node,
+  SkillDiscovery.node,
+  Tool.node,
+  ToolOutput.node,
+  Watcher.node,
+  WellKnown.node,
+  Worktree.node,
+  WorktreeStrategies.node,
+])
 
-const layer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
-    const commands = yield* CommandV2.Service
-    const plugin = yield* PluginV2.Service
-    const integration = yield* Integration.Service
-    const agents = yield* AgentV2.Service
-    const config = yield* Config.Service
-    const location = yield* Location.Service
-    const modelsDev = yield* ModelsDev.Service
-    const npm = yield* Npm.Service
-    const events = yield* EventV2.Service
-    const fs = yield* FSUtil.Service
-    const filesystem = yield* FileSystem.Service
-    const global = yield* Global.Service
-    const http = yield* HttpClient.HttpClient
-    const skill = yield* SkillV2.Service
-    const reference = yield* Reference.Service
-    const add = <R>(input: Plugin<R>) => {
-      const loaded = {
-        id: input.id,
-        effect: (context: PluginContext) =>
-          input
-            .effect(context)
-            .pipe(
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(CommandV2.Service, commands),
-              Effect.provideService(Integration.Service, integration),
-              Effect.provideService(AgentV2.Service, agents),
-              Effect.provideService(Config.Service, config),
-              Effect.provideService(Location.Service, location),
-              Effect.provideService(ModelsDev.Service, modelsDev),
-              Effect.provideService(Npm.Service, npm),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(FSUtil.Service, fs),
-              Effect.provideService(FileSystem.Service, filesystem),
-              Effect.provideService(Global.Service, global),
-              Effect.provideService(HttpClient.HttpClient, http),
-              Effect.provideService(SkillV2.Service, skill),
-              Effect.provideService(Reference.Service, reference),
-            ),
-      }
-      return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
-    }
+export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
-    yield* State.batch(
-      Effect.gen(function* () {
-        yield* add(ConfigReferencePlugin.Plugin)
-        yield* add(AgentPlugin.Plugin)
-        yield* add(CommandPlugin.Plugin)
-        yield* add(SkillPlugin.Plugin)
-        yield* add(ModelsDevPlugin)
-        yield* add(ConfigAgentPlugin.Plugin)
-        yield* add(ConfigCommandPlugin.Plugin)
-        yield* add(ConfigSkillPlugin.Plugin)
-        for (const item of ProviderPlugins) yield* add(item)
-        yield* add(ConfigExternalPlugin.Plugin)
-        yield* add(ConfigProviderPlugin.Plugin)
-        yield* add(VariantPlugin.Plugin)
-      }),
-    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
-  }),
-)
+const pre = [
+  ToolInputRepairPlugin.Plugin,
+  ConfigWorktreePlugin.Plugin,
+  ConfigMcpPlugin.Plugin,
+  McpCodeModeDefaultsPlugin.Plugin,
+  WellKnownPlugin.Plugin,
+  VcsGitPlugin.Plugin,
+  AgentPlugin.Plugin,
+  PlanPlugin.Plugin,
+  CommandPlugin.Plugin,
+  GoalPlugin.Plugin,
+  SkillPlugin.Plugin,
+  VcsHgPlugin.Plugin,
+  ModelsDevPlugin,
+  ...ProviderPlugins,
+  ...WebSearchPlugins,
+  PatchTool.Plugin,
+  // Render model prompts after the patch plugin selects the available editing tools.
+  ...OptimizePlugin.Plugins,
+  VerbosityPlugin.Plugin,
+  IdentityPlugin.Plugin,
+  EditTool.Plugin,
+  GlobTool.Plugin,
+  GrepTool.Plugin,
+  ImageGenerateTool.Plugin,
+  OpenCodeTools.Plugin,
+  McpResourceTools.Plugin,
+  QuestionTool.Plugin,
+  ReadTool.Plugin,
+  ArtifactTools.Plugin,
+  ScheduleTools.Plugin,
+  ShellTool.Plugin,
+  SkillTool.Plugin,
+  SubagentTool.Plugin,
+  TodoTool.Plugin,
+  WebFetchTool.Plugin,
+  WebSearchTool.Plugin,
+  WriteTool.Plugin,
+  WarmingPlugin.Plugin,
+] as const satisfies readonly InternalPlugin[]
 
-export const locationLayer = layer.pipe(
-  Layer.provideMerge(Config.locationLayer),
-  Layer.provideMerge(FetchHttpClient.layer),
-)
+const post = [
+  ConfigInstructionPlugin.Plugin,
+  ConfigReferencePlugin.Plugin,
+  ConfigAgentPlugin.Plugin,
+  BrowserPlugin,
+  ConfigCommandPlugin.Plugin,
+  ConfigCompactionPlugin.Plugin,
+  ConfigFormatterPlugin.Plugin,
+  ConfigImagePlugin.Plugin,
+  ConfigLocationWatcherPlugin.Plugin,
+  ConfigShellPlugin.Plugin,
+  ConfigSnapshotPlugin.Plugin,
+  ConfigToolOutputPlugin.Plugin,
+  ConfigCompatibilityPlugin.Plugin,
+  ConfigSkillPlugin.Plugin,
+  ConfigProviderPlugin.Plugin,
+  // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
+  DynamicProviderPlugin,
+  ConfigWebSearchPlugin.Plugin,
+  ConfigPolicyPlugin.Plugin,
+] as const satisfies readonly InternalPlugin[]
 
-export const node = makeLocationNode({
-  name: "plugin-internal",
-  layer,
-  deps: [
-    Catalog.node,
-    CommandV2.node,
-    PluginV2.node,
-    Integration.node,
-    AgentV2.node,
-    Config.node,
-    Location.node,
-    ModelsDev.node,
-    Npm.node,
-    EventV2.node,
-    FSUtil.node,
-    FileSystem.node,
-    Global.node,
-    httpClient,
-    SkillV2.node,
-    Reference.node,
-  ],
+// Repository config must not switch off policy enforcement or the Console connection that delivers
+// organization statements, so plugin remove operations skip these IDs.
+export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPolicyPlugin.Plugin.id])
+
+export const list = Effect.fn("PluginInternal.list")(function* () {
+  // Capture only services; activation supplies the child Scope and batching context.
+  const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const resolve = (plugins: readonly InternalPlugin[]) =>
+    plugins.map(
+      (plugin) =>
+        ({
+          id: plugin.id,
+          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          revision: "internal",
+          source: { type: "builtin" },
+        }) satisfies Generation,
+    )
+  return {
+    pre: resolve(pre),
+    post: resolve(post),
+  }
 })

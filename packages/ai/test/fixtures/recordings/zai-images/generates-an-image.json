@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": ["prefix:zai-images", "provider:zai", "protocol:zai-images"],
+    "name": "zai-images/generates-an-image",
+    "recordedAt": "2026-07-19T16:03:55.761Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/images/generations",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"cogview-4-250304\",\"prompt\":\"A simple flat red circle centered on a plain white background.\",\"size\":\"1024x1024\",\"quality\":\"standard\",\"user_id\":\"opencode-image-test\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\"created\":1784477028,\"data\":[{\"url\":\"https://mfile.z.ai/1784477035500-43574eab2b6e402da9063d6ac22dfefb.png?ufileattname=202607200003482062c3bba9b04f7d_watermark.png\"}],\"id\":\"202607200003482062c3bba9b04f7d\",\"request_id\":\"202607200003482062c3bba9b04f7d\"}"
+      }
+    }
+  ]
+}

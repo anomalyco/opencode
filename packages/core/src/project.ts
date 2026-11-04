@@ -1,15 +1,22 @@
-export * as ProjectV2 from "./project"
-export * as Project from "./project"
+export * as Project from "./project.js"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
+import { ChildProcess } from "effect/process"
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema"
-import { FSUtil } from "./fs-util"
-import { Git } from "./git"
-import { makeGlobalNode } from "./effect/app-node"
-import { Hash } from "./util/hash"
-import { ProjectDirectories } from "./project/directories"
-import { ProjectSchema } from "./project/schema"
+import { AbsolutePath } from "./schema.js"
+import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { Worktree } from "@opencode/schema/worktree"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Git } from "./git.js"
+import { AppProcess } from "@opencode/util/process"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Hash } from "@opencode/util/hash"
+import { ProjectSchema } from "./project/schema.js"
+import { ProjectTable, upsertProject } from "./project/sql.js"
+import { ProjectIcon } from "./project/icon.js"
+import { WorktreeTable } from "./worktree/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -17,56 +24,293 @@ export type ID = ProjectSchema.ID
 export const Vcs = ProjectSchema.Vcs
 export type Vcs = ProjectSchema.Vcs
 
-export class Info extends Schema.Class<Info>("Project.Info")({
-  id: ID,
+export const Current = ProjectSchema.Current
+export type Current = ProjectSchema.Current
+
+export const Info = ProjectSchema.Info
+export interface Info extends Schema.Schema.Type<typeof Info> {}
+
+export const UpdateInput = ProjectSchema.UpdateInput
+export type UpdateInput = ProjectSchema.UpdateInput
+
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Project.NotFoundError", {
+  projectID: ID,
 }) {}
-
-export const DirectoriesInput = ProjectDirectories.ListInput
-export type DirectoriesInput = typeof DirectoriesInput.Type
-
-export const Directories = ProjectDirectories.ListOutput
-export type Directories = typeof Directories.Type
 
 export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
+  // This checkout's main directory; the stored project canonical may be another clone.
+  readonly canonical: AbsolutePath
   readonly vcs?: Vcs
 }
 
-export interface Interface {
-  readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
-  readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
-  /**
-   * Temporary bridge method for writing the resolved project ID to the repo-local cache.
-   *
-   * This exists while the old opencode project service and this core project
-   * service work together: core resolves the ID, while the old service still owns
-   * database migration and persistence. The old service should call this after it
-   * finishes migrating from `resolve().previous` to `resolve().id`; once project
-   * persistence moves into core, this separate bridge method can go away.
-   */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<void>
+// Keep this filesystem-only; permission checks use it and should not execute VCS commands.
+export const root = Effect.fn("Project.root")(
+  function* (
+    fs: { readonly exists: (path: string) => Effect.Effect<boolean, unknown> },
+    input: AbsolutePath,
+    markers: readonly string[] = [".git", ".hg"],
+  ) {
+    for (let current: string = input; ; current = path.dirname(current)) {
+      for (const marker of markers) {
+        if (yield* fs.exists(path.join(current, marker))) return AbsolutePath.make(current)
+      }
+      if (path.dirname(current) === current) return undefined
+    }
+  },
+  Effect.orElseSucceed(() => undefined),
+)
+
+export const ACTIVATE_INTERVAL = 60_000
+const SWEEP_INTERVAL = Duration.hours(1)
+
+export interface Options {
+  readonly now?: () => number
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
+const Now = Context.Reference<() => number>("@opencode/Project/Now", { defaultValue: () => Date.now })
+
+export interface ListInput {
+  /** Includes archived Projects when true. */
+  readonly archived?: boolean
+}
+
+export interface ResolveOptions {
+  /** Discover ownership without persisting or announcing it. */
+  readonly persist?: boolean
+}
+
+export interface ActivateOptions {
+  /** Forks unthrottled persistence writes into `forkIn` instead of blocking the caller. */
+  readonly forkIn?: Scope.Scope
+}
+
+export interface Interface {
+  readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
+  /** Records Project activity for recency ordering, at most once per minute per Project. */
+  readonly activate: (projectID: ID, options?: ActivateOptions) => Effect.Effect<void>
+  /** Resolves the owning Project, persisting it unless `persist` is false. */
+  readonly resolve: (input: AbsolutePath, options?: ResolveOptions) => Effect.Effect<Resolved>
+  /** Archives Projects whose known directories are all gone; resolving a Project unarchives it. */
+  readonly sweep: () => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
+
+function fromRow(row: typeof ProjectTable.$inferSelect): Info {
+  const icon =
+    row.icon_url || row.icon_url_override || row.icon_color
+      ? {
+          url: row.icon_url ?? undefined,
+          override: row.icon_url_override ?? undefined,
+          color: row.icon_color ?? undefined,
+        }
+      : undefined
+  return {
+    id: row.id,
+    canonical: row.worktree,
+    vcs: row.vcs ?? undefined,
+    name: row.name ?? undefined,
+    icon,
+    commands: row.commands ?? undefined,
+    time: {
+      created: row.time_created,
+      updated: row.time_updated,
+      active: row.time_active,
+      archived: row.time_archived ?? undefined,
+    },
+    sandboxes: row.sandboxes,
+  }
+}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const now = yield* Now
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
-    const projectDirectories = yield* ProjectDirectories.Service
+    const proc = yield* AppProcess.Service
+    const bus = yield* Bus.Service
+    const db = (yield* Database.Service).db
+    const scope = yield* Scope.Scope
 
-    const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
-      return yield* projectDirectories.list(input.projectID)
+    const announcing = new Set<string>()
+    const persist = Effect.fnUntraced(function* (project: Resolved) {
+      const previous = yield* db
+        .select({ canonical: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, project.id))
+        .get()
+        .pipe(Effect.orDie)
+      yield* upsertProject(db, project).pipe(Effect.orDie)
+      const unarchived = yield* db
+        .update(ProjectTable)
+        .set({ time_archived: null, time_updated: sql`${ProjectTable.time_updated}` })
+        .where(and(eq(ProjectTable.id, project.id), isNotNull(ProjectTable.time_archived)))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      // Clones share a project ID; only replace a canonical directory that is gone.
+      const replaced =
+        previous &&
+        previous.canonical !== project.canonical &&
+        !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
+          ? yield* db
+              .update(ProjectTable)
+              .set({ worktree: project.canonical })
+              .where(eq(ProjectTable.id, project.id))
+              .returning()
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+      const changed = replaced ?? unarchived
+      if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
+      yield* ProjectIcon.refresh(fs, db, project.id).pipe(
+        Effect.flatMap((row) => (row ? bus.publish(ProjectSchema.Event.Updated, fromRow(row)) : Effect.void)),
+        Effect.ignoreCause,
+        Effect.forkIn(scope),
+      )
+      if (!project.vcs) return project
+      const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
+        { projectID: project.id, directory: project.canonical },
+      ]
+      if (project.directory !== project.canonical)
+        directories.push({
+          projectID: project.id,
+          directory: project.directory,
+          strategy: project.vcs.type === "git" ? Worktree.StrategyID.make("git") : undefined,
+        })
+      // A missing directory row means this directory's resolution is a new durable
+      // fact. The row insert commits atomically with the event, so a crash between
+      // checks retries on the next resolve instead of stranding the announcement.
+      // The in-flight set keeps concurrent resolves from publishing the same fact
+      // twice.
+      for (const item of directories) {
+        const key = item.projectID + "\u0000" + item.directory
+        if (announcing.has(key)) continue
+        announcing.add(key)
+        yield* Effect.gen(function* () {
+          const stored = yield* db
+            .select({ directory: WorktreeTable.directory })
+            .from(WorktreeTable)
+            .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
+            .get()
+            .pipe(Effect.orDie)
+          if (stored) return
+          const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
+          const markerless = yield* db
+            .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
+            .from(ProjectTable)
+            .where(
+              and(
+                isNull(ProjectTable.vcs),
+                gte(ProjectTable.worktree, directory),
+                lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+          const adopted = yield* Effect.filter(markerless, (candidate) =>
+            Effect.gen(function* () {
+              if (candidate.id === item.projectID) return false
+              if (!FSUtil.contains(directory, candidate.directory)) return false
+              const found = yield* fs
+                .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
+                .pipe(Effect.orElseSucceed(() => []))
+              if (!found[0]) return false
+              return (yield* fs.resolve(path.dirname(found[0]))) === directory
+            }),
+          )
+          yield* bus.publish(
+            Worktree.Event.Resolved,
+            {
+              projectID: item.projectID,
+              directory: item.directory,
+              previous: project.previous ?? ID.global,
+              ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
+            },
+            {
+              commit: () =>
+                db
+                  .insert(WorktreeTable)
+                  .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
+                  .onConflictDoNothing()
+                  .run()
+                  .pipe(Effect.orDie, Effect.asVoid),
+            },
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
+      }
+      return project
     })
+
+    const list = Effect.fn("Project.list")(function* (input?: ListInput) {
+      const rows = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(input?.archived ? undefined : isNull(ProjectTable.time_archived))
+        .orderBy(desc(ProjectTable.time_active), asc(ProjectTable.id))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map(fromRow)
+    })
+
+    const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
+      const row = yield* db
+        .update(ProjectTable)
+        .set({
+          worktree: input.canonical,
+          name: input.name === undefined ? undefined : input.name || null,
+          icon_url_override: input.icon?.override === undefined ? undefined : input.icon.override || null,
+          icon_color: input.icon?.color === undefined ? undefined : input.icon.color || null,
+          commands:
+            input.commands?.start === undefined
+              ? undefined
+              : input.commands.start
+                ? { start: input.commands.start }
+                : null,
+          time_updated: Date.now(),
+        })
+        .where(eq(ProjectTable.id, input.projectID))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ projectID: input.projectID })
+      const project = fromRow(row)
+      yield* bus.publish(ProjectSchema.Event.Updated, project)
+      return project
+    })
+
+    const activated = new Map<ID, number>()
+    const persistActivate = Effect.fn("Project.activate")(function* (projectID: ID, timestamp: number) {
+      const row = yield* db
+        .update(ProjectTable)
+        // Activity is not a metadata edit, so keep time_updated out of the implicit bump.
+        .set({ time_active: timestamp, time_updated: sql`${ProjectTable.time_updated}` })
+        .where(eq(ProjectTable.id, projectID))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
+      if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
+    })
+    const activate = (projectID: ID, options?: ActivateOptions): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        const timestamp = now()
+        const last = activated.get(projectID)
+        if (last !== undefined && timestamp - last < ACTIVATE_INTERVAL) return Effect.void
+        activated.set(projectID, timestamp)
+        const write = persistActivate(projectID, timestamp)
+        return options?.forkIn ? write.pipe(Effect.forkIn(options.forkIn), Effect.asVoid) : write
+      })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
         Effect.map((value) => value.trim()),
         Effect.map((value) => (value ? ID.make(value) : undefined)),
-        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.orElseSucceed(() => undefined),
       )
     })
 
@@ -82,15 +326,14 @@ const layer = Layer.effect(
       const value = input.trim()
       if (!value) return undefined
 
-      try {
-        const parsed = new URL(value)
+      const parsed = URL.parse(value)
+      if (parsed) {
         if (parsed.protocol === "file:") return undefined
         return parts(parsed.hostname, parsed.pathname)
-      } catch {
-        const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
-        if (scp) return parts(scp[2], scp[3])
-        return undefined
       }
+      const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
+      if (scp) return parts(scp[2], scp[3])
+      return undefined
     }
 
     function parts(host: string, name: string) {
@@ -102,35 +345,192 @@ const layer = Layer.effect(
       return `${host.toLowerCase()}/${pathname}`
     }
 
-    const root = Effect.fnUntraced(function* (repo: Git.Repository) {
+    const rootCommit = Effect.fnUntraced(function* (repo: Git.Repository) {
       const root = (yield* git.history.rootCommits(repo))[0]
       return root ? ID.make(root) : undefined
     })
 
-    const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
-      const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
-
+    // Failures resolve like dev (no remote / no root / own worktree) but aren't cached.
+    const gitDiscover = Effect.fnUntraced(function* (dotGit: AbsolutePath) {
+      const repo = yield* git.repo.discover(AbsolutePath.make(path.dirname(dotGit)))
+      if (!repo) return { resolved: undefined, cacheable: false }
+      let cacheable = true
+      const fallback = <A>(value: A) =>
+        Effect.orElseSucceed(() => {
+          cacheable = false
+          return value
+        })
       const previous = yield* cached(repo.commonDirectory)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-      return {
+      const id =
+        (yield* remote(repo).pipe(fallback(undefined))) ??
+        previous ??
+        (yield* rootCommit(repo).pipe(fallback(undefined)))
+      const canonical =
+        repo.gitDirectory === repo.commonDirectory
+          ? repo.worktree
+          : yield* git.worktree.list(repo).pipe(
+              Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+              fallback(repo.worktree),
+            )
+      const resolved: Resolved = {
         previous,
         id: id ?? ID.global,
         directory: repo.worktree,
+        canonical,
         vcs: { type: "git" as const, store: repo.commonDirectory },
+      }
+      return { resolved, cacheable }
+    })
+
+    // Keyed by `.git` path plus its metadata fingerprint, so repeat resolves spawn no git.
+    const gitCache = yield* Cache.make({
+      capacity: 512,
+      lookup: (key: string) => gitDiscover(AbsolutePath.make(key.slice(0, key.indexOf("\u0000")))),
+    })
+
+    // Mercurial identity uses the cached ID or the first root changeset; remote-derived
+    // identity (the git `remote()` path) is a follow-up.
+    const hgRoot = Effect.fnUntraced(function* (worktree: AbsolutePath) {
+      const result = yield* proc
+        .run(
+          ChildProcess.make("hg", ["log", "-r", "roots(all())", "-T", "{node}\n"], {
+            cwd: worktree,
+            env: { HGPLAIN: "1" },
+            extendEnv: true,
+            stdin: "ignore",
+          }),
+        )
+        .pipe(Effect.orElseSucceed(() => undefined))
+      if (!result || result.exitCode !== 0) return undefined
+      const node = result.stdout
+        .toString("utf8")
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .toSorted()[0]
+      return node ? ID.make(node) : undefined
+    })
+
+    const hgDiscover = Effect.fnUntraced(function* (dotHg: AbsolutePath) {
+      const worktree = AbsolutePath.make(path.dirname(dotHg))
+      const previous = yield* cached(dotHg)
+      const id = previous ?? (yield* hgRoot(worktree))
+      return {
+        previous,
+        id: id ?? ID.global,
+        directory: worktree,
+        vcs: { type: "hg" as const, store: dotHg },
       }
     })
 
-    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
+    const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath, options?: ResolveOptions) {
+      const save = (project: Resolved) => (options?.persist === false ? Effect.succeed(project) : persist(project))
+      const directory = AbsolutePath.make(yield* fs.resolve(input))
+      const native = yield* fs.up({ targets: [".git", ".hg"], start: directory, mode: "first" }).pipe(
+        Effect.map((matches) => matches[0]),
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (native && path.basename(native) === ".git") {
+        const dotGit = AbsolutePath.make(native)
+        const fingerprint = yield* git.repo.fingerprint(dotGit)
+        const key = `${dotGit}\u0000${fingerprint}`
+        const discovered = fingerprint
+          ? yield* Cache.get(gitCache, key).pipe(
+              Effect.tap((entry) => (entry.cacheable ? Effect.void : Cache.invalidate(gitCache, key))),
+            )
+          : yield* gitDiscover(dotGit)
+        if (discovered.resolved) return yield* save(discovered.resolved)
+      }
+
+      const hg = native && path.basename(native) === ".hg" ? yield* hgDiscover(AbsolutePath.make(native)) : undefined
+      if (hg) {
+        return yield* save({
+          ...hg,
+          canonical: hg.directory,
+        })
+      }
+
+      return yield* save({
+        id: ID.make(Hash.fast(`directory:${directory}`)),
+        directory,
+        canonical: directory,
+        vcs: undefined,
+      })
     })
 
-    return Service.of({ directories, resolve, commit })
+    const sweep = Effect.fn("Project.sweep")(function* () {
+      const cutoff = Date.now() - Duration.toMillis(SWEEP_INTERVAL)
+      // Projects touched since the cutoff are left alone. Checking again in the update means a
+      // resolve that moves the canonical directory mid-sweep bumps time_updated and wins.
+      const idle = and(
+        isNull(ProjectTable.time_archived),
+        lt(ProjectTable.time_updated, cutoff),
+        lt(ProjectTable.time_active, cutoff),
+      )
+      const projects = yield* db
+        .select({ id: ProjectTable.id, canonical: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(and(idle, ne(ProjectTable.id, ID.global)))
+        .all()
+        .pipe(Effect.orDie)
+      const worktrees = yield* db.select().from(WorktreeTable).all().pipe(Effect.orDie)
+      // Treat unreadable paths as present so transient filesystem errors never archive a Project.
+      const exists = (directory: AbsolutePath) => fs.exists(directory).pipe(Effect.orElseSucceed(() => true))
+      yield* Effect.forEach(
+        projects,
+        Effect.fnUntraced(function* (project) {
+          if (yield* exists(project.canonical)) return
+          const known = worktrees.filter(
+            (item) => item.project_id === project.id && item.directory !== project.canonical,
+          )
+          const surviving = yield* Effect.filter(known, (item) => exists(item.directory))
+          // Linked worktrees carry a strategy; only another main checkout can become the canonical directory.
+          const main = surviving.find((item) => !item.strategy)
+          if (!main && surviving.length) return
+          const row = yield* db
+            .update(ProjectTable)
+            .set(
+              main
+                ? { worktree: main.directory }
+                : { time_archived: Date.now(), time_updated: sql`${ProjectTable.time_updated}` },
+            )
+            .where(and(eq(ProjectTable.id, project.id), idle))
+            .returning()
+            .get()
+            .pipe(Effect.orDie)
+          if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
+        }),
+        { concurrency: 8, discard: true },
+      )
+    })
+
+    return Service.of({ list, update, activate, resolve, sweep })
   }),
 )
 
-export const node = makeGlobalNode({
-  service: Service,
-  layer: layer,
-  deps: [FSUtil.node, Git.node, ProjectDirectories.node],
+export function configured(options?: Options) {
+  return makeGlobalNode({
+    service: Service,
+    layer: options?.now ? layer.pipe(Layer.provide(Layer.succeed(Now, options.now))) : layer,
+    deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
+  })
+}
+
+export const node = configured()
+
+export const sweepNode = makeGlobalNode({
+  name: "project-archive-sweep",
+  layer: Layer.effectDiscard(
+    Effect.gen(function* () {
+      const project = yield* Service
+      yield* project
+        .sweep()
+        .pipe(
+          Effect.ignoreCause({ log: "Error", message: "Project archive sweep failed" }),
+          Effect.repeat(Schedule.spaced(SWEEP_INTERVAL)),
+          Effect.forkScoped,
+        )
+    }),
+  ),
+  deps: [node],
 })

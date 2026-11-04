@@ -1,0 +1,21 @@
+id: no-nested-effect-service-yield
+valid:
+  - |
+    Effect.gen(function* () {
+      const service = yield* Foo.Service
+      yield* service.run()
+    })
+  - |
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db.run()
+    })
+invalid:
+  - |
+    Effect.gen(function* () {
+      yield* (yield* Foo.Service).run()
+    })
+  - |
+    Effect.gen(function* () {
+      yield* (yield* Foo.Service).client.run()
+    })

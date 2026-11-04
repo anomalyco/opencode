@@ -1,0 +1,228 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { Database } from "bun:sqlite"
+import { expect, test } from "bun:test"
+import { SqliteClient } from "@effect/sql-sqlite-bun"
+import { eq, sql } from "drizzle-orm"
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { Cause, Effect, Tracer } from "effect"
+import type { SqlClient } from "effect/sql/SqlClient"
+import { isSqlError } from "effect/sql/SqlError"
+import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
+import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
+
+const users = sqliteTable("users", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  name: text().notNull(),
+})
+const teams = sqliteTable("teams", {
+  id: integer().primaryKey(),
+  name: text().notNull(),
+})
+const memberships = sqliteTable("memberships", {
+  user_id: integer().notNull(),
+  team_id: integer().notNull(),
+})
+
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
+  Effect.runPromise(
+    effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped),
+  )
+
+const makeDb = Effect.gen(function* () {
+  const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+  yield* db.run(sql`create table users (id integer primary key autoincrement, name text not null)`)
+  return db
+})
+
+test("selects rows through Effect-yieldable query builders", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      yield* db.insert(users).values({ name: "Ada" })
+
+      expect(yield* db.select().from(users)).toEqual([{ id: 1, name: "Ada" }])
+      expect(yield* db.select({ id: users.id }).from(users).where(eq(users.name, "Ada")).get()).toEqual({ id: 1 })
+    }),
+  )
+})
+
+test("maps query failures with query, redacted params, and cause", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+      const error = yield* db.run(sql`select * from missing_table where id = ${42}`).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(EffectDrizzleQueryError)
+      expect(error.query).toBe("select * from missing_table where id = ?")
+      expect(error.params).toEqual(["[redacted]"])
+      expect(Cause.isCause(error.cause)).toBe(true)
+      if (!Cause.isCause(error.cause)) return
+      expect(error.cause.reasons[0]?._tag).toBe("Fail")
+    }),
+  )
+})
+
+test("suppresses statement spans", async () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      yield* db.transaction((tx) => tx.insert(users).values({ name: "Grace" }))
+      yield* db.select().from(users)
+    }).pipe(
+      Effect.provideService(Tracer.Tracer, tracer),
+      Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      Effect.scoped,
+    ),
+  )
+
+  expect(spans.map((span) => span.name)).not.toContain("sql.execute")
+})
+
+test("commits successful transactions", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+
+      yield* db.transaction((tx) => tx.insert(users).values({ name: "Grace" }), { behavior: "immediate" })
+
+      expect(yield* db.select().from(users)).toEqual([{ id: 1, name: "Grace" }])
+    }),
+  )
+})
+
+test("rolls back failed transactions", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+
+      yield* db
+        .transaction((tx) =>
+          tx
+            .insert(users)
+            .values({ name: "Linus" })
+            .pipe(Effect.andThen(Effect.fail("boom"))),
+        )
+        .pipe(Effect.ignore)
+
+      expect(yield* db.select().from(users)).toEqual([])
+    }),
+  )
+})
+
+test("rolls back explicit transaction rollback", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+
+      yield* db
+        .transaction((tx) =>
+          tx
+            .insert(users)
+            .values({ name: "Barbara" })
+            .pipe(Effect.andThen(Effect.fail(tx.rollback()))),
+        )
+        .pipe(Effect.ignore)
+
+      expect(yield* db.select().from(users)).toEqual([])
+    }),
+  )
+})
+
+test("preserves failed transaction begin errors", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
+  const filename = join(dir, "locked.db")
+  const holder = new Database(filename)
+
+  try {
+    holder.run("create table users (id integer primary key autoincrement, name text not null)")
+    holder.run("pragma busy_timeout = 0")
+    holder.run("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        yield* db.run(sql`pragma busy_timeout = 0`)
+
+        const error = yield* db
+          .transaction((tx) => tx.insert(users).values({ name: "Blocked" }), { behavior: "immediate" })
+          .pipe(Effect.flip)
+
+        if (!isSqlError(error)) throw new Error("Expected SqlError")
+        expect(error.reason._tag).toBe("LockTimeoutError")
+        expect(error.reason.cause instanceof Error ? error.reason.cause.message : "").toContain("database is locked")
+      }).pipe(Effect.provide(SqliteClient.layer({ filename, disableWAL: true })), Effect.scoped),
+    )
+  } finally {
+    if (holder.inTransaction) holder.run("rollback")
+    holder.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("supports returning and rejects empty update sets", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+
+      const inserted = yield* db.insert(users).values({ name: "Ada" }).returning({ id: users.id, name: users.name })
+      expect(inserted).toEqual([{ id: 1, name: "Ada" }])
+
+      const updated = yield* db.update(users).set({ name: "Grace" }).where(eq(users.id, 1)).returning()
+      expect(updated).toEqual([{ id: 1, name: "Grace" }])
+
+      const deleted = yield* db.delete(users).where(eq(users.id, 1)).returning({ id: users.id })
+      expect(deleted).toEqual([{ id: 1 }])
+
+      expect(() => db.update(users).set({ name: undefined })).toThrow("No values to set")
+    }),
+  )
+})
+
+test("supports function-valued update joins with runtime table columns", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      const query = db
+        .update(users)
+        .set({ name: "Grace" })
+        .from(teams)
+        .innerJoin(memberships, (update) => eq(update.id, memberships.user_id))
+        .where(eq(teams.name, "Core"))
+
+      expect(query.toSQL()).toEqual({
+        sql: 'update "users" set "name" = ? from "teams" inner join "memberships" on "users"."id" = "memberships"."user_id" where "teams"."name" = ?',
+        params: ["Grace", "Core"],
+      })
+    }),
+  )
+})
+
+test("supports SQL-valued update joins", async () => {
+  await run(
+    Effect.gen(function* () {
+      const db = yield* makeDb
+      const query = db
+        .update(users)
+        .set({ name: "Lin" })
+        .from(teams)
+        .innerJoin(memberships, eq(users.id, memberships.user_id))
+        .where(eq(teams.name, "Core"))
+
+      expect(query.toSQL()).toEqual({
+        sql: 'update "users" set "name" = ? from "teams" inner join "memberships" on "users"."id" = "memberships"."user_id" where "teams"."name" = ?',
+        params: ["Lin", "Core"],
+      })
+    }),
+  )
+})

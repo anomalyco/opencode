@@ -1,0 +1,190 @@
+// Copyright 2019-2024 Tauri Programme within The Commons Conservancy
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
+
+import { nextDesktopZoomLevel, type DesktopZoomLevel } from "@opencode/app/desktop-menu"
+import { createSignal } from "solid-js"
+import { api } from "../api"
+
+const OS_NAME = (() => {
+  if (navigator.userAgent.includes("Mac")) return "macos"
+
+  if (navigator.userAgent.includes("Windows")) return "windows"
+
+  if (navigator.userAgent.includes("Linux")) return "linux"
+
+  return "unknown"
+})()
+
+const [webviewZoom, setWebviewZoom] = createSignal(1)
+
+const [zoomLevel, setZoomLevelSignal] = createSignal<DesktopZoomLevel>(1)
+
+let requestedZoom = 1
+
+let pinchZoomEnabled = false
+
+let wheelPinch:
+  | {
+      active: boolean
+      startZoom: number
+      totalDelta: number
+      timeout: ReturnType<typeof setTimeout> | undefined
+    }
+  | undefined
+
+const MAX_ZOOM_LEVEL = 10
+
+const MIN_ZOOM_LEVEL = 0.2
+
+const WHEEL_PINCH_THRESHOLD = 20
+
+const WHEEL_PINCH_STEP = 0.2
+
+const WHEEL_PINCH_END_DELAY = 160
+
+const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
+
+const applyZoom = (next: number) => {
+  requestedZoom = next
+  void api
+    .setZoomFactor(next)
+    .then(() => {
+      if (requestedZoom !== next) return
+      setWebviewZoom(next)
+    })
+    .catch(() => {
+      if (requestedZoom !== next) return
+      requestedZoom = webviewZoom()
+    })
+}
+
+// A renderer reload keeps the window's zoom, so seed the signal from main.
+void api.getZoomFactor().then((factor) => {
+  if (requestedZoom !== 1) return
+  requestedZoom = clamp(factor)
+  setWebviewZoom(requestedZoom)
+})
+
+void api.getZoomLevel().then(setZoomLevelSignal)
+
+api.onZoomChanged((zoom) => {
+  requestedZoom = clamp(zoom.factor)
+  setWebviewZoom(requestedZoom)
+  setZoomLevelSignal(zoom.level)
+})
+
+void api.getPinchZoomEnabled().then((enabled) => {
+  pinchZoomEnabled = enabled
+  syncWheelPinchListener()
+})
+
+api.onPinchZoomEnabledChanged((enabled) => {
+  pinchZoomEnabled = enabled
+  resetWheelPinch()
+  syncWheelPinchListener()
+})
+
+const setPinchZoomEnabled = (enabled: boolean) => {
+  pinchZoomEnabled = enabled
+  resetWheelPinch()
+  syncWheelPinchListener()
+
+  return api.setPinchZoomEnabled(enabled)
+}
+
+// Main saves the level and applies it to every window, then reports the new zoom back.
+const setZoomLevel = (level: DesktopZoomLevel) => {
+  requestedZoom = level
+
+  return api.setZoomLevel(level)
+}
+
+const resetZoom = () => void setZoomLevel(1)
+
+const zoomIn = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "in"))
+
+const zoomOut = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "out"))
+
+const resetWheelPinch = () => {
+  clearTimeout(wheelPinch?.timeout)
+  wheelPinch = undefined
+}
+
+const normalizeWheelDelta = (event: WheelEvent) => {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16
+
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * window.innerHeight
+
+  return event.deltaY
+}
+
+const updateWheelPinch = (event: WheelEvent) => {
+  wheelPinch ??= {
+    active: false,
+    startZoom: requestedZoom,
+    totalDelta: 0,
+    timeout: undefined,
+  }
+
+  clearTimeout(wheelPinch.timeout)
+  wheelPinch.timeout = setTimeout(resetWheelPinch, WHEEL_PINCH_END_DELAY)
+  wheelPinch.totalDelta += normalizeWheelDelta(event)
+
+  if (!wheelPinch.active && Math.abs(wheelPinch.totalDelta) < WHEEL_PINCH_THRESHOLD) return
+
+  if (!wheelPinch.active) {
+    wheelPinch.active = true
+    wheelPinch.startZoom = requestedZoom
+    wheelPinch.totalDelta = 0
+
+    return
+  }
+
+  wheelPinch.active = true
+  applyZoom(clamp(wheelPinch.startZoom - (wheelPinch.totalDelta / WHEEL_PINCH_THRESHOLD) * WHEEL_PINCH_STEP))
+}
+
+const onWheelPinch = (event: WheelEvent) => {
+  if (!event.ctrlKey) return
+
+  event.preventDefault()
+  updateWheelPinch(event)
+}
+
+// A cancelable window wheel listener makes every scroll gesture wait for the main thread, so it
+// is only attached while pinch zoom is on. Main's zoom-changed handler covers Ctrl+wheel otherwise.
+const syncWheelPinchListener = () => {
+  if (pinchZoomEnabled) {
+    window.addEventListener("wheel", onWheelPinch, { passive: false })
+
+    return
+  }
+
+  window.removeEventListener("wheel", onWheelPinch)
+}
+
+window.addEventListener("keydown", (event) => {
+  if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
+
+  if (event.key === "-") {
+    event.preventDefault()
+    zoomOut()
+
+    return
+  }
+
+  if (event.key === "=" || event.key === "+") {
+    event.preventDefault()
+    zoomIn()
+
+    return
+  }
+
+  if (event.key === "0") {
+    event.preventDefault()
+    resetZoom()
+  }
+})
+
+export { webviewZoom, zoomLevel, resetZoom, setPinchZoomEnabled, setZoomLevel, zoomIn, zoomOut }

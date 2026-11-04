@@ -1,0 +1,43 @@
+name: check
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev, beta]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # A pull request checks out its merge into the current base; the first parent is that base.
+          fetch-depth: 2
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Lint
+        run: bun run lint
+
+      # Local `bun run check` uses `bun check`; CI keeps the official TypeScript compiler as the source of truth.
+      - name: Typecheck (TypeScript 7.1)
+        run: bun run typecheck:tsc
+
+      # Every GUI package file (app, desktop, gui-plugins, the plugin package's GUI SDK, ui, session-ui) a pull request adds or edits must be free of
+      # oxlint problems, warn-level rules (anti-slop) included. Other packages are not affected.
+      - name: Lint changed files
+        if: github.event_name == 'pull_request'
+        # Against the merge's first parent, so base-branch commits the pull request has not merged are not counted as its
+        # changes (the event's base SHA can predate them).
+        run: bun run lint:changed HEAD^1

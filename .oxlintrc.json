@@ -1,51 +1,198 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
-  "options": {
-    "typeAware": true
-  },
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./script/oxlint/anti-slop/index.ts" },
+    { "name": "anti-slop-effect", "specifier": "./script/oxlint/anti-slop/effect/index.ts" }
+  ],
   "categories": {
-    "suspicious": "warn"
+    "correctness": "off",
+    "suspicious": "off",
+    "pedantic": "off",
+    "perf": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
   },
   "rules": {
-    "typescript/no-base-to-string": "warn",
-    // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
-    "require-yield": "off",
-    // SolidJS uses `let ref: T | undefined` for JSX ref bindings assigned at runtime
-    "no-unassigned-vars": "off",
-    // SolidJS tracks reactive deps by reading properties inside createEffect
-    "no-unused-expressions": "off",
-    // Intentional control char matching (ANSI escapes, null byte sanitization)
-    "no-control-regex": "off",
-    // SST and plugin tools require triple-slash references
-    "triple-slash-reference": "off",
-
-    // Suspicious category: suppress noisy rules
-    // Effect's nested function* closures inherently shadow outer scope
-    "no-shadow": "off",
-    // Namespace-heavy codebase makes this too noisy
-    "unicorn/consistent-function-scoping": "off",
-    // Opinionated — .sort()/.reverse() mutation is fine in this codebase
-    "unicorn/no-array-sort": "off",
-    "unicorn/no-array-reverse": "off",
-    // Not relevant — this isn't a DOM event handler codebase
-    "unicorn/prefer-add-event-listener": "off",
-    // Bundler handles module resolution
-    "unicorn/require-module-specifiers": "off",
-    // postMessage target origin not relevant for this codebase
-    "unicorn/require-post-message-target-origin": "off",
-    // Side-effectful constructors are intentional in some places
-    "no-new": "off",
-
-    // Type-aware: catch unhandled promises
-    "typescript/no-floating-promises": "warn",
-    // Warn when spreading non-plain objects (Headers, class instances, etc.)
-    "typescript/no-misused-spread": "warn"
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "Reflect",
+        "message": "Use typed property access or direct invocation. Suppress this rule only for genuine reflection."
+      }
+    ]
   },
-  "options": {
-    "typeAware": true
-  },
-  "options": {
-    "typeAware": true
-  },
-  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
+  "overrides": [
+    {
+      "files": [
+        "packages/app/**",
+        "packages/desktop/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
+        "packages/ui/**",
+        "packages/session-ui/**"
+      ],
+      "rules": {
+        "oxc/no-accumulating-spread": "warn",
+        "anti-slop/no-array-filter-map": "warn",
+        "anti-slop/no-reduce-accumulator-copy": "warn",
+        "anti-slop/no-chained-type-assertions": "warn",
+        "anti-slop/no-conditional-empty-object-spread": "warn",
+        "anti-slop/no-known-value-widening": "warn",
+        "anti-slop/no-module-mocking": "warn",
+        "anti-slop/no-object-parameters": "warn",
+        "anti-slop/no-reflect-apply": "warn",
+        "anti-slop/no-reflect-get": "warn",
+        "anti-slop/no-runtime-typeof": "warn",
+        "anti-slop/no-shape-in-symbol-names": "warn",
+        "anti-slop/no-unknown-parameters": "warn",
+        "anti-slop/no-unknown-returns": "warn",
+        "anti-slop/no-unknown-type-aliases": "warn",
+        "anti-slop/no-unsafe-dictionary-type": "warn",
+        "anti-slop/no-widen-then-assert": "warn",
+        "anti-slop/require-readable-spacing": "warn",
+        "anti-slop/require-safety-comment-for-type-assertion": "warn"
+      }
+    },
+    {
+      "files": [
+        "packages/app/**",
+        "packages/desktop/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
+        "packages/session-ui/**"
+      ],
+      "rules": {
+        "anti-slop-effect/no-manual-effect-error-tag": "warn",
+        "anti-slop-effect/no-manual-tag-comparison": "warn",
+        "anti-slop-effect/no-manual-tagged-construction": "warn",
+        "anti-slop-effect/no-service-constructor-imports": "warn",
+        "anti-slop-effect/prefer-effect-match": "warn"
+      }
+    },
+    {
+      "files": ["packages/gui-plugins/src/*.ts", "packages/gui-plugins/src/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "solid-js",
+                "importNames": ["createEffect", "createRenderEffect", "createComputed"],
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/gui-plugins/src/*/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "solid-js",
+                "importNames": ["createEffect", "createRenderEffect", "createComputed"],
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+              }
+            ],
+            "patterns": [
+              {
+                "regex": "^@opencode/(app|desktop)(/|$)",
+                "message": "GUI plugins never import the app or desktop packages. Use the SDK."
+              },
+              {
+                "regex": "^@/",
+                "message": "GUI plugins never import app internals. Use the SDK."
+              },
+              {
+                "group": ["../*/*", "!../*/contract"],
+                "message": "Import another built-in plugin only through its contract.ts."
+              },
+              {
+                "regex": "\\.css$",
+                "message": "Import CSS with ?inline and contribute it with ctx.add(Style, css)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/plugin/src/gui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@opencode/(app|desktop)(/|$)",
+                "message": "The GUI SDK never imports the app or desktop packages; the hosts implement it."
+              },
+              {
+                "regex": "^@opencode/gui-plugins(/|$)",
+                "message": "The GUI SDK never imports the built-in plugins; they import the SDK."
+              },
+              {
+                "regex": "^@/",
+                "message": "The GUI SDK never imports app internals."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/codemode/src/interpreter/**", "packages/codemode/src/stdlib/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect",
+                "allowTypeImports": true,
+                "message": "The evaluator and built-ins are plain generators driven by the job queue in runner.ts. Start host work with runner.host or block on it with runner.blocking; only runner.ts, execute.ts, and extensions.ts run Effects."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/codemode/src/interpreter/runner.ts",
+        "packages/codemode/src/interpreter/execute.ts",
+        "packages/codemode/src/interpreter/extensions.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/node_modules",
+    "**/dist",
+    "**/.build",
+    "**/.sst",
+    "**/*.d.ts",
+    "**/sdk.gen.ts",
+    "packages/plugins/figma/skills/**",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**",
+    "script/oxlint/anti-slop/**"
+  ]
 }

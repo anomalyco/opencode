@@ -1,0 +1,68 @@
+import { desktopZoomLevels } from "@opencode/app/desktop-menu"
+import { Schema } from "effect"
+import { Rpc, RpcGroup } from "effect/rpc"
+
+export const WindowThemeReady = Rpc.make("WindowThemeReady")
+
+export const WindowRequestMicrophone = Rpc.make("WindowRequestMicrophone", { success: Schema.Boolean })
+
+export const WindowSetVoiceCallActive = Rpc.make("WindowSetVoiceCallActive", { payload: { active: Schema.Boolean } })
+
+export const WindowGetFocused = Rpc.make("WindowGetFocused", { success: Schema.Boolean })
+
+export const WindowGetFullscreen = Rpc.make("WindowGetFullscreen", { success: Schema.Boolean })
+
+export const WindowSetFocus = Rpc.make("WindowSetFocus")
+
+export const WindowShow = Rpc.make("WindowShow")
+
+export const WindowGetZoomFactor = Rpc.make("WindowGetZoomFactor", { success: Schema.Number })
+
+export const WindowSetZoomFactor = Rpc.make("WindowSetZoomFactor", {
+  payload: { factor: Schema.Number },
+})
+
+export const WindowGetZoomLevel = Rpc.make("WindowGetZoomLevel", { success: Schema.Literals(desktopZoomLevels) })
+
+export const WindowSetZoomLevel = Rpc.make("WindowSetZoomLevel", {
+  payload: { level: Schema.Literals(desktopZoomLevels) },
+})
+
+export const WindowGetPinchZoomEnabled = Rpc.make("WindowGetPinchZoomEnabled", {
+  success: Schema.Boolean,
+})
+
+export const WindowSetPinchZoomEnabled = Rpc.make("WindowSetPinchZoomEnabled", {
+  payload: { enabled: Schema.Boolean },
+})
+
+export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
+  payload: {
+    theme: Schema.Struct({
+      mode: Schema.Literals(["light", "dark"]),
+      scheme: Schema.optionalKey(Schema.Literals(["system", "light", "dark"])),
+    }),
+  },
+})
+
+export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPosition", {
+  payload: { x: Schema.Number, y: Schema.Number },
+})
+
+export const WindowRpcs = RpcGroup.make(
+  WindowRequestMicrophone,
+  WindowSetVoiceCallActive,
+  WindowThemeReady,
+  WindowGetFocused,
+  WindowGetFullscreen,
+  WindowSetFocus,
+  WindowShow,
+  WindowGetZoomFactor,
+  WindowSetZoomFactor,
+  WindowGetZoomLevel,
+  WindowSetZoomLevel,
+  WindowGetPinchZoomEnabled,
+  WindowSetPinchZoomEnabled,
+  WindowSetTitlebar,
+  WindowSetTrafficLightsPosition,
+)

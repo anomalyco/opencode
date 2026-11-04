@@ -1,8 +1,22 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
+import {
+  DiffLineAnnotation,
+  FileContents,
+  FileDiffOptions,
+  registerCustomTheme,
+  type SelectedLineRange,
+} from "@pierre/diffs"
+import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
+import quoteHighlightStyles from "../components/quote-highlight.css?inline"
 
-export type DiffProps<T = {}> = FileDiffOptions<T> & {
+// Pierre resolves themes on the main thread and hands them to its workers, so register before any viewer renders.
+registerCustomTheme(OpenCodeTheme.name, () => Promise.resolve(OpenCodeTheme), "zed")
+
+// Viewers and worker pools must agree: the pool's options win whenever it renders.
+export const highlightOptions = { theme: OpenCodeTheme.name, preferredHighlighter: "highlights" } as const
+
+export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
@@ -17,52 +31,150 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 const unsafeCSS = `
 :host {
   --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  /* Pierre mixes 15% in dark mode, which makes collapsed rows read as highlighted. */
+  --diffs-bg-separator-override: light-dark(
+    color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
+    color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
+  );
+  --diffs-bg-addition-emphasis-override: light-dark(
+    rgb(from var(--v2-green-600) r g b / 0.2),
+    rgb(from var(--v2-green-600) r g b / 0.4)
+  );
+  --diffs-bg-deletion-emphasis-override: light-dark(
+    rgb(from var(--v2-red-600) r g b / 0.2),
+    rgb(from var(--v2-red-600) r g b / 0.4)
+  );
+  --diffs-fg-number-override: var(--v2-text-text-faint);
+  --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
+  --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
+  /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
+  text-wrap-style: auto;
 }
 
 [data-diff],
 [data-file] {
-  /* Pierre 1.2 mixes these override targets at 12% in light mode and 20% in dark mode. */
   --diffs-bg-deletion-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base))
+    rgb(from var(--v2-red-600) r g b / 0.05),
+    rgb(from var(--v2-red-600) r g b / 0.1)
   );
+  --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
   --diffs-bg-addition-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base))
+    rgb(from var(--v2-green-600) r g b / 0.05),
+    rgb(from var(--v2-green-800) r g b / 0.1)
   );
-  --diffs-selection-base: var(--surface-warning-strong);
-  --diffs-selection-border: var(--border-warning-base);
-  --diffs-selection-number-fg: #1c1917;
+  --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
+  --diffs-selection-base: var(--v2-background-bg-accent);
+  --diffs-selection-number-fg: var(--v2-text-text-accent);
+  --diffs-comment-bg: rgb(from var(--v2-background-bg-accent) r g b / 0.06);
   /* Use explicit alpha instead of color-mix(..., transparent) to avoid Safari's non-premultiplied interpolation bugs. */
-  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--surface-warning-base) r g b / 0.65));
-  --diffs-bg-selection-number: var(
-    --diffs-bg-selection-number-override,
-    rgb(from var(--surface-warning-base) r g b / 0.85)
-  );
-  --diffs-bg-selection-text: rgb(from var(--surface-warning-strong) r g b / 0.2);
+  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.2));
+  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
 }
 
-:host([data-color-scheme='dark']) [data-diff],
-:host([data-color-scheme='dark']) [data-file] {
-  --diffs-selection-number-fg: #fdfbfb;
-  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--solaris-dark-6) r g b / 0.65));
-  --diffs-bg-selection-number: var(
-    --diffs-bg-selection-number-override,
-    rgb(from var(--solaris-dark-6) r g b / 0.85)
-  );
+/* Each diff token is an element, so highlight rules match one ancestor where Blink inherits them; see quote-highlight.css. */
+@supports selector(:host-context(*)) {
+  [data-diff]::selection,
+  [data-file]::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff]::highlight(timeline-quote-source),
+  [data-file]::highlight(timeline-quote-source),
+  [data-diff]::highlight(timeline-quote-source-active),
+  [data-file]::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
 }
 
-[data-diff] ::selection,
-[data-file] ::selection {
-  background-color: var(--diffs-bg-selection-text);
+@supports not selector(:host-context(*)) {
+  [data-diff] ::selection,
+  [data-file] ::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff] ::highlight(timeline-quote-source),
+  [data-file] ::highlight(timeline-quote-source),
+  [data-diff] ::highlight(timeline-quote-source-active),
+  [data-file] ::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
 }
 
-::highlight(opencode-find) {
-  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  width: 2px;
 }
 
-::highlight(opencode-find-current) {
-  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {
+  background-color: light-dark(var(--v2-green-900), var(--v2-green-400));
+}
+
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  background-image: none;
+  background-color: light-dark(var(--v2-red-800), var(--v2-red-500));
+}
+
+[data-background] [data-column-number] {
+  --mix-light: 88%;
+  --mix-dark: 80%;
+}
+
+/* Changed-row overrides are final translucent fills, so Pierre must not blend them into the background again. */
+[data-background]
+  :is([data-line], [data-no-newline], [data-column-number], [data-gutter-buffer]):is(
+    [data-line-type='change-addition'],
+    [data-line-type='change-deletion']
+  ) {
+  --mix-light: 0%;
+  --mix-dark: 0%;
+}
+
+/* Syntax colors are inline styles on token spans, so emphasized text needs !important to stay legible on its highlight. */
+[data-line-type='change-addition'] [data-diff-span],
+[data-line-type='change-addition'] [data-diff-span] * {
+  color: light-dark(var(--v2-green-1200), var(--v2-text-text-base)) !important;
+}
+
+[data-line-type='change-deletion'] [data-diff-span],
+[data-line-type='change-deletion'] [data-diff-span] * {
+  color: light-dark(var(--v2-red-1200), var(--v2-text-text-base)) !important;
+}
+
+:is([data-separator-content], [data-expand-button]) {
+  color: var(--v2-text-text-faint);
+}
+
+[data-expand-button]:hover {
+  color: var(--diffs-fg);
+}
+
+[data-diff-type='split'] [data-additions],
+[data-diff-type='split'] [data-additions] [data-gutter],
+[data-diff-type='split'] [data-deletions],
+[data-diff-type='split'] [data-deletions] [data-content] {
+  border-left: 0;
+  border-right: 0;
+}
+
+[data-content-buffer] {
+  background-image: none;
+  background-color: var(--diffs-bg-context-gutter);
 }
 
 [data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {
@@ -83,22 +195,24 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diff] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
-  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
-}
-
-[data-file] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
-  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
+[data-diff] [data-line-annotation],
+[data-diff] [data-gutter-buffer='annotation'],
+[data-file] [data-line-annotation],
+[data-file] [data-gutter-buffer='annotation'] {
+  --diffs-annotation-bg: var(--diffs-comment-bg);
+  --diffs-computed-decoration-bg: var(--diffs-comment-bg);
+  --diffs-computed-diff-line-bg: var(--diffs-comment-bg);
+  --diffs-computed-selected-line-bg: var(--diffs-comment-bg);
+  --diffs-line-bg: var(--diffs-comment-bg);
+  background-color: var(--diffs-comment-bg);
 }
 
 [data-diff] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
-  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
 [data-file] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
-  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
 [data-diff] [data-column-number][data-selected-line] {
@@ -118,12 +232,43 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+@media (max-width: 767px) {
+  /* File annotations share the code column; reclaim the number gutter. Pierre only measures column widths for
+     scrolling files with annotations, so derive the gutter from the code grid width instead. */
+  [data-file][data-overflow='wrap'] [data-code] {
+    container-type: inline-size;
+  }
+
+  [data-file][data-overflow='wrap'] [data-line-annotation] {
+    margin-inline-start: calc(100% - 100cqi);
+    z-index: 4;
+  }
+}
+
+@media (pointer: fine) {
+  [data-gutter-utility-slot] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-column-number][data-hovered] [data-gutter-utility-slot],
+  [data-gutter-utility-slot]:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 /* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
 [data-diff] [data-line][data-line-type='change-deletion'][data-selected-line] {
   --diffs-bg-deletion-emphasis: light-dark(
     rgb(from var(--diffs-deletion-base) r g b / 0.07),
     rgb(from var(--diffs-deletion-base) r g b / 0.1)
   );
+}
+
+/* Pierre insets line numbers by 2ch to leave room for diff change bars; compact file viewers can tighten it. */
+[data-file]:not([data-disable-line-numbers]) :is([data-column-number], [data-gutter-buffer]) {
+  padding-left: var(--opencode-diffs-number-inset, 2ch);
 }
 
 [data-diff-header],
@@ -133,7 +278,6 @@ const unsafeCSS = `
     height: 24px;
   }
   [data-column-number] {
-    background-color: var(--diffs-bg);
     cursor: default !important;
   }
 
@@ -151,12 +295,13 @@ const unsafeCSS = `
 }
 
 ${lineCommentStyles}
+${quoteHighlightStyles}
 
 `
 
-export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
+export function createDefaultOptions<T>(style: FileDiffOptions<T, undefined>["diffStyle"]) {
   return {
-    theme: "OpenCode",
+    ...highlightOptions,
     themeType: "system",
     disableLineNumbers: false,
     overflow: "wrap",
@@ -166,7 +311,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     disableBackground: false,
     expansionLineCount: 20,
     hunkSeparators: "line-info-basic",
-    lineDiffType: style === "split" ? "word-alt" : "none",
+    lineDiffType: "word-line",
     maxLineDiffLength: 1000,
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,
@@ -182,5 +327,6 @@ export const styleVariables = {
   "--diffs-font-features": "var(--font-family-mono--font-feature-settings)",
   "--diffs-header-font-family": "var(--font-family-sans)",
   "--diffs-gap-block": 0,
-  "--diffs-min-number-column-width": "4ch",
+  "--diffs-gap-style": 0,
+  "--diffs-min-number-column-width": "3ch",
 }

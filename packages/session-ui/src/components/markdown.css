@@ -1,5 +1,34 @@
+.markdown-session-link {
+  display: inline;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--v2-background-bg-layer-02);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
+  color: var(--v2-text-text-accent);
+  font: inherit;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.markdown-session-link:hover {
+  color: var(--v2-text-text-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-session-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.markdown-session-id {
+  font-family: var(--font-family-mono);
+}
+
 [data-component="markdown"] {
-  --markdown-inline-code-path-color: var(--v2-text-text-code-accent);
+  --markdown-inline-code-path-color: var(--v2-text-text-code-path);
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
@@ -15,6 +44,17 @@
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: 160%;
+  /* Shells such as the app's turn off selection for chrome; Markdown is content, so it stays selectable. */
+  -webkit-user-select: text;
+  user-select: text;
+
+  [data-markdown-word] {
+    display: inline;
+  }
+
+  :is([data-markdown-word], code)[data-markdown-enter] {
+    animation: markdown-word-enter 180ms ease-out both;
+  }
 
   /* Spacing for flow */
   > *:first-child {
@@ -28,6 +68,11 @@
   }
   > [data-markdown-block]:last-child > *:last-child {
     margin-bottom: 0;
+  }
+
+  /* Pretty wrapping would move settled words as each token arrives, so the growing block stays greedy until it completes. */
+  &[data-streaming] > [data-markdown-block]:last-child {
+    text-wrap-style: auto;
   }
 
   /* Headings: Sized by level, distinguished by color and spacing */
@@ -50,9 +95,9 @@
   }
 
   h3 {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
     margin-top: 20px;
     margin-bottom: 8px;
     line-height: var(--line-height-large);
@@ -61,7 +106,7 @@
   h4,
   h5,
   h6 {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--v2-text-text-muted);
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
@@ -69,11 +114,17 @@
     line-height: var(--line-height-large);
   }
 
+  /* A heading's own bottom margin sets the gap to its section, so a block's larger top margin can't push the heading away from it. */
+  :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, [data-component]),
+  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > :is(pre, [data-slot="markdown-code-content"]) {
+    margin-top: 0;
+  }
+
   /* Emphasis & Strong: Neutral strong color */
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
   }
 
   /* Paragraphs */
@@ -83,13 +134,62 @@
 
   /* Links */
   a {
-    color: var(--text-interactive-base);
+    color: var(--v2-text-text-accent);
     text-decoration: none;
     font-weight: inherit;
   }
 
   a:hover {
+    color: var(--v2-text-text-accent-hover);
     text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* An atomic inline such as inline-block leaves a line break opportunity before the label, so the icon stays an
+     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word.
+     The artwork is a pseudo-element because an out-of-flow element is a block, and Chromium ends a triple-click
+     paragraph selection at a block. The hidden img only reports when the favicon has loaded. */
+  .markdown-link-favicon {
+    position: relative;
+    padding-inline-start: 14px;
+    margin-inline-end: 4px;
+  }
+
+  .markdown-link-favicon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    height: 14px;
+    margin: auto 0;
+    background: currentColor;
+    mask: url("./markdown-globe.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon[data-github]::before {
+    mask-image: url("./markdown-github.svg");
+  }
+
+  .markdown-link-favicon[data-loaded]::before {
+    border-radius: 2px;
+    background: var(--markdown-link-favicon) center / contain no-repeat;
+    mask: none;
+  }
+
+  .markdown-link-favicon img {
+    display: none;
+  }
+
+  a[data-local-link] {
+    cursor: pointer;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
+    cursor: pointer;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code):hover {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-path-color) 40%, transparent);
     text-underline-offset: 2px;
   }
 
@@ -98,8 +198,8 @@
   ol {
     margin-top: 8px;
     margin-bottom: 12px;
-    margin-left: 0;
-    padding-left: 32px;
+    margin-inline-start: 0;
+    padding-inline-start: 32px;
     list-style-position: outside;
   }
 
@@ -109,7 +209,6 @@
 
   ol {
     list-style-type: decimal;
-    padding-left: 2.25rem;
   }
 
   li {
@@ -131,7 +230,7 @@
   li > p > input[type="checkbox"] {
     position: absolute;
     top: 4px;
-    left: -20px;
+    inset-inline-start: -20px;
     margin: 0;
   }
 
@@ -149,18 +248,18 @@
   li > ol {
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
-    padding-left: 1rem; /* Minimal indent for nesting only */
+    padding-inline-start: 1rem; /* Minimal indent for nesting only */
   }
 
   li > ol {
-    padding-left: 1.75rem;
+    padding-inline-start: 1.75rem;
   }
 
   /* Blockquotes */
   blockquote {
-    border-left: 0.5px solid var(--v2-border-border-base);
+    border-inline-start: 0.5px solid var(--v2-border-border-base);
     margin: 1rem 0;
-    padding-left: 0.5rem;
+    padding-inline-start: 0.5rem;
     color: var(--v2-text-text-muted);
     font-style: normal;
   }
@@ -172,10 +271,11 @@
     margin: 32px 0;
   }
 
-  .shiki {
+  .highlights {
     background: var(--color-background-stronger);
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     font-size: 13px;
+    line-height: 20px;
     padding: 12px;
     border-radius: 6px;
     border: 0.5px solid var(--v2-border-border-base);
@@ -183,9 +283,59 @@
 
   [data-component="markdown-code"] {
     position: relative;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 
-  [data-component="markdown-code"][data-code-kind="shell"] .shiki {
+  [data-component="markdown-mermaid"] {
+    --pele-bg: var(--v2-background-bg-layer-02);
+    --pele-fg: var(--v2-text-text-base);
+    --pele-muted: var(--v2-text-text-muted);
+    --pele-line: var(--v2-icon-icon-muted);
+    --pele-surface: var(--v2-background-bg-base);
+    --pele-surface-alt: var(--v2-background-bg-layer-03);
+    --pele-border: var(--v2-border-border-strong);
+    --pele-accent: var(--v2-text-text-accent);
+    --pele-critical: var(--v2-state-fg-danger);
+    --pele-error: var(--v2-state-fg-danger);
+    --pele-font: var(--font-family-sans);
+    --pele-font-mono: var(--font-family-mono);
+    --pele-radius: 6px;
+    min-height: 96px;
+    margin: 12px 0 24px;
+    padding: 16px;
+    overflow: auto;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-02);
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  [data-component="markdown-mermaid"] > svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-code-content] > pre {
+    display: none;
+  }
+
+  /* Plugin content in place of the code keeps the code block's spacing. */
+  [data-slot="markdown-code-content"] {
+    margin-top: 12px;
+    margin-bottom: 24px;
+  }
+
+  [data-component="markdown-code"][data-code-kind="shell"] .highlights {
     background: var(--markdown-shell-code-background);
     border-color: var(--markdown-shell-code-border);
     color: var(--markdown-shell-code-color);
@@ -202,14 +352,32 @@
   [data-slot="markdown-copy-button"] {
     position: absolute;
     top: 4px;
-    right: 4px;
-    opacity: 0;
+    inset-inline-end: 4px;
     transition: opacity 0.15s ease;
     z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
   }
 
-  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
-  [data-slot="markdown-copy-button"]:focus-within {
+  /* Plugin actions sit before the 24px Copy button, revealed with it. */
+  [data-slot="markdown-code-actions"] {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 30px;
+    display: flex;
+    gap: 2px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"]:hover :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]),
+  :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]):focus-within {
     opacity: 1;
   }
 
@@ -237,22 +405,24 @@
   }
 
   :not(pre) > code {
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    padding: 2px 4px;
+    padding: 0 4px;
     border-radius: 4px;
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
+  /* A path turns into a link after an async existence check, so it keeps the plain code box and only fades its colours. */
   :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    background: color-mix(
-      in oklch,
-      var(--markdown-inline-code-path-color) var(--markdown-inline-code-bg-mix),
-      transparent
-    );
+    background-color: transparent;
+    transition:
+      color 200ms ease-out,
+      background-color 200ms ease-out;
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
@@ -263,33 +433,73 @@
     text-underline-offset: 2px;
   }
 
-  /* Tables */
+  /* Tables: the Console's data table, a raised body inside a muted frame that also holds the header */
+  [data-component="markdown-table"] {
+    margin: 16px 0;
+    overflow-x: auto;
+    padding: 2px;
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-01);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  }
+
   table {
     width: 100%;
-    border-collapse: collapse;
-    margin: 16px 0;
-    font-size: var(--font-size-base);
-    display: block;
-    overflow-x: auto;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--v2-text-text-base);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  tbody {
+    border-radius: 4px;
+    background: var(--v2-background-bg-base);
+    box-shadow: var(--v2-elevation-raised);
   }
 
   th,
   td {
-    /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
-    border-bottom: 0.5px solid var(--v2-border-border-muted);
-    padding: 12px;
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 
   th {
-    color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
-    border-bottom: 0.5px solid var(--v2-border-border-base);
+    padding: 8px 12px;
+    color: var(--v2-text-text-muted);
+    font-weight: 530;
+  }
+
+  td {
+    padding: 10px 12px;
+  }
+
+  tbody tr:not(:last-child) td {
+    border-bottom: 0.5px solid var(--v2-border-border-muted);
+  }
+
+  tbody tr:first-child td:first-child {
+    border-start-start-radius: 4px;
+  }
+
+  tbody tr:first-child td:last-child {
+    border-start-end-radius: 4px;
+  }
+
+  tbody tr:last-child td:first-child {
+    border-end-start-radius: 4px;
+  }
+
+  tbody tr:last-child td:last-child {
+    border-end-end-radius: 4px;
   }
 
   /* Images */
   img {
+    cursor: zoom-in;
     max-width: 100%;
     height: auto;
     border-radius: 4px;
@@ -298,7 +508,30 @@
   }
 }
 
-body[data-new-layout] [data-component="markdown"] {
+@keyframes markdown-word-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+:root[data-motion="reduce"] {
+  [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
+    animation: none;
+  }
+
+  [data-component="markdown"] :not(pre) > code[data-inline-code-kind="path"] {
+    transition: none;
+  }
+}
+
+[data-component="markdown"] > * {
+  unicode-bidi: plaintext;
+}
+
+:root body [data-component="markdown"] {
   [data-slot="markdown-copy-button"]::after {
     box-sizing: border-box;
     display: inline-flex;
@@ -318,56 +551,6 @@ body[data-new-layout] [data-component="markdown"] {
     letter-spacing: 0.05px;
     font-variant-numeric: tabular-nums;
     font-variation-settings: "slnt" 0;
-  }
-}
-
-body:not([data-new-layout]) [data-component="markdown"] {
-  color: var(--text-strong);
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-size: 14px;
-    color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
-  }
-
-  strong,
-  b {
-    color: var(--text-strong);
-  }
-
-  li::marker {
-    color: var(--text-weak);
-  }
-
-  blockquote {
-    border-left: 2px solid var(--border-weak-base);
-    color: var(--text-weak);
-  }
-
-  .shiki {
-    border-color: var(--border-weak-base);
-  }
-
-  :not(pre) > code {
-    color: var(--syntax-string);
-    padding: 0;
-    border-radius: 0;
-    background: none;
-  }
-
-  th,
-  td {
-    border-bottom: 1px solid var(--border-weaker-base);
-  }
-
-  th {
-    color: var(--text-strong);
-    border-bottom-color: var(--border-weak-base);
   }
 }
 

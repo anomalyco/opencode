@@ -1,0 +1,41 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh user@example.com",
+  add: "SSH sunucusu ekle",
+  "server.menu.label": "SSH sunucusu",
+  target: "Ana Bilgisayar veya SSH komutu",
+  connect: "Bağlan",
+  connectTo: "{{host}}'ye bağlanın",
+  authenticate: "SSH kimlik doğrulaması",
+  "session.disconnected": "SSH bağlantısı etkin değil",
+  "session.connecting": "SSH sunucusuna bağlanılıyor",
+  "session.reconnectDescription":
+    "Bu oturumu görüntülemek ve çalışmaya devam etmek için yeniden bağlanın. Uzak oturumunuz korunur.",
+  "session.reconnect": "Yeniden bağlan",
+  trust: "Güvenin ve bağlanın",
+  continue: "Devam",
+  update: "Güncelleyin ve yeniden bağlanın",
+  project: "{{host}}'de projeyi aç",
+  "stage.incompatible": "Sunucu güncellemesi gerekli",
+  "error.input":
+    "Bir ana bilgisayar veya SSH bağlantı komutunu girin. Uzaktan komutlara ve desteklenmeyen SSH seçeneklerine izin verilmez.",
+  "error.connection": "SSH bağlantısı kurulamadı. Ağınızı ve SSH yapılandırmanızı kontrol edin.",
+  "error.platform":
+    "Bu uzak platform desteklenmiyor. Otomatik kurulum şu anda x64 veya arm64'te Linux veya macOS gerektirir.",
+  "error.version": "Uzak hizmetin bağlanmadan önce bu Masaüstü sürümüyle eşleşmesi gerekir.",
+  "error.install": "Uzak sunucu yüklenemedi. Bağlantıyı, disk alanını ve tar'ın yüklü olup olmadığını kontrol edin.",
+  "error.unpublished":
+    "Bu Masaüstü sürümünde yayınlanmış bir uzak sunucu yok. Geliştirme derlemeleri için V2'yi ana makineye kurup başlatın ve ardından yeniden deneyin.",
+  "error.service": "SSH bağlandı ancak OpenCode sunucusu hazır olmadı.",
+  "error.host-key":
+    "Toplantı sahibinin kimliği doğrulanamadı. Bilinen SSH ana bilgisayarlarınızı güncellemeden önce parmak izini doğrulayın.",
+  "error.ssh-missing":
+    "OpenSSH bulunamadı. Bir OpenSSH istemcisi kurun ve ssh'nin PATH'de mevcut olduğundan emin olun.",
+  "action.authenticate": "Kimlik Doğrula",
+  "stage.connecting": "SSH üzerinden bağlanılıyor…",
+  "stage.authentication": "Kimlik doğrulama gerekli",
+  "form.name": "Sunucu adı (isteğe bağlı)",
+  "form.namePlaceholder": "Localhost",
+  "form.add": "Sunucu ekle",
+  "menu.delete": "Sil",
+}

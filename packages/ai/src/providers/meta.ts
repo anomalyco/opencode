@@ -1,0 +1,160 @@
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { MetaResponses } from "../protocols/meta-responses.js"
+import { MetaMessages } from "../protocols/meta-messages.js"
+import { MetaImages } from "../protocols/meta-images.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { MediaRoute } from "../route/media.js"
+import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
+
+export const id = ProviderID.make("meta")
+const baseURL = "https://api.meta.ai/v1"
+
+export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
+  Pick<AnthropicMessages.OptionsInput, "thinking" | "effort">
+export type MessagesOptionsInput = Pick<
+  AnthropicMessages.OptionsInput,
+  "thinking" | "effort" | "outputConfig" | "output_config" | "serviceTier" | "service_tier" | "metadata"
+> & { readonly [key: string]: unknown }
+export type ImageOptions = MetaImages.ImageOptions
+
+export interface WebSearchOptions {
+  readonly searchContextSize?: "low" | "medium" | "high" | (string & {})
+  readonly userLocation?: {
+    readonly city?: string
+    readonly region?: string
+    readonly country?: string
+    readonly timezone?: string
+  }
+}
+
+export const webSearch = (options: WebSearchOptions = {}) =>
+  ToolDefinition.make({
+    name: "web_search",
+    description: "Search the web with Meta's hosted search tool.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    native: {
+      meta: {
+        type: "web_search",
+        search_context_size: options.searchContextSize,
+        user_location:
+          options.userLocation === undefined ? undefined : { type: "approximate", ...options.userLocation },
+      },
+    },
+  })
+
+export interface ImageGenerationOptions {
+  readonly size?: string
+  readonly outputFormat?: OpenString<"webp" | "png" | "jpeg">
+  readonly reasoningStrength?: OpenString<"low" | "high">
+  readonly enableImageSearch?: boolean
+  readonly enableWebSearch?: boolean
+  readonly enableShell?: boolean
+}
+
+export const imageGeneration = (options: ImageGenerationOptions = {}) =>
+  ToolDefinition.make({
+    name: "image_generation",
+    description: "Generate or edit an image with Muse Image.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    native: {
+      meta: {
+        type: "image_generation",
+        size: options.size,
+        output_format: options.outputFormat,
+        reasoning_strength: options.reasoningStrength,
+        enable_image_search: options.enableImageSearch,
+        enable_web_search: options.enableWebSearch,
+        enable_shell: options.enableShell,
+      },
+    },
+  })
+
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: ProviderOptionsInput
+  }
+
+export type Settings = ProviderPackage.Settings &
+  ProviderOptionsInput & {
+    readonly apiKey?: string | false
+    readonly baseURL?: string
+  }
+
+const responsesRoute = Route.make({
+  id: "meta-responses",
+  provider: id,
+  providerMetadataKey: "meta",
+  protocol: MetaResponses.protocol,
+  endpoint: Endpoint.path("/responses", { baseURL }),
+  // Meta Responses does not support WebSocket upgrades; always use HTTP/SSE.
+  transport: MetaResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
+
+const chatRoute = Route.make({
+  id: "meta-chat",
+  provider: id,
+  providerMetadataKey: "meta",
+  protocol: OpenAIChat.protocol,
+  endpoint: Endpoint.path("/chat/completions", { baseURL }),
+  framing: OpenAIChat.framing,
+})
+
+const messagesRoute = Route.make({
+  id: "meta-messages",
+  provider: id,
+  providerMetadataKey: "meta",
+  protocol: MetaMessages.protocol,
+  endpoint: Endpoint.path("/messages", { baseURL }),
+  framing: AnthropicMessages.framing,
+  defaults: { providerOptions: { thinking: { type: "adaptive", display: "omitted" } } },
+})
+
+export const routes = [responsesRoute, chatRoute, messagesRoute]
+
+export const configure = (input: Config = {}) => {
+  const options = bearerRouteDefaults(input, "META_API_KEY", baseURL)
+  const configuredResponses = responsesRoute.with(options)
+  const configuredChat = chatRoute.with(options)
+  const configuredMessages = messagesRoute.with(options)
+  const responses = (modelID: string | ModelID) =>
+    configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID })
+  const chat = (modelID: string | ModelID) =>
+    configuredChat.model<OpenResponsesProviderOptionsInput>({
+      id: modelID,
+      compatibility: { maxTokensField: "max_completion_tokens", supportsPromptCacheKey: true },
+    })
+  const messages = (modelID: string | ModelID) =>
+    configuredMessages.model<MessagesOptionsInput>({
+      id: modelID,
+    })
+  const media = MediaRoute.deployment(input, options.auth)
+  const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })
+  return { id, model: responses, responses, chat, messages, image, configure }
+}
+
+export const provider = configure()
+export const responses = provider.responses
+export const chat = provider.chat
+export const messages = provider.messages
+export const image = provider.image
+
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).responses(modelID)
+
+export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).chat(modelID)
+
+export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).messages(modelID)
+
+export const imageModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).image(modelID)
+
+export * as Meta from "./meta.js"

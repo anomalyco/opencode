@@ -48,16 +48,6 @@ La CLI OpenCode dispose également des commandes suivantes.
 
 ---
 
-### agent
-
-Gérer les agents pour OpenCode.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Attachez un terminal à un serveur backend OpenCode déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |       | Dupliquer la session lors de la reprise (à utiliser avec `--continue` ou `--session`)              |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OPENCODE_SERVER_PASSWORD`)                    |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OPENCODE_SERVER_USERNAME` ou `opencode`) |
-
----
-
-#### create
-
-Créez un nouvel agent avec une configuration personnalisée.
-
-```bash
-opencode agent create
-```
-
-Cette commande vous guidera dans la création d'un nouvel agent avec un prompt système personnalisé et une configuration d'outils.
-
----
-
-#### list
-
-Liste tous les agents disponibles.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                      |
-| <nobr><code>{"--share"}</code></nobr>    |       | Partager la session                                                                                |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                                 |
 | <nobr><code>{"--agent"}</code></nobr>    |       | Agent à utiliser                                                                                   |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | Fichier(s) à joindre au message                                                                    |
@@ -442,17 +409,14 @@ Si vous ne fournissez pas d'ID de session, vous serez invité à sélectionner p
 
 ### import
 
-Importez les données de session à partir d'un fichier JSON ou d'une URL de partage OpenCode.
+Importez les données de session à partir d'un fichier JSON.
 
 ```bash
 opencode import <file>
 ```
 
-Vous pouvez importer à partir d'un fichier local ou d'une URL de partage OpenCode.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode peut être configuré à l'aide de variables d'environnement.
 
 | Variables                             | Type    | Description                                                                       |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
 | `OPENCODE_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
 | `OPENCODE_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
 | `OPENCODE_TUI_CONFIG`                 | chaîne  | Chemin d'accès au fichier de configuration TUI                                    |
@@ -609,7 +572,6 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 | `OPENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booléen | Activer les tâches de sous-agents en arrière-plan               |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booléen | Activer le système d'événements expérimental                    |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | booléen | Activer le chemin de requête LLM natif                          |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | booléen | Activer l'exécution parallèle de la recherche web               |

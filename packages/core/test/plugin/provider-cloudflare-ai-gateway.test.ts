@@ -1,425 +1,159 @@
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { describe, expect, mock } from "bun:test"
-import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { CloudflareAIGatewayPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-ai-gateway"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { describe, expect } from "bun:test"
+import { Effect, Schedule } from "effect"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { CloudflareAIGatewayPlugin } from "@opencode/core/plugin/provider/cloudflare-ai-gateway"
+import { Provider } from "@opencode/core/provider"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
+const providerID = Provider.ID.make("cloudflare-ai-gateway")
+
+const seed = Effect.fn(function* (fn: (provider: Provider.MutableInfo) => void) {
+  const catalog = yield* Provider.Service
+  yield* catalog.transform((catalog) => catalog.update(providerID, fn))
+  return catalog
+})
+
+const settingsWhen = (predicate: (settings: Provider.Settings | undefined) => boolean) =>
+  Effect.gen(function* () {
+    const catalog = yield* Provider.Service
+    return (yield* catalog.get(providerID))?.settings
+  }).pipe(
+    Effect.filterOrFail(predicate, () => new Error("settings not applied")),
+    Effect.retry({ schedule: Schedule.spaced("1 millis") }),
+    Effect.timeout("10 seconds"),
+  )
 
 const addPlugin = Effect.fn(function* () {
-  const plugin = yield* PluginV2.Service
-  const aisdk = yield* AISDK.Service
-  const host = yield* PluginHost.make(plugin)
+  const plugin = yield* Plugin.Service
+  const host = yield* PluginHost.make(plugin, "test")
   yield* CloudflareAIGatewayPlugin.effect(host)
 })
 
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    fx,
-    (previous) =>
-      Effect.sync(() => {
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        })
-      }),
-  )
-}
-
-const aiGatewayCalls: Record<string, unknown>[] = []
-const unifiedCalls: string[] = []
-const gatewayModelCalls: unknown[] = []
-
-function captureAiGatewayOptions(options: Record<string, unknown>) {
-  const nested =
-    options.options && typeof options.options === "object" ? (options.options as Record<string, unknown>) : undefined
-  return {
-    ...options,
-    ...(nested
-      ? {
-          options: {
-            ...nested,
-            headers:
-              nested.headers && typeof nested.headers === "object"
-                ? { ...(nested.headers as Record<string, unknown>) }
-                : nested.headers,
-          },
-        }
-      : {}),
-  }
-}
-
-function resetCalls() {
-  aiGatewayCalls.length = 0
-  unifiedCalls.length = 0
-  gatewayModelCalls.length = 0
-}
-
-function cloudflareEnv(overrides: Record<string, string | undefined> = {}) {
-  return {
-    CLOUDFLARE_ACCOUNT_ID: "env-account",
-    CLOUDFLARE_GATEWAY_ID: "env-gateway",
-    CLOUDFLARE_API_TOKEN: "env-token",
-    CF_AIG_TOKEN: undefined,
-    ...overrides,
-  }
-}
-
-mock.module("ai-gateway-provider", () => ({
-  createAiGateway(options: Record<string, unknown>) {
-    aiGatewayCalls.push(captureAiGatewayOptions(options))
-    return (input: unknown) => {
-      gatewayModelCalls.push(input)
-      return {
-        modelId: input,
-        provider: "cloudflare-ai-gateway",
-        specificationVersion: "v3",
-      }
-    }
-  },
-}))
-
-mock.module("ai-gateway-provider/providers/unified", () => ({
-  createUnified() {
-    return (modelID: string) => {
-      unifiedCalls.push(modelID)
-      return { unifiedModelID: modelID }
-    }
-  },
-}))
-
 describe("CloudflareAIGatewayPlugin", () => {
-  it.effect("requires account, gateway, and token before creating the unified SDK", () =>
-    withEnv(
-      {
-        CLOUDFLARE_ACCOUNT_ID: "acct",
-        CLOUDFLARE_GATEWAY_ID: "gateway",
-        CLOUDFLARE_API_TOKEN: "token",
-        CF_AIG_TOKEN: undefined,
-      },
-      () =>
-        Effect.gen(function* () {
-          const plugin = yield* PluginV2.Service
-          const aisdk = yield* AISDK.Service
-          yield* addPlugin()
-          const result = yield* aisdk.runSDK({
-            model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-              api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "ai-gateway-provider",
-            options: { name: "cloudflare-ai-gateway" },
-          })
-          expect(result.sdk.languageModel("openai/gpt-5")).toBeDefined()
-        }),
-    ),
-  )
-
-  it.effect("passes legacy metadata, cache, log, and User-Agent values under the AI Gateway options key", () =>
-    withEnv(cloudflareEnv(), () =>
+  it.effect("registers account and gateway forms when the environment does not provide them", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-
-        yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "ai-gateway-provider",
-          options: {
-            name: "cloudflare-ai-gateway",
-            metadata: { invoked_by: "test", project: "opencode" },
-            cacheTtl: 300,
-            cacheKey: "cache-key",
-            skipCache: true,
-            collectLog: false,
-          },
-        })
-
-        expect(aiGatewayCalls).toHaveLength(1)
-        expect(aiGatewayCalls[0]).toEqual({
-          accountId: "env-account",
-          gateway: "env-gateway",
-          apiKey: "env-token",
-          options: {
-            metadata: { invoked_by: "test", project: "opencode" },
-            cacheTtl: 300,
-            cacheKey: "cache-key",
-            skipCache: true,
-            collectLog: false,
-            headers: {
-              "User-Agent": expect.stringContaining("opencode/"),
-            },
-          },
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
+          type: "key",
+          label: "Gateway API token",
+          form: [
+            expect.objectContaining({ type: "string", key: "accountId", required: true }),
+            expect.objectContaining({ type: "string", key: "gatewayId", required: true }),
+          ],
         })
       }),
     ),
   )
 
-  it.effect("parses legacy cf-aig-metadata header when metadata option is absent", () =>
-    withEnv(cloudflareEnv(), () =>
+  it.effect("uses environment account and gateway values without requesting form fields", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_GATEWAY_ID: "gateway" }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-
-        yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "ai-gateway-provider",
-          options: {
-            name: "cloudflare-ai-gateway",
-            headers: {
-              "cf-aig-metadata": JSON.stringify({ invoked_by: "header", project: "opencode" }),
-            },
-          },
-        })
-
-        expect(aiGatewayCalls[0]?.options).toMatchObject({
-          metadata: { invoked_by: "header", project: "opencode" },
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
+          type: "key",
+          label: "Gateway API token",
         })
       }),
     ),
   )
 
-  it.effect("prefers Cloudflare env values over auth/config-derived options", () =>
-    withEnv(cloudflareEnv(), () =>
+  it.effect("requests only the gateway ID when the environment provides the account ID", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
         yield* addPlugin()
-
-        yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "ai-gateway-provider",
-          options: {
-            name: "cloudflare-ai-gateway",
-            accountId: "auth-account",
-            gateway: "auth-gateway",
-            apiKey: "auth-token",
-          },
-        })
-
-        expect(aiGatewayCalls[0]).toMatchObject({
-          accountId: "env-account",
-          gateway: "env-gateway",
-          apiKey: "env-token",
+        const integrations = yield* Integration.Service
+        expect((yield* integrations.get(Integration.ID.make("cloudflare-ai-gateway")))?.methods).toContainEqual({
+          type: "key",
+          label: "Gateway API token",
+          form: [expect.objectContaining({ type: "string", key: "gatewayId", required: true })],
         })
       }),
     ),
   )
 
-  it.effect("accepts gatewayId metadata copied from auth into provider options", () =>
-    withEnv(
-      cloudflareEnv({
-        CLOUDFLARE_ACCOUNT_ID: undefined,
-        CLOUDFLARE_GATEWAY_ID: undefined,
-        CLOUDFLARE_API_TOKEN: undefined,
-      }),
-      () =>
-        Effect.gen(function* () {
-          resetCalls()
-          const plugin = yield* PluginV2.Service
-          const aisdk = yield* AISDK.Service
-          yield* addPlugin()
-
-          yield* aisdk.runSDK({
-            model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-              api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "ai-gateway-provider",
-            options: {
-              name: "cloudflare-ai-gateway",
-              accountId: "auth-account",
-              gatewayId: "auth-gateway",
-              apiKey: "auth-token",
-            },
-          })
-
-          expect(aiGatewayCalls[0]).toMatchObject({
-            accountId: "auth-account",
-            gateway: "auth-gateway",
-            apiKey: "auth-token",
-          })
-        }),
-    ),
-  )
-
-  it.effect("falls back to CF_AIG_TOKEN when CLOUDFLARE_API_TOKEN is unset", () =>
-    withEnv(cloudflareEnv({ CLOUDFLARE_API_TOKEN: undefined, CF_AIG_TOKEN: "cf-aig-token" }), () =>
+  it.effect("gives the provider its environment account and gateway IDs", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_GATEWAY_ID: "gateway" }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
+        const catalog = yield* seed(() => {})
         yield* addPlugin()
-
-        yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "ai-gateway-provider",
-          options: { name: "cloudflare-ai-gateway" },
-        })
-
-        expect(aiGatewayCalls[0]).toMatchObject({ apiKey: "cf-aig-token" })
+        expect((yield* catalog.get(providerID))?.settings).toEqual({ accountId: "account", gatewayId: "gateway" })
       }),
     ),
   )
 
-  it.effect("does not create an SDK when account and gateway IDs are missing", () =>
-    withEnv(cloudflareEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }), () =>
+  it.effect("prefers configured IDs over environment IDs", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "env-account", CLOUDFLARE_GATEWAY_ID: "env-gateway" }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
-        yield* addPlugin()
-
-        const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "ai-gateway-provider",
-          options: { name: "cloudflare-ai-gateway" },
+        const catalog = yield* seed((provider) => {
+          provider.settings = { accountId: "configured-account", gatewayId: "configured-gateway" }
         })
-
-        expect(result.sdk).toBeUndefined()
-        expect(aiGatewayCalls).toHaveLength(0)
+        yield* addPlugin()
+        expect((yield* catalog.get(providerID))?.settings).toEqual({
+          accountId: "configured-account",
+          gatewayId: "configured-gateway",
+        })
       }),
     ),
   )
 
-  it.effect("does not create an SDK when the token is missing", () =>
-    withEnv(cloudflareEnv({ CLOUDFLARE_API_TOKEN: undefined, CF_AIG_TOKEN: undefined }), () =>
+  it.effect("gives the provider the account and gateway IDs of a stored form login", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
-        yield* addPlugin()
-
-        const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
+        const catalog = yield* seed(() => {})
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make("cloudflare-ai-gateway"),
+          value: Credential.Key.make({
+            type: "key",
+            key: "token",
+            metadata: { accountId: "form-account", gatewayId: "form-gateway" },
           }),
-          package: "ai-gateway-provider",
-          options: { name: "cloudflare-ai-gateway" },
         })
-
-        expect(result.sdk).toBeUndefined()
-        expect(aiGatewayCalls).toHaveLength(0)
+        yield* addPlugin()
+        expect((yield* catalog.get(providerID))?.settings).toEqual({
+          accountId: "form-account",
+          gatewayId: "form-gateway",
+        })
       }),
     ),
   )
 
-  it.effect("does not replace a configured baseURL with the Cloudflare AI Gateway SDK", () =>
-    withEnv(
-      cloudflareEnv({
-        CLOUDFLARE_ACCOUNT_ID: undefined,
-        CLOUDFLARE_GATEWAY_ID: undefined,
-        CLOUDFLARE_API_TOKEN: undefined,
-      }),
-      () =>
-        Effect.gen(function* () {
-          resetCalls()
-          const plugin = yield* PluginV2.Service
-          const aisdk = yield* AISDK.Service
-          yield* addPlugin()
-
-          const result = yield* aisdk.runSDK({
-            model: ModelV2.Info.make({
-              ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-              api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-            }),
-            package: "ai-gateway-provider",
-            options: { name: "cloudflare-ai-gateway", baseURL: "https://proxy.example/v1" },
-          })
-
-          expect(result.sdk).toBeUndefined()
-          expect(aiGatewayCalls).toHaveLength(0)
-        }),
-    ),
-  )
-
-  it.effect("maps provider/model IDs through the unified Cloudflare provider unchanged", () =>
-    withEnv(cloudflareEnv(), () =>
+  it.live("applies the account and gateway IDs of a form login made after startup", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
+        yield* seed(() => {})
         yield* addPlugin()
-
-        const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("cloudflare-ai-gateway"),
-              ModelV2.ID.make("anthropic/claude-sonnet-4-5"),
-            ),
-            api: {
-              id: ModelV2.ID.make("anthropic/claude-sonnet-4-5"),
-              type: "aisdk",
-              package: "test-provider",
-            },
-          }),
-          package: "ai-gateway-provider",
-          options: { name: "cloudflare-ai-gateway" },
+        const integrations = yield* Integration.Service
+        yield* integrations.connection.key({
+          integrationID: Integration.ID.make("cloudflare-ai-gateway"),
+          key: "token",
+          answer: { accountId: "form-account", gatewayId: "form-gateway" },
         })
-
-        expect(result.sdk.languageModel("anthropic/claude-sonnet-4-5")).toEqual({
-          modelId: { unifiedModelID: "anthropic/claude-sonnet-4-5" },
-          provider: "cloudflare-ai-gateway",
-          specificationVersion: "v3",
+        expect(yield* settingsWhen((settings) => settings?.accountId !== undefined)).toEqual({
+          accountId: "form-account",
+          gatewayId: "form-gateway",
         })
-        expect(unifiedCalls).toEqual(["anthropic/claude-sonnet-4-5"])
-        expect(gatewayModelCalls).toEqual([{ unifiedModelID: "anthropic/claude-sonnet-4-5" }])
       }),
     ),
   )
 
-  it.effect("ignores non Cloudflare AI Gateway packages", () =>
-    withEnv(cloudflareEnv(), () =>
+  it.effect("leaves a configured endpoint URL untouched", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_GATEWAY_ID: "gateway" }, () =>
       Effect.gen(function* () {
-        resetCalls()
-        const plugin = yield* PluginV2.Service
-        const aisdk = yield* AISDK.Service
-        yield* addPlugin()
-
-        const result = yield* aisdk.runSDK({
-          model: ModelV2.Info.make({
-            ...ModelV2.Info.empty(ProviderV2.ID.make("cloudflare-ai-gateway"), ModelV2.ID.make("openai/gpt-5")),
-            api: { id: ModelV2.ID.make("openai/gpt-5"), type: "aisdk", package: "test-provider" },
-          }),
-          package: "@ai-sdk/openai-compatible",
-          options: { name: "cloudflare-ai-gateway" },
+        const catalog = yield* seed((provider) => {
+          provider.settings = { baseURL: "https://proxy.example/v1" }
         })
-
-        expect(result.sdk).toBeUndefined()
-        expect(aiGatewayCalls).toHaveLength(0)
+        yield* addPlugin()
+        expect((yield* catalog.get(providerID))?.settings).toEqual({ baseURL: "https://proxy.example/v1" })
       }),
     ),
   )

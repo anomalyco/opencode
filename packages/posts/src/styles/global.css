@@ -1,0 +1,139 @@
+:root {
+  color-scheme: dark;
+  font-family: "Commit Mono", ui-monospace, monospace;
+  color: var(--foreground);
+  background: var(--background);
+  font-synthesis: none;
+  --foreground: #f1efe8;
+  --background: #131010;
+  --muted: rgb(241 239 232 / 45%);
+  --border: rgb(241 239 232 / 12%);
+  --code: rgb(255 255 255 / 6%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  font-size: 18px;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+}
+
+main {
+  width: min(100% - 2rem, 672px);
+  margin-inline: auto;
+  padding-block: 4rem;
+}
+
+.site-logo {
+  display: block;
+  width: 8.75rem;
+  margin-bottom: 5rem;
+}
+
+.site-logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+h1,
+h2 {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  color: #fff;
+  font-size: clamp(2rem, 8vw, 3rem);
+  line-height: 1.15;
+}
+
+h2 {
+  margin: 3rem 0 1rem;
+  font-size: 1.25rem;
+}
+
+p {
+  margin-block: 0 1.25rem;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+time,
+.description {
+  color: var(--muted);
+}
+
+.description {
+  font-size: 1.05rem;
+}
+
+.post-header {
+  margin-bottom: 4rem;
+}
+
+.post-header time {
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.post-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post-list a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 1rem;
+  margin-inline: -1.25rem;
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.post-list a:hover {
+  background: rgb(255 255 255 / 4%);
+}
+
+.post-list span:first-child {
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.post-list time {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+code {
+  padding: 0.15em 0.35em;
+  background: var(--code);
+  font: inherit;
+  font-size: 0.9em;
+}
+
+@media (max-width: 480px) {
+  .post-list a {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}

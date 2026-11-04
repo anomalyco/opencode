@@ -48,16 +48,6 @@ Der OpenCode CLI verfügt außerdem über die folgenden Befehle.
 
 ---
 
-### agent
-
-Agenten für OpenCode verwalten.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Schließen Sie ein Terminal an einen bereits laufenden OpenCode-Backend-Server an, der über die Befehle `serve` oder `web` gestartet wurde.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen abzweigen (mit `--continue` oder `--session` verwenden)    |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OPENCODE_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OPENCODE_SERVER_USERNAME` oder `opencode`) |
-
----
-
-#### create
-
-Erstellen Sie einen neuen Agenten mit benutzerdefinierter Konfiguration.
-
-```bash
-opencode agent create
-```
-
-Dieser Befehl führt Sie durch die Erstellung eines neuen Agenten mit einer benutzerdefinierten Systemeingabeaufforderung und Toolkonfiguration.
-
----
-
-#### list
-
-Listen Sie alle verfügbaren Agenten auf.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Setzen Sie die letzte Sitzung fort                                                                  |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                                           |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen verzweigen (mit `--continue` oder `--session` verwenden)                    |
-| <nobr><code>{"--share"}</code></nobr>    |      | Teilen Sie die Sitzung                                                                              |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | Zu verwendendes Modell in der Form provider/model                                                   |
 | <nobr><code>{"--agent"}</code></nobr>    |      | Zu verwendender Agent                                                                               |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Datei(en) zum Anhängen an die Nachricht                                                             |
@@ -442,17 +409,14 @@ Wenn Sie keine Sitzungs-ID angeben, werden Sie aufgefordert, eine der verfügbar
 
 ### import
 
-Importieren Sie Sitzungsdaten aus einer JSON-Datei oder einer OpenCode-Freigabe-URL.
+Importieren Sie Sitzungsdaten aus einer JSON-Datei.
 
 ```bash
 opencode import <file>
 ```
 
-Sie können aus einer lokalen Datei oder einer OpenCode-Freigabe-URL importieren.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
 | Variable                              | Typ             | Beschreibung                                                                     |
 | ------------------------------------- | --------------- | -------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolescher Wert | Sitzungen automatisch teilen                                                     |
 | `OPENCODE_GIT_BASH_PATH`              | Zeichenfolge    | Pfad zur ausführbaren Git Bash-Datei unter Windows                               |
 | `OPENCODE_CONFIG`                     | Zeichenfolge    | Pfad zur Konfigurationsdatei                                                     |
 | `OPENCODE_CONFIG_DIR`                 | Zeichenfolge    | Pfad zum Konfigurationsverzeichnis                                               |
@@ -608,7 +571,6 @@ Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich änder
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolescher Wert | Experimentelle Exa-Funktionen aktivieren                  |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolescher Wert | TY LSP für Python-Dateien aktivieren                      |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolescher Wert | Planmodus aktivieren                                      |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolescher Wert | Hintergrundaufgaben für Subagenten aktivieren             |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolescher Wert | Experimentelles Ereignissystem aktivieren                 |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolescher Wert | Nativen LLM-Anfragepfad aktivieren                        |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolescher Wert | Parallele Websuche aktivieren                             |

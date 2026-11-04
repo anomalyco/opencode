@@ -1,4 +1,4 @@
-export * as Wildcard from "./wildcard"
+export * as Wildcard from "./wildcard.js"
 
 export function match(input: string, pattern: string) {
   const normalized = input.replaceAll("\\", "/")

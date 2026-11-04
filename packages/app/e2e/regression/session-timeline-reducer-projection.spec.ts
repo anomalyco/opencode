@@ -1,43 +1,53 @@
 import { expect, test } from "@playwright/test"
-import {
-  assistantMessage,
-  completedAssistantInfo,
-  messageUpdated,
-  partUpdated,
-  setupTimeline,
-  shell,
-  status,
-  textPart,
-  toolPart,
-  userMessage,
-} from "../performance/timeline-stability/fixture"
+import { assistantMessage, setupTimeline, toolPart, userMessage } from "../utils/timeline"
 
-test("groups singleton and separated context operations at correct boundaries", async ({ page }) => {
+test("keeps failed search calls and their error cards inside the collapsed stack", async ({ page }) => {
   const parts = [
-    toolPart("prt_boundary_01_read", "read", "completed", { filePath: "src/a.ts" }),
-    textPart("prt_boundary_02_text", "Boundary text"),
-    toolPart("prt_boundary_03_glob", "glob", "completed", { path: ".", pattern: "**/*.ts" }),
-    toolPart("prt_boundary_04_grep", "grep", "completed", { path: ".", pattern: "stable" }),
-    shell("prt_boundary_05_shell", "completed", "done"),
-    toolPart("prt_boundary_06_list", "list", "completed", { path: "src" }),
+    toolPart(
+      "prt_error_glob",
+      "glob",
+      "error",
+      { path: "C:/Users", pattern: "*.ts" },
+      {
+        error: "Invalid tool input",
+      },
+    ),
+    toolPart(
+      "prt_error_grep",
+      "grep",
+      "error",
+      { path: "C:/Users", pattern: "value" },
+      {
+        error: "Search timed out after 30 seconds",
+      },
+    ),
   ]
+
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
-  await expect(page.locator('[data-timeline-part-ids="prt_boundary_01_read"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-part-ids="prt_boundary_03_glob,prt_boundary_04_grep"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-part-ids="prt_boundary_06_list"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(5)
-})
-
-test("reducer-hardening: converges when idle arrives before final part and message completion", async ({ page }) => {
-  const textID = "prt_event_order_text"
-  const assistant = assistantMessage([textPart(textID, "Partial")], { completed: false })
-  const timeline = await setupTimeline(page, { messages: [userMessage(), assistant] })
-  await timeline.send(status("busy"), 100)
-  await timeline.send(status("idle"), 100)
-  await timeline.send(partUpdated(textPart(textID, "Final after early idle")), 120)
-  await timeline.send(messageUpdated(completedAssistantInfo(assistant.info)), 250)
-
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${textID}"]`)).toContainText("Final after early idle")
+  const group = page.locator('[data-component="collapsed-tool-group"]')
+  const summary = group.getByRole("button", { name: "Used 2 Glob, Grep", exact: true })
+  await expect(summary).toHaveAttribute("aria-expanded", "false")
+  await summary.click()
+  await expect(group.locator('[data-kind="tool-error-card"]')).toHaveCount(2)
+  const glob = group.locator('[data-timeline-part-id="prt_error_glob"]')
+  await expect(glob.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+  await glob.getByRole("button").click()
+  await expect(glob).toContainText("Invalid tool input")
+  await expect(glob.locator('[data-component="tool-error-card-icon"]')).toBeVisible()
+  await expect(glob.locator('[data-component="tool-error-card-icon"] use')).toHaveAttribute(
+    "href",
+    "#opencode-v2-icon-outline-hexagonal-warning",
+  )
+  await expect
+    .poll(() =>
+      glob
+        .locator('[data-kind="tool-error-card"]')
+        .evaluate((element) => getComputedStyle(element, "::before").display),
+    )
+    .toBe("none")
+  await group.locator('[data-timeline-part-id="prt_error_grep"]').getByRole("button").click()
+  await expect(group.locator('[data-timeline-part-id="prt_error_grep"]')).toContainText(
+    "Search timed out after 30 seconds",
+  )
 })

@@ -1,0 +1,13 @@
+id: no-import-alias
+valid:
+  - import { foo } from "./foo"
+  - import type { Foo } from "./foo"
+  - import foo from "./foo"
+  - export { foo as bar } from "./foo"
+  - import type { Plugin as EffectPlugin } from "./foo"
+  - import type { Foo as Bar, Baz } from "./foo"
+invalid:
+  - import { foo as bar } from "./foo"
+  - import { baz, foo as bar } from "./foo"
+  - import { foo as bar, baz } from "./foo"
+  - import { type Foo as Bar, baz } from "./foo"

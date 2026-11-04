@@ -5,15 +5,14 @@ import {
   createLineCommentGutterRenderer,
   createLineCommentState,
   createManagedLineCommentAnnotationRenderer,
-  type LineCommentShape,
+  type SavedLineComment,
   type LineCommentStateProps,
 } from "../../components/line-comment-annotations"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { cloneSelectedLineRange, formatSelectedLineLabel } from "../../pierre/selection-bridge"
-import { LineCommentEditorV2, LineCommentV2 } from "@opencode-ai/ui/v2/line-comment-v2"
-import type { LineCommentEditorV2Mention } from "@opencode-ai/ui/v2/line-comment-v2"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { cloneSelectedLineRange } from "../../pierre/selection-bridge"
+import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode/ui/line-comment"
 
-type LineCommentControllerV2Props<T extends LineCommentShape> = {
+type LineCommentControllerV2Props<T extends SavedLineComment> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
@@ -24,28 +23,27 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
-  mention?: LineCommentEditorV2Mention
+  mention?: LineCommentEditorMention
 }
 
 type CommentProps = {
   id?: string
   comment: JSX.Element
-  selection: JSX.Element
   actions?: JSX.Element
   editor?: DraftProps
+  onOpen?: VoidFunction
   onClick?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>
 }
 
 type DraftProps = {
   value: string
-  selection: JSX.Element
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
   cancelLabel?: string
   submitLabel?: string
-  mention?: LineCommentEditorV2Mention
+  mention?: LineCommentEditorMention
 }
 
 function lineCommentElementV2(view: Accessor<CommentProps>) {
@@ -60,14 +58,13 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onClick={view().onClick}
           onMouseEnter={view().onMouseEnter}
         >
-          <LineCommentV2 comment={view().comment} selection={view().selection} actions={view().actions} />
+          <LineComment comment={view().comment} actions={view().actions} onOpen={view().onOpen} />
         </div>
       }
     >
       <div data-prevent-autofocus="" data-comment-id={view().id} onMouseDown={(event) => event.stopPropagation()}>
-        <LineCommentEditorV2
+        <LineCommentEditor
           value={view().editor!.value}
-          selection={view().editor!.selection}
           onInput={view().editor!.onInput}
           onCancel={view().editor!.onCancel}
           onSubmit={view().editor!.onSubmit}
@@ -83,9 +80,8 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
 function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
   return (
     <div data-prevent-autofocus="" onMouseDown={(event) => event.stopPropagation()}>
-      <LineCommentEditorV2
+      <LineCommentEditor
         value={view().value}
-        selection={view().selection}
         onInput={view().onInput}
         onCancel={view().onCancel}
         onSubmit={view().onSubmit}
@@ -97,7 +93,7 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
   )
 }
 
-export function createLineCommentControllerV2<T extends LineCommentShape>(props: LineCommentControllerV2Props<T>) {
+export function createLineCommentControllerV2<T extends SavedLineComment>(props: LineCommentControllerV2Props<T>) {
   const i18n = useI18n()
   const note = createLineCommentState<string>(props.state)
 
@@ -116,6 +112,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     draftElement: lineCommentDraftElementV2,
     renderComment: (comment) => {
       const edit = () => note.openEditor(comment.id, comment.selection, comment.comment)
+
       const remove = () => {
         note.reset()
         props.onDelete?.(comment)
@@ -124,7 +121,8 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       return {
         id: comment.id,
         comment: comment.comment,
-        selection: formatSelectedLineLabel(comment.selection, i18n.t),
+        // A comment with actions (its menu offers Edit) also opens its editor from a click on the card.
+        onOpen: props.renderCommentActions ? edit : undefined,
         get actions() {
           return props.renderCommentActions?.(comment, { edit, remove })
         },
@@ -134,7 +132,6 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
                 get value() {
                   return note.draft()
                 },
-                selection: formatSelectedLineLabel(comment.selection, i18n.t),
                 onInput: note.setDraft,
                 onCancel: note.cancelDraft,
                 onSubmit: (value: string) => {
@@ -151,9 +148,12 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
               }
             : undefined
         },
-        onMouseEnter: () => note.hoverComment(comment.selection),
+        onMouseEnter: () => {
+          if (note.commenting()) return
+          note.hoverComment(comment.selection)
+        },
         onClick: () => {
-          if (note.isEditing(comment.id)) return
+          if (props.renderCommentActions || note.isEditing(comment.id)) return
           note.toggleComment(comment.id, comment.selection)
         },
       }
@@ -162,12 +162,15 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       get value() {
         return note.draft()
       },
-      selection: formatSelectedLineLabel(range, i18n.t),
       onInput: note.setDraft,
-      onCancel: note.cancelDraft,
+      onCancel: () => {
+        note.cancelDraft()
+        note.select(null)
+      },
       onSubmit: (comment) => {
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
+        note.select(null)
       },
       cancelLabel: i18n.t("ui.lineComment.cancel"),
       submitLabel: i18n.t("ui.lineComment.submit"),
@@ -179,6 +182,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     label: props.label,
     getSelectedRange: () => {
       if (note.opened()) return null
+
       return note.selected()
     },
     onOpenDraft: note.openDraft,
@@ -188,6 +192,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     if (!range) {
       note.select(null)
       note.cancelDraft()
+
       return
     }
 
@@ -197,6 +202,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
   const onLineSelectionEnd = (range: SelectedLineRange | null) => {
     if (!range) {
       note.cancelDraft()
+
       return
     }
 

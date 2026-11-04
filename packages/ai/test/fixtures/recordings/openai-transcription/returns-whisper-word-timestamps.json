@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:openai-transcription",
+      "provider:openai",
+      "protocol:openai-transcription"
+    ],
+    "name": "openai-transcription/returns-whisper-word-timestamps",
+    "recordedAt": "2026-09-23T12:32:02.972Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundarydfe85869a7d6448994e94f2f41d9ce55"
+        },
+        "body": "--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n[audio]\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"timestamp_granularities[]\"\r\n\r\nword\r\n--BOUNDARY--\r\n"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"task\":\"transcribe\",\"language\":\"english\",\"duration\":1.5399999618530273,\"text\":\"Hello from OpenCode!\",\"words\":[{\"word\":\"Hello\",\"start\":0.0,\"end\":0.6200000047683716},{\"word\":\"from\",\"start\":0.6200000047683716,\"end\":0.8799999952316284},{\"word\":\"OpenCode\",\"start\":0.8799999952316284,\"end\":1.399999976158142}],\"usage\":{\"type\":\"duration\",\"seconds\":2}}"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-export * as ConfigMCPV1 from "./mcp"
+export * as ConfigMCPV1 from "./mcp.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { PositiveInt } from "../../schema.js"
 
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
@@ -16,6 +16,9 @@ export const Local = Schema.Struct({
   }),
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
+  }),
+  codemode: Schema.optional(Schema.Boolean).annotate({
+    description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
@@ -46,6 +49,9 @@ export const Remote = Schema.Struct({
   url: Schema.String.annotate({ description: "URL of the remote MCP server" }),
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
+  }),
+  codemode: Schema.optional(Schema.Boolean).annotate({
+    description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
     description: "Headers to send with the request",

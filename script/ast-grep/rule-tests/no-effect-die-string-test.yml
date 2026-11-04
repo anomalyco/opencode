@@ -1,0 +1,7 @@
+id: no-effect-die-string
+valid:
+  - Effect.die(new Error("boom"))
+  - Effect.fail("boom")
+invalid:
+  - Effect.die("boom")
+  - Effect.die(`boom ${value}`)

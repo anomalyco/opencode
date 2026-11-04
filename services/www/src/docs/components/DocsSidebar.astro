@@ -1,0 +1,27 @@
+---
+import { docsHref, type DocsNavGroup } from "../lib/navigation"
+
+interface Props {
+  groups: DocsNavGroup[]
+  currentSlug: string
+}
+---
+
+<nav class="docs-sidebar" aria-label="Documentation">
+  {
+    Astro.props.groups.map((group) => (
+      <section>
+        {group.title && <h2>{group.title}</h2>}
+        <ul>
+          {group.items.map((item) => (
+            <li>
+              <a href={docsHref(item.slug)} aria-current={item.slug === Astro.props.currentSlug ? "page" : undefined}>
+                {item.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+</nav>

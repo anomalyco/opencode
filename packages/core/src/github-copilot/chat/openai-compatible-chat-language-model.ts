@@ -3,7 +3,6 @@ import {
   InvalidResponseDataError,
   type LanguageModelV3,
   type LanguageModelV3CallOptions,
-  type LanguageModelV3Content,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
   type SharedV3Warning,
@@ -12,7 +11,6 @@ import {
   combineHeaders,
   createEventSourceResponseHandler,
   createJsonErrorResponseHandler,
-  createJsonResponseHandler,
   type FetchFunction,
   generateId,
   isParsableJson,
@@ -22,13 +20,13 @@ import {
   type ResponseHandler,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import { convertToOpenAICompatibleChatMessages } from "./convert-to-openai-compatible-chat-messages"
-import { getResponseMetadata } from "./get-response-metadata"
-import { mapOpenAICompatibleFinishReason } from "./map-openai-compatible-finish-reason"
-import { type OpenAICompatibleChatModelId, openaiCompatibleProviderOptions } from "./openai-compatible-chat-options"
-import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } from "../openai-compatible-error"
-import type { MetadataExtractor } from "./openai-compatible-metadata-extractor"
-import { prepareTools } from "./openai-compatible-prepare-tools"
+import { convertToOpenAICompatibleChatMessages } from "./convert-to-openai-compatible-chat-messages.js"
+import { getResponseMetadata } from "./get-response-metadata.js"
+import { mapOpenAICompatibleFinishReason } from "./map-openai-compatible-finish-reason.js"
+import { type OpenAICompatibleChatModelId, openaiCompatibleProviderOptions } from "./openai-compatible-chat-options.js"
+import { defaultOpenAICompatibleErrorStructure, type ProviderErrorStructure } from "../openai-compatible-error.js"
+import type { MetadataExtractor } from "./openai-compatible-metadata-extractor.js"
+import { prepareTools } from "./openai-compatible-prepare-tools.js"
 
 export type OpenAICompatibleChatConfig = {
   provider: string
@@ -189,117 +187,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     }
   }
 
-  async doGenerate(options: LanguageModelV3CallOptions) {
-    const { args, warnings } = await this.getArgs({ ...options })
-
-    const body = JSON.stringify(args)
-
-    const {
-      responseHeaders,
-      value: responseBody,
-      rawValue: rawResponse,
-    } = await postJsonToApi({
-      url: this.config.url({
-        path: "/chat/completions",
-        modelId: this.modelId,
-      }),
-      headers: combineHeaders(this.config.headers(), options.headers),
-      body: args,
-      failedResponseHandler: this.failedResponseHandler,
-      successfulResponseHandler: createJsonResponseHandler(OpenAICompatibleChatResponseSchema),
-      abortSignal: options.abortSignal,
-      fetch: this.config.fetch,
-    })
-
-    const choice = responseBody.choices[0]
-    const content: Array<LanguageModelV3Content> = []
-
-    // text content:
-    const text = choice.message.content
-    if (text != null && text.length > 0) {
-      content.push({
-        type: "text",
-        text,
-        providerMetadata: choice.message.reasoning_opaque
-          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-          : undefined,
-      })
-    }
-
-    // reasoning content (Copilot uses reasoning_text):
-    const reasoning = choice.message.reasoning_text
-    if (reasoning != null && reasoning.length > 0) {
-      content.push({
-        type: "reasoning",
-        text: reasoning,
-        // Include reasoning_opaque for Copilot multi-turn reasoning
-        providerMetadata: choice.message.reasoning_opaque
-          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-          : undefined,
-      })
-    }
-
-    // tool calls:
-    if (choice.message.tool_calls != null) {
-      for (const toolCall of choice.message.tool_calls) {
-        content.push({
-          type: "tool-call",
-          toolCallId: toolCall.id ?? generateId(),
-          toolName: toolCall.function.name,
-          input: toolCall.function.arguments!,
-          providerMetadata: choice.message.reasoning_opaque
-            ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
-            : undefined,
-        })
-      }
-    }
-
-    // provider metadata:
-    const providerMetadata: SharedV3ProviderMetadata = {
-      [this.providerOptionsName]: {},
-      ...(await this.config.metadataExtractor?.extractMetadata?.({
-        parsedBody: rawResponse,
-      })),
-    }
-    const completionTokenDetails = responseBody.usage?.completion_tokens_details
-    if (completionTokenDetails?.accepted_prediction_tokens != null) {
-      providerMetadata[this.providerOptionsName].acceptedPredictionTokens =
-        completionTokenDetails?.accepted_prediction_tokens
-    }
-    if (completionTokenDetails?.rejected_prediction_tokens != null) {
-      providerMetadata[this.providerOptionsName].rejectedPredictionTokens =
-        completionTokenDetails?.rejected_prediction_tokens
-    }
-
-    return {
-      content,
-      finishReason: {
-        unified: mapOpenAICompatibleFinishReason(choice.finish_reason),
-        raw: choice.finish_reason ?? undefined,
-      },
-      usage: {
-        inputTokens: {
-          total: responseBody.usage?.prompt_tokens ?? undefined,
-          noCache: undefined,
-          cacheRead: responseBody.usage?.prompt_tokens_details?.cached_tokens ?? undefined,
-          cacheWrite: undefined,
-        },
-        outputTokens: {
-          total: responseBody.usage?.completion_tokens ?? undefined,
-          text: undefined,
-          reasoning: responseBody.usage?.completion_tokens_details?.reasoning_tokens ?? undefined,
-        },
-        raw: responseBody.usage ?? undefined,
-      },
-      providerMetadata,
-      request: { body },
-      response: {
-        ...getResponseMetadata(responseBody),
-        headers: responseHeaders,
-        body: rawResponse,
-      },
-      warnings,
-    }
+  async doGenerate(_options: LanguageModelV3CallOptions): Promise<never> {
+    throw new Error("GitHub Copilot models only support streaming")
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
@@ -330,7 +219,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
     const toolCalls: Array<{
       id: string
-      type: "function"
       function: {
         name: string
         arguments: string
@@ -465,17 +353,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
             const delta = choice.delta
 
-            // Capture reasoning_opaque for Copilot multi-turn reasoning
-            if (delta.reasoning_opaque) {
-              if (reasoningOpaque != null) {
-                throw new InvalidResponseDataError({
-                  data: delta,
-                  message:
-                    "Multiple reasoning_opaque values received in a single response. Only one thinking part per response is supported.",
-                })
-              }
-              reasoningOpaque = delta.reasoning_opaque
-            }
+            // Interleaved thinking (Claude) sends a new reasoning_opaque before each tool call.
+            // Keep the latest, matching the Copilot VS Code client, which replays only that one.
+            if (delta.reasoning_opaque) reasoningOpaque = delta.reasoning_opaque
 
             // enqueue reasoning before text deltas (Copilot uses reasoning_text):
             const reasoningContent = delta.reasoning_text
@@ -560,7 +440,6 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
                   toolCalls[index] = {
                     id: toolCallDelta.id,
-                    type: "function",
                     function: {
                       name: toolCallDelta.function.name,
                       arguments: toolCallDelta.function.arguments ?? "",
@@ -655,7 +534,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
             }
 
             if (isActiveText) {
-              controller.enqueue({ type: "text-end", id: "txt-0" })
+              controller.enqueue({
+                type: "text-end",
+                id: "txt-0",
+                providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+              })
             }
 
             // go through all tool calls and send the ones that are not finished
@@ -742,38 +625,6 @@ const openaiCompatibleTokenUsageSchema = z
       .nullish(),
   })
   .nullish()
-
-// limited version of the schema, focussed on what is needed for the implementation
-// this approach limits breakages when the API changes and increases efficiency
-const OpenAICompatibleChatResponseSchema = z.object({
-  id: z.string().nullish(),
-  created: z.number().nullish(),
-  model: z.string().nullish(),
-  choices: z.array(
-    z.object({
-      message: z.object({
-        role: z.literal("assistant").nullish(),
-        content: z.string().nullish(),
-        // Copilot-specific reasoning fields
-        reasoning_text: z.string().nullish(),
-        reasoning_opaque: z.string().nullish(),
-        tool_calls: z
-          .array(
-            z.object({
-              id: z.string().nullish(),
-              function: z.object({
-                name: z.string(),
-                arguments: z.string(),
-              }),
-            }),
-          )
-          .nullish(),
-      }),
-      finish_reason: z.string().nullish(),
-    }),
-  ),
-  usage: openaiCompatibleTokenUsageSchema,
-})
 
 // limited version of the schema, focussed on what is needed for the implementation
 // this approach limits breakages when the API changes and increases efficiency

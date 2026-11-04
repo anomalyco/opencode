@@ -1,0 +1,61 @@
+[data-component="session-websearch-dock"] {
+  width: 100%;
+  background-color: var(--v2-background-bg-base);
+  border-radius: 12px;
+  box-shadow:
+    var(--v2-elevation-raised),
+    0 0 0 0.5px var(--v2-background-bg-base);
+  overflow: clip;
+
+  [data-color-scheme="dark"] & {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
+  .websearch-setting {
+    padding: 16px 16px 0;
+  }
+
+  .websearch-setting [data-component="settings-row"] {
+    column-gap: 24px;
+    padding-block: 0;
+    border: 0;
+  }
+
+  .websearch-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    padding: 12px 16px;
+  }
+
+  .websearch-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: auto;
+    color: var(--v2-text-text-base);
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+  }
+
+  .websearch-status:empty {
+    display: none;
+  }
+
+  .websearch-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+  }
+}
+
+[data-component="menu-v2-content"][data-slot="select-v2-content"].websearch-provider-menu {
+  width: max-content;
+  min-width: 0;
+
+  [data-component="menu-v2-item"] {
+    gap: 24px;
+  }
+}

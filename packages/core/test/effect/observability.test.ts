@@ -4,18 +4,14 @@ import { Effect, Layer, Logger } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileLogger } from "../../src/observability/logging"
-import { resource } from "../../src/observability/otlp"
+import { fileLogger } from "@opencode/util/observability/logging"
+import { resource } from "@opencode/util/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
-const opencodeClient = process.env.OPENCODE_CLIENT
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
-
-  if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
-  else process.env.OPENCODE_CLIENT = opencodeClient
 })
 
 describe("resource", () => {
@@ -39,17 +35,53 @@ describe("resource", () => {
   })
 
   test("keeps built-in attributes when env values conflict", () => {
-    process.env.OPENCODE_CLIENT = "cli"
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
 
-    expect(resource().attributes).toMatchObject({
+    const app = { client: "cli", version: "1.2.3", channel: "beta" }
+    expect(resource(app).attributes).toMatchObject({
       "opencode.client": "cli",
       "service.namespace": "anomalyco",
     })
-    expect(resource().attributes["service.instance.id"]).not.toBe("override")
-    expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+    expect(resource(app).attributes["service.instance.id"]).not.toBe("override")
+    expect(resource(app).attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
   })
+})
+
+test("falls back to local logging when OTLP initialization fails", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-observability-test-"))
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `
+        import { Effect } from "effect"
+        import { Observability } from "@opencode/util/observability"
+        await Effect.void.pipe(Effect.provide(Observability.layer()), Effect.scoped, Effect.runPromise)
+      `,
+    ],
+    {
+      cwd: path.join(import.meta.dir, "../.."),
+      env: {
+        ...process.env,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "://invalid",
+        XDG_CACHE_HOME: path.join(dir, "cache"),
+        XDG_CONFIG_HOME: path.join(dir, "config"),
+        XDG_DATA_HOME: path.join(dir, "data"),
+        XDG_STATE_HOME: path.join(dir, "state"),
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  )
+  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
+
+  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" })
 })
 
 test("file logger appends concurrent runs with a run on every line", async () => {

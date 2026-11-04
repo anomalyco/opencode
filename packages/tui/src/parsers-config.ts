@@ -123,7 +123,7 @@ export default {
     },
     {
       filetype: "php",
-      wasm: "https://github.com/tree-sitter/tree-sitter-php/releases/download/v0.24.2/tree-sitter-php.wasm",
+      wasm: "https://github.com/tree-sitter/tree-sitter-php/releases/download/v0.24.2/tree-sitter-php_only.wasm",
       queries: {
         highlights: [
           // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
@@ -302,7 +302,7 @@ export default {
       wasm: "https://github.com/tree-sitter-grammars/tree-sitter-diff/releases/download/v0.1.0/tree-sitter-diff.wasm",
       queries: {
         highlights: [
-          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/master/queries/highlights.scm",
+          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/2520c3f934b3179bb540d23e0ef45f75304b5fed/queries/highlights.scm",
         ],
       },
     },

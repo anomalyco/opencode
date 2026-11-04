@@ -1,101 +1,78 @@
-import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useTuiConfig } from "../../config"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { usePluginRuntime } from "../../plugin/runtime"
+import { useConfig } from "../../config"
+import { Slot } from "../../plugin/render"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { TextAttributes } from "@opentui/core"
+import "../../component/title-shimmer"
 
 import { getScrollAcceleration } from "../../util/scroll"
-import { WorkspaceLabel } from "../../component/workspace-label"
+import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
-  const pluginRuntime = usePluginRuntime()
-  const project = useProject()
-  const sync = useSync()
-  const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
-  const session = createMemo(() => sync.session.get(props.sessionID))
-  const workspace = () => {
-    const workspaceID = session()?.workspaceID
-    if (!workspaceID) return
-    return project.workspace.get(workspaceID)
-  }
-  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+export function Sidebar(props: { sessionID: string }) {
+  const data = useData()
+  const theme = useTheme()
+  const config = useConfig().data
+  const session = createMemo(() => data.session.get(props.sessionID))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
     <Show when={session()}>
       <box
-        backgroundColor={theme.backgroundPanel}
-        width={42}
+        backgroundColor={theme.background.raised.base}
+        width={SESSION_SIDEBAR_WIDTH}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        position={props.overlay ? "absolute" : "relative"}
+        position="relative"
       >
+        <box flexShrink={0} paddingRight={2} paddingBottom={1}>
+          <title_shimmer
+            fg={theme.text.base}
+            rename={{
+              pending: data.session.title.pending(props.sessionID),
+              title: withTimestampedFallback(session()),
+            }}
+            enabled={config.animations ?? true}
+            backdrop={theme.background.raised.base}
+            attributes={
+              data.session.title.pending(props.sessionID) && config.animations === false
+                ? TextAttributes.DIM
+                : TextAttributes.BOLD
+            }
+          >
+            {withTimestampedFallback(session())}
+          </title_shimmer>
+        </box>
         <scrollbox
           flexGrow={1}
+          minHeight={0}
           scrollAcceleration={scrollAcceleration()}
+          // The sidebar only scrolls vertically; a horizontal bar steals a row during initial layout.
+          horizontalScrollbarOptions={{ visible: false }}
           verticalScrollbarOptions={{
+            // Use the content's reserved right padding instead of changing its width when the bar toggles.
+            position: "absolute",
+            right: 0,
+            top: 0,
+            width: 1,
+            height: "100%",
             trackOptions: {
-              backgroundColor: theme.background,
-              foregroundColor: theme.borderActive,
+              backgroundColor: theme.background.raised.base,
+              foregroundColor: theme.scrollbar.base,
             },
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <pluginRuntime.Slot
-              name="sidebar_title"
-              mode="single_winner"
-              session_id={props.sessionID}
-              title={session()!.title}
-              share_url={session()!.share?.url}
-            >
-              <box paddingRight={1}>
-                <text fg={theme.text}>
-                  <b>{session()!.title}</b>
-                </text>
-                <Show when={InstallationChannel !== "latest"}>
-                  <text fg={theme.textMuted}>{props.sessionID}</text>
-                </Show>
-                <Show when={session()!.workspaceID}>
-                  <text fg={theme.textMuted}>
-                    <Show
-                      when={workspace()}
-                      fallback={<WorkspaceLabel type="unknown" name={session()!.workspaceID!} status="error" icon />}
-                    >
-                      {(item) => (
-                        <WorkspaceLabel
-                          type={item().type}
-                          name={item().name}
-                          status={project.workspace.status(item().id) ?? "error"}
-                          icon
-                        />
-                      )}
-                    </Show>
-                  </text>
-                </Show>
-                <Show when={session()!.share?.url}>
-                  <text fg={theme.textMuted}>{session()!.share!.url}</text>
-                </Show>
-              </box>
-            </pluginRuntime.Slot>
-            <pluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
+            <Slot path="sidebar.content" input={{ sessionID: props.sessionID }} />
           </box>
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <pluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.success }}>•</span> <b>Open</b>
-              <span style={{ fg: theme.text }}>
-                <b>Code</b>
-              </span>{" "}
-              <span>{InstallationVersion}</span>
-            </text>
-          </pluginRuntime.Slot>
+          <Slot path="sidebar.footer" input={{ sessionID: props.sessionID }} />
         </box>
       </box>
     </Show>

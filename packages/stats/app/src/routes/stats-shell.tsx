@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "150K",
+  fallbackStars: "220K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -18,7 +18,8 @@ export type ThemePreference = (typeof themePreferences)[number]
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
-  maximumFractionDigits: 1,
+  maximumFractionDigits: 0,
+  roundingIncrement: 5,
 })
 
 export const getGitHubStars = query(async () => {
@@ -27,6 +28,7 @@ export const getGitHubStars = query(async () => {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "opencode-stats",
     },
   })
     .then((response) => (response.ok ? response.json() : undefined))
@@ -230,6 +232,7 @@ export function Footer(props: {
     { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
     { href: "#market-share", label: i18n.t("nav.marketShare") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#methodology", label: i18n.t("methodology.title") },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
@@ -240,7 +243,7 @@ export function Footer(props: {
     { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
     { href: githubLink.href, label: i18n.t("header.github") },
-    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
+    { href: "https://www.youtube.com/@anomalyco", label: i18n.t("footer.youtube") },
   ]
   const bridge = () =>
     props.bridge === undefined
@@ -269,7 +272,7 @@ export function Footer(props: {
       <div data-slot="footer-bottom">
         <div>
           <span>{i18n.t("footer.copyright")}</span>
-          <span data-slot="status">{i18n.t("footer.status")}</span>
+          <SystemStatusLink />
         </div>
         <div data-slot="footer-controls">
           <FooterLanguageSwitcher />
@@ -306,7 +309,6 @@ function FooterLanguageSwitcher() {
     <label data-slot="footer-language">
       <span>{i18n.t("footer.language")}</span>
       <select
-        value={language.locale()}
         aria-label={i18n.t("footer.language")}
         onChange={(event) => {
           const locale = event.currentTarget.value as Locale
@@ -317,10 +319,44 @@ function FooterLanguageSwitcher() {
           if (href !== current) window.location.assign(href)
         }}
       >
-        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
+        {/* Mark the option, not the select: SSR ignores a select value and hydration does not apply it. */}
+        <For each={language.locales}>
+          {(locale) => (
+            <option value={locale} selected={locale === language.locale()}>
+              {language.label(locale)}
+            </option>
+          )}
+        </For>
       </select>
     </label>
   )
+}
+
+const systemStatuses = ["operational", "degraded", "outage", "unknown"] as const
+type SystemStatus = (typeof systemStatuses)[number]
+
+function SystemStatusLink() {
+  const i18n = useI18n()
+  const [status, setStatus] = createSignal<SystemStatus>("unknown")
+
+  onMount(() => {
+    fetch("/status/api/summary", { signal: AbortSignal.timeout(10_000) })
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((body: unknown) => setStatus(readSystemStatus(body)))
+      .catch(() => setStatus("unknown"))
+  })
+
+  // The status page lives outside this app and is not localized, so bypass the locale route and client router.
+  return (
+    <a data-slot="status" data-status={status()} href="/status" rel="external">
+      {i18n.t(`footer.status.${status()}`)}
+    </a>
+  )
+}
+
+function readSystemStatus(body: unknown) {
+  if (!body || typeof body !== "object" || !("status" in body)) return "unknown"
+  return systemStatuses.find((status) => status === body.status) ?? "unknown"
 }
 
 function SectionBridge(props: { label: string; href: string }) {

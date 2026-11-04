@@ -1,12 +1,14 @@
-export * as Provider from "./provider"
+export * as Provider from "./provider.js"
 
-import { Schema } from "effect"
-import { optional } from "./schema"
-import { Integration } from "./integration"
-import { statics } from "./schema"
+import { Effect, Schema } from "effect"
+import { Integration } from "./integration.js"
+import { ProviderCompatibility } from "./model-compatibility.js"
+import { optional, statics } from "./schema.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
-  Schema.brand("ProviderV2.ID"),
+  Schema.brand("Provider.ID"),
+  Schema.annotate({ identifier: "Provider.ID" }),
   statics((schema) => ({
     opencode: schema.make("opencode"),
     anthropic: schema.make("anthropic"),
@@ -14,6 +16,7 @@ export const ID = Schema.String.pipe(
     google: schema.make("google"),
     googleVertex: schema.make("google-vertex"),
     githubCopilot: schema.make("github-copilot"),
+    claudeAgent: schema.make("claude-agent"),
     amazonBedrock: schema.make("amazon-bedrock"),
     azure: schema.make("azure"),
     openrouter: schema.make("openrouter"),
@@ -23,50 +26,102 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
-export interface AISDK extends Schema.Schema.Type<typeof AISDK> {}
-export const AISDK = Schema.Struct({
-  type: Schema.Literal("aisdk"),
-  package: Schema.String,
-  url: Schema.String.pipe(optional),
-  settings: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
-}).annotate({ identifier: "Provider.AISDK" })
+const Updated = ephemeral({ type: "provider.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
-export interface Native extends Schema.Schema.Type<typeof Native> {}
-export const Native = Schema.Struct({
-  type: Schema.Literal("native"),
-  url: Schema.String.pipe(optional),
-  settings: Schema.Record(Schema.String, Schema.Unknown),
-}).annotate({ identifier: "Provider.Native" })
+export const Package = Schema.String
+export type Package = typeof Package.Type
 
-export const Api = Schema.Union([AISDK, Native])
+export const Activation = Schema.Literals(["auto", "enabled", "disabled"])
+export type Activation = typeof Activation.Type
+
+export const Compaction = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("summary") }),
+  Schema.Struct({ type: Schema.Literal("native") }),
+])
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Provider.Api" })
-export type Api = typeof Api.Type
+  .annotate({ identifier: "Provider.Compaction" })
+export type Compaction = typeof Compaction.Type
+
+/** "websocket" on a route without a WebSocket channel warns and falls back to HTTP. */
+export const Transport = Schema.Literals(["http", "websocket"]).annotate({ identifier: "Provider.Transport" })
+export type Transport = typeof Transport.Type
+
+/** Prompt-cache lifetime such as "5m", "30m", "1h" or "24h", in models.dev's duration format. */
+export const CacheTTL = Schema.TemplateLiteral([Schema.Number, Schema.Literals(["ms", "s", "m", "h", "d"])])
+  .check(Schema.isPattern(/^\d+(ms|s|m|h|d)$/))
+  .annotate({ identifier: "Provider.CacheTTL" })
+export type CacheTTL = typeof CacheTTL.Type
+
+/** Keep-alive requests for this provider's or model's sessions; overrides the top-level `warming`. */
+export const CacheWarming = Schema.Union([
+  Schema.Boolean,
+  Schema.Struct({
+    // Settings hold JSON, so durations stay strings here; the warming plugin parses them.
+    interval: Schema.Union([Schema.Literal("auto"), Schema.String])
+      .pipe(optional)
+      .annotate({ description: 'Duration such as "4 minutes", or "auto" for 90% of the model\'s cache.ttl' }),
+    duration: Schema.String.pipe(optional).annotate({ description: 'Duration such as "30 minutes"' }),
+  }),
+]).annotate({ identifier: "Provider.CacheWarming" })
+export type CacheWarming = typeof CacheWarming.Type
+
+/** Prompt-cache settings. `ttl` is sent to the provider as given; each provider accepts its own set. */
+export const Cache = Schema.Struct({
+  ttl: CacheTTL.pipe(optional),
+  warming: CacheWarming.pipe(optional),
+}).annotate({ identifier: "Provider.Cache" })
+export type Cache = typeof Cache.Type
+
+/** HTTP request body compression; only endpoints known to decode it should enable it. */
+export const Encoding = Schema.Literals(["zstd", "gzip", "none"]).annotate({ identifier: "Provider.Encoding" })
+export type Encoding = typeof Encoding.Type
+
+const Timeout = Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional)
+
+// The named fields are the settings OpenCode reads itself; every other key is a provider option for the provider package.
+export const Settings = Schema.StructWithRest(
+  Schema.Struct({
+    timeout: Timeout,
+    headerTimeout: Timeout,
+    chunkTimeout: Timeout,
+    compaction: Compaction.pipe(optional),
+    cache: Cache.pipe(optional),
+    transport: Transport.pipe(optional),
+    encoding: Encoding.pipe(optional),
+  }),
+  [Schema.Record(Schema.String, Schema.Any)],
+).annotate({ identifier: "Provider.Settings" })
+export type Settings = typeof Settings.Type
+
+export const Overlays = {
+  settings: Settings.pipe(optional),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  body: Schema.Record(Schema.String, Schema.Any).pipe(optional),
+}
 
 export interface Request extends Schema.Schema.Type<typeof Request> {}
 export const Request = Schema.Struct({
+  settings: Settings.pipe(Schema.withConstructorDefault(Effect.succeed({}))),
   headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.Record(Schema.String, Schema.Json),
+  body: Schema.Record(Schema.String, Schema.Any),
 }).annotate({ identifier: "Provider.Request" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  canonical: ID.pipe(optional),
   integrationID: Integration.ID.pipe(optional),
   name: Schema.String,
-  disabled: Schema.Boolean.pipe(optional),
-  api: Api,
-  request: Request,
+  activation: Activation,
+  package: Package,
+  /** Inherited by every model of this provider; model compatibility overrides individual fields. */
+  compatibility: ProviderCompatibility.pipe(optional),
+  ...Overlays,
 })
-  .annotate({ identifier: "ProviderV2.Info" })
+  .annotate({ identifier: "Provider.Info" })
   .pipe(
-    statics((schema) => ({
-      empty: (id: ID) =>
-        schema.make({
-          id,
-          name: id,
-          api: { type: "native", settings: {} },
-          request: { headers: {}, body: {} },
-        }),
+    statics(() => ({
+      empty: (id: ID): Info => ({ id, name: id, activation: "auto", package: "" }),
     })),
   )

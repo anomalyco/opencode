@@ -1,0 +1,109 @@
+import { Effect } from "effect"
+import {
+  LLMEvent,
+  type ToolCallPart,
+  ToolFailure,
+  ToolOutput,
+  ToolResultValue,
+  type ToolOutput as ToolOutputType,
+  type ToolResultValue as ToolResultValueType,
+} from "./schema/index.js"
+import { type Tool } from "./tool.js"
+
+export interface ToolSettlement {
+  readonly result: ToolResultValueType
+  readonly output?: ToolOutputType
+}
+
+export interface DispatchResult extends ToolSettlement {
+  readonly events: ReadonlyArray<LLMEvent>
+}
+
+/** Execute one canonical tool call without owning provider IO or continuation. */
+export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect.Effect<DispatchResult> => {
+  const name = call.namespace === undefined ? call.name : `${call.namespace}.${call.name}`
+  const tool = tools.find((item) => item.name === name)
+  if (!tool)
+    return Effect.succeed(
+      result(call, {
+        type: "error",
+        value: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
+      }),
+    )
+  if (!tool.execute)
+    return Effect.succeed(result(call, { type: "error", value: `Tool has no execute handler: ${name}` }))
+
+  return decodeAndExecute(tool, call).pipe(
+    Effect.map((value) => result(call, value)),
+    Effect.catchTag("Tool.Error", (failure) =>
+      Effect.succeed(result(call, { type: "error", value: failure.message })),
+    ),
+  )
+}
+
+/** A call the loop answers before the next step. With `error`, it is not run and the model gets the error back. */
+export interface PendingCall {
+  readonly call: ToolCallPart
+  readonly error?: string
+}
+
+/** Run a step's tool calls concurrently, with results in call order. */
+export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<PendingCall>) =>
+  Effect.forEach(
+    calls,
+    (item) =>
+      item.error === undefined
+        ? dispatch(tools, item.call)
+        : Effect.succeed(result(item.call, { type: "error", value: item.error })),
+    { concurrency: "unbounded" },
+  )
+
+const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
+  tool._decode(call.input).pipe(
+    Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
+    Effect.flatMap((decoded) =>
+      tool.execute!(decoded, {
+        id: call.id,
+        name: call.name,
+        namespace: call.namespace,
+      }).pipe(
+        Effect.flatMap((value) =>
+          tool._encode(value).pipe(
+            Effect.mapError(
+              (error) =>
+                new ToolFailure({
+                  message: `Tool returned an invalid value for its success schema: ${error.message}`,
+                }),
+            ),
+          ),
+        ),
+        Effect.map((encoded) => {
+          if (tool._legacyResult && ToolResultValue.is(encoded))
+            return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
+          const output = tool._project(decoded, call.id, encoded)
+          const result = ToolOutput.toResultValue(output)
+          return result.type === "error" ? { result } : { result, output }
+        }),
+      ),
+    ),
+  )
+
+const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement): DispatchResult => {
+  const settlement = ToolResultValue.is(value) ? { result: value } : value
+  return {
+    result: settlement.result,
+    output: settlement.output,
+    events: [
+      LLMEvent.toolResult({
+        id: call.id,
+        name: call.name,
+        namespace: call.namespace,
+        result: settlement.result,
+        output: settlement.output,
+        providerMetadata: call.providerMetadata,
+      }),
+    ],
+  }
+}
+
+export const ToolRuntime = { dispatch } as const

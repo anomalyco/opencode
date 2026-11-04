@@ -36,11 +36,7 @@ export const lineCommentStyles = `
   border: none;
 }
 
-[data-component="line-comment"][data-variant="add"] [data-slot="line-comment-button"] {
-  background: var(--syntax-diff-add);
-}
-
-[data-component="line-comment"] [data-component="icon"] {
+[data-component="line-comment"] [data-slot="icon-svg"] {
   color: var(--white);
 }
 
@@ -125,7 +121,7 @@ export const lineCommentStyles = `
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-x-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -145,7 +141,7 @@ export const lineCommentStyles = `
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-weak);
+  color: var(--v2-text-text-faint);
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -166,8 +162,8 @@ export const lineCommentStyles = `
   padding: 8px;
   border-radius: var(--radius-md);
   background: var(--surface-base);
-  border: 1px solid var(--border-base);
-  color: var(--text-strong);
+  border: 1px solid var(--v2-border-border-base);
+  color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   line-height: var(--line-height-large);
@@ -185,7 +181,7 @@ export const lineCommentStyles = `
   max-height: 180px;
   overflow: auto;
   padding: 4px;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--v2-border-border-base);
   border-radius: var(--radius-md);
   background: var(--surface-base);
 }
@@ -200,7 +196,7 @@ export const lineCommentStyles = `
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   text-align: left;
 }
 
@@ -219,14 +215,14 @@ export const lineCommentStyles = `
 
 [data-component="line-comment"] [data-slot="line-comment-mention-dir"] {
   min-width: 0;
-  color: var(--text-weak);
+  color: var(--v2-text-text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-file"] {
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   white-space: nowrap;
 }
 
@@ -245,9 +241,9 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"] {
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--v2-border-border-base);
   background: var(--surface-base);
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   border-radius: var(--radius-md);
   height: 28px;
   padding: 0 10px;
@@ -261,9 +257,9 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"][data-variant="primary"] {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  color: var(--background-base);
+  background: var(--v2-background-bg-contrast);
+  border-color: var(--v2-background-bg-contrast);
+  color: var(--v2-text-text-contrast);
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"]:disabled {
@@ -276,11 +272,14 @@ let installed = false
 
 export function installLineCommentStyles() {
   if (installed) return
+
   if (typeof document === "undefined") return
 
   const id = "opencode-line-comment-styles"
+
   if (document.getElementById(id)) {
     installed = true
+
     return
   }
 

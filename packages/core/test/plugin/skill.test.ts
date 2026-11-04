@@ -1,25 +1,80 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { Effect, Layer, Stream } from "effect"
+import { SkillPlugin } from "@opencode/core/plugin/skill"
+import { Skill } from "@opencode/core/skill"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
-const it = testEffect(AppNodeBuilder.build(SkillV2.node))
+const it = testEffect(AppNodeBuilder.build(Skill.node))
+const config = (plugins: Info["plugins"] = []) =>
+  Layer.succeed(
+    Config.Service,
+    Config.Service.of({
+      entries: () => Effect.succeed([new Document({ type: "document", info: new Info({ plugins }) })]),
+      snapshot: () => [new Document({ type: "document", info: new Info({ plugins }) })],
+      changes: () => Stream.never,
+    }),
+  )
 
 describe("SkillPlugin.Plugin", () => {
-  it.effect("registers the built-in customize-opencode skill", () =>
+  it.effect("registers built-in skills", () =>
     Effect.gen(function* () {
-      const skill = yield* SkillV2.Service
-      yield* SkillPlugin.Plugin.effect(host({ skill: { ...skill, reload: skill.reload } }))
+      const skill = yield* Skill.Service
+      yield* SkillPlugin.Plugin.effect(
+        host({
+          app: { name: "test", version: "1.2.3", channel: "beta" },
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skill.transform,
+            reload: skill.reload,
+          },
+        }),
+      ).pipe(Effect.provide(config()))
+      const skills = yield* skill.list()
+      const report = skills.find((item) => item.id === "report")
 
-      expect(yield* skill.list()).toContainEqual(
+      expect(skills).toContainEqual(
         expect.objectContaining({
-          name: "customize-opencode",
-          description: expect.stringContaining("opencode's own configuration"),
+          id: "opencode",
+          name: "OpenCode",
+          path: "skill://opencode/SKILL.md",
+          description: expect.stringContaining("any question about OpenCode itself"),
         }),
       )
+      expect(skills).toContainEqual(
+        expect.objectContaining({
+          id: "report",
+          name: "Report",
+          path: "skill://report/SKILL.md",
+          description: expect.stringContaining("opencode issue"),
+        }),
+      )
+      expect(report?.content).toContain("- opencode version: 1.2.3")
+      expect(report?.content).toContain("- install/channel: beta")
     }),
+  )
+
+  it.effect("reports canonical configured plugin sources with existing labels and ordering", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* SkillPlugin.Plugin.effect(
+        host({
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skill.transform,
+            reload: skill.reload,
+          },
+        }),
+      )
+      const report = (yield* skill.list()).find((item) => item.id === "report")
+      expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
+    }).pipe(
+      Effect.provide(
+        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
+      ),
+    ),
   )
 })

@@ -7,8 +7,8 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
-  isMissingUniqueUsersColumn,
   omitUniqueUsers,
   rankRowsWithMarketShare,
   statPeriodKey,
@@ -16,7 +16,9 @@ import {
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
+  withUniqueUsersFallback,
   type StatBaseAggregate,
+  type StatPeriodScope,
 } from "./stat"
 
 export type GeoStatRow = typeof geoStat.$inferInsert
@@ -54,7 +56,11 @@ export declare namespace GeoStatRepo {
       readonly model?: string
     }) => Effect.Effect<GeoStatRow[], DatabaseError>
     readonly upsert: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
-    readonly deleteRetiredDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (
+      scope: StatPeriodScope,
+      hiddenModels: readonly string[],
+    ) => Effect.Effect<void, DatabaseError>
+    readonly deleteUnknownDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -93,7 +99,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                   eq(geoStat.grain, "day"),
                   eq(geoStat.client, "all"),
                   eq(geoStat.source, "all"),
-                  inArray(geoStat.tier, ["Go", "go"]),
+                  inArray(geoStat.tier, DATA_SITE_TIERS),
                   scope,
                 ),
               )
@@ -138,14 +144,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: async () => {
-                try {
-                  return await upsertGeoChunk(chunk, true)
-                } catch (cause) {
-                  if (!isMissingUniqueUsersColumn(cause)) throw cause
-                  return upsertGeoChunk(chunk, false)
-                }
-              },
+              try: () => withUniqueUsersFallback((includeUniqueUsers) => upsertGeoChunk(chunk, includeUniqueUsers)),
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },
@@ -191,29 +190,79 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
           })
       }
 
-      const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (rows: GeoStatRow[]) {
-        const scope = statRowScope(rows)
-        if (!scope) return
-
+      const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (
+        scope: StatPeriodScope,
+        hiddenModels: readonly string[],
+      ) {
         yield* Effect.tryPromise({
           try: () =>
             db
               .delete(geoStat)
               .where(
                 and(
-                  inArray(geoStat.grain, scope.grains),
-                  inArray(geoStat.period_key, scope.periodKeys),
-                  inArray(geoStat.dataset, scope.datasets),
-                  inArray(geoStat.client, scope.clients),
-                  inArray(geoStat.source, scope.sources),
-                  or(inArray(geoStat.provider, RETIRED_STAT_PROVIDERS), inArray(geoStat.model, RETIRED_STAT_MODELS)),
+                  eq(geoStat.grain, scope.grain),
+                  eq(geoStat.period_key, scope.periodKey),
+                  eq(geoStat.dataset, scope.dataset),
+                  eq(geoStat.client, "all"),
+                  eq(geoStat.source, "all"),
+                  or(
+                    inArray(geoStat.provider, RETIRED_STAT_PROVIDERS),
+                    inArray(geoStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),
+                    and(eq(geoStat.provider, "unknown"), eq(geoStat.model, "hy4-preview")),
+                  ),
                 ),
               ),
           catch: (cause) => DatabaseError.make({ cause }),
         })
       })
 
-      return GeoStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions })
+      const deleteUnknownDimensions = Effect.fn("GeoStatRepo.deleteUnknownDimensions")(function* (rows: GeoStatRow[]) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+        const replacements = new Set(rows.map((row) => [statPeriodKey(row), row.model, row.country].join("\u0000")))
+        const stale = yield* Effect.tryPromise({
+          try: () =>
+            db
+              .select({
+                id: geoStat.id,
+                grain: geoStat.grain,
+                period_key: geoStat.period_key,
+                dataset: geoStat.dataset,
+                tier: geoStat.tier,
+                client: geoStat.client,
+                source: geoStat.source,
+                model: geoStat.model,
+                country: geoStat.country,
+              })
+              .from(geoStat)
+              .where(
+                and(
+                  eq(geoStat.provider, "unknown"),
+                  inArray(geoStat.grain, scope.grains),
+                  inArray(geoStat.period_key, scope.periodKeys),
+                  inArray(geoStat.dataset, scope.datasets),
+                  inArray(geoStat.client, scope.clients),
+                  inArray(geoStat.source, scope.sources),
+                  inArray(geoStat.model, [...new Set(rows.map((row) => row.model ?? "all"))]),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+        const ids = stale
+          .filter((row) => replacements.has([statPeriodKey(row), row.model, row.country].join("\u0000")))
+          .map((row) => row.id)
+        yield* Effect.forEach(
+          chunks(ids, UPSERT_CHUNK_SIZE),
+          (chunk) =>
+            Effect.tryPromise({
+              try: () => db.delete(geoStat).where(and(eq(geoStat.provider, "unknown"), inArray(geoStat.id, chunk))),
+              catch: (cause) => DatabaseError.make({ cause }),
+            }),
+          { discard: true },
+        )
+      })
+
+      return GeoStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
     }),
   )
 }

@@ -1,0 +1,25 @@
+---
+import { getCollection } from "astro:content"
+import Layout from "../layouts/Layout.astro"
+
+export const prerender = true
+
+const posts = (await getCollection("posts")).sort(
+  (a, b) => b.data.published.valueOf() - a.data.published.valueOf(),
+)
+---
+
+<Layout>
+  <ol class="post-list">
+    {posts.map((post) => (
+      <li>
+        <a href={`${import.meta.env.BASE_URL}/${post.id}/`}>
+          <span>{post.data.title}</span>
+          <time datetime={post.data.published.toISOString()}>
+            {post.data.published.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+          </time>
+        </a>
+      </li>
+    ))}
+  </ol>
+</Layout>

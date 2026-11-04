@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "example/**/*.ts",
+    "test/**/*.types.ts",
+    "test/loop.test.ts",
+    "test/promise.test.ts",
+    "test/testing.test.ts",
+    "test/provider/checkpoint.test.ts"
+  ]
+}

@@ -1,47 +1,29 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { Location as CoreLocation } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { SessionInput as CoreSessionInput } from "@opencode-ai/core/session/input"
-import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt as CorePrompt } from "@opencode-ai/core/session/prompt"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Location } from "@opencode-ai/schema/location"
-import { Model } from "@opencode-ai/schema/model"
-import { Project } from "@opencode-ai/schema/project"
-import { Provider } from "@opencode-ai/schema/provider"
-import { Prompt } from "@opencode-ai/schema/prompt"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionInput } from "@opencode-ai/schema/session-input"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Workspace } from "@opencode-ai/schema/workspace"
-import { Api } from "@opencode-ai/server/api"
-import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
-import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
+import { Agent } from "@opencode/schema/agent"
+import { Config } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
+import { Prompt } from "@opencode/schema/prompt"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Vcs } from "@opencode/schema/vcs"
 
-test("Core and Server reuse the authoritative Schema and Protocol values", () => {
-  expect(AgentV2.ID).toBe(Agent.ID)
-  expect(CoreLocation.Ref).toBe(Location.Ref)
-  expect(ModelV2.Ref).toBe(Model.Ref)
-  expect(SessionV2.Info).toBe(Session.Info)
-  expect(CoreSessionInput.Admitted).toBe(SessionInput.Admitted)
-  expect(CoreSessionMessage.Message).toBe(SessionMessage.Message)
-  expect(CorePrompt).toBe(Prompt)
-  expect(Api.groups["server.session"].identifier).toBe("server.session")
-  expect(Object.keys(ClientApi.groups)).toEqual(Object.keys(Api.groups))
-  expect(Session.ID.create()).toStartWith("ses_")
-  expect(Project.ID.global).toBe("global")
-  expect(Provider.ID.anthropic).toBe("anthropic")
-  expect(Workspace.ID.create()).toStartWith("wrk_")
+const Client = await import("../src/effect")
+
+test("effect entrypoint exposes canonical Schema contracts", () => {
+  expect(Client.Agent).toBe(Agent)
+  expect(Client.Config).toBe(Config)
+  expect(Client.Model).toBe(Model)
+  expect(Client.Session).toBe(Session)
+  expect(Client.Vcs.Base).toBe(Vcs.Base)
 })
 
-test("client and Server contracts generate identically", () => {
-  const server = compile(Api, { groupNames, endpointNames, omitEndpoints })
-  const client = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
+test("generated Effect API names canonical and composed outputs", async () => {
+  const source = await Bun.file(new URL("../src/effect/api/api.ts", import.meta.url)).text()
 
-  expect(emitPromise(client)).toEqual(emitPromise(server))
+  expect(source).toContain("export type SessionGetOutput = Session.Info")
+  expect(source).toContain("export type EventSubscribeOutput = OpenCodeEvent")
+  expect(source).not.toContain("HttpApiClient.ForApi")
 })
 
 test("shared DTO schemas construct and decode plain objects", () => {
@@ -54,5 +36,4 @@ test("shared DTO schemas construct and decode plain objects", () => {
   expect(Object.getPrototypeOf(content)).toBe(Object.prototype)
   expect(Prompt.ast.annotations?.identifier).toBe("Prompt")
   expect(SessionMessage.AssistantText.ast.annotations?.identifier).toBe("Session.Message.Assistant.Text")
-  expect(CoreSessionMessage.AssistantText).toBe(SessionMessage.AssistantText)
 })

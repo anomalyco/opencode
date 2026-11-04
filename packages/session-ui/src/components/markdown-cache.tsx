@@ -1,27 +1,68 @@
-import { checksum } from "@opencode-ai/core/util/encode"
+import { abort } from "@opencode/util/abort"
+import { checksum } from "@opencode/util/encode"
+import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
 import DOMPurify from "dompurify"
-import { project } from "./markdown-stream"
+import { markdownWorkerDisposed, parseMarkdown } from "./markdown-worker"
+import { localImagePath, localLinkPath } from "./markdown-image"
 
 export type MarkdownCacheEntry = {
   raw: string
+  src?: string
   hash: string
   html: string
 }
 
 const max = 200
-const cache = new Map<string, MarkdownCacheEntry>()
-const config = {
-  USE_PROFILES: { html: true, mathMl: true },
-  SANITIZE_NAMED_PROPS: true,
-  FORBID_TAGS: ["style"],
-  FORBID_CONTENTS: ["style", "script"],
-  ADD_TAGS: ["svg", "path"],
-  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
-}
 
-if (typeof window !== "undefined" && DOMPurify.isSupported) {
-  DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
+const cache = new Map<string, MarkdownCacheEntry>()
+
+const pending = new Map<
+  string,
+  { raw: string; promise: Promise<MarkdownCacheEntry>; controller: AbortController; consumers: Set<symbol> }
+>()
+
+// A private instance keeps this hook set separate from other DOMPurify users.
+const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
+
+if (typeof window !== "undefined" && purifier.isSupported) {
+  // A config passed to sanitize() rebuilds every allow-list on each call; set once, every call reuses them.
+  purifier.setConfig({
+    USE_PROFILES: { html: true, mathMl: true },
+    SANITIZE_NAMED_PROPS: true,
+    FORBID_TAGS: ["style"],
+    FORBID_CONTENTS: ["style", "script"],
+    ADD_TAGS: ["svg", "path"],
+    ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+  })
+  purifier.addHook("beforeSanitizeAttributes", (node) => {
+    if (node instanceof HTMLAnchorElement) {
+      // Local file links never navigate the document; the host decides how to open them.
+      node.removeAttribute("data-local-link")
+      const path = localLinkPath(node.getAttribute("href") ?? "")
+
+      if (!path) return
+      node.setAttribute("data-local-link", path)
+      node.setAttribute("role", "link")
+      node.setAttribute("tabindex", "0")
+      node.removeAttribute("href")
+      node.removeAttribute("target")
+
+      return
+    }
+
+    if (!(node instanceof HTMLImageElement)) return
+    // Local paths are not browser URLs. Keep them inert until the host reads them.
+    node.removeAttribute("data-local-image")
+    const path = localImagePath(node.getAttribute("src") ?? "")
+
+    if (!path) return
+    node.setAttribute("data-local-image", path)
+    node.removeAttribute("src")
+    node.removeAttribute("srcset")
+  })
+  purifier.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
+
     if (node.target !== "_blank") return
 
     const rel = node.getAttribute("rel") ?? ""
@@ -33,8 +74,9 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 }
 
 export function sanitizeMarkdown(html: string) {
-  if (!DOMPurify.isSupported) return ""
-  return DOMPurify.sanitize(html, config)
+  if (!purifier.isSupported) return ""
+
+  return purifier.sanitize(html)
 }
 
 export function getCachedMarkdown(key: string) {
@@ -48,31 +90,108 @@ export function touchCachedMarkdown(key: string, value: MarkdownCacheEntry) {
   if (cache.size <= max) return
 
   const first = cache.keys().next().value
+
   if (!first) return
   cache.delete(first)
 }
 
-export async function preloadMarkdown(
-  text: string,
-  cacheKey: string,
-  parser: { parse(text: string): string | Promise<string> },
-) {
-  await Promise.all(
-    project(undefined, text, false).blocks.map(async (block, index) => {
-      if (block.mode === "code") return
-      const key = `${cacheKey}:${index}:${block.mode}`
-      const cached = getCachedMarkdown(key)
-      if (cached?.raw === block.raw) {
-        touchCachedMarkdown(key, cached)
-        return
-      }
-      const hash = checksum(block.raw)
-      if (!hash) return
-      touchCachedMarkdown(key, {
-        raw: block.raw,
-        hash,
-        html: sanitizeMarkdown(await Promise.resolve(parser.parse(block.src))),
-      })
-    }),
-  )
+export async function preloadMarkdown(text: string, cacheKey: string, signal?: AbortSignal) {
+  if (signal?.aborted) throw markdownWorkerDisposed
+  const block = { raw: text, src: text }
+  const key = `${cacheKey}:0:full`
+
+  if (getReadyMarkdown(block, key)) return
+  await renderCachedMarkdown(block, key, signal)
+}
+
+export function getReadyMarkdown(block: { raw: string; src: string }, key?: string) {
+  const cached = key ? getCachedMarkdown(key) : undefined
+
+  if (key && cached && (cached.src ?? cached.raw) === block.src) {
+    pending.delete(key)
+    touchCachedMarkdown(key, cached)
+
+    return cached
+  }
+
+  if (!purifier.isSupported) return
+
+  try {
+    const html = parseSmallMarkdown(block.src)
+
+    if (html === undefined) return
+    const hash = checksum(block.src)
+    const result = { raw: block.raw, src: block.src, hash: hash ?? "", html: sanitizeMarkdown(html) }
+
+    if (key && hash) {
+      pending.delete(key)
+      touchCachedMarkdown(key, result)
+    }
+
+    return result
+  } catch {
+    // Keep parser failures on the normal worker/escaped-text fallback path.
+    return
+  }
+}
+
+export async function renderCachedMarkdown(block: { raw: string; src: string }, key?: string, signal?: AbortSignal) {
+  if (signal?.aborted) throw markdownWorkerDisposed
+  const cached = key ? getCachedMarkdown(key) : undefined
+
+  if (key && cached && (cached.src ?? cached.raw) === block.src) {
+    pending.delete(key)
+    touchCachedMarkdown(key, cached)
+
+    return cached
+  }
+
+  const current = key ? pending.get(key) : undefined
+  const job = current?.raw === block.src ? current : startMarkdown(block, key)
+  const consumer = Symbol()
+  job.consumers.add(consumer)
+
+  return new Promise<MarkdownCacheEntry>((resolve, reject) => {
+    const release = () => {
+      signal?.removeEventListener("abort", cancel)
+
+      // A disposed consumer must not cancel another consumer's shared parse.
+      if (!job.consumers.delete(consumer) || job.consumers.size > 0) return
+      abort(job.controller)
+
+      if (key && pending.get(key) === job) pending.delete(key)
+    }
+
+    const cancel = () => {
+      release()
+      reject(markdownWorkerDisposed)
+    }
+
+    signal?.addEventListener("abort", cancel, { once: true })
+    void job.promise.then(resolve, reject).finally(release)
+  })
+}
+
+function startMarkdown(block: { raw: string; src: string }, key?: string) {
+  const controller = new AbortController()
+
+  const promise = parseMarkdown(block.src, controller.signal)
+    .then((html) => {
+      if (controller.signal.aborted) throw markdownWorkerDisposed
+      const hash = checksum(block.src)
+      const result = { raw: block.raw, src: block.src, hash: hash ?? "", html: sanitizeMarkdown(html) }
+
+      if (key && hash && pending.get(key)?.promise === promise) touchCachedMarkdown(key, result)
+
+      return result
+    })
+    .finally(() => {
+      if (key && pending.get(key)?.promise === promise) pending.delete(key)
+    })
+
+  const job = { raw: block.src, promise, controller, consumers: new Set<symbol>() }
+
+  if (key) pending.set(key, job)
+
+  return job
 }

@@ -4,12 +4,12 @@ import { MAX_STASH_ENTRIES, parsePromptStash } from "../../src/prompt/stash"
 
 test("stash JSONL skips corruption and retains newest entries", () => {
   const entries = Array.from({ length: MAX_STASH_ENTRIES + 2 }, (_, index) =>
-    JSON.stringify({ input: String(index), parts: [], timestamp: index }),
+    JSON.stringify({ prompt: { text: String(index), files: [], agents: [], pasted: [] }, timestamp: index }),
   )
   entries.splice(2, 0, "broken")
   const result = parsePromptStash(entries.join("\n"))
   expect(result).toHaveLength(MAX_STASH_ENTRIES)
-  expect(result[0]?.input).toBe("2")
+  expect(result[0]?.prompt.text).toBe("2")
 })
 
 test("frecency JSONL skips corruption, keeps latest path state, and limits entries", () => {

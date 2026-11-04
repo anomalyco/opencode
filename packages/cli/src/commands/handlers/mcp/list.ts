@@ -1,0 +1,50 @@
+import { EOL } from "node:os"
+import { Effect } from "effect"
+import { OpenCode, type McpServer } from "@opencode/client"
+import { Commands } from "../../commands"
+import { Runtime } from "../../../framework/runtime"
+import { Service } from "@opencode/client/effect/service"
+import { ServerConnection } from "../../../services/server-connection"
+
+export default Runtime.handler(
+  Commands.commands.mcp.commands.list,
+  Effect.fn("cli.mcp.list")(function* () {
+    const { endpoint } = yield* ServerConnection.resolve()
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
+    const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))
+    if (servers.length === 0) {
+      process.stdout.write("No MCP servers configured" + EOL)
+      return
+    }
+    const width = Math.max(...servers.map((server) => server.name.length))
+    const lines = servers.map(
+      (server) => `${icon(server.status)} ${server.name.padEnd(width)}  ${describe(server.status)}`,
+    )
+    process.stdout.write(lines.join(EOL) + EOL)
+  }),
+)
+
+function icon(status: McpServer["status"]) {
+  switch (status.status) {
+    case "connected":
+      return "✓"
+    case "needs_auth":
+      return "⚠"
+    case "failed":
+      return "✗"
+    default:
+      return "○"
+  }
+}
+
+function describe(status: McpServer["status"]) {
+  switch (status.status) {
+    case "needs_auth":
+      return "needs authentication"
+    case "failed":
+      return `failed: ${status.error}`
+    default:
+      return status.status
+  }
+}

@@ -2,11 +2,13 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
+    "noUnusedLocals": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "types": ["bun", "node"]
+    "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src", "../core/src/resource.d.ts"]
+  "include": ["src", "../core/src/resource.d.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

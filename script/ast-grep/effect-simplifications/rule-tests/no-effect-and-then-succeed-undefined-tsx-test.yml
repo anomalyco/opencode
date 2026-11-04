@@ -1,0 +1,21 @@
+id: no-effect-and-then-succeed-undefined-tsx
+valid:
+  - const view = <Widget value={effect.pipe(Effect.as(undefined))} />
+  - const view = <Widget value={Effect.as(effect, undefined)} />
+  - const view = <Widget value={effect.pipe(Effect.asVoid)} />
+  - const view = <Widget value={effect.pipe(Effect.andThen(Effect.succeed(null)))} />
+  - const view = <Widget value={Effect.andThen(effect, options, Effect.succeed(undefined))} />
+  - const view = <Widget value={Stream.andThen(effect, Effect.succeed(undefined))} />
+invalid:
+  - const view = <Widget value={effect.pipe(Effect.andThen(Effect.succeed(undefined)))} />
+  - const view = <Widget value={Effect.andThen(effect, Effect.succeed(undefined))} />
+  - |
+    const view = (
+      <Widget
+        value={effect.pipe(
+          Effect.andThen(
+            Effect.succeed(undefined),
+          ),
+        )}
+      />
+    )

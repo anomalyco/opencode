@@ -1,0 +1,100 @@
+id: no-effect-flat-map-suspend
+snapshots:
+  Effect.flatMap(effect, () => Effect.suspend(() => next)):
+    labels:
+      - source: Effect.flatMap(effect, () => Effect.suspend(() => next))
+        style: primary
+        start: 0
+        end: 56
+  ? |
+    effect.pipe(
+      Effect.flatMap(() =>
+        Effect.suspend(() => next),
+      ),
+    )
+  : labels:
+      - source: |-
+          Effect.flatMap(() =>
+              Effect.suspend(() => next),
+            )
+        style: primary
+        start: 15
+        end: 71
+  effect.pipe(Effect.flatMap(() => Effect.suspend(() => next))):
+    labels:
+      - source: Effect.flatMap(() => Effect.suspend(() => next))
+        style: primary
+        start: 12
+        end: 60
+  effect.pipe(Effect.flatMap(() => { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(() => { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 71
+  effect.pipe(Effect.flatMap((_) => Effect.suspend(() => next))):
+    labels:
+      - source: Effect.flatMap((_) => Effect.suspend(() => next))
+        style: primary
+        start: 12
+        end: 61
+  effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => next))):
+    labels:
+      - source: Effect.flatMap((_value) => Effect.suspend(() => next))
+        style: primary
+        start: 12
+        end: 66
+  "effect.pipe(Effect.flatMap((_value: Value) => Effect.suspend(() => next)))":
+    labels:
+      - source: "Effect.flatMap((_value: Value) => Effect.suspend(() => next))"
+        style: primary
+        start: 12
+        end: 73
+  "effect.pipe(Effect.flatMap((_value: Value) => { return Effect.suspend(() => next) }))":
+    labels:
+      - source: "Effect.flatMap((_value: Value) => { return Effect.suspend(() => next) })"
+        style: primary
+        start: 12
+        end: 84
+  effect.pipe(Effect.flatMap(_ => Effect.suspend(() => next))):
+    labels:
+      - source: Effect.flatMap(_ => Effect.suspend(() => next))
+        style: primary
+        start: 12
+        end: 59
+  effect.pipe(Effect.flatMap(_ => { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(_ => { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 70
+  effect.pipe(Effect.flatMap(_value => { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(_value => { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 75
+  effect.pipe(Effect.flatMap(function () { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(function () { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 77
+  effect.pipe(Effect.flatMap(function (_) { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(function (_) { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 78
+  effect.pipe(Effect.flatMap(function (_value) { return Effect.suspend(() => next) })):
+    labels:
+      - source: Effect.flatMap(function (_value) { return Effect.suspend(() => next) })
+        style: primary
+        start: 12
+        end: 83
+  "effect.pipe(Effect.flatMap(function (_value: Value) { return Effect.suspend(() => next) }))":
+    labels:
+      - source: "Effect.flatMap(function (_value: Value) { return Effect.suspend(() => next) })"
+        style: primary
+        start: 12
+        end: 90

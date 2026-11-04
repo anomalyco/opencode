@@ -1,0 +1,163 @@
+.settings-search {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Only results scroll inside the search; with the nav list below it, the list absorbs a short sidebar. */
+.settings-search[data-empty="true"] {
+  flex-shrink: 0;
+}
+
+.settings-search[data-empty="true"] [data-slot="text-input-v2-icon-button"] {
+  visibility: hidden;
+}
+
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+  color: var(--v2-icon-icon-faint);
+  cursor: default;
+}
+
+:is(.settings-search, .settings-filter-search)
+  [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, :focus-visible):not(:disabled) {
+  background: transparent;
+  color: var(--v2-icon-icon-base);
+}
+
+.settings-search [data-component="text-input-v2"] {
+  width: 100%;
+  flex-shrink: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-search [data-component="text-input-v2"]:is(:hover, :focus-within):not([data-disabled]),
+.settings-search [data-component="text-input-v2"]:has(input:not(:placeholder-shown)):not([data-disabled]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"][data-overflow-start="true"] {
+  --mask-start: 16px;
+}
+
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"][data-overflow-end="true"] {
+  --mask-end: 16px;
+}
+
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"]:dir(rtl) {
+  --mask-direction: to left;
+}
+
+:is(.settings-search, .settings-filter-search)
+  [data-slot="text-input-v2-input"]:is([data-overflow-start="true"], [data-overflow-end="true"]) {
+  mask-image: linear-gradient(
+    var(--mask-direction, to right),
+    transparent,
+    black var(--mask-start, 0px),
+    black calc(100% - var(--mask-end, 0px)),
+    transparent
+  );
+}
+
+.settings-search-empty {
+  min-width: 0;
+  margin-block-start: 16px;
+  overflow: hidden;
+  white-space: pre;
+}
+
+/* Centred like every search list's empty state, with even insets on the rows' text spine. */
+.settings-search [data-slot="search-list-empty"] .settings-search-empty {
+  justify-content: center;
+  margin-block-start: 0;
+  padding-inline: 18px;
+}
+
+.settings-search-empty-quoted {
+  flex: 1;
+  min-width: 0;
+  color: var(--v2-text-text-base);
+}
+
+.settings-search [data-slot="search-list-empty"] .settings-search-empty-quoted {
+  flex: 0 1 auto;
+}
+
+.settings-search-empty-measure {
+  position: absolute;
+  visibility: hidden;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.settings-search-empty-measure > span {
+  display: block;
+  width: max-content;
+}
+
+.settings-search-empty,
+.settings-search-empty-measure {
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.settings-search-empty {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  padding-inline-start: 8px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="settings-list"] {
+  --settings-search-inset: 20px;
+}
+
+[data-component="settings-list"][data-variant="catalog"] {
+  --settings-search-inset: 16px;
+}
+
+[data-search-target] {
+  position: relative;
+  isolation: isolate;
+  outline: none;
+}
+
+[data-search-target]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline: calc(-1 * var(--settings-search-inset, 0px));
+  z-index: -1;
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-03);
+  pointer-events: none;
+  animation: settings-search-reveal 1.8s ease-out forwards;
+}
+
+[data-search-target="header"]::before {
+  border-radius: 8px;
+}
+
+@keyframes settings-search-reveal {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+:root[data-motion="reduce"] {
+  [data-search-target]::before {
+    animation-timing-function: steps(1, end);
+  }
+}

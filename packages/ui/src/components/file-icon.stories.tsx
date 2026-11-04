@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { For } from "solid-js"
 import * as mod from "./file-icon"
 import { create } from "../storybook/scaffold"
 
@@ -82,12 +83,14 @@ export const Samples = {
           "grid-template-columns": "repeat(auto-fill, minmax(120px, 1fr))",
         }}
       >
-        {items.map((node) => (
-          <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
-            <mod.FileIcon node={{ path: node.path, type: node.type }} mono={false} />
-            <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{node.path}</div>
-          </div>
-        ))}
+        <For each={items}>
+          {(node) => (
+            <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+              <mod.FileIcon node={{ path: node.path, type: node.type }} mono={false} />
+              <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{node.path}</div>
+            </div>
+          )}
+        </For>
       </div>
     )
   },

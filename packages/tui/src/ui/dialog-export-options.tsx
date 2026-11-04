@@ -1,212 +1,299 @@
-import { TextareaRenderable, TextAttributes } from "@opentui/core"
+import { Keymap } from "../context/keymap"
+import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
-import { useDialog, type DialogContext } from "./dialog"
+import { DialogHeader, DialogLayout, type DialogContext } from "./dialog"
+import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
-import { onMount, Show } from "solid-js"
-import { useBindings } from "../keymap"
+import { createMemo, createSignal, For, Show } from "solid-js"
+
+export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
-  defaultFilename: string
   defaultThinking: boolean
-  defaultToolDetails: boolean
-  defaultAssistantMetadata: boolean
-  defaultOpenWithoutSaving: boolean
   onConfirm?: (options: {
-    filename: string
+    action: "copy" | "export"
+    format: ExportFormat
     thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
-    openWithoutSaving: boolean
+    tools: boolean
+    sanitize: boolean
   }) => void
   onCancel?: () => void
 }
 
+type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "export"
+
 export function DialogExportOptions(props: DialogExportOptionsProps) {
-  const dialog = useDialog()
-  const { theme } = useTheme()
-  let textarea: TextareaRenderable
-  const [store, setStore] = createStore({
-    thinking: props.defaultThinking,
-    toolDetails: props.defaultToolDetails,
-    assistantMetadata: props.defaultAssistantMetadata,
-    openWithoutSaving: props.defaultOpenWithoutSaving,
-    active: "filename" as "filename" | "thinking" | "toolDetails" | "assistantMetadata" | "openWithoutSaving",
-  })
-
-  useBindings(() => ({
-    bindings: [
-      {
-        key: "tab",
-        desc: "Next export option",
-        group: "Dialog",
-        cmd: () => {
-          const order: Array<"filename" | "thinking" | "toolDetails" | "assistantMetadata" | "openWithoutSaving"> = [
-            "filename",
-            "thinking",
-            "toolDetails",
-            "assistantMetadata",
-            "openWithoutSaving",
-          ]
-          const currentIndex = order.indexOf(store.active)
-          const nextIndex = (currentIndex + 1) % order.length
-          setStore("active", order[nextIndex])
-        },
-      },
-    ],
-  }))
-
-  useBindings(() => ({
-    enabled: store.active !== "filename",
-    bindings: [
-      {
-        key: "space",
-        desc: "Toggle export option",
-        group: "Dialog",
-        cmd: () => {
-          if (store.active === "thinking") setStore("thinking", !store.thinking)
-          if (store.active === "toolDetails") setStore("toolDetails", !store.toolDetails)
-          if (store.active === "assistantMetadata") setStore("assistantMetadata", !store.assistantMetadata)
-          if (store.active === "openWithoutSaving") setStore("openWithoutSaving", !store.openWithoutSaving)
-        },
-      },
-    ],
-  }))
-
-  onMount(() => {
-    dialog.setSize("medium")
-    setTimeout(() => {
-      if (!textarea || textarea.isDestroyed) return
-      textarea.focus()
-    }, 1)
-    textarea.gotoLineEnd()
-  })
-
+  const newDesigns = useNewDesigns()
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Export Options
-        </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
-      <box gap={1}>
-        <box>
-          <text fg={theme.text}>Filename:</text>
-        </box>
-        <textarea
-          onSubmit={() => {
-            props.onConfirm?.({
-              filename: textarea.plainText,
-              thinking: store.thinking,
-              toolDetails: store.toolDetails,
-              assistantMetadata: store.assistantMetadata,
-              openWithoutSaving: store.openWithoutSaving,
-            })
-          }}
-          height={3}
-          ref={(val: TextareaRenderable) => {
-            textarea = val
-            val.traits = { status: "FILENAME" }
-          }}
-          initialValue={props.defaultFilename}
-          placeholder="Enter filename"
-          placeholderColor={theme.textMuted}
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.text}
-        />
-      </box>
-      <box flexDirection="column">
-        <box
-          flexDirection="row"
-          gap={2}
-          paddingLeft={1}
-          backgroundColor={store.active === "thinking" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "thinking")}
-        >
-          <text fg={store.active === "thinking" ? theme.primary : theme.textMuted}>
-            {store.thinking ? "[x]" : "[ ]"}
-          </text>
-          <text fg={store.active === "thinking" ? theme.primary : theme.text}>Include thinking</text>
-        </box>
-        <box
-          flexDirection="row"
-          gap={2}
-          paddingLeft={1}
-          backgroundColor={store.active === "toolDetails" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "toolDetails")}
-        >
-          <text fg={store.active === "toolDetails" ? theme.primary : theme.textMuted}>
-            {store.toolDetails ? "[x]" : "[ ]"}
-          </text>
-          <text fg={store.active === "toolDetails" ? theme.primary : theme.text}>Include tool details</text>
-        </box>
-        <box
-          flexDirection="row"
-          gap={2}
-          paddingLeft={1}
-          backgroundColor={store.active === "assistantMetadata" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "assistantMetadata")}
-        >
-          <text fg={store.active === "assistantMetadata" ? theme.primary : theme.textMuted}>
-            {store.assistantMetadata ? "[x]" : "[ ]"}
-          </text>
-          <text fg={store.active === "assistantMetadata" ? theme.primary : theme.text}>Include assistant metadata</text>
-        </box>
-        <box
-          flexDirection="row"
-          gap={2}
-          paddingLeft={1}
-          backgroundColor={store.active === "openWithoutSaving" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "openWithoutSaving")}
-        >
-          <text fg={store.active === "openWithoutSaving" ? theme.primary : theme.textMuted}>
-            {store.openWithoutSaving ? "[x]" : "[ ]"}
-          </text>
-          <text fg={store.active === "openWithoutSaving" ? theme.primary : theme.text}>Open without saving</text>
-        </box>
-      </box>
-      <Show when={store.active !== "filename"}>
-        <text fg={theme.textMuted} paddingBottom={1}>
-          Press <span style={{ fg: theme.text }}>space</span> to toggle, <span style={{ fg: theme.text }}>return</span>{" "}
-          to confirm
-        </text>
-      </Show>
-      <Show when={store.active === "filename"}>
-        <text fg={theme.textMuted} paddingBottom={1}>
-          Press <span style={{ fg: theme.text }}>return</span> to confirm, <span style={{ fg: theme.text }}>tab</span>{" "}
-          for options
-        </text>
-      </Show>
-    </box>
+    <Show when={newDesigns()} fallback={<LegacyDialogExportOptions {...props} />}>
+      <DialogExportOptionsList {...props} />
+    </Show>
   )
 }
 
-DialogExportOptions.show = (
-  dialog: DialogContext,
-  defaultFilename: string,
-  defaultThinking: boolean,
-  defaultToolDetails: boolean,
-  defaultAssistantMetadata: boolean,
-  defaultOpenWithoutSaving: boolean,
-) => {
+type Row = "format" | "thinking" | "tools" | "sanitize"
+
+/** Export options as a list of values, under the "new-designs" experiment: ↑/↓ moves, ←/→ or space changes. */
+function DialogExportOptionsList(props: DialogExportOptionsProps) {
+  const [store, setStore] = createStore({
+    format: "markdown" as ExportFormat,
+    thinking: props.defaultThinking,
+    tools: true,
+    sanitize: false,
+  })
+  const [selected, setSelected] = createSignal<Row>("format")
+
+  const confirm = (action: "copy" | "export") =>
+    props.onConfirm?.({
+      action,
+      format: store.format,
+      thinking: store.thinking,
+      tools: store.tools,
+      sanitize: store.sanitize,
+    })
+
+  const change = (row: Row) => {
+    if (row === "format") return setStore("format", store.format === "markdown" ? "json" : "markdown")
+    setStore(row, !store[row])
+  }
+
+  const include = (value: boolean) => (value ? "include" : "exclude")
+  const options = createMemo(() => [
+    {
+      title: "Format",
+      value: "format" as Row,
+      onSelect: () => change("format"),
+      footerOverhang: 2,
+      footer: <DialogSelectChoice value={store.format} active={selected() === "format"} />,
+    },
+    ...(store.format === "markdown"
+      ? [
+          {
+            title: "Thinking",
+            value: "thinking" as Row,
+            onSelect: () => change("thinking"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={include(store.thinking)} active={selected() === "thinking"} />,
+          },
+          {
+            title: "Tools",
+            value: "tools" as Row,
+            onSelect: () => change("tools"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={include(store.tools)} active={selected() === "tools"} />,
+          },
+        ]
+      : [
+          {
+            title: "Sanitize",
+            value: "sanitize" as Row,
+            onSelect: () => change("sanitize"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={store.sanitize ? "on" : "off"} active={selected() === "sanitize"} />,
+          },
+        ]),
+  ])
+
+  return (
+    <DialogSelect
+      title="Export session"
+      renderFilter={false}
+      footerGap={2}
+      options={options()}
+      onMove={(option) => setSelected(option.value)}
+      actions={[
+        {
+          command: "dialog.export.copy",
+          title: "copy",
+          bind: "c",
+          selection: "none",
+          group: "primary",
+          onTrigger: () => confirm("copy"),
+        },
+      ]}
+      footerHints={[{ title: "save to file", label: "enter", group: "primary" }]}
+      bindings={[
+        { bind: "left", title: "Previous value", group: "Dialog", run: () => change(selected()) },
+        { bind: "right", title: "Next value", group: "Dialog", run: () => change(selected()) },
+        { bind: "space", title: "Change export option", group: "Dialog", run: () => change(selected()) },
+        { bind: "return", title: "Save to file", group: "Dialog", run: () => confirm("export") },
+      ]}
+    />
+  )
+}
+
+function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
+  const theme = useTheme().surface("dialog")
+  // Same field styling as the question form: only the focused row is highlighted, and the
+  // mark alone shows what's checked.
+  const markColor = (active: boolean, checked: boolean) =>
+    active ? theme.text.formfield.focused : checked ? theme.text.formfield.selected : theme.text.muted
+  const labelColor = (active: boolean) => (active ? theme.text.formfield.focused : theme.text.formfield.base)
+  const [store, setStore] = createStore({
+    format: "markdown" as ExportFormat,
+    thinking: props.defaultThinking,
+    tools: true,
+    sanitize: false,
+    active: "markdown" as Active,
+  })
+
+  const confirm = (action: "copy" | "export") =>
+    props.onConfirm?.({
+      action,
+      format: store.format,
+      thinking: store.thinking,
+      tools: store.tools,
+      sanitize: store.sanitize,
+    })
+
+  const activate = () => {
+    if (store.active === "markdown" || store.active === "json") {
+      setStore("format", store.active)
+      return
+    }
+    if (store.active === "thinking") setStore("thinking", !store.thinking)
+    if (store.active === "tools") setStore("tools", !store.tools)
+    if (store.active === "sanitize") setStore("sanitize", !store.sanitize)
+    if (store.active === "copy" || store.active === "export") confirm(store.active)
+  }
+
+  const move = (offset: number) => {
+    const options: Active[] =
+      store.format === "markdown" ? ["markdown", "json", "thinking", "tools"] : ["markdown", "json", "sanitize"]
+    const order: Active[] = [...options, "copy", "export"]
+    setStore("active", order[(order.indexOf(store.active) + offset + order.length) % order.length])
+  }
+
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
+      { bind: "tab", title: "Next export option", group: "Dialog", run: () => move(1) },
+      { bind: "shift+tab", title: "Previous export option", group: "Dialog", run: () => move(-1) },
+      {
+        bind: "return",
+        title: "Select export option",
+        group: "Dialog",
+        run: activate,
+      },
+    ],
+  }))
+
+  const selectFormat = (format: ExportFormat) => {
+    setStore("format", format)
+    setStore("active", format)
+  }
+
+  return (
+    <DialogLayout
+      header={<DialogHeader title="Export session" />}
+      legacyFooter={
+        <box flexDirection="row" justifyContent="flex-end" gap={1}>
+          <box
+            paddingLeft={4}
+            paddingRight={4}
+            backgroundColor={
+              store.active === "copy" ? theme.background.action.primary.focused : theme.background.action.primary.base
+            }
+            onMouseUp={() => confirm("copy")}
+          >
+            <text fg={store.active === "copy" ? theme.text.action.primary.focused : theme.text.action.primary.base}>
+              Copy
+            </text>
+          </box>
+          <box
+            paddingLeft={4}
+            paddingRight={4}
+            backgroundColor={
+              store.active === "export" ? theme.background.action.primary.focused : theme.background.action.primary.base
+            }
+            onMouseUp={() => confirm("export")}
+          >
+            <text fg={store.active === "export" ? theme.text.action.primary.focused : theme.text.action.primary.base}>
+              Export
+            </text>
+          </box>
+        </box>
+      }
+    >
+      <box gap={1}>
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.text.base}>Export as:</text>
+          <box flexDirection="row" gap={1}>
+            <For each={["markdown", "json"] as const}>
+              {(format) => (
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  onMouseUp={() => selectFormat(format)}
+                >
+                  <text fg={markColor(store.active === format, store.format === format)}>
+                    {store.format === format ? "◉" : "○"}
+                  </text>
+                  <text fg={labelColor(store.active === format)}>{format === "markdown" ? "Markdown" : "JSON"}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </box>
+        <Show when={store.format === "markdown"}>
+          <box
+            flexDirection="row"
+            gap={1}
+            onMouseUp={() => {
+              setStore("active", "thinking")
+              setStore("thinking", !store.thinking)
+            }}
+          >
+            <text fg={markColor(store.active === "thinking", store.thinking)}>{store.thinking ? "[x]" : "[ ]"}</text>
+            <text fg={labelColor(store.active === "thinking")}>Include thinking</text>
+          </box>
+          <box
+            flexDirection="row"
+            gap={1}
+            onMouseUp={() => {
+              setStore("active", "tools")
+              setStore("tools", !store.tools)
+            }}
+          >
+            <text fg={markColor(store.active === "tools", store.tools)}>{store.tools ? "[x]" : "[ ]"}</text>
+            <text fg={labelColor(store.active === "tools")}>Include tools</text>
+          </box>
+        </Show>
+        <Show when={store.format === "json"}>
+          <box
+            flexDirection="row"
+            gap={1}
+            onMouseUp={() => {
+              setStore("active", "sanitize")
+              setStore("sanitize", !store.sanitize)
+            }}
+          >
+            <text fg={markColor(store.active === "sanitize", store.sanitize)}>{store.sanitize ? "[x]" : "[ ]"}</text>
+            <text fg={labelColor(store.active === "sanitize")}>Sanitize sensitive data</text>
+          </box>
+        </Show>
+      </box>
+    </DialogLayout>
+  )
+}
+
+DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => {
   return new Promise<{
-    filename: string
+    action: "copy" | "export"
+    format: ExportFormat
     thinking: boolean
-    toolDetails: boolean
-    assistantMetadata: boolean
-    openWithoutSaving: boolean
+    tools: boolean
+    sanitize: boolean
   } | null>((resolve) => {
     dialog.replace(
       () => (
         <DialogExportOptions
-          defaultFilename={defaultFilename}
           defaultThinking={defaultThinking}
-          defaultToolDetails={defaultToolDetails}
-          defaultAssistantMetadata={defaultAssistantMetadata}
-          defaultOpenWithoutSaving={defaultOpenWithoutSaving}
           onConfirm={(options) => resolve(options)}
           onCancel={() => resolve(null)}
         />

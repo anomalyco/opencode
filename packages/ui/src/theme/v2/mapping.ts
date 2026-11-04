@@ -3,7 +3,7 @@ import { V2_AVATAR_DARK, V2_AVATAR_LIGHT } from "./avatar"
 
 const ref = (name: string): V2ColorValue => `var(--${name})`
 
-const lightAgentTokens: Record<string, V2ColorValue> = {
+const lightAgentTokens = {
   "v2-agent-plan-solid": ref("v2-pink-800"),
   "v2-agent-plan-border": "rgba(200, 61, 139, 0.20)",
   "v2-agent-plan-background": "rgba(253, 236, 243, 0.10)",
@@ -15,9 +15,9 @@ const lightAgentTokens: Record<string, V2ColorValue> = {
   "v2-agent-explore-background": "rgba(254, 250, 236, 0.1)",
   "v2-agent-review-solid": ref("v2-green-800"),
   "v2-agent-writer-solid": ref("v2-purple-700"),
-}
+} satisfies Record<string, V2ColorValue>
 
-const darkAgentTokens: Record<string, V2ColorValue> = {
+const darkAgentTokens = {
   "v2-agent-plan-solid": ref("v2-pink-400"),
   "v2-agent-plan-border": "rgba(247, 153, 198, 0.20)",
   "v2-agent-plan-background": "rgba(170, 53, 118, 0.05)",
@@ -29,9 +29,9 @@ const darkAgentTokens: Record<string, V2ColorValue> = {
   "v2-agent-explore-background": "rgba(172, 136, 51, 0.05)",
   "v2-agent-review-solid": ref("v2-green-300"),
   "v2-agent-writer-solid": ref("v2-purple-400"),
-}
+} satisfies Record<string, V2ColorValue>
 
-const light: Record<string, V2ColorValue> = {
+const light = {
   "v2-background-bg-base": ref("v2-grey-100"),
   "v2-background-bg-deep": ref("v2-grey-200"),
   "v2-background-bg-layer-01": ref("v2-grey-300"),
@@ -40,13 +40,16 @@ const light: Record<string, V2ColorValue> = {
   "v2-background-bg-layer-04": ref("v2-grey-600"),
   "v2-background-bg-inverse": ref("v2-grey-1000"),
   "v2-background-bg-contrast": ref("v2-grey-900"),
+  "v2-background-bg-icon-button-contrast": ref("v2-background-bg-contrast"),
   "v2-background-bg-button-neutral": ref("v2-grey-100"),
   "v2-background-bg-accent": ref("v2-blue-600"),
+  "v2-background-bg-code-path": ref("v2-cyan-100"),
   "v2-text-text-inverse": ref("v2-grey-100"),
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-600"),
   "v2-text-text-accent-hover": ref("v2-blue-700"),
   "v2-text-text-code-accent": ref("v2-blue-900"),
+  "v2-text-text-code-path": ref("v2-blue-900"),
   "v2-border-border-muted": ref("v2-alpha-dark-8"),
   "v2-border-border-base": ref("v2-alpha-dark-10"),
   "v2-border-border-strong": ref("v2-alpha-dark-20"),
@@ -71,7 +74,7 @@ const light: Record<string, V2ColorValue> = {
   "v2-state-bg-danger": ref("v2-red-100"),
   "v2-state-fg-danger": ref("v2-red-800"),
   "v2-state-border-danger": ref("v2-red-300"),
-  "v2-state-bg-info": ref("v2-blue-100"),
+  "v2-state-bg-info": ref("v2-blue-200"),
   "v2-state-fg-info": ref("v2-blue-800"),
   "v2-state-border-info": ref("v2-blue-300"),
   ...lightAgentTokens,
@@ -82,6 +85,8 @@ const light: Record<string, V2ColorValue> = {
     "0px 8px 16px 0px var(--v2-alpha-dark-4), 0px 4px 8px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
   "v2-elevation-overlay":
     "0px 16px 32px 0px var(--v2-alpha-dark-4), 0px 8px 16px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+  "v2-elevation-input":
+    "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
   "v2-elevation-button-neutral":
     "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
   "v2-elevation-button-contrast":
@@ -94,9 +99,9 @@ const light: Record<string, V2ColorValue> = {
   "v2-illustration-illustration-layer-01": ref("v2-grey-300"),
   "v2-illustration-illustration-layer-02": ref("v2-grey-400"),
   "v2-illustration-illustration-layer-03": ref("v2-grey-500"),
-}
+} satisfies Record<string, V2ColorValue>
 
-const dark: Record<string, V2ColorValue> = {
+const dark = {
   "v2-background-bg-base": ref("v2-grey-1000"),
   "v2-background-bg-deep": ref("v2-grey-1100"),
   "v2-background-bg-layer-01": ref("v2-grey-800"),
@@ -105,13 +110,16 @@ const dark: Record<string, V2ColorValue> = {
   "v2-background-bg-layer-04": ref("v2-grey-400"),
   "v2-background-bg-inverse": ref("v2-grey-100"),
   "v2-background-bg-contrast": ref("v2-grey-700"),
+  "v2-background-bg-icon-button-contrast": ref("v2-grey-400"),
   "v2-background-bg-button-neutral": ref("v2-alpha-light-6"),
   "v2-background-bg-accent": ref("v2-blue-600"),
+  "v2-background-bg-code-path": ref("v2-cyan-1200"),
   "v2-text-text-inverse": ref("v2-grey-1000"),
   "v2-text-text-contrast": ref("v2-grey-100"),
   "v2-text-text-accent": ref("v2-blue-400"),
   "v2-text-text-accent-hover": ref("v2-blue-300"),
   "v2-text-text-code-accent": ref("v2-blue-400"),
+  "v2-text-text-code-path": ref("v2-blue-300"),
   "v2-border-border-muted": ref("v2-alpha-light-8"),
   "v2-border-border-base": ref("v2-alpha-light-10"),
   "v2-border-border-strong": ref("v2-alpha-light-20"),
@@ -147,6 +155,8 @@ const dark: Record<string, V2ColorValue> = {
     "0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 4px 8px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
   "v2-elevation-overlay":
     "0px 16px 32px 0px var(--v2-alpha-dark-30), 0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+  "v2-elevation-input":
+    "0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
   "v2-elevation-button-neutral":
     "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
   "v2-elevation-button-contrast":
@@ -159,7 +169,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-illustration-illustration-layer-01": ref("v2-grey-900"),
   "v2-illustration-illustration-layer-02": ref("v2-grey-800"),
   "v2-illustration-illustration-layer-03": ref("v2-grey-700"),
-}
+} satisfies Record<string, V2ColorValue>
 
 export function mapV2Semantics(isDark: boolean): Record<string, V2ColorValue> {
   return isDark ? dark : light

@@ -1,0 +1,183 @@
+import { batch, untrack, type Accessor } from "solid-js"
+import type { SetStoreFunction, Store } from "solid-js/store"
+import type {
+  ComposerAgentPart,
+  ComposerFilePart,
+  ComposerSkillPart,
+  ComposerSessionPart,
+  ComposerPersistedState,
+  ComposerPrompt,
+} from "../types"
+import { isAttachment, promptLength } from "../prompt-parts"
+
+type ComposerStateStore = [
+  Store<ComposerPersistedState> | Accessor<Store<ComposerPersistedState>>,
+  SetStoreFunction<ComposerPersistedState>,
+]
+
+export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
+
+export function createComposerEditorActions(input: ComposerStateStoreInput) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- this typed union explicitly accepts either a store tuple or an accessor
+  const tuple = () => (typeof input === "function" ? input() : input)
+
+  const store = () => {
+    const value = tuple()[0]
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- resolve the accessor branch of the typed store union
+    return typeof value === "function" ? value() : value
+  }
+
+  const setStore = () => tuple()[1]
+
+  const clearRetry = () => {
+    if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
+  }
+
+  return {
+    get state() {
+      return store()
+    },
+    setPrompt(prompt: ComposerPrompt, cursor?: number) {
+      // Persisted setters encode on every call, even inside a reactive batch.
+      const update: Partial<ComposerPersistedState> = { prompt, retry: undefined }
+
+      if (cursor !== undefined) update.cursor = cursor
+      batch(() => setStore()(update))
+    },
+    setCursor(cursor: number) {
+      if (untrack(() => store().cursor) === cursor) return
+      setStore()("cursor", cursor)
+    },
+    setMode(mode: "normal" | "shell") {
+      if (untrack(() => store().mode === mode && store().retry === undefined)) return
+      setStore()({ mode, retry: undefined })
+    },
+    setText(content: string) {
+      batch(() =>
+        setStore()((state) => ({
+          prompt: [{ type: "text", content, start: 0, end: content.length }, ...state.prompt.filter(isAttachment)],
+          cursor: content.length,
+          retry: undefined,
+        })),
+      )
+    },
+    addText(content: string) {
+      const cursor = store().cursor ?? promptLength(store().prompt)
+      batch(() =>
+        setStore()((state) => ({
+          prompt: insertText(state.prompt, cursor, content),
+          cursor: cursor + content.length,
+          retry: undefined,
+        })),
+      )
+    },
+    removeContext(key: string) {
+      setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
+      clearRetry()
+    },
+    addMention(
+      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
+      range?: { start: number; end: number },
+    ) {
+      const prompt = withOffsets(store().prompt)
+      const length = promptLength(prompt)
+      const end = range?.end ?? Math.min(store().cursor ?? length, length)
+
+      const part = prompt.find(
+        (item): item is Extract<ComposerPrompt[number], { type: "text" }> =>
+          item.type === "text" && end >= item.start && end <= item.end,
+      )
+
+      const index = part ? part.content.slice(0, end - part.start).lastIndexOf("@") : -1
+      const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
+      setStore()("prompt", insertMention(prompt, start, end, mention))
+      setStore()("cursor", start + mention.content.length + 1)
+      clearRetry()
+    },
+    removeAttachment(id: string) {
+      setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
+      clearRetry()
+    },
+  }
+}
+
+function insertText(prompt: ComposerPrompt, cursor: number, content: string): ComposerPrompt {
+  let position = 0
+  let inserted = false
+
+  const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
+    if (isAttachment(part)) return [part]
+    const start = position
+    position += part.content.length
+
+    if (inserted) return [part]
+
+    if (part.type === "text" && cursor >= start && cursor <= position) {
+      inserted = true
+      const offset = cursor - start
+
+      return [{ ...part, content: part.content.slice(0, offset) + content + part.content.slice(offset) }]
+    }
+
+    if (cursor > start) return [part]
+    inserted = true
+
+    return [{ type: "text", content, start: 0, end: 0 }, part]
+  })
+
+  if (!inserted) parts.push({ type: "text", content, start: 0, end: 0 })
+
+  return withOffsets(parts)
+}
+
+function insertMention(
+  prompt: ComposerPrompt,
+  start: number,
+  end: number,
+  mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
+): ComposerPrompt {
+  let position = 0
+  let inserted = false
+
+  const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
+    if (isAttachment(part)) return [part]
+    const partStart = position
+    position += part.content.length
+
+    if (inserted) return [part]
+
+    if (part.type === "text" && start >= partStart && end <= position) {
+      inserted = true
+      const before = part.content.slice(0, start - partStart)
+      const after = part.content.slice(end - partStart)
+
+      return [
+        ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
+        mention,
+        { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
+      ]
+    }
+
+    if (start !== end || start > partStart) return [part]
+    inserted = true
+
+    return [mention, { type: "text", content: " ", start: 0, end: 0 }, part]
+  })
+
+  if (!inserted && start === end) parts.push(mention, { type: "text", content: " ", start: 0, end: 0 })
+
+  return withOffsets(parts)
+}
+
+function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
+  let offset = 0
+
+  return prompt.map((part) => {
+    if (isAttachment(part)) return part
+    const next = { ...part, start: offset, end: offset + part.content.length }
+    offset = next.end
+
+    return next
+  })
+}

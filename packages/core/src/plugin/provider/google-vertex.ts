@@ -1,31 +1,44 @@
-import { Effect } from "effect"
-import { define } from "../internal"
-import { ProviderV2 } from "../../provider"
+import { Effect, Option, Schema, Stream } from "effect"
+import path from "node:path"
+import { define } from "@opencode/plugin/effect/plugin"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Bus } from "../../bus.js"
+import { Credential } from "../../credential.js"
+import { Provider } from "../../provider.js"
+import { configuredSettings } from "./configured.js"
 
-function resolveProject(options: Record<string, any>) {
+const ADC_METHOD = "google-adc"
+
+const decodeADCFile = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ quota_project_id: Schema.optional(Schema.String) })),
+)
+
+function resolveProject(options: Record<string, unknown>) {
   // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex, while Google SDKs
   // and ADC examples commonly use the broader Google Cloud project aliases.
-  return (
+  const project =
     options.project ??
     process.env.GOOGLE_VERTEX_PROJECT ??
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCP_PROJECT ??
     process.env.GCLOUD_PROJECT
-  )
+  return typeof project === "string" ? project : undefined
 }
 
-function resolveLocation(options: Record<string, any>) {
-  return (
+function resolveLocation(options: Record<string, unknown>) {
+  const location =
     options.location ??
     process.env.GOOGLE_VERTEX_LOCATION ??
     process.env.GOOGLE_CLOUD_LOCATION ??
-    process.env.VERTEX_LOCATION ??
-    "us-central1"
-  )
+    process.env.VERTEX_LOCATION
+  return typeof location === "string" ? location : undefined
 }
 
 function vertexEndpoint(location: string) {
   if (location === "global") return "aiplatform.googleapis.com"
+  // Jurisdictional multi-regions use Regional Endpoint Platform domains.
+  if (location === "eu" || location === "us") return `aiplatform.${location}.rep.googleapis.com`
   return `${location}-aiplatform.googleapis.com`
 }
 
@@ -38,136 +51,181 @@ function replaceVertexVars(value: string, project: string | undefined, location:
     .replaceAll("${GOOGLE_VERTEX_ENDPOINT}", vertexEndpoint(location))
 }
 
-function authFetch(fetchWithRuntimeOptions?: unknown) {
-  // Native Vertex SDKs handle ADC internally. OpenAI-compatible Vertex endpoints
-  // do not, so inject a Google access token into their fetch path.
-  return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const { GoogleAuth } = await import("google-auth-library")
-    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
-    const client = await auth.getClient()
-    const token = await client.getAccessToken()
-    const headers = new Headers(init?.headers)
-    headers.set("Authorization", `Bearer ${token.token}`)
-    return typeof fetchWithRuntimeOptions === "function"
-      ? fetchWithRuntimeOptions(input, { ...init, headers })
-      : fetch(input, { ...init, headers })
-  }
-}
-
 export const GoogleVertexPlugin = define({
-  id: "google-vertex",
+  id: "opencode.provider.google.vertex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
-      Effect.fn(function* (evt) {
-        for (const item of evt.provider.list()) {
-          if (item.provider.api.type !== "aisdk") continue
-          if (
-            item.provider.api.package !== "@ai-sdk/google-vertex" &&
-            !(
-              item.provider.id === ProviderV2.ID.googleVertex &&
-              item.provider.api.package.includes("@ai-sdk/openai-compatible")
-            )
-          )
-            continue
-          const project = resolveProject(item.provider.request.body)
-          const location = String(resolveLocation(item.provider.request.body))
-          evt.provider.update(item.provider.id, (provider) => {
-            if (project) provider.request.body.project = project
-            provider.request.body.location = location
-            if (provider.api.type === "aisdk" && provider.api.url) {
-              provider.api.url = replaceVertexVars(provider.api.url, project, location)
-            }
-            if (provider.api.type === "aisdk" && provider.api.package.includes("@ai-sdk/openai-compatible")) {
-              provider.request.body.fetch = authFetch(provider.request.body.fetch)
-            }
-          })
-        }
-      }),
+    const fs = yield* FSUtil.Service
+    const credentials = yield* Credential.Service
+    const bus = yield* Bus.Service
+    const read = (file: string) => fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
+    // Same lookup as gcloud itself. Only project IDs are read; nothing here contacts Google.
+    const gcloud =
+      (process.env.CLOUDSDK_CONFIG
+        ? process.env.CLOUDSDK_CONFIG === "~"
+          ? Global.Path.home
+          : process.env.CLOUDSDK_CONFIG.startsWith("~/")
+            ? path.join(Global.Path.home, process.env.CLOUDSDK_CONFIG.slice(2))
+            : process.env.CLOUDSDK_CONFIG
+        : undefined) ??
+      (process.platform === "win32" && process.env.APPDATA
+        ? path.join(process.env.APPDATA, "gcloud")
+        : path.join(Global.Path.home, ".config", "gcloud"))
+    const active = `config_${(yield* read(path.join(gcloud, "active_config")))?.trim() || "default"}`
+    const configs = (yield* fs
+      .readDirectory(path.join(gcloud, "configurations"))
+      .pipe(Effect.orElseSucceed((): string[] => [])))
+      .filter((name) => name.startsWith("config_"))
+      .toSorted((a, b) => Number(b === active) - Number(a === active) || a.localeCompare(b))
+    const contents = yield* Effect.forEach(configs, (name) => read(path.join(gcloud, "configurations", name)))
+    const adcFile = yield* read(path.join(gcloud, "application_default_credentials.json"))
+    const configured = (yield* configuredSettings(Provider.ID.googleVertex)) ?? {}
+    const projects = Array.from(
+      new Set(
+        [
+          resolveProject(configured),
+          ...contents.map((content) => content?.match(/^project\s*=\s*(\S+)/m)?.[1]),
+          Option.getOrUndefined(decodeADCFile(adcFile ?? ""))?.quota_project_id,
+        ].filter((project): project is string => Boolean(project)),
+      ),
     )
-    yield* ctx.aisdk.sdk(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID === ProviderV2.ID.googleVertex && evt.package.includes("@ai-sdk/openai-compatible")) {
-          evt.options.fetch = authFetch(evt.options.fetch)
-          return
-        }
-        if (evt.package !== "@ai-sdk/google-vertex") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
-        const project = resolveProject(evt.options)
-        const location = resolveLocation(evt.options)
-        const options = { ...evt.options }
-        delete options.fetch
-        evt.sdk = mod.createVertex({
-          ...options,
-          project,
-          location,
-        })
-      }),
+    // Credentials work in every location; locations differ in which models they serve. `global` serves the most.
+    const locations = Array.from(
+      new Set([
+        resolveLocation(configured) ?? "global",
+        "global",
+        "us",
+        "eu",
+        ...contents.flatMap((content) =>
+          Array.from((content ?? "").matchAll(/^region\s*=\s*(\S+)/gm), (match) => match[1]),
+        ),
+      ]),
     )
-    yield* ctx.aisdk.language(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.googleVertex) return
-        evt.language = evt.sdk.languageModel(String(evt.model.api.id).trim())
-      }),
-    )
-  }),
-})
 
-export const GoogleVertexAnthropicPlugin = define({
-  id: "google-vertex-anthropic",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
-      Effect.fn(function* (evt) {
-        for (const item of evt.provider.list()) {
-          if (item.provider.api.type !== "aisdk") continue
-          if (item.provider.api.package !== "@ai-sdk/google-vertex/anthropic") continue
-          const project =
-            item.provider.request.body.project ??
-            process.env.GOOGLE_CLOUD_PROJECT ??
-            process.env.GCP_PROJECT ??
-            process.env.GCLOUD_PROJECT
-          const location =
-            item.provider.request.body.location ??
-            process.env.GOOGLE_CLOUD_LOCATION ??
-            process.env.VERTEX_LOCATION ??
-            "global"
-          evt.provider.update(item.provider.id, (provider) => {
-            if (project) provider.request.body.project = project
-            provider.request.body.location = location
+    const load = Effect.fn("GoogleVertexPlugin.load")(function* () {
+      const connection = yield* ctx.integration.connection.active(Provider.ID.googleVertex)
+      // Reads the stored value rather than resolving the connection, so startup never refreshes anything.
+      const stored =
+        connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
+      if (stored?.value.type !== "external" || stored.value.methodID !== ADC_METHOD) return {}
+      return { project: stored.value.metadata?.project, location: stored.value.metadata?.location }
+    })
+    const selected = { settings: yield* load() }
+    const settingsFor = (provider: { id: string; integrationID?: string; settings?: Record<string, unknown> }) => ({
+      ...provider.settings,
+      ...((provider.integrationID ?? provider.id) === Provider.ID.googleVertex ? selected.settings : {}),
+    })
+
+    yield* ctx.integration.transform((editor) => {
+      // models.dev lists project, location, and the ADC file path, which configure Google auth rather than
+      // carrying a key. The Express Mode key is the only env credential.
+      editor.method.update({
+        integrationID: Provider.ID.googleVertex,
+        method: { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] },
+      })
+      editor.method.update({
+        integrationID: Provider.ID.googleVertex,
+        method: {
+          id: ADC_METHOD,
+          type: "external",
+          label: "Google Cloud credentials (gcloud auth or environment)",
+          form: [
+            {
+              key: "project",
+              type: "string",
+              title: "Google Cloud project",
+              description: projects.length
+                ? `Found ${projects.length} project${projects.length === 1 ? "" : "s"} in your gcloud configuration.`
+                : "No projects found in your gcloud configuration.",
+              required: true,
+              minLength: 1,
+              pattern: "\\S",
+              placeholder: "Project ID",
+              custom: true,
+              default: projects[0],
+              options: projects.map((project) => ({ value: project, label: project })),
+            },
+            {
+              key: "location",
+              type: "string",
+              title: "Location",
+              description:
+                "global serves the most models. Use us, eu, or a single region for data residency or regional quota.",
+              required: true,
+              minLength: 1,
+              pattern: "\\S",
+              placeholder: "Location",
+              custom: true,
+              default: locations[0],
+              options: locations.map((location) => ({ value: location, label: location })),
+            },
+          ],
+        },
+      })
+    })
+    yield* ctx.provider.transform((evt) => {
+      for (const item of evt.list()) {
+        if (
+          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
+          !(
+            item.provider.id === Provider.ID.googleVertex &&
+            item.provider.package === "@opencode/ai/providers/openai-compatible"
+          )
+        )
+          continue
+        const settings = settingsFor(item.provider)
+        const project = resolveProject(settings)
+        const location = resolveLocation(settings) ?? "global"
+        evt.update(item.provider.id, (provider) => {
+          // Vertex authenticates through ADC rather than a key credential, so a
+          // resolvable project is what makes the provider usable.
+          if (project && provider.activation === "auto") provider.activation = "enabled"
+          provider.settings = {
+            ...settingsFor(provider),
+            ...(project ? { project } : {}),
+            location,
+            ...(typeof provider.settings?.baseURL === "string"
+              ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
+              : {}),
+          }
+        })
+      }
+    })
+    yield* ctx.model.transform((models) => {
+      for (const item of models.provider.list()) {
+        if (
+          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
+          !(
+            item.provider.id === Provider.ID.googleVertex &&
+            item.provider.package === "@opencode/ai/providers/openai-compatible"
+          )
+        )
+          continue
+        const settings = settingsFor(item.provider)
+        const project = resolveProject(settings)
+        const location = resolveLocation(settings) ?? "global"
+        for (const model of models.list(item.provider.id)) {
+          if (typeof model.settings?.baseURL !== "string") continue
+          const baseURL = replaceVertexVars(model.settings.baseURL, project, location)
+          models.update(item.provider.id, model.id, (draft) => {
+            draft.settings = {
+              ...draft.settings,
+              baseURL,
+            }
           })
         }
-      }),
-    )
-    yield* ctx.aisdk.sdk(
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/google-vertex/anthropic") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
-        const project =
-          typeof evt.options.project === "string"
-            ? evt.options.project
-            : (process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCP_PROJECT ?? process.env.GCLOUD_PROJECT)
-        const location =
-          typeof evt.options.location === "string"
-            ? evt.options.location
-            : (process.env.GOOGLE_CLOUD_LOCATION ?? process.env.VERTEX_LOCATION ?? "global")
-        evt.sdk = mod.createVertexAnthropic({
-          ...evt.options,
-          project,
-          location,
-          // Continental multi-regions (eu, us) require Regional Endpoint Platform
-          // domains; the default {region}-aiplatform.googleapis.com does not resolve.
-          ...((location === "eu" || location === "us") && project && !evt.options.baseURL
-            ? {
-                baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
-              }
-            : {}),
-        })
-      }),
-    )
-    yield* ctx.aisdk.language(
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("google-vertex-anthropic")) return
-        evt.language = evt.sdk.languageModel(String(evt.model.api.id).trim())
-      }),
+      }
+    })
+    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
+      Stream.runForEach(() =>
+        Effect.gen(function* () {
+          const next = yield* load()
+          if (JSON.stringify(next) === JSON.stringify(selected.settings)) return
+          selected.settings = next
+          yield* ctx.provider.reload()
+          yield* ctx.model.reload()
+        }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
     )
   }),
 })

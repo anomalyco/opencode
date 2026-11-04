@@ -1,31 +1,37 @@
 import { DialogPrompt } from "../ui/dialog-prompt"
-import { useDialog } from "../ui/dialog"
-import { useSync } from "../context/sync"
-import { createMemo } from "solid-js"
-import { useSDK } from "../context/sdk"
+import { type DialogContext, useDialog } from "../ui/dialog"
+import { useClient } from "../context/client"
+import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 
-interface DialogSessionRenameProps {
-  session: string
-}
-
-export function DialogSessionRename(props: DialogSessionRenameProps) {
+export function DialogSessionRename(props: { sessionID: string; currentTitle?: string }) {
   const dialog = useDialog()
-  const sync = useSync()
-  const sdk = useSDK()
-  const session = createMemo(() => sync.session.get(props.session))
+  const client = useClient()
+  const toast = useToast()
 
   return (
     <DialogPrompt
-      title="Rename Session"
-      value={session()?.title}
+      title="Rename session"
+      placeholder="Session title"
+      value={props.currentTitle}
       onConfirm={(value) => {
-        void sdk.client.session.update({
-          sessionID: props.session,
-          title: value,
-        })
-        dialog.clear()
+        const title = value.trim()
+        if (!title) return
+        void client.api.session
+          .update({ sessionID: props.sessionID, title })
+          .then(() => dialog.clear())
+          .catch((error) =>
+            toast.show({
+              message: `Failed to rename session: ${errorMessage(error)}`,
+              variant: "error",
+              duration: 5000,
+            }),
+          )
       }}
       onCancel={() => dialog.clear()}
     />
   )
 }
+
+DialogSessionRename.show = (dialog: DialogContext, sessionID: string, currentTitle?: string) =>
+  dialog.replace(() => <DialogSessionRename sessionID={sessionID} currentTitle={currentTitle} />)

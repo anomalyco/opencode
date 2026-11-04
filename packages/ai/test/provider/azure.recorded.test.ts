@@ -1,0 +1,139 @@
+import { describe, expect } from "bun:test"
+import { Effect } from "effect"
+import { ai, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
+import { Azure } from "../../src/providers.js"
+import { LLMClient } from "../../src/route.js"
+import { recordedTests } from "../recorded-test.js"
+
+const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME ?? "aiden-azury-group"
+
+const chatModel = Azure.configure({
+  resourceName,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).chat("gpt-5.6-luna")
+
+const responsesModel = Azure.configure({
+  resourceName,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).responses("gpt-5.6-luna")
+
+const messagesModel = Azure.configure({
+  resourceName,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).messages("claude-haiku-4-5")
+
+const foundryChatModel = Azure.configure({
+  baseURL: `https://${resourceName}.services.ai.azure.com/models`,
+  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+}).chat("Kimi-K2.5")
+
+const lookupWeather = ToolDefinition.make({
+  name: "lookup_weather",
+  description: "Look up the current weather for a city",
+  inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+})
+
+const recorded = recordedTests({
+  prefix: "azure",
+  provider: "azure",
+  requires: ["AZURE_OPENAI_API_KEY"],
+})
+
+describe("Azure OpenAI recorded", () => {
+  recorded.effect("chat streams text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: chatModel, prompt: "Reply with exactly one word: hello" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("hello")
+    }),
+  )
+
+  recorded.effect("chat streams text from a Foundry models URL", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: foundryChatModel, prompt: "Reply with exactly one word: hello" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("hello")
+    }),
+  )
+
+  recorded.effect("messages streams text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: messagesModel, prompt: "Reply with exactly one word: hola" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("hola")
+    }),
+  )
+
+  recorded.effect("messages calls a tool", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({
+          model: messagesModel,
+          prompt: "What is the weather in Paris? Use the lookup_weather tool.",
+          tools: [lookupWeather],
+        }),
+      )
+
+      const call = response.toolCalls.find((part) => part.name === "lookup_weather")
+      expect(call).toBeDefined()
+      expect(call?.input).toMatchObject({ city: "Paris" })
+    }),
+  )
+
+  recorded.effect("responses streams text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({ model: responsesModel, prompt: "Reply with exactly one word: bonjour" }),
+      )
+
+      expect(response.text.toLowerCase()).toContain("bonjour")
+    }),
+  )
+
+  recorded.effect("responses calls a tool", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({
+          model: responsesModel,
+          prompt: "What is the weather in Paris? Use the lookup_weather tool.",
+          tools: [lookupWeather],
+        }),
+      )
+
+      const call = response.toolCalls.find((part) => part.name === "lookup_weather")
+      expect(call).toBeDefined()
+      expect(call?.input).toMatchObject({ city: "Paris" })
+    }),
+  )
+
+  recorded.effect("responses continues after a tool result", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        ai.request({
+          model: responsesModel,
+          messages: [
+            Message.user("What is the weather in Paris?"),
+            Message.assistant([
+              ToolCallPart.make({ id: "call_paris_1", name: "lookup_weather", input: { city: "Paris" } }),
+            ]),
+            Message.tool({
+              id: "call_paris_1",
+              name: "lookup_weather",
+              result: "18C, light rain",
+              resultType: "text",
+            }),
+          ],
+          tools: [lookupWeather],
+        }),
+      )
+
+      expect(response.text.length).toBeGreaterThan(0)
+    }),
+  )
+})

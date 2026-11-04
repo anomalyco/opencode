@@ -1,0 +1,40 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh user@example.com",
+  add: "Dodaj SSH strežnik",
+  "server.menu.label": "SSH strežnik",
+  target: "Gostitelj ali SSH ukaz",
+  connect: "Poveži",
+  connectTo: "Poveži z {{host}}",
+  authenticate: "SSH overjanje",
+  "session.disconnected": "SSH povezava ni aktivna",
+  "session.connecting": "Povezovanje s SSH strežnikom",
+  "session.reconnectDescription":
+    "Povežite se znova, da si ogledate sejo in nadaljujete delo. Vaša oddaljena seja je ohranjena.",
+  "session.reconnect": "Poveži znova",
+  trust: "Zaupaj in poveži",
+  continue: "Nadaljuj",
+  update: "Posodobi in se poveži znova",
+  project: "Odpri projekt na {{host}}",
+  "stage.incompatible": "Zahteva se posodobitev strežnika",
+  "error.input": "Vnesite gostitelja ali SSH ukaz. Oddaljeni ukazi in nepodprte SSH opcije niso dovoljene.",
+  "error.connection": "Povezave SSH ni bilo mogoče vzpostaviti. Preverite omrežje in SSH nastavitve.",
+  "error.platform":
+    "Ta oddaljena platforma ni podprta. Samodejna nastavitev trenutno zahteva Linux ali macOS na x64 ali arm64.",
+  "error.version": "Oddaljena storitev se mora ujemati s to namizno različico pred povezavo.",
+  "error.install":
+    "Namestitev oddaljenega strežnika ni uspela. Preverite povezljivost, prostor na disku in ali je tar nameščen.",
+  "error.unpublished":
+    "Za to namizno različico ni objavljenega oddaljenega strežnika. Za razvojne različice namestite in zaženite V2 na gostitelju, nato poskusite znova.",
+  "error.service": "SSH povezan, vendar OpenCode strežnik ni postal pripravljen.",
+  "error.host-key":
+    "Osebnosti gostitelja ni bilo mogoče preveriti. Pred posodobitvijo znanih gostiteljev SSH preverite njegov prstni odtis.",
+  "error.ssh-missing": "OpenSSH ni bilo najdeno. Namestite OpenSSH odjemalec in zagotovite, da je ssh na PATH.",
+  "action.authenticate": "Overi",
+  "stage.connecting": "Povezovanje preko SSH…",
+  "stage.authentication": "Zahtevano overjanje",
+  "form.name": "Ime strežnika (neobvezno)",
+  "form.namePlaceholder": "Lokalni gostitelj",
+  "form.add": "Dodaj strežnik",
+  "menu.delete": "Izbriši",
+}

@@ -210,27 +210,6 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-## todowrite
-
-코딩 세션 중에 todo 목록을 관리합니다.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todowrite": "allow"
-  }
-}
-```
-
-복잡한 작업 중에 진행 상황을 추적하기 위해 작업 목록을 만들고 업데이트합니다. LLM은 멀티 단계 작업을 구성하기 위해 이것을 사용합니다.
-
-:::note
-이 도구는 기본으로 시약을 비활성화하지만 수동으로 활성화 할 수 있습니다. [더 알아보기](/docs/agents/#permissions)
-:::
-
----
-
 #### webfetch
 
 Fetch 웹 콘텐츠.

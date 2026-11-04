@@ -1,10 +1,76 @@
-import type { LocationRef } from "@opencode-ai/sdk/v2"
-import { createContext, useContext, type Accessor, type ParentProps } from "solid-js"
+import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client"
+import { retry } from "@opencode/util/retry"
+import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
+import { useClient } from "./client"
+import { useData } from "./data"
 
-const context = createContext<Accessor<LocationRef | undefined>>()
+const context = createContext<{
+  readonly current: LocationGetOutput | undefined
+  // The target location as set, available before the server-synced info in `current` arrives.
+  readonly ref: LocationRef | undefined
+  readonly error: { readonly location: LocationRef; readonly cause: unknown } | undefined
+  set: (location?: LocationRef) => void
+}>()
 
-export function LocationProvider(props: ParentProps<{ location?: LocationRef }>) {
-  return <context.Provider value={() => props.location}>{props.children}</context.Provider>
+export function LocationProvider(props: ParentProps) {
+  const client = useClient()
+  const data = useData()
+  const [ref, setRef] = createSignal<LocationRef>()
+  const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
+  let generation = 0
+  const current = createMemo(() => data.location.info(ref()))
+
+  function sync(location?: LocationRef) {
+    if (!location) return
+    const attempt = ++generation
+    const defaultLocation = data.location.default()
+    const target =
+      location.directory === defaultLocation.directory && location.workspaceID === defaultLocation.workspaceID
+        ? undefined
+        : location
+    setError(undefined)
+    // Only the server's typed LocationNotFoundError proves the folder is gone. Other failures, such as
+    // plugins still activating after a restart, are retried and never block the composer.
+    void retry(() => (generation === attempt ? data.location.sync(target) : Promise.resolve()), {
+      retryIf: (cause) => generation === attempt && !isLocationNotFoundError(cause),
+    }).catch((cause) => {
+      const current = ref()
+      if (
+        !isLocationNotFoundError(cause) ||
+        generation !== attempt ||
+        current?.directory !== location.directory ||
+        current.workspaceID !== location.workspaceID
+      )
+        return
+      setError({ location, cause })
+    })
+  }
+
+  function set(location?: LocationRef) {
+    setRef(location)
+    if (client.connection.status() === "connected") sync(location)
+  }
+
+  onCleanup(client.event.on("server.connected", () => sync(ref())))
+
+  return (
+    <context.Provider
+      value={{
+        get current() {
+          return current()
+        },
+        get ref() {
+          return ref()
+        },
+        get error() {
+          return error()
+        },
+        set,
+      }}
+    >
+      {props.children}
+    </context.Provider>
+  )
 }
 
 export function useLocation() {

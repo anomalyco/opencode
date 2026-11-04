@@ -1,0 +1,10 @@
+id: no-star-import
+language: TypeScript
+message: Do not use star imports.
+severity: error
+rule:
+  all:
+    - kind: namespace_import
+    - inside:
+        kind: import_statement
+        stopBy: end

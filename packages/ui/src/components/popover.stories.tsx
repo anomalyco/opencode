@@ -72,6 +72,7 @@ export const Inline = {
 export const Controlled = {
   render: () => {
     const [open, setOpen] = createSignal(true)
+
     return (
       <mod.Popover
         open={open()}

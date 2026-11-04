@@ -2,7 +2,7 @@
 description: "Bump AI sdk dependencies minor / patch versions only"
 ---
 
-Please read @package.json and @packages/opencode/package.json.
+Please read @package.json and @packages/core/package.json.
 
 Your job is to look into AI SDK dependencies, figure out if they have versions that can be upgraded (minor or patch versions ONLY no major ignore major changes).
 

@@ -210,27 +210,6 @@ Załaduj [umiejętność](/docs/skills) (plik `SKILL.md`) i zwróć jej treść 
 
 ---
 
-### todowrite
-
-Zarządzaj listami zadań (todo) podczas sesji kodowania.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todowrite": "allow"
-  }
-}
-```
-
-Tworzy i aktualizuje listy zadań w celu śledzenia postępu podczas złożonych operacji. LLM wykorzystuje to do organizowania zadań wieloetapowych.
-
-:::note
-To narzędzie jest domyślnie wyłączone dla subagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
-:::
-
----
-
 ### webfetch
 
 Pobieraj treści z sieci.

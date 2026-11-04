@@ -1,73 +1,87 @@
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
+import { Plugin } from "@opencode/plugin/tui"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { DialogMcp } from "../../component/dialog-mcp"
 
-const id = "internal:sidebar-mcp"
-
-function View(props: { api: TuiPluginApi }) {
-  const [open, setOpen] = createSignal(true)
-  const theme = () => props.api.theme.current
-  const list = createMemo(() => props.api.state.mcp())
-  const on = createMemo(() => list().filter((item) => item.status === "connected").length)
+export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
+  const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
+  const theme = props.context.theme
+  const session = createMemo(() => props.context.data.session.get(props.sessionID))
+  const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
+  const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
   const bad = createMemo(
-    () =>
-      list().filter(
-        (item) =>
-          item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
-      ).length,
+    () => list().filter((item) => item.status.status === "failed" || item.status.status === "needs_auth").length,
   )
 
   const dot = (status: string) => {
-    if (status === "connected") return theme().success
-    if (status === "failed") return theme().error
-    if (status === "disabled") return theme().textMuted
-    if (status === "needs_auth") return theme().warning
-    if (status === "needs_client_registration") return theme().error
-    return theme().textMuted
+    if (status === "connected") return theme.text.feedback.success.base
+    if (status === "failed") return theme.text.feedback.error.base
+    if (status === "disabled") return theme.text.muted
+    if (status === "needs_auth") return theme.text.feedback.warning.base
+    return theme.text.muted
   }
 
   return (
     <Show when={list().length > 0}>
       <box>
-        <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
+        <box
+          flexDirection="row"
+          gap={1}
+          onMouseDown={() => {
+            if (list().length <= 2) return
+            void updateView((draft) => {
+              draft.open = !draft.open
+            }).catch((error) => console.error("Failed to persist MCP sidebar state", error))
+          }}
+        >
           <Show when={list().length > 2}>
-            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
           </Show>
-          <text fg={theme().text}>
+          <text fg={theme.text.base}>
             <b>MCP</b>
-            <Show when={!open()}>
-              <span style={{ fg: theme().textMuted }}>
+            <Show when={!view.open}>
+              <span style={{ fg: theme.text.muted }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
             </Show>
           </text>
         </box>
-        <Show when={list().length <= 2 || open()}>
+        <Show when={list().length <= 2 || view.open}>
           <For each={list()}>
             {(item) => (
-              <box flexDirection="row" gap={1}>
+              <box
+                flexDirection="row"
+                gap={1}
+                minWidth={0}
+                onMouseUp={() =>
+                  props.context.ui.dialog.show(() => (
+                    <DialogMcp initialServer={item.name} details={item.status.status === "failed"} />
+                  ))
+                }
+              >
                 <text
                   flexShrink={0}
                   style={{
-                    fg: dot(item.status),
+                    fg: dot(item.status.status),
                   }}
                 >
                   •
                 </text>
-                <text fg={theme().text} wrapMode="word">
-                  {item.name}{" "}
-                  <span style={{ fg: theme().textMuted }}>
-                    <Switch fallback={item.status}>
-                      <Match when={item.status === "connected"}>Connected</Match>
-                      <Match when={item.status === "failed"}>
-                        <i>{item.error}</i>
-                      </Match>
-                      <Match when={item.status === "disabled"}>Disabled</Match>
-                      <Match when={item.status === "needs_auth"}>Needs auth</Match>
-                      <Match when={item.status === "needs_client_registration"}>Needs client ID</Match>
-                    </Switch>
-                  </span>
+                <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
+                  <b>{item.name}</b>
+                </text>
+                <text
+                  fg={item.status.status === "failed" ? theme.text.feedback.error.base : theme.text.muted}
+                  wrapMode="none"
+                  flexShrink={0}
+                >
+                  <Switch fallback={item.status.status}>
+                    <Match when={item.status.status === "connected"}>Connected</Match>
+                    <Match when={item.status.status === "pending"}>Connecting</Match>
+                    <Match when={item.status.status === "failed"}>Error</Match>
+                    <Match when={item.status.status === "disabled"}>Disabled</Match>
+                    <Match when={item.status.status === "needs_auth"}>Sign in</Match>
+                  </Switch>
                 </text>
               </box>
             )}
@@ -78,20 +92,12 @@ function View(props: { api: TuiPluginApi }) {
   )
 }
 
-const tui: TuiPlugin = async (api) => {
-  api.slots.register({
-    order: 200,
-    slots: {
-      sidebar_content() {
-        return <View api={api} />
-      },
-    },
-  })
-}
-
-const plugin: BuiltinTuiPlugin = {
-  id,
-  tui,
-}
-
-export default plugin
+export default Plugin.define({
+  id: "opencode.sidebar.mcp",
+  setup(context) {
+    context.ui.slot({
+      append: "sidebar.content",
+      render: (props) => <SidebarMcp context={context} sessionID={props.sessionID} />,
+    })
+  },
+})

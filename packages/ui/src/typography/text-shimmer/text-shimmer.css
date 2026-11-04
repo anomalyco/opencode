@@ -1,0 +1,152 @@
+[data-component="text-shimmer"] {
+  --text-shimmer-step: 45ms;
+  --text-shimmer-duration: 1200ms;
+  --text-shimmer-swap: 220ms;
+  --text-shimmer-index: 0;
+  --text-shimmer-spread: 5.2ch;
+  --text-shimmer-gutter: calc(var(--text-shimmer-spread) + 1ch);
+  --text-shimmer-base-color: var(--text-weak);
+  --text-shimmer-peak-color: var(--text-strong);
+
+  display: inline-flex;
+  align-items: baseline;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+  display: inline-grid;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition: opacity var(--text-shimmer-swap) ease-out;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+  color: inherit;
+  opacity: 1;
+}
+
+/* Clipped to its box, where the old background sweep painted, so the sweep's travel never adds overflow. */
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  position: relative;
+  overflow: clip;
+  color: var(--text-shimmer-base-color);
+  opacity: 0;
+}
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
+  opacity: 1;
+}
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-base"] {
+  opacity: 0;
+}
+
+/* The sweep is the text again in the peak colour, seen through a soft window that crosses it. The window and the text
+   inside it move in opposite directions by the same amount, so the text stays put while the window travels: both are
+   transforms, which the compositor runs, where an animated background position restyled and repainted the text on
+   every frame. The window's centre runs from one gutter before the text to one gutter past it. */
+[data-component="text-shimmer"] [data-slot="text-shimmer-sweep"] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--text-shimmer-spread));
+  right: calc(-1 * var(--text-shimmer-spread));
+  display: none;
+  pointer-events: none;
+  user-select: none;
+  mask-image: linear-gradient(
+    90deg,
+    transparent calc(50% - var(--text-shimmer-spread)),
+    #000 50%,
+    transparent calc(50% + var(--text-shimmer-spread))
+  );
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-sweep-text"] {
+  display: block;
+  margin-left: var(--text-shimmer-spread);
+  margin-right: var(--text-shimmer-spread);
+  white-space: pre;
+  color: var(--text-shimmer-peak-color);
+}
+
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  > [data-slot="text-shimmer-sweep"] {
+  display: block;
+}
+
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  :is([data-slot="text-shimmer-sweep"], [data-slot="text-shimmer-sweep-text"]) {
+  animation-duration: var(--text-shimmer-duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
+}
+
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  [data-slot="text-shimmer-sweep"] {
+  animation-name: text-shimmer-window;
+}
+
+[data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"][data-run="true"]
+  [data-slot="text-shimmer-sweep-text"] {
+  animation-name: text-shimmer-text;
+}
+
+/* The window is one spread wider than the text on each side, so its percentages carry the spread back out. */
+@keyframes text-shimmer-window {
+  0% {
+    translate: calc(-50% + var(--text-shimmer-spread) - var(--text-shimmer-gutter)) 0;
+  }
+
+  100% {
+    translate: calc(50% - var(--text-shimmer-spread) + var(--text-shimmer-gutter)) 0;
+  }
+}
+
+@keyframes text-shimmer-text {
+  0% {
+    translate: calc(50% + var(--text-shimmer-gutter)) 0;
+  }
+
+  100% {
+    translate: calc(-50% - var(--text-shimmer-gutter)) 0;
+  }
+}
+
+:root[data-motion="reduce"] {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    color: inherit;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-sweep"] {
+    display: none !important;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+    opacity: 1 !important;
+  }
+}

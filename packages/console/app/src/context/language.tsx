@@ -1,7 +1,7 @@
 import { createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { getRequestEvent } from "solid-js/web"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import {
   LOCALES,
   type Locale,
@@ -11,7 +11,7 @@ import {
   dir as localeDir,
   label as localeLabel,
   localeFromCookieHeader,
-  localeFromRequest,
+  pageLocale,
   parseLocale,
   route as localeRoute,
   tag as localeTag,
@@ -19,7 +19,7 @@ import {
 
 function initial() {
   const evt = getRequestEvent()
-  if (evt) return localeFromRequest(evt.request)
+  if (evt) return pageLocale(evt.request)
 
   if (typeof document === "object") {
     const fromDom = parseLocale(document.documentElement.dataset.locale)

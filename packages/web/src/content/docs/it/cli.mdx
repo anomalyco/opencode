@@ -48,16 +48,6 @@ La CLI di OpenCode include anche i seguenti comandi.
 
 ---
 
-### agent
-
-Gestisci gli agenti per OpenCode.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Collega un terminale a un backend server di OpenCode già in esecuzione avviato tramite i comandi `serve` o `web`.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |       | Crea un fork della sessione durante la continuazione (usa con `--continue` o `--session`)       |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Password per l'autenticazione di base (predefinita: `OPENCODE_SERVER_PASSWORD`)                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nome utente per l'autenticazione di base (predefinito: `OPENCODE_SERVER_USERNAME` o `opencode`) |
-
----
-
-#### create
-
-Crea un nuovo agente con configurazione personalizzata.
-
-```bash
-opencode agent create
-```
-
-Questo comando ti guida nella creazione di un nuovo agente con un system prompt personalizzato e configurazione degli strumenti.
-
----
-
-#### list
-
-Elenca tutti gli agenti disponibili.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continua l'ultima sessione                                                                      |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID sessione da continuare                                                                       |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Duplica la sessione quando continui (usa con `--continue` o `--session`)                        |
-| <nobr><code>{"--share"}</code></nobr>    |       | Condividi la sessione                                                                           |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modello nel formato provider/model                                                              |
 | <nobr><code>{"--agent"}</code></nobr>    |       | Agente da usare                                                                                 |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | File da allegare al messaggio                                                                   |
@@ -442,17 +409,14 @@ Se non fornisci un ID sessione, ti verrà chiesto di selezionare tra le sessioni
 
 ### import
 
-Importa i dati di sessione da un file JSON o da un URL di condivisione OpenCode.
+Importa i dati di sessione da un file JSON.
 
 ```bash
 opencode import <file>
 ```
 
-Puoi importare da un file locale o da un URL di condivisione OpenCode.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode può essere configurato tramite variabili d'ambiente.
 
 | Variabile                             | Tipo    | Descrizione                                                 |
 | ------------------------------------- | ------- | ----------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Condivide automaticamente le sessioni                       |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Percorso all'eseguibile Git Bash su Windows                 |
 | `OPENCODE_CONFIG`                     | string  | Percorso al file di configurazione                          |
 | `OPENCODE_TUI_CONFIG`                 | string  | Percorso al file di configurazione TUI                      |
@@ -609,7 +572,6 @@ Queste variabili d'ambiente abilitano funzionalità sperimentali che potrebbero 
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Abilita funzionalità Exa sperimentali                   |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Abilita TY LSP per i file python                        |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Abilita plan mode                                       |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Abilita task subagent in background                     |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Abilita sistema eventi sperimentale                     |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Abilita percorso nativo di richiesta LLM                |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Abilita esecuzione parallela della ricerca web          |

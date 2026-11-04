@@ -1,30 +1,27 @@
-import { NodeFileSystem } from "@effect/platform-node"
-import { compile, emitEffectImported, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import { ClientApi, endpointNames, groupNames, omitEndpoints } from "../src/contract"
-import { Effect } from "effect"
-import { fileURLToPath } from "url"
+#!/usr/bin/env bun
 
-const contract = compile(ClientApi, { groupNames, endpointNames, omitEndpoints })
+import { $ } from "bun"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-await Effect.runPromise(
-  Effect.all(
-    [
-      write(
-        emitPromise(contract, {
-          outputTypes: {
-            "events.subscribe": {
-              name: "OpenCodeEventEncoded",
-              import: 'import type { OpenCodeEventEncoded } from "@opencode-ai/protocol/groups/event"',
-            },
-          },
-        }),
-        fileURLToPath(new URL("../src/generated", import.meta.url)),
-      ),
-      write(
-        emitEffectImported(contract, { module: "../contract", api: "ClientApi" }),
-        fileURLToPath(new URL("../src/generated-effect", import.meta.url)),
-      ),
-    ],
-    { concurrency: 2, discard: true },
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
-)
+process.chdir(fileURLToPath(new URL("..", import.meta.url)))
+
+await $`rm -rf dist`
+await $`bun tsc -p tsconfig.build.json`
+const root = path.resolve("src")
+const result = await Bun.build({
+  entrypoints: await Array.fromAsync(new Bun.Glob("**/*.ts").scan({ cwd: root, absolute: true })).then((files) =>
+    files.filter((file) => !file.endsWith(".d.ts")),
+  ),
+  root,
+  outdir: "dist",
+  target: "node",
+  format: "esm",
+  packages: "external",
+  splitting: true,
+  naming: {
+    entry: "[dir]/[name].[ext]",
+    chunk: "chunks/[name]-[hash].[ext]",
+  },
+})
+if (!result.success) throw new AggregateError(result.logs, "Failed to build Client")

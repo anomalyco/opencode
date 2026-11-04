@@ -210,27 +210,6 @@ Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su conte
 
 ---
 
-### todowrite
-
-Administre listas de tareas pendientes durante las sesiones de codificación.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todowrite": "allow"
-  }
-}
-```
-
-Crea y actualiza listas de tareas para realizar un seguimiento del progreso durante operaciones complejas. El LLM usa esto para organizar tareas de varios pasos.
-
-:::note
-Esta herramienta está deshabilitada para los subagentes de forma predeterminada, pero puede habilitarla manualmente. [Más información](/docs/agents/#permissions)
-:::
-
----
-
 ### webfetch
 
 Obtener contenido web.

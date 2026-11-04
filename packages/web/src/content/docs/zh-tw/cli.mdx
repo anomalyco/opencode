@@ -48,16 +48,6 @@ OpenCode CLI 還提供以下指令。
 
 ---
 
-### agent
-
-管理 OpenCode 的代理。
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 將終端機連接到已透過 `serve` 或 `web` 指令啟動的 OpenCode 後端伺服器。
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分支工作階段（與 `--continue` 或 `--session` 一起使用）           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本驗證密碼（預設使用 `OPENCODE_SERVER_PASSWORD`）                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本驗證使用者名稱（預設使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
-
----
-
-#### create
-
-使用自訂設定建立新的代理。
-
-```bash
-opencode agent create
-```
-
-此指令將引導您使用自訂系統提示詞和工具設定來建立新的代理。
-
----
-
-#### list
-
-列出所有可用的代理。
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                      |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                     |
 | <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分岔工作階段（與 `--continue` 或 `--session` 搭配使用）           |
-| <nobr><code>{"--share"}</code></nobr>    |      | 分享工作階段                                                            |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式為 provider/model                                     |
 | <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                            |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到訊息的檔案                                                        |
@@ -442,17 +409,14 @@ opencode export [sessionID]
 
 ### import
 
-從 JSON 檔案或 OpenCode 分享連結匯入工作階段資料。
+從 JSON 檔案匯入工作階段資料。
 
 ```bash
 opencode import <file>
 ```
 
-您可以從本地檔案或 OpenCode 分享連結匯入。
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode 可以透過環境變數進行設定。
 
 | 變數                                  | 類型    | 說明                                        |
 | ------------------------------------- | ------- | ------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 自動分享工作階段                            |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可執行檔的路徑          |
 | `OPENCODE_CONFIG`                     | string  | 設定檔路徑                                  |
 | `OPENCODE_TUI_CONFIG`                 | string  | TUI 設定檔路徑                              |
@@ -609,7 +572,6 @@ OpenCode 可以透過環境變數進行設定。
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 啟用實驗性 Exa 功能             |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 為 python 檔案啟用 TY LSP       |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 啟用計畫模式                    |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | 啟用背景子代理任務              |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | 啟用實驗性事件系統              |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | 啟用原生 LLM 請求路徑           |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | 啟用平行 Web 搜尋執行           |

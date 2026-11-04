@@ -1,0 +1,12 @@
+id: no-drizzle-column-name
+snapshots:
+  ? |
+    const table = sqliteTable("session", {
+      projectID: text("project_id").notNull(),
+      createdAt: integer("time_created").notNull(),
+    })
+  : labels:
+      - source: text("project_id")
+        style: primary
+        start: 52
+        end: 70

@@ -1,0 +1,71 @@
+[data-component="new-session-wordmark"] {
+  --icon-strong-base: var(--icon-base);
+  --wordmark-shimmer-opacity: 0.45;
+  --lodger-body: color-mix(in srgb, var(--v2-icon-icon-base) 22%, var(--v2-background-bg-base));
+  --lodger-side: color-mix(in srgb, var(--v2-icon-icon-base) 38%, var(--v2-background-bg-base));
+  --lodger-eye: var(--v2-icon-icon-base);
+  --lodger-crack: color-mix(in srgb, var(--v2-icon-icon-base) 55%, var(--v2-background-bg-base));
+
+  .wordmark-shimmer {
+    --icon-base: white;
+    --icon-strong-base: white;
+    --icon-weak-base: transparent;
+
+    /* Blend above the base logo's opacity so the sweep only adds light in either theme. */
+    color: white;
+    mix-blend-mode: screen;
+    opacity: 0;
+    mask-image: linear-gradient(to right, transparent 40%, black 50%, transparent 60%);
+    mask-size: 300% 100%;
+    mask-repeat: no-repeat;
+    animation: new-session-wordmark-shimmer 800ms linear both;
+  }
+
+  [data-slot="lodger-blink"] {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+/* The composer gives a little under the lodger while it is carried over it, hinting it can be dropped there. */
+[data-component="new-session"] [data-slot="new-session-composer"] {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-component="new-session"] [data-slot="new-session-composer"][data-lodger-over] {
+  transform: translateY(3px) scale(0.985);
+}
+
+[data-component="new-session-wordmark"][data-lifted] {
+  position: relative;
+  z-index: 20;
+}
+
+[data-color-scheme="light"] [data-component="new-session-wordmark"] {
+  --icon-weak-base: color-mix(in srgb, var(--icon-base) 30%, transparent);
+}
+
+[data-color-scheme="dark"] [data-component="new-session-wordmark"] {
+  /* Preserve the previous dark highlight strength: 0.16 × 0.7 × 0.6. */
+  --wordmark-shimmer-opacity: 0.0672;
+}
+
+/* Oversizing the mask moves its highlight physically left to right, including in RTL. */
+@keyframes new-session-wordmark-shimmer {
+  0% {
+    mask-position: 100% 0;
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: var(--wordmark-shimmer-opacity);
+  }
+  100% {
+    mask-position: 0% 0;
+    opacity: 0;
+  }
+}
+
+:root[data-motion="reduce"] [data-component="new-session-wordmark"] .wordmark-shimmer {
+  animation: none;
+}

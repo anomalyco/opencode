@@ -1,0 +1,22 @@
+id: no-effect-die-string
+language: TypeScript
+message: die with `new Error(...)`.
+severity: error
+rule:
+  any:
+    - all:
+        - pattern: Effect.die($MESSAGE)
+        - has:
+            field: arguments
+            all:
+              - kind: arguments
+              - has:
+                  kind: string
+    - all:
+        - pattern: Effect.die($MESSAGE)
+        - has:
+            field: arguments
+            all:
+              - kind: arguments
+              - has:
+                  kind: template_string

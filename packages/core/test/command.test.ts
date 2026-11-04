@@ -1,56 +1,71 @@
 import { describe, expect } from "bun:test"
+import { Command } from "@opencode/core/command"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
-import { CommandV2 } from "@opencode-ai/core/command"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(CommandV2.node))
+const it = testEffect(AppNodeBuilder.build(Command.node))
 
-describe("CommandV2", () => {
-  it.effect("applies command transforms and preserves later overrides", () =>
+describe("Command", () => {
+  it.effect("registers and executes callback commands", () =>
     Effect.gen(function* () {
-      const command = yield* CommandV2.Service
+      const command = yield* Command.Service
+      const calls: Command.Invocation[] = []
       yield* command.transform((editor) => {
-        editor.update("review", (command) => {
-          command.template = "First"
-          command.description = "Review code"
-        })
-        editor.update("review", (command) => {
-          command.template = "Second"
-          command.model = {
-            id: ModelV2.ID.make("claude"),
-            providerID: ProviderV2.ID.make("anthropic"),
-            variant: ModelV2.VariantID.make("high"),
-          }
+        editor.add({
+          name: "goal",
+          description: "Manage the session goal",
+          execute: (input) => Effect.sync(() => calls.push(input)),
         })
       })
 
-      expect(yield* command.get("review")).toEqual(
-        CommandV2.Info.make({
-          name: "review",
-          template: "Second",
-          description: "Review code",
-          model: {
-            id: ModelV2.ID.make("claude"),
-            providerID: ProviderV2.ID.make("anthropic"),
-            variant: ModelV2.VariantID.make("high"),
-          },
-        }),
+      expect(yield* command.get("goal")).toEqual(
+        Command.Info.make({ name: "goal", description: "Manage the session goal" }),
       )
-      expect(yield* command.list()).toEqual([
-        CommandV2.Info.make({
-          name: "review",
-          template: "Second",
-          description: "Review code",
-          model: {
-            id: ModelV2.ID.make("claude"),
-            providerID: ProviderV2.ID.make("anthropic"),
-            variant: ModelV2.VariantID.make("high"),
+      const invocation = {
+        sessionID: Session.ID.make("ses_test"),
+        prompt: { text: "ship it", files: [{ uri: "file:///tmp/plan.md" }] },
+        delivery: "steer" as const,
+      }
+      yield* command.execute({ name: "goal", invocation })
+      expect(calls).toEqual([invocation])
+    }),
+  )
+
+  it.effect("replaces commands with later definitions", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      yield* command.transform((editor) => {
+        editor.add({ name: "goal", description: "First", execute: () => Effect.void })
+        editor.add({ name: "goal", description: "Second", execute: () => Effect.void })
+      })
+
+      expect(yield* command.list()).toEqual([Command.Info.make({ name: "goal", description: "Second" })])
+    }),
+  )
+
+  it.effect("returns callback error messages without stack traces", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      yield* command.transform((editor) => {
+        editor.add({
+          name: "fail",
+          execute: () => Effect.fail(new Error("command failed")),
+        })
+      })
+
+      const error = yield* command
+        .execute({
+          name: "fail",
+          invocation: {
+            sessionID: Session.ID.make("ses_test"),
+            prompt: { text: "" },
+            delivery: "steer",
           },
-        }),
-      ])
+        })
+        .pipe(Effect.flip)
+      expect(error).toMatchObject({ _tag: "Command.ExecutionError", message: "command failed" })
     }),
   )
 })

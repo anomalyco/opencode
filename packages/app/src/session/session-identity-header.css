@@ -1,0 +1,124 @@
+.session-options-menu [data-component="menu-v2-item"] {
+  padding-inline-end: 30px;
+}
+
+/* The location card takes the browser site popover's spacing. Its submenus render elsewhere and keep the menu's. */
+[data-component="menu-v2-content"][data-slot="session-location-card"] {
+  gap: 2px;
+  padding: 2px;
+
+  [data-component="menu-v2-item"] {
+    padding-inline: 8px;
+  }
+
+  /* A row whose submenu is open keeps the hover background while the pointer is in the submenu. */
+  [data-component="menu-v2-item"][data-expanded] {
+    background: var(--menu-v2-hover);
+  }
+
+  /* Spans the card edge to edge over its padding; a 1px line scaled to a hairline. */
+  [data-slot="menu-v2-separator"] {
+    width: calc(100% + 4px);
+    margin: 0 -2px;
+    background: var(--v2-border-border-base);
+    transform: scaleY(0.5);
+  }
+}
+
+.session-header-layout {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  inline-size: 100%;
+  block-size: 48px;
+}
+
+.session-header-location {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-inline-size: 0;
+  flex-shrink: 0;
+}
+
+.session-header-location > .session-location-tooltip,
+.session-header-location [data-slot="session-location-trigger"] {
+  max-inline-size: none;
+  flex-shrink: 0;
+}
+
+.session-header-location .session-location-label {
+  inline-size: max-content;
+  flex-shrink: 0;
+}
+
+/* The label leaves the hit area, but keeps its intrinsic width available to the fit observer. */
+.session-header-layout[data-location-collapse="1"] [data-slot="session-location-worktree"],
+.session-header-layout[data-location-collapse="2"] .session-location-label {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.session-header-location:has([data-slot="session-title-ancestors"]) {
+  max-inline-size: 60%;
+  flex-shrink: 1;
+}
+
+.session-header-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.session-header-title > [data-slot="session-title-child"] {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-shrink: 1;
+}
+
+.session-header-title-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  inline-size: 0;
+  block-size: 0;
+  overflow: hidden;
+}
+
+.session-header-title-measure > span {
+  display: block;
+  inline-size: max-content;
+  padding-inline: 4px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+.session-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-inline-start: 6px;
+}
+
+.session-header-fade {
+  top: 48px;
+}
+
+.session-header-separator {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  /* The neighbouring segments' own padding counts toward the gap; 0.5px is the text's side bearing. */
+  margin-inline: calc(var(--separator-gap) - var(--separator-before) - 0.5px)
+    calc(var(--separator-gap) - var(--separator-after) - 0.5px);
+  /* The header's segments are 13px text, and the slash takes their size. */
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}

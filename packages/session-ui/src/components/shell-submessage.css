@@ -18,6 +18,7 @@
   display: inline-block;
   vertical-align: baseline;
   min-width: 0;
+  font-family: var(--v2-font-family-code);
   line-height: inherit;
   white-space: nowrap;
 }

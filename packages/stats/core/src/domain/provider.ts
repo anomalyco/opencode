@@ -7,15 +7,16 @@ import { RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
-  isMissingUniqueUsersColumn,
   omitUniqueUsers,
   rankRowsWithMarketShare,
-  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
+  withUniqueUsersFallback,
   type StatBaseAggregate,
+  type StatPeriodScope,
 } from "./stat"
 
 export type ProviderStatRow = typeof providerStat.$inferInsert
@@ -40,7 +41,7 @@ export declare namespace ProviderStatRepo {
       readonly source?: string
     }) => Effect.Effect<ProviderStatRow[], DatabaseError>
     readonly upsert: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
-    readonly deleteRetiredDimensions: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (scope: StatPeriodScope) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -69,7 +70,7 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                   eq(providerStat.grain, "day"),
                   eq(providerStat.client, "all"),
                   eq(providerStat.source, "all"),
-                  inArray(providerStat.tier, ["Go", "go"]),
+                  inArray(providerStat.tier, DATA_SITE_TIERS),
                 ),
               )
               .orderBy(asc(providerStat.period_key)),
@@ -109,14 +110,8 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
           chunks(rows, UPSERT_CHUNK_SIZE),
           (chunk) =>
             Effect.tryPromise({
-              try: async () => {
-                try {
-                  return await upsertProviderChunk(chunk, true)
-                } catch (cause) {
-                  if (!isMissingUniqueUsersColumn(cause)) throw cause
-                  return upsertProviderChunk(chunk, false)
-                }
-              },
+              try: () =>
+                withUniqueUsersFallback((includeUniqueUsers) => upsertProviderChunk(chunk, includeUniqueUsers)),
               catch: (cause) => DatabaseError.make({ cause }),
             }),
           { discard: true },
@@ -162,22 +157,19 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
       }
 
       const deleteRetiredDimensions = Effect.fn("ProviderStatRepo.deleteRetiredDimensions")(function* (
-        rows: ProviderStatRow[],
+        scope: StatPeriodScope,
       ) {
-        const scope = statRowScope(rows)
-        if (!scope) return
-
         yield* Effect.tryPromise({
           try: () =>
             db
               .delete(providerStat)
               .where(
                 and(
-                  inArray(providerStat.grain, scope.grains),
-                  inArray(providerStat.period_key, scope.periodKeys),
-                  inArray(providerStat.dataset, scope.datasets),
-                  inArray(providerStat.client, scope.clients),
-                  inArray(providerStat.source, scope.sources),
+                  eq(providerStat.grain, scope.grain),
+                  eq(providerStat.period_key, scope.periodKey),
+                  eq(providerStat.dataset, scope.dataset),
+                  eq(providerStat.client, "all"),
+                  eq(providerStat.source, "all"),
                   inArray(providerStat.provider, RETIRED_STAT_PROVIDERS),
                 ),
               ),

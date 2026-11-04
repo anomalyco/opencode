@@ -1,8 +1,8 @@
 import { Effect } from "effect"
-import { HttpClient } from "effect/unstable/http"
-import type { Definition, JsonSchema } from "../tool.js"
+import { HttpClient } from "effect/http"
+import type { Tool, JsonSchema } from "../tool.js"
 
-/** A parsed OpenAPI 3.x document. YAML must be parsed by the host. */
+/** A parsed OpenAPI 3.x document. YAML must be parsed by the ctx. */
 export type Document = Record<string, unknown>
 
 /** The operation identity handed to auth resolution and errors. */
@@ -22,9 +22,8 @@ export type SecurityScheme =
   | { readonly type: "openIdConnect" }
 
 /**
- * Credential material returned by a host auth resolver. The carrier for `apiKey`
- * comes from the scheme definition, not the credential. `header` is the escape
- * hatch for nonstandard schemes.
+ * Credential material returned by a host auth resolver. `apiKey` uses the scheme's carrier;
+ * `header` supports nonstandard schemes.
  */
 export type Credential =
   | { readonly type: "bearer"; readonly token: string }
@@ -33,9 +32,7 @@ export type Credential =
   | { readonly type: "header"; readonly name: string; readonly value: string }
 
 /**
- * Resolves credential material for one named security scheme at call time.
- * `undefined` means unavailable, try the next OR alternative; a failure aborts
- * the call rather than falling through.
+ * Resolves credentials at call time. `undefined` tries the next OR alternative; failure aborts.
  */
 export type AuthResolver = (context: {
   readonly name: string
@@ -61,10 +58,10 @@ export type Skipped = {
   readonly reason: string
 }
 
-export type Tools = { [name: string]: Definition<HttpClient.HttpClient> | Tools }
+export type Tools = { [name: string]: Tool<HttpClient.HttpClient> | Tools }
 
 export type Result = {
-  /** Tool subtree; the host places it under a key in its `tools` tree. */
+  /** Namespaced tools; the host places them under a key in its `tools` object. */
   readonly tools: Tools
   readonly skipped: ReadonlyArray<Skipped>
 }
@@ -74,9 +71,7 @@ export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok
 export type InputLocation = "path" | "query" | "header" | "body"
 
 export type InputField = {
-  /** Model-visible field name after cross-location collision handling. */
   readonly inputName: string
-  /** Original parameter or body-property name used on the wire. */
   readonly name: string
   readonly location: InputLocation
   readonly required: boolean
@@ -92,7 +87,6 @@ export type OperationInput = {
   readonly body: Body | undefined
 }
 
-/** One OR alternative: scheme name -> required scopes. Empty object = unauthenticated is acceptable. */
 export type SecurityRequirement = Readonly<Record<string, ReadonlyArray<string>>>
 
 export type Plan = {

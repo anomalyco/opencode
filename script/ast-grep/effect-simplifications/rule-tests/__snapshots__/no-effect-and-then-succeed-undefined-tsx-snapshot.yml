@@ -1,0 +1,32 @@
+id: no-effect-and-then-succeed-undefined-tsx
+snapshots:
+  ? |
+    const view = (
+      <Widget
+        value={effect.pipe(
+          Effect.andThen(
+            Effect.succeed(undefined),
+          ),
+        )}
+      />
+    )
+  : labels:
+      - source: |-
+          Effect.andThen(
+                  Effect.succeed(undefined),
+                )
+        style: primary
+        start: 55
+        end: 113
+  const view = <Widget value={Effect.andThen(effect, Effect.succeed(undefined))} />:
+    labels:
+      - source: Effect.andThen(effect, Effect.succeed(undefined))
+        style: primary
+        start: 28
+        end: 77
+  const view = <Widget value={effect.pipe(Effect.andThen(Effect.succeed(undefined)))} />:
+    labels:
+      - source: Effect.andThen(Effect.succeed(undefined))
+        style: primary
+        start: 40
+        end: 81

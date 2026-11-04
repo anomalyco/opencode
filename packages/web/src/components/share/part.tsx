@@ -7,7 +7,6 @@ import {
   IconGlobeAlt,
   IconDocument,
   IconPaperClip,
-  IconQueueList,
   IconUserCircle,
   IconCommandLine,
   IconCheckCircle,
@@ -86,9 +85,6 @@ export function Part(props: PartProps) {
               </Match>
               <Match when={props.part.type === "reasoning" && props.message.role === "assistant"}>
                 <IconBrain width={18} height={18} />
-              </Match>
-              <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
-                <IconQueueList width={18} height={18} />
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "bash"}>
                 <IconCommandLine width={18} height={18} />
@@ -248,14 +244,6 @@ export function Part(props: PartProps) {
                       message={props.message}
                     />
                   </Match>
-                  <Match when={props.part.tool === "todowrite"}>
-                    <TodoWriteTool
-                      message={props.message}
-                      id={props.part.id}
-                      tool={props.part.tool}
-                      state={props.part.state}
-                    />
-                  </Match>
                   <Match when={props.part.tool === "webfetch"}>
                     <WebFetchTool
                       message={props.message}
@@ -300,13 +288,6 @@ type ToolProps = {
   state: MessageV2.ToolStateCompleted
   message: MessageV2.Assistant
   isLastPart?: boolean
-}
-
-interface Todo {
-  id: string
-  content: string
-  status: "pending" | "in_progress" | "completed"
-  priority: "low" | "medium" | "high"
 }
 
 function stripWorkingDirectory(filePath?: string, workingDir?: string) {
@@ -383,45 +364,6 @@ function formatErrorString(error: string, label: string): JSX.Element {
     <pre>
       <span data-color="dimmed">{error}</span>
     </pre>
-  )
-}
-
-export function TodoWriteTool(props: ToolProps) {
-  const messages = useShareMessages()
-  const priority: Record<Todo["status"], number> = {
-    in_progress: 0,
-    pending: 1,
-    completed: 2,
-  }
-  const todos = createMemo(() =>
-    ((props.state.input?.todos ?? []) as Todo[]).slice().sort((a, b) => priority[a.status] - priority[b.status]),
-  )
-  const starting = () => todos().every((t: Todo) => t.status === "pending")
-  const finished = () => todos().every((t: Todo) => t.status === "completed")
-
-  return (
-    <>
-      <div data-component="tool-title">
-        <span data-slot="name">
-          <Switch fallback={messages.updating_plan}>
-            <Match when={starting()}>{messages.creating_plan}</Match>
-            <Match when={finished()}>{messages.completing_plan}</Match>
-          </Switch>
-        </span>
-      </div>
-      <Show when={todos().length > 0}>
-        <ul data-component="todos">
-          <For each={todos()}>
-            {(todo) => (
-              <li data-slot="item" data-status={todo.status}>
-                <span></span>
-                {todo.content}
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
-    </>
   )
 }
 

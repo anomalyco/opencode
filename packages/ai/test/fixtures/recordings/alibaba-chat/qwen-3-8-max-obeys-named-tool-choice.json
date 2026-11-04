@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:alibaba-chat",
+      "provider:alibaba",
+      "protocol:alibaba-chat",
+      "region:ap-southeast-1",
+      "tool",
+      "tool-choice"
+    ],
+    "name": "alibaba-chat/qwen-3-8-max-obeys-named-tool-choice",
+    "recordedAt": "2026-10-02T01:23:46.235Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"qwen3.8-max\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Find the current weather in Paris.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get weather in a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"]}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"none\",\"max_completion_tokens\":4096}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream;charset=utf-8"
+        },
+        "body": "data: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null,\"choices\":[{\"logprobs\":null,\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_3b220e76d7d946f498d026c0\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"index\":0,\"id\":\"\",\"type\":\"function\",\"function\":{\"arguments\":\"\"}}]},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\": \\\"Paris\"}}]},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"function\":{\"arguments\":\"\\\"\"}}]},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"function\":{\"arguments\":\"}\"}}]},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"function\":{\"arguments\":\"\"}}]},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"\"},\"index\":0,\"id\":null,\"type\":\"function\"}],\"content\":\"\"},\"index\":0,\"finish_reason\":null,\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"model\":\"qwen3.8-max\",\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\",\"logprobs\":null}],\"created\":1790904225,\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[],\"created\":1790904225,\"id\":\"chatcmpl-bf693c1a-0554-935b-ab28-cda0a18a27ff\",\"model\":\"qwen3.8-max\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":19,\"prompt_tokens\":288,\"prompt_tokens_details\":{\"cache_creation\":{\"ephemeral_5m_input_tokens\":0},\"cache_creation_input_tokens\":0,\"cache_type\":\"ephemeral\",\"cache_write_tokens\":0,\"cached_tokens\":0,\"text_tokens\":288},\"total_tokens\":307}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

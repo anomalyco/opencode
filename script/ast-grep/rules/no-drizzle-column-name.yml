@@ -1,0 +1,22 @@
+id: no-drizzle-column-name
+language: TypeScript
+message: Use snake_case object keys instead of explicit drizzle column names.
+severity: error
+files:
+  - packages/core/src/**/sql.ts
+  - packages/core/src/**/*.sql.ts
+rule:
+  any:
+    - pattern: text($NAME)
+    - pattern: text($NAME, $$$ARGS)
+    - pattern: integer($NAME)
+    - pattern: integer($NAME, $$$ARGS)
+    - pattern: blob($NAME)
+    - pattern: blob($NAME, $$$ARGS)
+    - pattern: real($NAME)
+    - pattern: real($NAME, $$$ARGS)
+    - pattern: numeric($NAME)
+    - pattern: numeric($NAME, $$$ARGS)
+constraints:
+  NAME:
+    kind: string

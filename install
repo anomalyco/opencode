@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 APP=opencode
+SOURCE_APP=opencode
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -15,13 +16,13 @@ Usage: install.sh [options]
 
 Options:
     -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 1.0.180)
+    -v, --version <version> Install a specific version (e.g., 0.0.0-beta-17236)
     -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+    curl -fsSL https://opencode.ai/v2/install | bash
+    curl -fsSL https://opencode.ai/v2/install | bash -s -- --version 0.0.0-beta-17236
     ./install --binary /path/to/opencode
 EOF
 }
@@ -99,20 +100,23 @@ else
       fi
     fi
 
+    # Git Bash and MSYS2 run as emulated x64 on Windows ARM64, so `uname -m` reports x86_64.
+    # The host CPU still shows in the `uname -s` suffix and in PROCESSOR_IDENTIFIER.
+    if [ "$os" = "windows" ] && [ "$arch" = "x64" ]; then
+      if [[ "$raw_os" == *-ARM64 || "${PROCESSOR_IDENTIFIER:-}" == ARM* ]]; then
+        arch="arm64"
+      fi
+    fi
+
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64|windows-arm64)
         ;;
       *)
         echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
         exit 1
         ;;
     esac
-
-    archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
-      archive_ext=".tar.gz"
-    fi
 
     is_musl=false
     if [ "$os" = "linux" ]; then
@@ -165,42 +169,50 @@ else
       target="$target-musl"
     fi
 
-    filename="$APP-$target$archive_ext"
-
-
-    if [ "$os" = "linux" ]; then
-        if ! command -v tar >/dev/null 2>&1; then
-             echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-             exit 1
-        fi
-    else
-        if ! command -v unzip >/dev/null 2>&1; then
-            echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
-            exit 1
-        fi
+    if ! command -v tar >/dev/null 2>&1; then
+        echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+        exit 1
     fi
 
+    package_scope="@opencode"
     if [ -z "$requested_version" ]; then
-        url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        metadata=$(curl -fsSL https://opencode.ai/update/api/latest/cli/npm || true)
+        specific_version=$(echo "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+        package=$(echo "$metadata" | sed -n 's/.*"package":"\([^"]*\)".*/\1/p')
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        if [ -z "$specific_version" ] || [ -z "$package" ]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
+        package_scope="${package%/cli}"
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
+    fi
 
-        # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
-        if [ "$http_status" = "404" ]; then
-            echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
-            exit 1
-        fi
+    package_name="$package_scope/cli-$target"
+    http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/$package_scope%2fcli-$target/$specific_version" || true)
+    # Older clients install the minimum release before they can migrate package names.
+    if [ "$http_status" = "404" ] && [ -n "$requested_version" ]; then
+        package_name="@opencode-ai/cli-$target"
+        http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
+    fi
+    if [ "$http_status" = "404" ]; then
+        echo -e "${RED}Error: Version ${specific_version} is not available for $target${NC}"
+        echo -e "${MUTED}Available versions: https://www.npmjs.com/package/$package_name?activeTab=versions${NC}"
+        exit 1
+    fi
+    if [ "$http_status" != "200" ]; then
+        echo -e "${RED}Failed to fetch package information${NC}"
+        exit 1
+    fi
+
+    filename="cli-$target-$specific_version.tgz"
+    url="https://registry.npmjs.org/$package_name/-/$filename"
+    binary_name="$SOURCE_APP"
+    if [ "$os" = "windows" ]; then
+        binary_name="$SOURCE_APP.exe"
     fi
 fi
 
@@ -219,29 +231,15 @@ print_message() {
 }
 
 check_version() {
-    if command -v opencode >/dev/null 2>&1; then
-        opencode_path=$(which opencode)
+    if command -v "$APP" >/dev/null 2>&1; then
+        opencode_path=$(which "$APP")
 
         ## Check the installed version
-        installed_version=$(opencode --version 2>/dev/null || echo "")
+        installed_version=$("$APP" --version 2>/dev/null || echo "")
+        installed_version="${installed_version##* }"
+        installed_version="${installed_version#v}"
 
-        if [[ "$installed_version" != "$specific_version" ]]; then
-            print_message info "${MUTED}Installed version: ${NC}$installed_version."
-        else
-            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
-            exit 0
-        fi
-    fi
-}
-
-unbuffered_sed() {
-    if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
-    else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
+        print_message info "${MUTED}Installed version: ${NC}$installed_version."
     fi
 }
 
@@ -274,81 +272,97 @@ download_with_progress() {
         exec 4>/dev/null
     fi
 
-    local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/opencode_install_$$"
-    local tracefile="${basename}.trace"
-
-    rm -f "$tracefile"
-    mkfifo "$tracefile"
+    local headers="${output}.headers"
 
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap "trap - RETURN; rm -f \"$headers\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
-    (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
-    ) &
+    # Poll the file size on a timer so rendering cost stays fixed no matter how many bytes arrive.
+    # Read the size with ls because busybox wc -c reads the whole file.
+    curl -fsL -D "$headers" -o "$output" "$url" &
     local curl_pid=$!
 
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
-        local length=0
-        local bytes=0
+    local length bytes
+    while kill -0 "$curl_pid" 2>/dev/null; do
+        if [ -f "$output" ]; then
+            length=$(grep -i '^content-length:' "$headers" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
+            bytes=$(ls -ln "$output" | awk '{print $5}')
+            print_progress "$bytes" "${length:-0}"
+        fi
+        sleep 0.1 2>/dev/null || sleep 1
+    done
 
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
-                bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
-                    print_progress "$bytes" "$length"
-                fi
-            fi
-        done
-    }
-
-    wait $curl_pid
-    local ret=$?
+    local ret=0
+    wait "$curl_pid" || ret=$?
+    if [ "$ret" -eq 0 ]; then
+        bytes=$(ls -ln "$output" | awk '{print $5}')
+        print_progress "$bytes" "$bytes"
+    fi
     echo "" >&4
     return $ret
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
+    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -# -L -o "$tmp_dir/$filename" "$url"
+        local ret=0
+        curl -f -# -L -o "$tmp_dir/$filename" "$url" || ret=$?
+        # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
+        if [ "$ret" -eq 23 ]; then
+            print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
+        fi
+        if [ "$ret" -ne 0 ]; then
+            exit "$ret"
+        fi
     fi
 
-    if [ "$os" = "linux" ]; then
-        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
-    else
-        unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
+    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    local installed_binary="$APP"
+    if [ "$os" = "windows" ]; then
+        installed_binary="$APP.exe"
     fi
-
-    mv "$tmp_dir/opencode" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    mv "$tmp_dir/package/bin/$binary_name" "$INSTALL_DIR/$installed_binary"
+    chmod 755 "$INSTALL_DIR/$installed_binary"
     rm -rf "$tmp_dir"
 }
 
 install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/opencode"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}from: ${NC}$binary_path"
+    local installed_binary="$APP"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) installed_binary="$APP.exe" ;;
+    esac
+    cp "$binary_path" "$INSTALL_DIR/$installed_binary"
+    chmod 755 "$INSTALL_DIR/$installed_binary"
+}
+
+install_legacy_shim() {
+    local shim_os="${os:-}"
+    if [[ -z "$shim_os" ]]; then
+        case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*) shim_os="windows" ;;
+        esac
+    fi
+    rm -f "$INSTALL_DIR/opencode2" "$INSTALL_DIR/opencode2.exe" "$INSTALL_DIR/opencode2.cmd"
+    if [[ "$shim_os" == "windows" ]]; then
+        cat > "$INSTALL_DIR/opencode2.cmd" <<'EOF'
+@echo off
+"%~dp0opencode.exe" %*
+exit /b %errorlevel%
+EOF
+        return
+    fi
+    cat > "$INSTALL_DIR/opencode2" <<'EOF'
+#!/bin/sh
+exec "$(dirname "$0")/opencode" "$@"
+EOF
+    chmod 755 "$INSTALL_DIR/opencode2"
 }
 
 if [ -n "$binary_path" ]; then
@@ -357,8 +371,10 @@ else
     check_version
     download_and_install
 fi
+install_legacy_shim
 
 
+path_added=false
 add_to_path() {
     local config_file=$1
     local command=$2
@@ -368,6 +384,7 @@ add_to_path() {
     elif [[ -w $config_file ]]; then
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
+        path_added=true
         print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
@@ -408,6 +425,18 @@ if [[ "$no_modify_path" != "true" ]]; then
             break
         fi
     done
+
+    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving opencode off PATH.
+    if [[ -z $config_file ]]; then
+        case $current_shell in
+            zsh) new_config_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
+            fish) new_config_file="$HOME/.config/fish/config.fish" ;;
+            *) new_config_file="" ;;
+        esac
+        if [[ -n $new_config_file ]] && mkdir -p "$(dirname "$new_config_file")" 2>/dev/null && touch "$new_config_file" 2>/dev/null; then
+            config_file=$new_config_file
+        fi
+    fi
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
@@ -452,9 +481,12 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
+if [[ $path_added == "true" ]]; then
+    echo -e "exec \$SHELL   ${MUTED}# Reload PATH (or open a new terminal)${NC}"
+fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/v2/docs"
 echo -e ""
 echo -e ""

@@ -1,10 +1,7 @@
 import {
-  APICallError,
   type JSONValue,
   type LanguageModelV3,
   type LanguageModelV3CallOptions,
-  type LanguageModelV3Content,
-  type LanguageModelV3ProviderTool,
   type LanguageModelV3StreamPart,
   type SharedV3ProviderMetadata,
   type SharedV3Warning,
@@ -12,24 +9,22 @@ import {
 import {
   combineHeaders,
   createEventSourceResponseHandler,
-  createJsonResponseHandler,
   generateId,
   parseProviderOptions,
   type ParseResult,
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIConfig } from "./openai-config"
-import { openaiFailedResponseHandler } from "./openai-error"
-import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
-import { fileSearchOutputSchema } from "./tool/file-search"
-import { imageGenerationOutputSchema } from "./tool/image-generation"
-import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input"
-import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason"
-import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types"
-import { prepareResponsesTools } from "./openai-responses-prepare-tools"
-import type { OpenAIResponsesModelId } from "./openai-responses-settings"
-import { localShellInputSchema } from "./tool/local-shell"
+import type { OpenAIConfig } from "./openai-config.js"
+import { openaiFailedResponseHandler } from "./openai-error.js"
+import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter.js"
+import { fileSearchOutputSchema } from "./tool/file-search.js"
+import { imageGenerationOutputSchema } from "./tool/image-generation.js"
+import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input.js"
+import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason.js"
+import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types.js"
+import { prepareResponsesTools, type ResponsesHostedTool } from "./openai-responses-prepare-tools.js"
+import type { OpenAIResponsesModelId } from "./openai-responses-settings.js"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -84,20 +79,6 @@ const codeInterpreterCallItem = z.object({
       ]),
     )
     .nullable(),
-})
-
-const localShellCallItem = z.object({
-  type: z.literal("local_shell_call"),
-  id: z.string(),
-  call_id: z.string(),
-  action: z.object({
-    type: z.literal("exec"),
-    command: z.array(z.string()),
-    timeout_ms: z.number().optional(),
-    user: z.string().optional(),
-    working_directory: z.string().optional(),
-    env: z.record(z.string(), z.string()).optional(),
-  }),
 })
 
 const imageGenerationCallItem = z.object({
@@ -165,7 +146,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     responseFormat,
   }: LanguageModelV3CallOptions) {
     const warnings: SharedV3Warning[] = []
-    const modelConfig = getResponsesModelConfig(this.modelId)
 
     if (topK != null) {
       warnings.push({ type: "unsupported", feature: "topK" })
@@ -198,13 +178,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       providerOptions,
       schema: openaiResponsesProviderOptionsSchema,
     })
+    const store = openaiOptions?.store ?? false
 
     const { input, warnings: inputWarnings } = await convertToOpenAIResponsesInput({
       prompt,
-      systemMessageMode: modelConfig.systemMessageMode,
+      systemMessageMode: "system",
       fileIdPrefixes: this.config.fileIdPrefixes,
-      store: openaiOptions?.store ?? true,
-      hasLocalShellTool: hasOpenAITool("openai.local_shell"),
+      store,
     })
 
     warnings.push(...inputWarnings)
@@ -214,8 +194,11 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     let include: OpenAIResponsesIncludeOptions = openaiOptions?.include
 
     function addInclude(key: OpenAIResponsesIncludeValue) {
+      if (include?.includes(key)) return
       include = include != null ? [...include, key] : [key]
     }
+
+    addInclude("reasoning.encrypted_content")
 
     function hasOpenAITool(id: string) {
       return tools?.find((tool) => tool.type === "provider" && tool.id === id) != null
@@ -233,15 +216,23 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       addInclude("message.output_text.logprobs")
     }
 
-    // when a web search tool is present, automatically include the sources:
-    const webSearchToolName = (
-      tools?.find(
-        (tool) =>
-          tool.type === "provider" && (tool.id === "openai.web_search" || tool.id === "openai.web_search_preview"),
-      ) as LanguageModelV3ProviderTool | undefined
-    )?.name
+    const {
+      tools: openaiTools,
+      toolChoice: openaiToolChoice,
+      hostedTools,
+      selectedHostedTool,
+      toolWarnings,
+    } = prepareResponsesTools({
+      tools,
+      toolChoice,
+      strictJsonSchema,
+    })
+    const getHostedToolName = (responseType: ResponsesHostedTool["responseType"]) => {
+      if (selectedHostedTool?.responseType === responseType) return selectedHostedTool.name
+      return hostedTools.find((tool) => tool.responseType === responseType)?.name ?? responseType
+    }
 
-    if (webSearchToolName) {
+    if (hostedTools.some((tool) => tool.responseType === "web_search")) {
       addInclude("web_search_call.action.sources")
     }
 
@@ -282,7 +273,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       metadata: openaiOptions?.metadata,
       parallel_tool_calls: openaiOptions?.parallelToolCalls,
       previous_response_id: openaiOptions?.previousResponseId,
-      store: openaiOptions?.store,
+      store,
       user: openaiOptions?.user,
       instructions: openaiOptions?.instructions,
       service_tier: openaiOptions?.serviceTier,
@@ -291,96 +282,20 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       safety_identifier: openaiOptions?.safetyIdentifier,
       top_logprobs: topLogprobs,
 
-      // model-specific settings:
-      ...(modelConfig.isReasoningModel &&
-        (openaiOptions?.reasoningEffort != null || openaiOptions?.reasoningSummary != null) && {
-          reasoning: {
-            ...(openaiOptions?.reasoningEffort != null && {
-              effort: openaiOptions.reasoningEffort,
-            }),
-            ...(openaiOptions?.reasoningSummary != null && {
-              summary: openaiOptions.reasoningSummary,
-            }),
-          },
-        }),
-      ...(modelConfig.requiredAutoTruncation && {
-        truncation: "auto",
+      ...((openaiOptions?.reasoningEffort != null || openaiOptions?.reasoningSummary != null) && {
+        reasoning: {
+          ...(openaiOptions?.reasoningEffort != null && {
+            effort: openaiOptions.reasoningEffort,
+          }),
+          ...(openaiOptions?.reasoningSummary != null && {
+            summary: openaiOptions.reasoningSummary,
+          }),
+        },
       }),
     }
 
-    if (modelConfig.isReasoningModel) {
-      // remove unsupported settings for reasoning models
-      // see https://platform.openai.com/docs/guides/reasoning#limitations
-      if (baseArgs.temperature != null) {
-        baseArgs.temperature = undefined
-        warnings.push({
-          type: "unsupported",
-          feature: "temperature",
-          details: "temperature is not supported for reasoning models",
-        })
-      }
-
-      if (baseArgs.top_p != null) {
-        baseArgs.top_p = undefined
-        warnings.push({
-          type: "unsupported",
-          feature: "topP",
-          details: "topP is not supported for reasoning models",
-        })
-      }
-    } else {
-      if (openaiOptions?.reasoningEffort != null) {
-        warnings.push({
-          type: "unsupported",
-          feature: "reasoningEffort",
-          details: "reasoningEffort is not supported for non-reasoning models",
-        })
-      }
-
-      if (openaiOptions?.reasoningSummary != null) {
-        warnings.push({
-          type: "unsupported",
-          feature: "reasoningSummary",
-          details: "reasoningSummary is not supported for non-reasoning models",
-        })
-      }
-    }
-
-    // Validate flex processing support
-    if (openaiOptions?.serviceTier === "flex" && !modelConfig.supportsFlexProcessing) {
-      warnings.push({
-        type: "unsupported",
-        feature: "serviceTier",
-        details: "flex processing is only available for o3, o4-mini, and gpt-5 models",
-      })
-      // Remove from args if not supported
-      baseArgs.service_tier = undefined
-    }
-
-    // Validate priority processing support
-    if (openaiOptions?.serviceTier === "priority" && !modelConfig.supportsPriorityProcessing) {
-      warnings.push({
-        type: "unsupported",
-        feature: "serviceTier",
-        details:
-          "priority processing is only available for supported models (gpt-4, gpt-5, gpt-5-mini, o3, o4-mini) and requires Enterprise access. gpt-5-nano is not supported",
-      })
-      // Remove from args if not supported
-      baseArgs.service_tier = undefined
-    }
-
-    const {
-      tools: openaiTools,
-      toolChoice: openaiToolChoice,
-      toolWarnings,
-    } = prepareResponsesTools({
-      tools,
-      toolChoice,
-      strictJsonSchema,
-    })
-
     return {
-      webSearchToolName,
+      getHostedToolName,
       args: {
         ...baseArgs,
         tools: openaiTools,
@@ -390,392 +305,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     }
   }
 
-  async doGenerate(options: LanguageModelV3CallOptions) {
-    const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
-    const url = this.config.url({
-      path: "/responses",
-      modelId: this.modelId,
-    })
-
-    const {
-      responseHeaders,
-      value: response,
-      rawValue: rawResponse,
-    } = await postJsonToApi({
-      url,
-      headers: combineHeaders(this.config.headers(), options.headers),
-      body,
-      failedResponseHandler: openaiFailedResponseHandler,
-      successfulResponseHandler: createJsonResponseHandler(
-        z.object({
-          id: z.string(),
-          created_at: z.number(),
-          error: z
-            .object({
-              code: z.string(),
-              message: z.string(),
-            })
-            .nullish(),
-          model: z.string(),
-          output: z.array(
-            z.discriminatedUnion("type", [
-              z.object({
-                type: z.literal("message"),
-                role: z.literal("assistant"),
-                id: z.string(),
-                content: z.array(
-                  z.object({
-                    type: z.literal("output_text"),
-                    text: z.string(),
-                    logprobs: LOGPROBS_SCHEMA.nullish(),
-                    annotations: z.array(
-                      z.discriminatedUnion("type", [
-                        z.object({
-                          type: z.literal("url_citation"),
-                          start_index: z.number(),
-                          end_index: z.number(),
-                          url: z.string(),
-                          title: z.string(),
-                        }),
-                        z.object({
-                          type: z.literal("file_citation"),
-                          file_id: z.string(),
-                          filename: z.string().nullish(),
-                          index: z.number().nullish(),
-                          start_index: z.number().nullish(),
-                          end_index: z.number().nullish(),
-                          quote: z.string().nullish(),
-                        }),
-                        z.object({
-                          type: z.literal("container_file_citation"),
-                        }),
-                      ]),
-                    ),
-                  }),
-                ),
-              }),
-              webSearchCallItem,
-              fileSearchCallItem,
-              codeInterpreterCallItem,
-              imageGenerationCallItem,
-              localShellCallItem,
-              z.object({
-                type: z.literal("function_call"),
-                call_id: z.string(),
-                name: z.string(),
-                arguments: z.string(),
-                id: z.string(),
-              }),
-              z.object({
-                type: z.literal("computer_call"),
-                id: z.string(),
-                status: z.string().optional(),
-              }),
-              z.object({
-                type: z.literal("reasoning"),
-                id: z.string(),
-                encrypted_content: z.string().nullish(),
-                summary: z.array(
-                  z.object({
-                    type: z.literal("summary_text"),
-                    text: z.string(),
-                  }),
-                ),
-              }),
-            ]),
-          ),
-          service_tier: z.string().nullish(),
-          incomplete_details: z.object({ reason: z.string() }).nullish(),
-          usage: usageSchema,
-        }),
-      ),
-      abortSignal: options.abortSignal,
-      fetch: this.config.fetch,
-    })
-
-    if (response.error) {
-      throw new APICallError({
-        message: response.error.message,
-        url,
-        requestBodyValues: body,
-        statusCode: 400,
-        responseHeaders,
-        responseBody: rawResponse as string,
-        isRetryable: false,
-      })
-    }
-
-    const content: Array<LanguageModelV3Content> = []
-    const logprobs: Array<z.infer<typeof LOGPROBS_SCHEMA>> = []
-
-    // flag that checks if there have been client-side tool calls (not executed by openai)
-    let hasFunctionCall = false
-
-    // map response content to content array
-    for (const part of response.output) {
-      switch (part.type) {
-        case "reasoning": {
-          // when there are no summary parts, we need to add an empty reasoning part:
-          if (part.summary.length === 0) {
-            part.summary.push({ type: "summary_text", text: "" })
-          }
-
-          for (const summary of part.summary) {
-            content.push({
-              type: "reasoning" as const,
-              text: summary.text,
-              providerMetadata: {
-                copilot: {
-                  itemId: part.id,
-                  reasoningEncryptedContent: part.encrypted_content ?? null,
-                },
-              },
-            })
-          }
-          break
-        }
-
-        case "image_generation_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.id,
-            toolName: "image_generation",
-            input: "{}",
-            providerExecuted: true,
-          })
-
-          content.push({
-            type: "tool-result",
-            toolCallId: part.id,
-            toolName: "image_generation",
-            result: {
-              result: part.result,
-            } satisfies z.infer<typeof imageGenerationOutputSchema>,
-          })
-
-          break
-        }
-
-        case "local_shell_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.call_id,
-            toolName: "local_shell",
-            input: JSON.stringify({ action: part.action } satisfies z.infer<typeof localShellInputSchema>),
-            providerMetadata: {
-              copilot: {
-                itemId: part.id,
-              },
-            },
-          })
-
-          break
-        }
-
-        case "message": {
-          for (const contentPart of part.content) {
-            if (options.providerOptions?.copilot?.logprobs && contentPart.logprobs) {
-              logprobs.push(contentPart.logprobs)
-            }
-
-            content.push({
-              type: "text",
-              text: contentPart.text,
-              providerMetadata: {
-                copilot: {
-                  itemId: part.id,
-                },
-              },
-            })
-
-            for (const annotation of contentPart.annotations) {
-              if (annotation.type === "url_citation") {
-                content.push({
-                  type: "source",
-                  sourceType: "url",
-                  id: this.config.generateId?.() ?? generateId(),
-                  url: annotation.url,
-                  title: annotation.title,
-                })
-              } else if (annotation.type === "file_citation") {
-                content.push({
-                  type: "source",
-                  sourceType: "document",
-                  id: this.config.generateId?.() ?? generateId(),
-                  mediaType: "text/plain",
-                  title: annotation.quote ?? annotation.filename ?? "Document",
-                  filename: annotation.filename ?? annotation.file_id,
-                })
-              }
-            }
-          }
-
-          break
-        }
-
-        case "function_call": {
-          hasFunctionCall = true
-
-          content.push({
-            type: "tool-call",
-            toolCallId: part.call_id,
-            toolName: part.name,
-            input: part.arguments,
-            providerMetadata: {
-              copilot: {
-                itemId: part.id,
-              },
-            },
-          })
-          break
-        }
-
-        case "web_search_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.id,
-            toolName: webSearchToolName ?? "web_search",
-            input: JSON.stringify({ action: part.action }),
-            providerExecuted: true,
-          })
-
-          content.push({
-            type: "tool-result",
-            toolCallId: part.id,
-            toolName: webSearchToolName ?? "web_search",
-            result: { status: part.status },
-          })
-
-          break
-        }
-
-        case "computer_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.id,
-            toolName: "computer_use",
-            input: "",
-            providerExecuted: true,
-          })
-
-          content.push({
-            type: "tool-result",
-            toolCallId: part.id,
-            toolName: "computer_use",
-            result: {
-              type: "computer_use_tool_result",
-              status: part.status || "completed",
-            },
-          })
-          break
-        }
-
-        case "file_search_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.id,
-            toolName: "file_search",
-            input: "{}",
-            providerExecuted: true,
-          })
-
-          content.push({
-            type: "tool-result",
-            toolCallId: part.id,
-            toolName: "file_search",
-            result: {
-              queries: part.queries,
-              results:
-                part.results?.map((result) => ({
-                  attributes: result.attributes as Record<string, JSONValue>,
-                  fileId: result.file_id,
-                  filename: result.filename,
-                  score: result.score,
-                  text: result.text,
-                })) ?? null,
-            } satisfies z.infer<typeof fileSearchOutputSchema>,
-          })
-          break
-        }
-
-        case "code_interpreter_call": {
-          content.push({
-            type: "tool-call",
-            toolCallId: part.id,
-            toolName: "code_interpreter",
-            input: JSON.stringify({
-              code: part.code,
-              containerId: part.container_id,
-            } satisfies z.infer<typeof codeInterpreterInputSchema>),
-            providerExecuted: true,
-          })
-
-          content.push({
-            type: "tool-result",
-            toolCallId: part.id,
-            toolName: "code_interpreter",
-            result: {
-              outputs: part.outputs,
-            } satisfies z.infer<typeof codeInterpreterOutputSchema>,
-          })
-          break
-        }
-      }
-    }
-
-    const providerMetadata: SharedV3ProviderMetadata = {
-      copilot: { responseId: response.id },
-    }
-
-    if (logprobs.length > 0) {
-      providerMetadata.copilot.logprobs = logprobs
-    }
-
-    if (typeof response.service_tier === "string") {
-      providerMetadata.copilot.serviceTier = response.service_tier
-    }
-
-    return {
-      content,
-      finishReason: {
-        unified: mapOpenAIResponseFinishReason({
-          finishReason: response.incomplete_details?.reason,
-          hasFunctionCall,
-        }),
-        raw: response.incomplete_details?.reason,
-      },
-      usage: {
-        inputTokens: {
-          total: response.usage.input_tokens,
-          noCache:
-            response.usage.input_tokens_details?.cached_tokens != null
-              ? response.usage.input_tokens - response.usage.input_tokens_details.cached_tokens
-              : undefined,
-          cacheRead: response.usage.input_tokens_details?.cached_tokens ?? undefined,
-          cacheWrite: undefined,
-        },
-        outputTokens: {
-          total: response.usage.output_tokens,
-          text: undefined,
-          reasoning: response.usage.output_tokens_details?.reasoning_tokens ?? undefined,
-        },
-        raw: response.usage,
-      },
-      request: { body },
-      response: {
-        id: response.id,
-        timestamp: new Date(response.created_at * 1000),
-        modelId: response.model,
-        headers: responseHeaders,
-        body: rawResponse,
-      },
-      providerMetadata,
-      warnings,
-    }
+  async doGenerate(_options: LanguageModelV3CallOptions): Promise<never> {
+    throw new Error("GitHub Copilot models only support streaming")
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
+    const { args: body, warnings, getHostedToolName } = await this.getArgs(options)
 
     const { responseHeaders, value: response } = await postJsonToApi({
       url: this.config.url({
@@ -821,7 +356,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     const ongoingToolCalls: Record<
       number,
       | {
-          toolName: string
           toolCallId: string
           codeInterpreter?: {
             containerId: string
@@ -840,7 +374,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       {
         canonicalId: string // the item.id from output_item.added
         encryptedContent?: string | null
-        summaryParts: number[]
+        summaryParts: Record<number, "active" | "can-conclude" | "concluded">
       }
     > = {}
 
@@ -880,7 +414,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             if (isResponseOutputItemAddedChunk(value)) {
               if (value.item.type === "function_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: value.item.name,
                   toolCallId: value.item.call_id,
                 }
 
@@ -891,18 +424,16 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 })
               } else if (value.item.type === "web_search_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: webSearchToolName ?? "web_search",
                   toolCallId: value.item.id,
                 }
 
                 controller.enqueue({
                   type: "tool-input-start",
                   id: value.item.id,
-                  toolName: webSearchToolName ?? "web_search",
+                  toolName: getHostedToolName("web_search"),
                 })
               } else if (value.item.type === "computer_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: "computer_use",
                   toolCallId: value.item.id,
                 }
 
@@ -913,7 +444,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 })
               } else if (value.item.type === "code_interpreter_call") {
                 ongoingToolCalls[value.output_index] = {
-                  toolName: "code_interpreter",
                   toolCallId: value.item.id,
                   codeInterpreter: {
                     containerId: value.item.container_id,
@@ -923,7 +453,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-input-start",
                   id: value.item.id,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                 })
 
                 controller.enqueue({
@@ -935,7 +465,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "file_search",
+                  toolName: getHostedToolName("file_search"),
                   input: "{}",
                   providerExecuted: true,
                 })
@@ -943,7 +473,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "image_generation",
+                  toolName: getHostedToolName("image_generation"),
                   input: "{}",
                   providerExecuted: true,
                 })
@@ -960,10 +490,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               } else if (isResponseOutputItemAddedReasoningChunk(value)) {
+                if (activeReasoning[value.output_index]) {
+                  currentReasoningOutputIndex = value.output_index
+                  return
+                }
                 activeReasoning[value.output_index] = {
                   canonicalId: value.item.id,
                   encryptedContent: value.item.encrypted_content,
-                  summaryParts: [0],
+                  summaryParts: { 0: "active" },
                 }
                 currentReasoningOutputIndex = value.output_index
 
@@ -1010,7 +544,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: getHostedToolName("web_search"),
                   input: JSON.stringify({ action: value.item.action }),
                   providerExecuted: true,
                 })
@@ -1018,7 +552,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "web_search",
+                  toolName: getHostedToolName("web_search"),
                   result: { status: value.item.status },
                 })
               } else if (value.item.type === "computer_call") {
@@ -1052,7 +586,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "file_search",
+                  toolName: getHostedToolName("file_search"),
                   result: {
                     queries: value.item.queries,
                     results:
@@ -1071,7 +605,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                   result: {
                     outputs: value.item.outputs,
                   } satisfies z.infer<typeof codeInterpreterOutputSchema>,
@@ -1080,31 +614,10 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-result",
                   toolCallId: value.item.id,
-                  toolName: "image_generation",
+                  toolName: getHostedToolName("image_generation"),
                   result: {
                     result: value.item.result,
                   } satisfies z.infer<typeof imageGenerationOutputSchema>,
-                })
-              } else if (value.item.type === "local_shell_call") {
-                ongoingToolCalls[value.output_index] = undefined
-
-                controller.enqueue({
-                  type: "tool-call",
-                  toolCallId: value.item.call_id,
-                  toolName: "local_shell",
-                  input: JSON.stringify({
-                    action: {
-                      type: "exec",
-                      command: value.item.action.command,
-                      timeoutMs: value.item.action.timeout_ms,
-                      user: value.item.action.user,
-                      workingDirectory: value.item.action.working_directory,
-                      env: value.item.action.env,
-                    },
-                  } satisfies z.infer<typeof localShellInputSchema>),
-                  providerMetadata: {
-                    copilot: { itemId: value.item.id },
-                  },
                 })
               } else if (value.item.type === "message") {
                 if (currentTextId) {
@@ -1117,13 +630,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               } else if (isResponseOutputItemDoneReasoningChunk(value)) {
                 const activeReasoningPart = activeReasoning[value.output_index]
                 if (activeReasoningPart) {
-                  for (const summaryIndex of activeReasoningPart.summaryParts) {
+                  for (const [summaryIndex, status] of Object.entries(activeReasoningPart.summaryParts)) {
+                    if (status === "concluded") continue
                     controller.enqueue({
                       type: "reasoning-end",
                       id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
                       providerMetadata: {
                         copilot: {
-                          itemId: activeReasoningPart.canonicalId,
+                          itemId: value.item.id,
                           reasoningEncryptedContent: value.item.encrypted_content ?? null,
                         },
                       },
@@ -1149,7 +663,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               controller.enqueue({
                 type: "tool-result",
                 toolCallId: value.item_id,
-                toolName: "image_generation",
+                toolName: getHostedToolName("image_generation"),
                 result: {
                   result: value.partial_image_b64,
                 } satisfies z.infer<typeof imageGenerationOutputSchema>,
@@ -1185,7 +699,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 controller.enqueue({
                   type: "tool-call",
                   toolCallId: toolCall.toolCallId,
-                  toolName: "code_interpreter",
+                  toolName: getHostedToolName("code_interpreter"),
                   input: JSON.stringify({
                     code: value.code,
                     containerId: toolCall.codeInterpreter!.containerId,
@@ -1228,8 +742,19 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
 
               // the first reasoning start is pushed in isResponseOutputItemAddedReasoningChunk.
-              if (activeItem && value.summary_index > 0) {
-                activeItem.summaryParts.push(value.summary_index)
+              if (activeItem && value.summary_index > 0 && activeItem.summaryParts[value.summary_index] === undefined) {
+                for (const [summaryIndex, status] of Object.entries(activeItem.summaryParts)) {
+                  if (status !== "can-conclude") continue
+                  controller.enqueue({
+                    type: "reasoning-end",
+                    id: `${activeItem.canonicalId}:${summaryIndex}`,
+                    providerMetadata: {
+                      copilot: { itemId: activeItem.canonicalId },
+                    },
+                  })
+                  activeItem.summaryParts[Number(summaryIndex)] = "concluded"
+                }
+                activeItem.summaryParts[value.summary_index] = "active"
 
                 controller.enqueue({
                   type: "reasoning-start",
@@ -1242,6 +767,22 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               }
+            } else if (isResponseReasoningSummaryPartDoneChunk(value)) {
+              const activeItem =
+                currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+              if (!activeItem || activeItem.summaryParts[value.summary_index] !== "active") return
+              if (body.store === false) {
+                activeItem.summaryParts[value.summary_index] = "can-conclude"
+                return
+              }
+              controller.enqueue({
+                type: "reasoning-end",
+                id: `${activeItem.canonicalId}:${value.summary_index}`,
+                providerMetadata: {
+                  copilot: { itemId: activeItem.canonicalId },
+                },
+              })
+              activeItem.summaryParts[value.summary_index] = "concluded"
             } else if (isResponseReasoningSummaryTextDeltaChunk(value)) {
               const activeItem =
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
@@ -1303,6 +844,16 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             if (currentTextId) {
               controller.enqueue({ type: "text-end", id: currentTextId })
               currentTextId = null
+            }
+            for (const activeItem of Object.values(activeReasoning)) {
+              for (const [summaryIndex, status] of Object.entries(activeItem.summaryParts)) {
+                if (status === "concluded") continue
+                controller.enqueue({
+                  type: "reasoning-end",
+                  id: `${activeItem.canonicalId}:${summaryIndex}`,
+                  providerMetadata: { copilot: { itemId: activeItem.canonicalId } },
+                })
+              }
             }
 
             const providerMetadata: SharedV3ProviderMetadata = {
@@ -1482,7 +1033,6 @@ const responseOutputItemDoneSchema = z.object({
     imageGenerationCallItem,
     webSearchCallItem,
     fileSearchCallItem,
-    localShellCallItem,
     z.object({
       type: z.literal("computer_call"),
       id: z.string(),
@@ -1552,6 +1102,12 @@ const responseReasoningSummaryTextDeltaSchema = z.object({
   delta: z.string(),
 })
 
+const responseReasoningSummaryPartDoneSchema = z.object({
+  type: z.literal("response.reasoning_summary_part.done"),
+  item_id: z.string(),
+  summary_index: z.number(),
+})
+
 const openaiResponsesChunkSchema = z.union([
   textDeltaChunkSchema,
   responseFinishedChunkSchema,
@@ -1564,6 +1120,7 @@ const openaiResponsesChunkSchema = z.union([
   responseCodeInterpreterCallCodeDoneSchema,
   responseAnnotationAddedSchema,
   responseReasoningSummaryPartAddedSchema,
+  responseReasoningSummaryPartDoneSchema,
   responseReasoningSummaryTextDeltaSchema,
   errorChunkSchema,
   z.object({ type: z.string() }).loose(), // fallback for unknown chunks
@@ -1652,6 +1209,12 @@ function isResponseReasoningSummaryPartAddedChunk(
   return chunk.type === "response.reasoning_summary_part.added"
 }
 
+function isResponseReasoningSummaryPartDoneChunk(
+  chunk: z.infer<typeof openaiResponsesChunkSchema>,
+): chunk is z.infer<typeof responseReasoningSummaryPartDoneSchema> {
+  return chunk.type === "response.reasoning_summary_part.done"
+}
+
 function isResponseReasoningSummaryTextDeltaChunk(
   chunk: z.infer<typeof openaiResponsesChunkSchema>,
 ): chunk is z.infer<typeof responseReasoningSummaryTextDeltaSchema> {
@@ -1660,69 +1223,6 @@ function isResponseReasoningSummaryTextDeltaChunk(
 
 function isErrorChunk(chunk: z.infer<typeof openaiResponsesChunkSchema>): chunk is z.infer<typeof errorChunkSchema> {
   return chunk.type === "error"
-}
-
-type ResponsesModelConfig = {
-  isReasoningModel: boolean
-  systemMessageMode: "remove" | "system" | "developer"
-  requiredAutoTruncation: boolean
-  supportsFlexProcessing: boolean
-  supportsPriorityProcessing: boolean
-}
-
-function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
-  const supportsFlexProcessing =
-    modelId.startsWith("o3") ||
-    modelId.startsWith("o4-mini") ||
-    (modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-chat"))
-  const supportsPriorityProcessing =
-    modelId.startsWith("gpt-4") ||
-    modelId.startsWith("gpt-5-mini") ||
-    (modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat")) ||
-    modelId.startsWith("o3") ||
-    modelId.startsWith("o4-mini")
-  const defaults = {
-    requiredAutoTruncation: false,
-    systemMessageMode: "system" as const,
-    supportsFlexProcessing,
-    supportsPriorityProcessing,
-  }
-
-  // gpt-5-chat models are non-reasoning
-  if (modelId.startsWith("gpt-5-chat")) {
-    return {
-      ...defaults,
-      isReasoningModel: false,
-    }
-  }
-
-  // o series reasoning models:
-  if (
-    modelId.startsWith("o") ||
-    modelId.startsWith("gpt-5") ||
-    modelId.startsWith("codex-") ||
-    modelId.startsWith("computer-use")
-  ) {
-    if (modelId.startsWith("o1-mini") || modelId.startsWith("o1-preview")) {
-      return {
-        ...defaults,
-        isReasoningModel: true,
-        systemMessageMode: "remove",
-      }
-    }
-
-    return {
-      ...defaults,
-      isReasoningModel: true,
-      systemMessageMode: "developer",
-    }
-  }
-
-  // gpt models:
-  return {
-    ...defaults,
-    isReasoningModel: false,
-  }
 }
 
 // TODO AI SDK 6: use optional here instead of nullish

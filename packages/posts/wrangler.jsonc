@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opencode-posts",
+  "compatibility_date": "2026-07-25",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "opencode.ai/posts*",
+      "zone_name": "opencode.ai"
+    }
+  ]
+}

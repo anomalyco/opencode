@@ -1,8 +1,9 @@
-import { HttpClient } from "effect/unstable/http"
-import { make, type Definition } from "../tool.js"
+import { HttpClient } from "effect/http"
+import { make, type Tool } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {
   componentDefinitions,
+  hasDirectionalSchemas,
   inputSchema,
   isRecord,
   methods,
@@ -31,16 +32,17 @@ export type {
 } from "./types.js"
 
 /**
- * Builds a CodeMode tool subtree from an OpenAPI 3.x document, one tool per
- * operation. Auth is resolved host-side via `auth.resolve` and never
- * model-visible. Tools require `HttpClient.HttpClient`; unrepresentable
- * operations land in `skipped`.
+ * Builds one CodeMode tool per representable OpenAPI 3.x operation. Auth remains host-side,
+ * tools require `HttpClient.HttpClient`, and unrepresentable operations land in `skipped`.
  */
 export const fromSpec = (options: Options): Result => {
   const document = options.spec
   const schemes = securitySchemes(document)
   const defaultSecurity = securityRequirements(document.security)
-  const definitions = componentDefinitions(document)
+  const requestDefinitions = componentDefinitions(document, "request")
+  const responseDefinitions = hasDirectionalSchemas(document)
+    ? componentDefinitions(document, "response")
+    : requestDefinitions
   const paths = isRecord(document.paths) ? document.paths : {}
   const used = new Set<string>()
   const namespaces = new Set<string>()
@@ -51,7 +53,6 @@ export const fromSpec = (options: Options): Result => {
     if (!isRecord(pathValue)) continue
     for (const [method, operationValue] of Object.entries(pathValue)) {
       if (!methods.has(method) || !isRecord(operationValue)) continue
-      const segments = operationPath(method, path, operationValue, used, namespaces)
       const operation: Operation = {
         operationId: nonEmptyString(operationValue.operationId),
         method: method.toUpperCase(),
@@ -59,7 +60,7 @@ export const fromSpec = (options: Options): Result => {
         summary: nonEmptyString(operationValue.summary),
         description: nonEmptyString(operationValue.description),
       }
-      const output = operationOutput(document, operationValue, definitions)
+      const output = operationOutput(document, operationValue, responseDefinitions)
       if (!output.ok) {
         skipped.push({ method: operation.method, path, reason: output.reason })
         continue
@@ -97,6 +98,7 @@ export const fromSpec = (options: Options): Result => {
         auth: options.auth,
         headers: options.headers ?? {},
       }
+      const segments = operationPath(method, path, operationValue, used, namespaces)
       used.add(segments.join("."))
       for (const index of segments.slice(0, -1).keys()) namespaces.add(segments.slice(0, index + 1).join("."))
       setTool(
@@ -104,9 +106,9 @@ export const fromSpec = (options: Options): Result => {
         segments,
         make({
           description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
-          input: inputSchema(input.fields, definitions),
+          input: inputSchema(input.fields, requestDefinitions),
           output: output.value,
-          run: (input) => invoke(plan, input),
+          execute: (input) => invoke(plan, input),
         }),
       )
     }
@@ -115,16 +117,16 @@ export const fromSpec = (options: Options): Result => {
   return { tools, skipped }
 }
 
-const setTool = (tools: Tools, path: ReadonlyArray<string>, definition: Definition<HttpClient.HttpClient>): void => {
+const setTool = (tools: Tools, path: ReadonlyArray<string>, tool: Tool<HttpClient.HttpClient>): void => {
   const [head, ...rest] = path
   if (head === undefined) return
   if (rest.length === 0) {
-    tools[head] = definition
+    tools[head] = tool
     return
   }
   const child = tools[head]
   if (child === undefined || !isRecord(child) || child._tag === "CodeModeTool") {
     tools[head] = Object.create(null) as Tools
   }
-  setTool(tools[head] as Tools, rest, definition)
+  setTool(tools[head] as Tools, rest, tool)
 }

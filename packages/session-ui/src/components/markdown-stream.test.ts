@@ -1,10 +1,82 @@
 import { describe, expect, test } from "bun:test"
-import { canReusePendingBlock, project, stream } from "./markdown-stream"
+import { canReusePendingBlock } from "./markdown-projection"
+import { project, stream } from "./markdown-stream"
 
 describe("markdown stream", () => {
+  test.each([
+    "<div>\n\nWorld",
+    "<details>\n\nWorld",
+    "<!-- <div> -->\n\nWorld",
+    "<pre>\n<div>\n</pre>\n\nWorld",
+    '<div data-tip="a > <span>">\n</div>\n\nWorld',
+  ])("preserves unfinished and quoted-attribute HTML groups on completion: %s", (tail) => {
+    const text = `Hello\n\n${tail}`
+    const live = project(undefined, text, true)
+    const done = project(live, text, false)
+    expect(done.blocks.map((block) => block.raw).join("")).toBe(text)
+    expect(done.blocks.every((block) => block.mode === "full")).toBe(true)
+  })
+
+  test("ignores > and /> inside quoted HTML attributes when grouping blocks", () => {
+    const closed = project(undefined, '<div data-tip="a > <span>">\n</div>\n\nSettled\n\nTail', true)
+    expect(closed.blocks.map((block) => [block.raw, block.mode])).toEqual([
+      ['<div data-tip="a > <span>">\n</div>\n\n', "full"],
+      ["Settled\n\n", "full"],
+      ["Tail", "live"],
+    ])
+
+    const grouped = project(undefined, '<div data-icon="/>">\n\n**Inside**\n\n</div>', false)
+    expect(grouped.blocks).toEqual([
+      {
+        raw: '<div data-icon="/>">\n\n**Inside**\n\n</div>',
+        src: '<div data-icon="/>">\n\n**Inside**\n\n</div>',
+        mode: "full",
+      },
+    ])
+  })
+
+  test.each(["[x][r]\n\nOther\n\n[r]: /ok invalid", "[x][r]\n\nOther\n\n[r]: /ok\n| --- |\n"])(
+    "retracts an invalidated provisional reference definition: %s",
+    (text) => {
+      let current = project(undefined, "", true)
+
+      for (let i = 1; i <= text.length; i++) current = project(current, text.slice(0, i), true)
+      expect(current.blocks[0]!.src).toBe("[x][r]\n\n")
+      const done = project(current, text, false)
+      expect(done.blocks[0]!.src).toBe("[x][r]\n\n")
+    },
+  )
+
+  test("rebuilds long messages when an unsampled interior character changes", () => {
+    const text = "Start\n\n" + "x".repeat(6000) + "\n\nTail"
+    const live = project(undefined, text, true)
+    const edited = text.slice(0, 1000) + "Y" + text.slice(1001)
+    const next = project(live, edited, true)
+    expect(next.blocks[0]).toBe(live.blocks[0])
+    expect(next.blocks.map((block) => block.raw).join("")).toBe(edited)
+    expect(project(next, edited, false).blocks.map((block) => block.raw).join("")).toBe(edited)
+  })
+
   test("heals incomplete emphasis while streaming", () => {
     expect(stream("hello **world", true)).toEqual([{ raw: "hello **world", src: "hello **world**", mode: "live" }])
     expect(stream("say `code", true)).toEqual([{ raw: "say `code", src: "say `code`", mode: "live" }])
+  })
+
+  test.each([
+    ["*foo*bar", "*foo*bar"],
+    ["foo*bar", "foo*bar"],
+    ["*foo*bar*baz", "*foo*bar*baz*"],
+    ["\\(P(x_{t+1})\\)", "\\(P(x_{t+1})\\)"],
+    ["\\(w^{*}\\) and *next", "\\(w^{*}\\) and *next*"],
+  ])("preserves math and intraword emphasis in %s", (raw, src) => {
+    expect(stream(raw, true)).toEqual([{ raw, src, mode: "live" }])
+  })
+
+  test("keeps a display math block with a blank line in one stable block", () => {
+    expect(stream("$$\na\n\nb\n$$\n\nafter", true)).toEqual([
+      { raw: "$$\na\n\nb\n$$\n\n", src: "$$\na\n\nb\n$$\n\n", mode: "full" },
+      { raw: "after", src: "after", mode: "live" },
+    ])
   })
 
   test("keeps incomplete links non-clickable until they finish", () => {
@@ -129,6 +201,9 @@ describe("markdown stream", () => {
     expect(
       canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "code", raw: "```ts\none two", src: "" }),
     ).toBe(true)
+    expect(canReusePendingBlock({ mode: "live", raw: "partial" }, { mode: "live", raw: "partial text", src: "" })).toBe(
+      true,
+    )
     expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "live", raw: "one", src: "" })).toBe(false)
   })
 
@@ -143,6 +218,39 @@ describe("markdown stream", () => {
       mode: "code",
       language: "ts",
     })
+  })
+
+  test("finalizes only the live tail when streaming stops", () => {
+    const live = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final item", true)
+    const final = project(live, live.text, false)
+
+    expect(final.blocks[0]).toBe(live.blocks[0])
+    expect(final.blocks[1]).toBe(live.blocks[1])
+    expect(final.blocks[2]).toEqual({ raw: "- final item", src: "- final item", mode: "full" })
+  })
+
+  test("catches up paced text before finalizing", () => {
+    const live = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final", true)
+    const final = project(live, `${live.text} item`, false)
+
+    expect(canReusePendingBlock(live.blocks[0], final.blocks[0]!)).toBe(true)
+    expect(canReusePendingBlock(live.blocks[1], final.blocks[1]!)).toBe(true)
+    expect(final.blocks[2]).toEqual({ raw: "- final item", src: "- final item", mode: "full" })
+  })
+
+  test("completes an open code block when streaming stops", () => {
+    const live = project(undefined, "```ts\nconst value = 1", true)
+    const final = project(live, live.text, false)
+
+    expect(final.blocks).toEqual([
+      {
+        raw: "```ts\nconst value = 1",
+        src: "const value = 1",
+        mode: "code",
+        language: "ts",
+        complete: true,
+      },
+    ])
   })
 
   test("does not add a blank line before the first streamed code", () => {
@@ -190,5 +298,76 @@ describe("markdown stream", () => {
       language: "ts",
       complete: true,
     })
+  })
+
+  test("keeps list-indented code fences inside the list so numbering and nested indentation match CommonMark", () => {
+    const first = project(
+      undefined,
+      "1. First step\n   ```ts\n   const x = 1\n   ```\n2. Second step\n   ```ts\n   const y = 2",
+      true,
+    )
+
+    expect(first.blocks).toEqual([
+      {
+        raw: "1. First step\n   ```ts\n   const x = 1\n   ```\n2. Second step\n   ```ts\n   const y = 2",
+        src: "1. First step\n   ```ts\n   const x = 1\n   ```\n2. Second step\n   ```ts\n   const y = 2",
+        mode: "live",
+      },
+    ])
+
+    const next = project(first, `${first.text}\n   const z = 3`, true)
+    expect(next.blocks).toEqual([
+      {
+        raw: "1. First step\n   ```ts\n   const x = 1\n   ```\n2. Second step\n   ```ts\n   const y = 2\n   const z = 3",
+        src: "1. First step\n   ```ts\n   const x = 1\n   ```\n2. Second step\n   ```ts\n   const y = 2\n   const z = 3",
+        mode: "live",
+      },
+    ])
+  })
+
+  test("back-patches only the block referencing a late reference definition and preserves definitions on finalize", () => {
+    const first = project(
+      undefined,
+      "Read [docs][1].\n\nUnrelated settled paragraph.\n\nTrailing paragraph",
+      true,
+    )
+
+    expect(first.blocks[0]).toEqual({ raw: "Read [docs][1].\n\n", src: "Read [docs][1].\n\n", mode: "full" })
+    expect(first.blocks[1]).toEqual({
+      raw: "Unrelated settled paragraph.\n\n",
+      src: "Unrelated settled paragraph.\n\n",
+      mode: "full",
+    })
+
+    const next = project(first, `${first.text}\n\n[1]: https://example.com/docs`, true)
+    expect(next.blocks[1]).toBe(first.blocks[1])
+    expect(next.blocks[0]).toEqual({
+      raw: "Read [docs][1].\n\n",
+      src: "Read [docs][1].\n\n\n\n[1]: https://example.com/docs",
+      mode: "full",
+    })
+
+    const done = project(next, next.text, false)
+    expect(done.blocks[0]).toEqual({
+      raw: "Read [docs][1].\n\n",
+      src: "Read [docs][1].\n\n\n\n[1]: https://example.com/docs",
+      mode: "full",
+    })
+  })
+
+  test("replaces the initial empty fallback block cleanly when streaming begins from empty text", () => {
+    const doc = "# Heading\n\nFirst paragraph.\n\n```ts\nconst x = 1\n```\n\nTrailing paragraph."
+    let prev = project(undefined, "", true)
+    expect(prev.blocks).toEqual([{ raw: "", src: "", mode: "live" }])
+
+    for (let i = 10; i <= doc.length; i += 10) {
+      const slice = doc.slice(0, i)
+      prev = project(prev, slice, true)
+      expect(prev.blocks).toEqual(stream(slice, true))
+    }
+
+    const done = project(prev, doc, false)
+    expect(done.blocks.every((block) => block.mode !== "live")).toBe(true)
+    expect(done.blocks.map((block) => block.raw).join("")).toBe(doc)
   })
 })

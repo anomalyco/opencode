@@ -1,0 +1,124 @@
+---
+title: "Providers"
+description: "Connect your own model provider accounts to an OpenCode Console workspace and choose which models members can use."
+---
+
+Connect provider accounts you already pay for, such as Anthropic, OpenAI, or AWS Bedrock, and share their models
+with everyone in the workspace. Console stores the credential and serves each provider through its gateway, so members
+use the models without ever seeing the provider key. The same gateway is available to your own tools through the
+[Providers API](/console/api/providers).
+
+Owners and admins manage providers from the **Providers** tab. Members get the enabled models in OpenCode after
+running `/connect`.
+
+## Connect a provider
+
+1. Open **Providers** and click **Connect Provider**.
+2. Pick a provider from the catalog and enter its API key.
+3. Optionally click **Test connection**, then click **Save**.
+
+The catalog includes Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter, and many more. Catalog
+providers come with their models preconfigured.
+
+### Cloud providers
+
+Cloud providers need a few extra details.
+
+| Provider              | Details                               |
+| --------------------- | ------------------------------------- |
+| Azure                 | Resource name and API key             |
+| AWS Bedrock           | Region and API key                    |
+| Google Vertex AI      | Region and service account JSON       |
+| Cloudflare AI Gateway | Account ID, Gateway ID, and API token |
+| Databricks            | Workspace URL and token               |
+
+### Custom providers
+
+Click **Add Custom Provider** to connect any other endpoint, then add its models with **Add Model**.
+
+| Field      | Description                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Where Console forwards requests, for example `https://api.deepseek.com/v1`.     |
+| Format     | Chat Completions, Responses API, Anthropic Compatible, or Google Generative AI. |
+| Auth mode  | Bearer, API key header, or Custom header.                                       |
+| Credential | The key Console sends to the provider.                                          |
+
+## Choose models
+
+Open a provider to see its models. Only enabled models are available to members.
+
+- Use the **Enabled** toggle to turn a model on or off.
+- Turn on **New models** to enable models the provider adds in the future.
+
+## Edit models
+
+Click a model to edit it. Changes are saved when you close the panel.
+
+| Section       | What you can change                                             |
+| ------------- | --------------------------------------------------------------- |
+| General       | Display name, API ID, tools support, input and output types     |
+| Variants      | Variants with their own headers or body                         |
+| Configuration | Default variant, request headers and body, token limits         |
+| Cost Tiers    | Input, output, cache read, and cache write prices per 1M tokens |
+
+### Custom pricing
+
+Catalog models start with the provider's list price. If you have negotiated pricing, for example a discount on your
+OpenAI contract, override the prices under **Cost Tiers** so usage reports and [budgets](/console/budgets) match what
+you actually pay.
+
+| Field            | List price | Your price |
+| ---------------- | ---------- | ---------- |
+| Input price      | $2.50      | $2.00      |
+| Output price     | $15.00     | $12.00     |
+| Cache read price | $0.25      | $0.20      |
+
+Prices you change are highlighted on the provider page. Use **Restore default value** on a field, or **⋯ › Restore...**
+on the model, to return to the list price.
+
+Add a **Context** tier when a model charges more above a context size, for example for prompts over 200K tokens.
+
+### Custom models
+
+Click **Add Model** to add a model the catalog doesn't include, with its **Display name** and **Model ID**. Use
+**⋯ › Duplicate...** on an existing model to start from its settings.
+
+## OpenCode models
+
+The **Models** tab manages the [models](/console/models) Console provides, which are paid from workspace credits. It
+works like a provider page:
+
+- Turn individual models on or off.
+- Turn **Free models** off to block free models for the workspace.
+- Turn **New models** on to enable new Console models automatically.
+
+Disable the whole provider from **⋯ › Disable** to use only your own providers.
+
+## Use in OpenCode
+
+Members run `/connect` and choose the workspace. Each enabled provider appears as the workspace name followed by the
+provider name, and `/models` lists its enabled models.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Turn on **Managed providers only** in **Settings › General** to restrict OpenCode to the workspace's providers for
+everyone.
+
+## Disable or remove
+
+Open the provider's **⋯** menu:
+
+- **Disable** hides the provider and its models from members but keeps its settings.
+- **Remove...** deletes the provider and its models. The dialog shows who used it recently, and offers
+  **Disable instead**.
+
+To rotate a key, click the credential on the provider page and enter the new one.
+
+## Billing
+
+The provider bills you for tokens; Console does not charge credits for them. Console still records each request and
+its cost using the model's pricing, so usage reports and [budgets](/console/budgets) include it.
+
+To call a provider from your own tools instead of OpenCode, use the [Providers API](/console/api/providers).

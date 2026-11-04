@@ -1,21 +1,29 @@
-export * as McpEvent from "./mcp-event"
+export * as McpEvent from "./mcp-event.js"
 
 import { Schema } from "effect"
-import { Event } from "./event"
+import { Event } from "./event.js"
 
-export const ToolsChanged = Event.define({
+export const ToolsChanged = Event.ephemeral({
   type: "mcp.tools.changed",
   schema: {
     server: Schema.String,
   },
 })
 
-export const BrowserOpenFailed = Event.define({
-  type: "mcp.browser.open.failed",
+export const ResourcesChanged = Event.ephemeral({
+  type: "mcp.resources.changed",
   schema: {
-    mcpName: Schema.String,
-    url: Schema.String,
+    server: Schema.String,
   },
 })
 
-export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed)
+// Emitted whenever a server's connection status settles (connected, failed, needs_auth, closed) so
+// observers can refresh status without polling.
+export const StatusChanged = Event.ephemeral({
+  type: "mcp.status.changed",
+  schema: {
+    server: Schema.String,
+  },
+})
+
+export const Definitions = Event.inventory(ToolsChanged, ResourcesChanged, StatusChanged)

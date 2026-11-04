@@ -48,16 +48,6 @@ OpenCode CLI ยังมีคำสั่งย่อยอีกมากม�
 
 ---
 
-### agent
-
-จัดการเอเจนต์สำหรับ OpenCode
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | แยกเซสชันเมื่อดำเนินการต่อ (ใช้กับ `--continue` หรือ `--session`)                           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_PASSWORD`)                   |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_USERNAME` หรือ `opencode`) |
-
----
-
-#### create
-
-สร้างเอเจนต์ใหม่
-
-```bash
-opencode agent create
-```
-
-คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
-
----
-
-#### list
-
-แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -346,7 +314,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | ดำเนินการต่อจากเซสชันล่าสุด                                                                 |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | ID เซสชันเพื่อดำเนินการต่อ                                                                  |
 | <nobr><code>{"--fork"}</code></nobr>     |      | แยกเซสชันเมื่อทำต่อ (ใช้กับ `--continue` หรือ `--session`)                                  |
-| <nobr><code>{"--share"}</code></nobr>    |      | สร้างลิงก์แชร์สำหรับเซสชัน                                                                  |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | โมเดลที่จะใช้ในรูปแบบ provider/model                                                        |
 | <nobr><code>{"--agent"}</code></nobr>    |      | เอเจนต์ที่จะใช้                                                                             |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | แนบไฟล์ไปกับข้อความ                                                                         |
@@ -443,17 +410,14 @@ opencode export [sessionID]
 
 ### import
 
-นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ OpenCode
+นำเข้าเซสชันจากไฟล์ JSON
 
 ```bash
 opencode import <file>
 ```
 
-คุณสามารถนำเข้าไฟล์ในเครื่องหรือ URL ที่แชร์
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -565,7 +529,6 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
 | ------------------------------------- | ------- | ---------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
 | `OPENCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
 | `OPENCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
 | `OPENCODE_TUI_CONFIG`                 | String  | เส้นทางไปยังไฟล์การกำหนดค่า TUI                                  |
@@ -610,7 +573,6 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 | `OPENCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | เปิดใช้งาน TY LSP สำหรับไฟล์ python            |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | Boolean | เปิดใช้งานงาน subagent เบื้องหลัง              |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | Boolean | เปิดใช้งานระบบเหตุการณ์ทดลอง                   |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | Boolean | เปิดใช้งานเส้นทางคำขอ LLM แบบ native           |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | Boolean | เปิดใช้งานการค้นหาเว็บแบบขนาน                  |

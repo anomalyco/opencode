@@ -48,16 +48,6 @@ OpenCode CLI har også følgende kommandoer.
 
 ---
 
-### agent
-
-Administrer agenter for OpenCode.
-
-```bash
-opencode agent [command]
-```
-
----
-
 ### attach
 
 Koble en terminal til en allerede kjørende OpenCode-backend-server startet via `serve` eller `web` kommandoer.
@@ -86,28 +76,6 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OPENCODE_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
-
----
-
-#### create
-
-Opprett en ny agent med tilpasset konfigurasjon.
-
-```bash
-opencode agent create
-```
-
-Denne kommandoen vil veilede deg gjennom å lage en ny agent med en tilpasset systemmelding og verktøykonfigurasjon.
-
----
-
-#### list
-
-List opp alle tilgjengelige agenter.
-
-```bash
-opencode agent list
-```
 
 ---
 
@@ -345,7 +313,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
-| <nobr><code>{"--share"}</code></nobr>    |      | Del økten                                                                                          |
 | <nobr><code>{"--model"}</code></nobr>    | `-m` | Modell å bruke i form av leverandør/modell                                                         |
 | <nobr><code>{"--agent"}</code></nobr>    |      | Agent å bruke                                                                                      |
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er) som skal legges ved meldingen                                                              |
@@ -442,17 +409,14 @@ Hvis du ikke gir en økt ID, blir du bedt om å velge fra tilgjengelige økter.
 
 ### import
 
-Importer øktdata fra en JSON-fil eller en OpenCode share-URL.
+Importer øktdata fra en JSON-fil.
 
 ```bash
 opencode import <file>
 ```
 
-Du kan importere fra en lokal fil eller en OpenCode share-URL.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -564,7 +528,6 @@ OpenCode kan konfigureres ved hjelp av miljøvariabler.
 
 | Variabel                              | Type   | Beskrivelse                                                           |
 | ------------------------------------- | ------ | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
 | `OPENCODE_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
 | `OPENCODE_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
 | `OPENCODE_TUI_CONFIG`                 | streng | Bane til TUI-konfigurasjonsfil                                        |
@@ -609,7 +572,6 @@ Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres elle
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolsk | Aktiver eksperimentelle Exa-funksjoner                |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver TY LSP for python-filer                       |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver planmodus                                     |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolsk | Aktiver bakgrunnsoppgaver for subagenter              |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolsk | Aktiver eksperimentelt hendelsessystem                |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolsk | Aktiver innebygd LLM-forespørselsvei                  |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolsk | Aktiver parallell kjøring av websøk                   |

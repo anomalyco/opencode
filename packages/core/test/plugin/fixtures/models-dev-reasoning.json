@@ -1,0 +1,811 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "env": ["OPENAI_API_KEY"],
+    "models": {
+      "gpt-reasoning": {
+        "id": "gpt-reasoning",
+        "type": "chat",
+        "name": "GPT Reasoning",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"],
+            "budget": {
+              "min": 1024,
+              "max": 64000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 8192
+        },
+        "api": {
+          "responses": {
+            "base_url": "https://api.openai.com/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai"
+            }
+          }
+        },
+        "experimental": {
+          "modes": {
+            "high": {
+              "body": {
+                "service_tier": "priority"
+              },
+              "headers": {
+                "x-mode": "high"
+              }
+            },
+            "pro": {
+              "body": {
+                "reasoning": {
+                  "mode": "pro"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "env": ["ANTHROPIC_API_KEY"],
+    "models": {
+      "claude-budget": {
+        "id": "claude-budget",
+        "type": "chat",
+        "name": "Claude Budget",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "budget": {
+              "min": 1024,
+              "max": 64000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 64000
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://api.anthropic.com/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic"
+            }
+          }
+        }
+      },
+      "claude-effort": {
+        "id": "claude-opus-4.7",
+        "type": "chat",
+        "name": "Claude Effort",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 8192
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://api.anthropic.com/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic"
+            }
+          }
+        }
+      },
+      "claude-toggle": {
+        "id": "claude-toggle",
+        "type": "chat",
+        "name": "Claude Toggle",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 8192
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://api.anthropic.com/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic"
+            }
+          }
+        }
+      },
+      "claude-opus-4-5": {
+        "id": "claude-opus-4-5",
+        "type": "chat",
+        "name": "Claude Opus 4.5",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "high"],
+            "budget": {
+              "min": 1024
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 8192
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://api.anthropic.com/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic"
+            }
+          }
+        }
+      }
+    }
+  },
+  "xai": {
+    "id": "xai",
+    "name": "xAI",
+    "env": ["XAI_API_KEY"],
+    "models": {
+      "grok-4.5": {
+        "id": "grok-4.5",
+        "type": "chat",
+        "name": "Grok 4.5",
+        "release_date": "2026-07-08",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 500000,
+          "output": 500000
+        },
+        "api": {
+          "responses": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/xai"
+            }
+          }
+        }
+      }
+    }
+  },
+  "opencode-go": {
+    "id": "opencode-go",
+    "name": "OpenCode Go",
+    "env": ["OPENCODE_API_KEY"],
+    "models": {
+      "minimax-m3": {
+        "id": "minimax-m3",
+        "type": "chat",
+        "name": "MiniMax-M3",
+        "release_date": "2026-05-31",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "api": {
+          "messages": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic"
+            }
+          }
+        }
+      }
+    }
+  },
+  "alibaba": {
+    "id": "alibaba",
+    "name": "Alibaba",
+    "env": ["ALIBABA_API_KEY"],
+    "models": {
+      "toggle-only": {
+        "id": "toggle-only",
+        "type": "chat",
+        "name": "Toggle Only",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/alibaba"
+            }
+          }
+        }
+      },
+      "toggle-budget": {
+        "id": "toggle-budget",
+        "type": "chat",
+        "name": "Toggle Budget",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "budget": {
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/alibaba"
+            }
+          }
+        }
+      }
+    }
+  },
+  "vercel": {
+    "id": "vercel",
+    "name": "Vercel AI Gateway",
+    "env": ["AI_GATEWAY_API_KEY"],
+    "models": {
+      "alibaba/qwen-toggle": {
+        "id": "alibaba/qwen-toggle",
+        "type": "chat",
+        "name": "Gateway Alibaba Toggle",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "budget": {
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/gateway"
+            }
+          }
+        }
+      },
+      "amazon/nova-2-lite": {
+        "id": "amazon/nova-2-lite",
+        "type": "chat",
+        "name": "Gateway Nova 2 Lite",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/gateway"
+            }
+          }
+        }
+      },
+      "deepseek/deepseek-toggle": {
+        "id": "deepseek/deepseek-toggle",
+        "type": "chat",
+        "name": "Gateway DeepSeek Toggle",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/gateway"
+            }
+          }
+        }
+      }
+    }
+  },
+  "openrouter": {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "env": ["OPENROUTER_API_KEY"],
+    "models": {
+      "openrouter-toggle": {
+        "id": "openrouter-toggle",
+        "type": "chat",
+        "name": "OpenRouter Toggle",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@openrouter/ai-sdk-provider"
+            }
+          }
+        }
+      }
+    }
+  },
+  "google": {
+    "id": "google",
+    "name": "Google",
+    "env": ["GOOGLE_GENERATIVE_AI_API_KEY"],
+    "models": {
+      "gemini-2.5-flash": {
+        "id": "gemini-2.5-flash",
+        "type": "chat",
+        "name": "Gemini 2.5 Flash",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "budget": {
+              "min": 0,
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/google"
+            }
+          }
+        }
+      }
+    }
+  },
+  "google-vertex": {
+    "id": "google-vertex",
+    "name": "Google Vertex",
+    "env": ["GOOGLE_VERTEX_PROJECT"],
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "id": "gemini-2.5-flash-lite",
+        "type": "chat",
+        "name": "Gemini 2.5 Flash Lite",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "budget": {
+              "min": 512,
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/google-vertex"
+            }
+          }
+        }
+      }
+    }
+  },
+  "amazon-bedrock": {
+    "id": "amazon-bedrock",
+    "name": "Amazon Bedrock",
+    "env": ["AWS_ACCESS_KEY_ID"],
+    "models": {
+      "us.amazon.nova-2-lite-v1:0": {
+        "id": "us.amazon.nova-2-lite-v1:0",
+        "type": "chat",
+        "name": "Nova 2 Lite",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@ai-sdk/amazon-bedrock"
+            }
+          }
+        }
+      }
+    }
+  },
+  "sap-ai-core": {
+    "id": "sap-ai-core",
+    "name": "SAP AI Core",
+    "env": ["AICORE_SERVICE_KEY"],
+    "models": {
+      "gemini-2.5-flash": {
+        "id": "gemini-2.5-flash",
+        "type": "chat",
+        "name": "Gemini 2.5 Flash",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "budget": {
+              "min": 0,
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@jerome-benoit/sap-ai-provider-v2"
+            }
+          }
+        }
+      },
+      "amazon--nova-lite": {
+        "id": "amazon--nova-lite",
+        "type": "chat",
+        "name": "Nova Lite",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@jerome-benoit/sap-ai-provider-v2"
+            }
+          }
+        }
+      },
+      "cohere--command-a-reasoning": {
+        "id": "cohere--command-a-reasoning",
+        "type": "chat",
+        "name": "Command A Reasoning",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": ["low", "high"],
+            "budget": {
+              "min": 1
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@jerome-benoit/sap-ai-provider-v2"
+            }
+          }
+        }
+      },
+      "anthropic--claude-4.7-opus": {
+        "id": "anthropic--claude-4.7-opus",
+        "type": "chat",
+        "name": "Claude 4.7 Opus",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low"]
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@jerome-benoit/sap-ai-provider-v2"
+            }
+          }
+        }
+      },
+      "anthropic--claude-4-sonnet": {
+        "id": "anthropic--claude-4-sonnet",
+        "type": "chat",
+        "name": "Claude 4 Sonnet",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "budget": {
+              "min": 1024,
+              "max": 16000
+            }
+          },
+          "temperature": true
+        },
+        "limit": {
+          "context": 128000,
+          "output": 20000
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "",
+            "sdk": {
+              "aisdk": "@jerome-benoit/sap-ai-provider-v2"
+            }
+          }
+        }
+      }
+    }
+  }
+}
