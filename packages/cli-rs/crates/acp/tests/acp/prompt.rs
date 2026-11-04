@@ -1,5 +1,4 @@
-//! `prompt.test.ts`. Left to C.12: "reports full-file diffs for a completed edit and patch", the tool
-//! locations of the streamed shell call, and the compaction updates of the two wind-down cases.
+//! `prompt.test.ts`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,10 +7,10 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::wire::{
-    Hook, PromptCall, Wire, WireOptions, assert_matches, delivered, durable_event, events, failed,
-    interrupted, lock, make_session, reasoning_delta, review_command, start_session, start_wire,
-    step_ended, succeeded, text_delta, tokens, tool_called, tool_failed, tool_progress,
-    tool_started, tool_succeeded, turn, usage,
+    Hook, PromptCall, Wire, WireOptions, assert_matches, delivered, durable_event, ephemeral_event,
+    events, failed, file_diff, interrupted, lock, make_session, reasoning_delta, review_command,
+    start_session, start_wire, step_ended, succeeded, text_delta, tokens, tool_called, tool_failed,
+    tool_progress, tool_started, tool_succeeded, trimmed, turn, usage,
 };
 
 fn lost() -> Value {
@@ -208,7 +207,10 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
     );
     assert_matches(
         &updates[5]["update"],
-        &json!({ "title": "printf done", "kind": "execute", "rawInput": { "command": "printf done", "workdir": "sub" } }),
+        &json!({
+            "title": "printf done", "kind": "execute", "locations": [{ "path": "/workspace/sub" }],
+            "rawInput": { "command": "printf done", "workdir": "sub" },
+        }),
     );
     assert_matches(
         &updates[7]["update"],
@@ -472,6 +474,10 @@ async fn session_cancel_forwards_the_servers_wind_down_before_resolving_cancelle
                     delivered(session, &call.id),
                     tool_started(session, "call_sleep", "shell"),
                     tool_called(session, "call_sleep", json!({ "command": "sleep 60" })),
+                    durable_event(
+                        "session.compaction.started",
+                        json!({ "sessionID": session, "reason": "manual", "inputID": call.id }),
+                    ),
                     text_delta(session, "msg_held", "working", 0),
                 ]
             })),
@@ -485,6 +491,13 @@ async fn session_cancel_forwards_the_servers_wind_down_before_resolving_cancelle
                             &session,
                             "call_sleep",
                             json!({ "error": { "type": "aborted", "message": "interrupted" } }),
+                        ),
+                        durable_event(
+                            "session.compaction.failed",
+                            json!({
+                                "sessionID": session, "reason": "manual",
+                                "error": { "type": "compaction.interrupted", "message": "Compaction was interrupted" },
+                            }),
                         ),
                         durable_event(
                             "session.step.failed",
@@ -525,6 +538,15 @@ async fn session_cancel_forwards_the_servers_wind_down_before_resolving_cancelle
         update,
         &json!({ "sessionUpdate": "usage_update", "used": 33 })
     )));
+    let compactions: Vec<Value> = before
+        .iter()
+        .filter(|update| update["sessionUpdate"] == "compaction_update")
+        .cloned()
+        .collect();
+    assert_matches(
+        &json!(compactions),
+        &json!([{ "status": "in_progress" }, { "status": "cancelled", "summary": null }]),
+    );
     assert_eq!(acp.server.state().interrupts, vec![acp.session_id.clone()]);
     assert_eq!(
         acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"],
@@ -543,6 +565,14 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
                     delivered(session, &call.id),
                     tool_started(session, "call_stuck", "shell"),
                     tool_called(session, "call_stuck", json!({ "command": "sleep 60" })),
+                    durable_event(
+                        "session.compaction.started",
+                        json!({ "sessionID": session, "reason": "manual", "inputID": call.id }),
+                    ),
+                    ephemeral_event(
+                        "session.compaction.delta",
+                        json!({ "sessionID": session, "text": "partial" }),
+                    ),
                     text_delta(session, "msg_held", "working", 0),
                 ]
             })),
@@ -560,13 +590,153 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
         prompt.await.unwrap().unwrap(),
         json!({ "stopReason": "cancelled", "_meta": {} })
     );
-    assert!(received_before_response(&acp).iter().any(|update| crate::wire::matches(
+    let before = received_before_response(&acp);
+    assert!(before.iter().any(|update| crate::wire::matches(
         update,
         &json!({
             "sessionUpdate": "tool_call_update", "toolCallId": "call_stuck", "status": "failed",
             "rawOutput": { "error": "Cancelled" },
         })
     )));
+    let compaction_id = acp.server.state().prompts()[0]["id"].clone();
+    let compactions: Vec<Value> = before
+        .into_iter()
+        .filter(|update| {
+            update["sessionUpdate"]
+                .as_str()
+                .is_some_and(|kind| kind.starts_with("compaction_"))
+        })
+        .collect();
+    assert_eq!(
+        compactions,
+        vec![
+            json!({ "sessionUpdate": "compaction_update", "compactionId": compaction_id, "status": "in_progress" }),
+            json!({ "sessionUpdate": "compaction_summary_chunk", "compactionId": compaction_id, "content": { "type": "text", "text": "partial" } }),
+            json!({ "sessionUpdate": "compaction_update", "compactionId": compaction_id, "status": "cancelled", "summary": null }),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_str().unwrap().to_owned();
+    let file = |name: &str| format!("{root}/{name}");
+    let edited = "one\r\nthree\r\n";
+    let indented = "  const x = 1\n  const y = 3\n";
+    let formatted = "keep\nnew\n// formatted\n";
+    let added = "two\n";
+    for (name, text) in [
+        ("edited.ts", edited),
+        ("indented.ts", indented),
+        ("formatted.ts", formatted),
+        ("added.ts", added),
+    ] {
+        std::fs::write(file(name), text).unwrap();
+    }
+    let patch = [
+        "*** Begin Patch",
+        "*** Update File: indented.ts",
+        "@@",
+        "   const x = 1",
+        "-  const y = 2",
+        "+  const y = 3",
+        "*** Update File: formatted.ts",
+        "@@",
+        " keep",
+        "-old",
+        "+new",
+        "*** Add File: added.ts",
+        "+two",
+        "*** Delete File: gone.ts",
+        "*** End Patch",
+    ]
+    .join("\n");
+    let acp = start_wire(WireOptions {
+        on_prompt: Some(events(move |call| {
+            let session = call.session_id.as_str();
+            turn(
+                session,
+                &call.id,
+                vec![
+                    tool_started(session, "call_edit", "edit"),
+                    tool_called(
+                        session,
+                        "call_edit",
+                        json!({ "path": "edited.ts", "oldString": "two", "newString": "three" }),
+                    ),
+                    tool_succeeded(
+                        session,
+                        "call_edit",
+                        json!({ "files": [file_diff("edited.ts", "one\r\ntwo\r\n", edited, "modified")] }),
+                        "edited",
+                    ),
+                    tool_started(session, "call_patch", "patch"),
+                    tool_called(session, "call_patch", json!({ "patchText": patch })),
+                    tool_succeeded(
+                        session,
+                        "call_patch",
+                        json!({ "files": [
+                            trimmed("indented.ts", "  const x = 1\n  const y = 2\n", indented),
+                            file_diff("formatted.ts", "keep\nold\n", formatted, "modified"),
+                            file_diff("added.ts", "", added, "added"),
+                            file_diff("gone.ts", "gone\n", "", "deleted"),
+                            file_diff("missing.ts", "one\n", "two\n", "modified"),
+                        ] }),
+                        "patched",
+                    ),
+                    tool_started(session, "call_snippet", "edit"),
+                    tool_called(
+                        session,
+                        "call_snippet",
+                        json!({ "path": "edited.ts", "oldString": "two", "newString": "three" }),
+                    ),
+                    tool_succeeded(session, "call_snippet", json!({}), "edited"),
+                ],
+            )
+        })),
+        ..WireOptions::default()
+    })
+    .await;
+    acp.initialize(json!({})).await;
+    let session = acp.new_session(&root, json!([])).await.unwrap();
+
+    acp.prompt(session["sessionId"].as_str().unwrap(), "edit the files")
+        .await
+        .unwrap();
+
+    let completed = |id: &str| {
+        acp.updates()
+            .into_iter()
+            .map(|item| item["update"].clone())
+            .find(|update| {
+                update["sessionUpdate"] == "tool_call_update"
+                    && update["toolCallId"] == id
+                    && update["status"] == "completed"
+            })
+            .unwrap()
+    };
+    let text =
+        |text: &str| json!({ "type": "content", "content": { "type": "text", "text": text } });
+    let diff = |name: &str, old: Value, new: &str| json!({ "type": "diff", "path": file(name), "oldText": old, "newText": new });
+    assert_matches(
+        &completed("call_edit"),
+        &json!({ "content": [text("edited"), diff("edited.ts", json!("one\r\ntwo\r\n"), edited)] }),
+    );
+    assert_matches(
+        &completed("call_patch"),
+        &json!({ "content": [
+            text("patched"),
+            diff("indented.ts", json!("  const x = 1\n  const y = 2\n"), indented),
+            diff("formatted.ts", json!("keep\nold\n"), formatted),
+            diff("added.ts", Value::Null, added),
+            diff("gone.ts", json!("gone\n"), ""),
+        ] }),
+    );
+    assert_matches(
+        &completed("call_snippet"),
+        &json!({ "content": [text("edited")] }),
+    );
 }
 
 #[tokio::test]
