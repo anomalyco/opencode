@@ -163,7 +163,11 @@ impl Dialogs {
                 return;
             };
             match event.kind {
-                MouseEventKind::Down(_) => inner.dismiss.set(inner.app.selected_text().is_some()),
+                // TS asks whether a selection exists. A press on text has started a drag by now, so a drag that
+                // starts inside the panel keeps the dialog open.
+                MouseEventKind::Down(_) => inner
+                    .dismiss
+                    .set(inner.app.is_selecting() || inner.app.selected_text().is_some()),
                 MouseEventKind::Up(_) => {
                     if inner.dismiss.replace(false) {
                         return;
