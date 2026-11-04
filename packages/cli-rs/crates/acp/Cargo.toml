@@ -1,0 +1,15 @@
+[package]
+name = "opencode-acp"
+description = "The ACP agent (C.11)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api.workspace = true
+opencode-service.workspace = true
+opencode-store.workspace = true

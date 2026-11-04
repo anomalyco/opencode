@@ -1,0 +1,67 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.dependencies]
+opencode-acp = { path = "crates/acp" }
+opencode-api = { path = "crates/api" }
+opencode-drive = { path = "crates/drive" }
+opencode-latex = { path = "crates/latex" }
+opencode-local = { path = "crates/local" }
+opencode-mermaid = { path = "crates/mermaid" }
+opencode-mini = { path = "crates/mini" }
+opencode-parity = { path = "crates/parity" }
+opencode-plugin = { path = "crates/plugin" }
+opencode-service = { path = "crates/service" }
+opencode-store = { path = "crates/store" }
+opencode-tui = { path = "crates/tui" }
+opencode-ui = { path = "crates/ui" }
+
+# The local opentui-rust checkout on main; see README.md for the native library.
+opentui = { path = "/home/simon/src/opentui-rust/crates/opentui", features = ["static", "tokio", "tree-sitter"] }
+
+# Expected third-party crates, declared once so steps rarely edit manifests. A crate takes one with
+# `name.workspace = true` and adds features with `features = [...]`.
+anyhow = "1"
+base64 = "0.23"
+bytes = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+indexmap = { version = "2", features = ["serde"] }
+jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
+libc = "0.2"
+log = { version = "0.4", features = ["std"] }
+notify = "8"
+percent-encoding = "2"
+qrcode = { version = "0.14", default-features = false }
+rand = "0.10"
+regex = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "http2"] }
+rustix = { version = "1", features = ["fs", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha1 = "0.11"
+similar = "3"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "process", "fs", "net", "signal"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+tokio-util = { version = "0.7", features = ["io", "codec"] }
+unicode-width = "0.2"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+which = "8"
+
+[profile.release]
+debug = "line-tables-only"
