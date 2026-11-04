@@ -57,21 +57,12 @@ impl Data {
         }
     }
 
+    /// Every read goes through `refresh`, which checks the connection before building it. A
+    /// settle timer checks when it fires.
     fn follow(&self, follow: Follow) {
-        // Reads start when their task is built, so check before building it, as `refresh` does
-        // before calling its load. A settle timer checks when it fires.
-        if !self.live() && !matches!(follow, Follow::Settle(..)) {
-            return;
-        }
         match follow {
-            Follow::Session(id) => {
-                let task = self.session_sync(&id, false);
-                self.refresh(task);
-            }
-            Follow::Messages(id) => {
-                let task = self.message_sync(&id);
-                self.refresh(task);
-            }
+            Follow::Session(id) => self.refresh(move |data| data.session_sync(&id, false)),
+            Follow::Messages(id) => self.refresh(move |data| data.message_sync(&id)),
             Follow::Message(session, message) => self.fetch_message(session, message),
             Follow::Renamed(session, title) => self.renamed(session, title),
             Follow::Active(token) => self.rehydrate(token),
@@ -79,14 +70,12 @@ impl Data {
                 self.rehydrate_location();
                 let default = self.read(|state| state.default_location().clone());
                 self.refresh_catalogs(vec![Catalog::Vcs], default);
-                let projects = self.project_sync();
-                self.refresh(projects);
+                self.refresh(|data| data.project_sync());
             }
             Follow::Catalogs(catalogs, location) => self.refresh_catalogs(catalogs, location),
             Follow::Settle(key, catalog, location) => self.settle(key, catalog, location),
             Follow::Websearch(location) => {
-                let task = self.websearch_refresh(Some(&location));
-                self.refresh(task);
+                self.refresh(move |data| data.websearch_refresh(Some(&location)))
             }
         }
     }
@@ -94,8 +83,7 @@ impl Data {
     /// Reconciles session status with `session.active`. Status events received during the read
     /// supersede the snapshot; a snapshot of an older connection is ignored.
     fn rehydrate(&self, token: u64) {
-        let data = self.clone();
-        self.refresh(async move {
+        self.refresh(move |data| async move {
             let result = data
                 .client()
                 .session_active(&RequestOptions::default())
@@ -156,8 +144,7 @@ impl Data {
                     .collect()
             });
             for id in unknown {
-                let task = data.session_sync(&id, false);
-                data.refresh(task);
+                data.refresh(move |data| data.session_sync(&id, false));
             }
             Ok(())
         });
@@ -178,6 +165,14 @@ impl State {
     pub(crate) fn apply_event(&mut self, event: &V2Event) -> Vec<Follow> {
         match event {
             V2Event::ServerConnected(_) => {
+                // Every connection after the first is a reconnect, also one the status watch
+                // coalesced (`resync`, a queue-full drop): what the old stream left cached is
+                // stale, and every view must look again.
+                if self.connected {
+                    self.syncs.invalidate_prefix("");
+                    self.log.everything();
+                }
+                self.connected = true;
                 let token = self.token();
                 self.active_updates = Some((token, Default::default()));
                 return vec![Follow::Active(token), Follow::Rehydrate];
@@ -336,6 +331,13 @@ pub async fn run(
                     continue;
                 }
                 let online = state.borrow_and_update().status == Status::Connected;
+                // F.3 queues the dying stream's last batch before it reports the disconnect.
+                // Apply it while still online, so the invalidation below also covers it.
+                if !online {
+                    while let Ok(batch) = batches.try_recv() {
+                        data.apply(&batch);
+                    }
+                }
                 data.set_online(online);
             }
             batch = batches.recv() => {
@@ -373,8 +375,10 @@ impl Source<V2Event> for Events {
     }
 }
 
-/// Connects the store to its client's event stream. Drop the connection to stop.
+/// Connects the store to its client's event stream on the store's runtime, so the UI thread can
+/// call it without a runtime context. Drop the connection to stop.
 pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle<()>) {
+    let _runtime = data.runtime().enter();
     data.set_online(false);
     let (connection, batches) = events::connect(
         Events {
@@ -382,6 +386,8 @@ pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle
         },
         options,
     );
-    let task = tokio::spawn(run(data.clone(), connection.watch(), batches));
+    let task = data
+        .runtime()
+        .spawn(run(data.clone(), connection.watch(), batches));
     (connection, task)
 }
