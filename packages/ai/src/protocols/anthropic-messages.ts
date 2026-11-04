@@ -11,7 +11,6 @@ import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
   CacheTTL,
-  HttpOptions,
   type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
@@ -839,7 +838,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           content.push(yield* lowerMedia(part, request, breakpoints))
           continue
         }
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
       if (content.length > 0) messages.push({ role: "user", content })
       continue
@@ -897,8 +895,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: AnthropicToolResultBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),
@@ -1535,7 +1531,7 @@ export const transport = <
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
       const requiredBetas = requiredBetaHeaders(input.body)
       if (requiredBetas.length === 0) return http.prepare(input)
-      const headers = Headers.fromInput(input.request.http?.headers)
+      const headers = Headers.fromInput(input.request.headers)
       const existingBetas = (headers["anthropic-beta"] ?? "")
         .split(",")
         .map((item) => item.trim())
@@ -1543,13 +1539,7 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: {
-          ...input.request,
-          http: new HttpOptions({
-            ...input.request.http,
-            headers: { ...headers, "anthropic-beta": [...betas].join(",") },
-          }),
-        },
+        request: { ...input.request, headers: { ...headers, "anthropic-beta": [...betas].join(",") } },
       })
     },
   }

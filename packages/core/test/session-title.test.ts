@@ -217,7 +217,7 @@ it.effect("generates a title from the sole user message and renames the session"
     yield* title.generate(sessionID)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.http?.headers).toEqual({
+    expect(requests[0]?.headers).toEqual({
       "x-opencode-session-id": sessionID,
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,

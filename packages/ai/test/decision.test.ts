@@ -89,7 +89,8 @@ describe("Decision", () => {
         ],
         questions,
         providerOptions: { trace: { enabled: true } },
-        http: { body: { request_metadata: "value" }, headers: { "x-request": "yes" }, query: { trace: "1" } },
+        headers: { "x-request": "yes" },
+        http: { body: { request_metadata: "value" }, query: { trace: "1" } },
       })
 
       expect(response.answers).toEqual(expectedAnswers)

@@ -114,6 +114,18 @@ const pluginRuntimePlugin: BunPlugin = {
     }))
   },
 }
+// Bun drops `export * from "ws"` in this sideEffects-free module, leaving NodeWS.WebSocketServer undefined and
+// failing every WebSocket upgrade in the compiled binary. Bun's built-in ws has no PerMessageDeflate.
+const wsReexportPlugin: BunPlugin = {
+  name: "ws-named-reexports",
+  setup(build) {
+    build.onLoad({ filter: /platform-node-shared[/\\]dist[/\\]NodeWS\.js$/ }, () => ({
+      contents:
+        'export { createWebSocketStream, extension, Receiver, Sender, subprotocol, WebSocket, WebSocketServer } from "ws"',
+      loader: "js",
+    }))
+  },
+}
 
 for (const item of targets) {
   const opencodePty = await resolveOpencodePty({
@@ -166,6 +178,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       parcelWatcherPlugin,
       opencodePtyPlugin,
       pluginRuntimePlugin,
+      wsReexportPlugin,
       simulationGraphPlugin,
       modelsSnapshot,
     ],

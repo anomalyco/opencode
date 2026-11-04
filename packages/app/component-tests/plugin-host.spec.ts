@@ -1,11 +1,24 @@
 import type { Component, Owner } from "solid-js"
 import type { PluginInfo } from "@opencode/client/promise"
-import type { Context, Contract, DialogHandle, Dialogs, Live, SessionRef, SessionScreen } from "@opencode/plugin/gui"
+import type {
+  CodeBlockProps,
+  Context,
+  Contract,
+  DialogHandle,
+  Dialogs,
+  Live,
+  SessionRef,
+  SessionScreen,
+} from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
+import type { mountCodeBlocks } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
+
+/** What the code block cases drive from the page. */
+type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
 
 /** What the scoped-registration case keeps from inside its plugin. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
@@ -303,7 +316,7 @@ story("a plugin's toasts close when it goes away, and a handle closes only its o
   expect(result).toEqual({ kept: true, setups: 2 })
 })
 
-story("ctx.ui renders the app's own components in a plugin's contribution and dialog", async ({ page }) => {
+story("ctx.ui renders the app's components in a contribution, a host menu and a dialog", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountSessionRegion, until, createComponent, createSignal, Slot } = await import(fixture)
 
@@ -322,6 +335,7 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
               const ui = ctx.ui
               const [on, setOn] = createSignal(false)
               const [name, setName] = createSignal("")
+              const [period, setPeriod] = createSignal("day")
 
               const dialog = () =>
                 ctx.dialogs.open((handle) =>
@@ -374,6 +388,64 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
                   createComponent(ui.Keybind, { keys: ["Ctrl", "K"] }),
                   createComponent(ui.Markdown, { text: "# Fixture heading\n\nSome *text*." }),
                   createComponent(ui.Code, { content: "const fence = `\n```\n`", language: "ts" }),
+                  createComponent(ui.SettingsLayout, {
+                    title: "Fixture settings",
+                    description: "Fixture page description",
+                    get children() {
+                      return createComponent(ui.SettingsSection, {
+                        title: "Fixture section",
+                        footer: "Fixture footer",
+                        get children() {
+                          return createComponent(ui.SettingsRow, {
+                            id: "fixture-period",
+                            title: "Period",
+                            description: "How far back to count",
+                            get children() {
+                              return createComponent(ui.Select<"day" | "month">, {
+                                label: "Period",
+                                options: [
+                                  { value: "day", label: "Day" },
+                                  { value: "month", label: "Month" },
+                                ],
+                                get value() {
+                                  return period()
+                                },
+                                onChange: (value: "day" | "month") => {
+                                  setPeriod(value)
+                                  record(`select ${value}`)
+                                },
+                              })
+                            },
+                          })
+                        },
+                      })
+                    },
+                  }),
+                ],
+              })
+
+              ctx.add(Slot, {
+                at: "session.location.menu",
+                render: () => [
+                  createComponent(ui.MenuSeparator, {}),
+                  createComponent(ui.MenuItem, {
+                    label: "Usage",
+                    icon: "status",
+                    keys: ["U"],
+                    onSelect: () => record("usage"),
+                  }),
+                  createComponent(ui.MenuGroup, {
+                    label: "Fixture menu group",
+                    get children() {
+                      return createComponent(ui.MenuSub, {
+                        label: "Open in",
+                        onOpenChange: (open: boolean) => record(`sub ${open}`),
+                        get children() {
+                          return createComponent(ui.MenuItem, { label: "Editor", onSelect: () => record("editor") })
+                        },
+                      })
+                    },
+                  }),
                 ],
               })
             },
@@ -427,6 +499,43 @@ story("ctx.ui renders the app's own components in a plugin's contribution and di
   await expect(dialog.locator('[data-slot="dialog-close-button"]')).toHaveCount(1)
   await dialog.getByRole("button", { name: "Close fixture" }).click()
   await expect(dialog).toHaveCount(0)
+
+  // Settings components render the host's settings markup, and search finds the row by its id.
+  await expect(root.locator(".settings-tab-header h2.settings-tab-title")).toHaveText("Fixture settings")
+  const section = root.getByRole("region", { name: "Fixture section" })
+  await expect(section.locator("h3.settings-section-title")).toHaveText("Fixture section")
+  await expect(section).toContainText("Fixture footer")
+  const row = section.locator('[data-component="settings-list"] > [data-component="settings-row"]')
+  await expect(row).toHaveAttribute("data-action", "fixture-period")
+  await expect(row.locator('[data-slot="settings-row-description"]')).toHaveText("How far back to count")
+
+  const select = row.locator('[data-slot="settings-row-control"] [data-component="select-v2"]')
+  // The trigger is named by the label and the selected choice.
+  await expect(select).toHaveAccessibleName("Period Day")
+  await select.click()
+  await page.getByRole("option", { name: "Month" }).click()
+  await expect(select).toHaveAccessibleName("Period Month")
+
+  // Menu rows render inside the host's menu as its own rows: keyboard items, a group, and a submenu.
+  await root.getByRole("button", { name: "Project menu" }).click()
+  const project = page.getByRole("menu")
+  await expect(project.getByRole("separator")).toHaveCount(1)
+  const usage = project.getByRole("menuitem", { name: "Usage" })
+  await expect(usage).toHaveAttribute("data-component", "menu-v2-item")
+  await expect(usage.locator('use[href="#opencode-v2-icon-status"]')).toHaveCount(1)
+  await expect(usage.locator('[data-component="keybind-v2"]')).toHaveText("U")
+  await usage.click()
+  await expect(project).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Project menu" }).click()
+  await expect(page.getByRole("menu").getByText("Fixture menu group")).toBeVisible()
+  await page.getByRole("menuitem", { name: "Open in" }).hover()
+  await page.getByRole("menu", { name: "Open in" }).getByRole("menuitem", { name: "Editor" }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-ui",
+    /^button;menu;submit acme;select month;usage;sub true;editor;/,
+  )
 })
 
 story(
@@ -1424,6 +1533,169 @@ story("startup enable state does not wait for the manager, and live updates beat
   })
 })
 
+story(
+  "a plugin theme joins the theme picker and leaves it with its plugin, keeping the user's choice",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountThemes, until, Theme } = await import(fixture)
+      const root = document.documentElement
+
+      const variant = {
+        palette: {
+          neutral: "#101418",
+          ink: "#e6edf3",
+          primary: "#009fff",
+          success: "#3fb950",
+          warning: "#d29922",
+          error: "#f85149",
+          info: "#a371f7",
+        },
+      }
+
+      const host = mountThemes({
+        definitions: [
+          {
+            id: "acme",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Theme, {
+                  $schema: "https://opencode.ai/desktop-theme.json",
+                  name: "Midnight",
+                  id: "midnight",
+                  light: variant,
+                  dark: variant,
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => host.status("acme") === "active")
+      const names = host.options().map((option: { name: string }) => option.name)
+      const index = names.indexOf("Midnight")
+      host.select("acme:midnight")
+      await until(() => root.dataset.theme === "acme:midnight")
+
+      host.disable("acme")
+      await until(() => root.dataset.theme === "oc-2")
+
+      const withdrawn = {
+        listed: host.options().some((option: { id: string }) => option.id === "acme:midnight"),
+        selected: host.selected(),
+        stored: localStorage.getItem("opencode-theme-id"),
+      }
+
+      host.enable()
+      await until(() => root.dataset.theme === "acme:midnight")
+      const restored = host.selected()
+      host.unmount()
+
+      return { neighbors: names.slice(index - 1, index + 2), withdrawn, restored }
+    }, fixture)
+
+    expect(result).toEqual({
+      // Alphabetical among the app's themes, not appended after them.
+      neighbors: ["Mercury", "Midnight", "Monokai"],
+      withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
+      restored: "acme:midnight",
+    })
+  },
+)
+
+story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountThemes, until } = await import(fixture)
+    const root = document.documentElement
+    // The last run picked a theme whose plugin is now uninstalled, and cached its colors.
+    localStorage.setItem("opencode-theme-id", "gone:midnight")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#010203;")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#010203;")
+
+    const host = mountThemes({ definitions: [], pending: true })
+    // The window is ready to show on the cached colors while the plugin list is still on its way.
+    await until(() => host.applied() > 0)
+    const waiting = host.selected()
+    // The frame's own provider already shows the default theme; mark the root to see this provider apply it.
+    root.dataset.theme = "frame"
+
+    host.load()
+    await until(() => root.dataset.theme === "oc-2")
+
+    const settled = {
+      selected: host.selected(),
+      stored: localStorage.getItem("opencode-theme-id"),
+      cached: localStorage.getItem("opencode-theme-css-dark") ?? localStorage.getItem("opencode-theme-css-light"),
+    }
+
+    host.unmount()
+
+    return { waiting, settled }
+  }, fixture)
+
+  expect(result).toEqual({
+    waiting: "gone:midnight",
+    settled: { selected: "oc-2", stored: "gone:midnight", cached: null },
+  })
+})
+
+story(
+  "a panel with a width of its own sizes the side region and keeps the width the user drags it to",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountPanelWidths, until, Panel } = await import(fixture)
+
+      const panel = (id: string, width?: "narrow") => ({
+        id: `${id}-plugin`,
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(Panel, {
+              id,
+              region: "side",
+              width,
+              list: (input: { open: readonly string[] }) =>
+                input.open.includes("main") ? [{ id: "main", title: id }] : [],
+              render: () => null,
+            }),
+        }),
+      })
+
+      // The row is 1200px wide: the chat panel and the side region share 1192px beside the 8px gap.
+      const host = mountPanelWidths({
+        definitions: [panel("quota", "narrow"), panel("files")],
+        active: "quota-plugin:main",
+        width: 1200,
+      })
+
+      // The chat panel is on screen at this width, and the divider's handle starts a drag from it.
+      const settle = (width: number) => until(() => host.chat() === width && host.handle() === width)
+
+      // `narrow` leaves the side region its minimum, 320px.
+      await settle(872)
+      host.drag(700)
+      await settle(700)
+      const dragged = { widths: host.widths(), conversation: host.conversation() }
+
+      // A panel without a width keeps the conversation's, and a drag on it changes only that.
+      host.select("files-plugin:main")
+      await settle(600)
+      host.drag(650)
+      await settle(650)
+      const shared = { widths: host.widths(), conversation: host.conversation() }
+
+      host.select("quota-plugin:main")
+      await settle(700)
+      host.unmount()
+
+      return { dragged, shared }
+    }, fixture)
+
+    expect(result).toEqual({
+      dragged: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 600, resized: false } },
+      shared: { widths: { "quota-plugin:quota": 492 }, conversation: { width: 650, resized: true } },
+    })
+  },
+)
+
 story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
@@ -1558,4 +1830,147 @@ story("a composer pill with a menu opens the plugin's content under the host's h
   // The content renders again on the next open.
   await pill.click()
   await expect(page.getByTestId("goal-pause")).toBeVisible()
+})
+
+story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until, CodeBlock, CodeBlockAction } = await import(fixture)
+
+    const host: CodeBlocksHost = mountCodeBlocks({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) => {
+              ctx.add(CodeBlock, {
+                languages: ["chart"],
+                render: (props: CodeBlockProps) => {
+                  const chart = document.createElement("div")
+                  chart.dataset.testid = "chart"
+                  chart.textContent = `${props.language} ${props.code} in ${props.session?.directory}`
+
+                  return chart
+                },
+              })
+              ctx.add(CodeBlock, {
+                languages: ["broken"],
+                render: () => {
+                  throw new Error("chart failed")
+                },
+              })
+              // Declines, so the block keeps its code.
+              ctx.add(CodeBlock, { languages: ["quiet"], render: () => undefined })
+              ctx.add(CodeBlockAction, {
+                id: "run",
+                languages: ["sh"],
+                icon: "terminal",
+                title: "Run in terminal",
+                run: (input: CodeBlockProps) =>
+                  void (document.body.dataset.ran = `${input.code} in ${input.session?.directory}`),
+              })
+            },
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+    // The closing fence has not arrived yet.
+    host.show("```chart\nA,B", true)
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  const blocks = root.locator('[data-component="markdown-code"]')
+  await expect(blocks.locator("pre code")).toHaveText("A,B")
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+
+  // The closing fence arrives while the message still streams.
+  await host.evaluate((host) => host.show("```chart\nA,B\n```\n\nMore", true))
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) =>
+    host.show(
+      [
+        "```chart\nA,B\n```",
+        "```broken\nx\n```",
+        "```quiet\ny\n```",
+        "```sh\necho hi\n```",
+        "```ts\nconst a = 1\n```",
+      ].join("\n\n"),
+    ),
+  )
+
+  await expect(blocks).toHaveCount(5)
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.nth(0).locator("pre")).toBeHidden()
+
+  // A render that throws or declines keeps the code; the failure is the plugin's, which keeps running.
+  for (const index of [1, 2]) {
+    await expect(blocks.nth(index).locator("pre")).toBeVisible()
+    await expect(blocks.nth(index).locator('[data-slot="markdown-code-content"]')).toHaveCount(0)
+  }
+
+  expect(await host.evaluate((host) => ({ failure: host.failure("acme"), status: host.status("acme") }))).toEqual({
+    failure: { phase: "render", error: expect.stringContaining("chart failed") },
+    status: "active",
+  })
+
+  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
+  const shell = blocks.nth(3)
+  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await shell.hover()
+  await shell.getByRole("button", { name: "Run in terminal" }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")
+  await expect(blocks.nth(4).locator("pre code")).toHaveText("const a = 1")
+  await expect(
+    blocks.nth(4).locator('[data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'),
+  ).toHaveCount(0)
+})
+
+story("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until } = await import(fixture)
+    const host: CodeBlocksHost = mountCodeBlocks({ definitions: [] })
+    host.show("```chart\nA,B\n```")
+    await until(() => !!document.querySelector('[data-testid="code-blocks"] [data-markdown-ready] pre code'))
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  await expect(root.locator("pre code")).toHaveText("A,B")
+
+  await host.evaluate(async (host, fixture) => {
+    const { CodeBlock } = await import(fixture)
+
+    host.define([
+      {
+        id: "acme",
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(CodeBlock, {
+              languages: ["chart"],
+              render: () => {
+                const chart = document.createElement("div")
+                chart.dataset.testid = "chart"
+                chart.textContent = "drawn"
+
+                return chart
+              },
+            }),
+        }),
+      },
+    ])
+  }, fixture)
+
+  await expect(root.getByTestId("chart")).toHaveText("drawn")
+  await expect(root.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) => host.define([]))
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+  await expect(root.locator("pre code")).toHaveText("A,B")
 })

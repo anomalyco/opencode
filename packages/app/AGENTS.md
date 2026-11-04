@@ -1,7 +1,7 @@
 ## Priorities
 
 - Prioritise, in this order: stability, simplicity, performance.
-- Before changing session or timeline code, record a production benchmark baseline and compare it after the change.
+- Before changing session or timeline code, benchmark it against `origin/dev` with strobe (`packages/app/perf/README.md`): `strobe bench packages/app/perf/<area>.bench.ts --base origin/dev --head .`.
 
 ## Debugging
 
