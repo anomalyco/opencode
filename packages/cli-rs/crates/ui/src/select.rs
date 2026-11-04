@@ -181,6 +181,9 @@ pub struct SelectAction<T> {
     pub bind: Option<String>,
     pub group: Option<Group>,
     pub hidden: bool,
+    /// Hides the action for some selections, such as a toggle that only applies to some rows. Its binding is off
+    /// while it is hidden, so the key goes on to the select.
+    pub hidden_when: Option<ActionDisabled<T>>,
     pub disabled: Option<ActionDisabled<T>>,
     pub run: ActionRun<T>,
 }
@@ -193,6 +196,7 @@ impl<T> Clone for SelectAction<T> {
             bind: self.bind.clone(),
             group: self.group,
             hidden: self.hidden,
+            hidden_when: self.hidden_when.clone(),
             disabled: self.disabled.clone(),
             run: self.run.clone(),
         }
@@ -212,6 +216,7 @@ impl<T: 'static> SelectAction<T> {
             bind: None,
             group: None,
             hidden: false,
+            hidden_when: None,
             disabled: None,
             run: ActionRun::Selected(Rc::new(run)),
         }
@@ -925,6 +930,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
     }
 
+    fn action_hidden(&self, action: &SelectAction<T>) -> bool {
+        action
+            .hidden_when
+            .as_ref()
+            .is_some_and(|hidden| hidden(self.selected().as_ref()))
+    }
+
     fn action_disabled(&self, action: &SelectAction<T>) -> bool {
         let option = self.selected();
         if matches!(action.run, ActionRun::Selected(_)) && option.is_none() {
@@ -978,6 +990,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             .group("Dialog");
             if let Some(bind) = &action.bind {
                 item = item.bind(Bind::Key(bind.clone()));
+            }
+            if action.hidden_when.is_some() {
+                let (weak, action) = (Rc::downgrade(&self.0), action.clone());
+                item = item.enabled(opentui::keymap::Condition::When(Rc::new(move || {
+                    weak.upgrade()
+                        .is_some_and(|inner| !Select(inner).action_hidden(&action))
+                })));
             }
             commands.push(item);
         }
@@ -1283,7 +1302,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let props = self.props();
         let selected = self.selected();
         let mut items: Vec<(Group, FooterAction)> = Vec::new();
-        for action in props.actions.iter().filter(|action| !action.hidden) {
+        for action in props
+            .actions
+            .iter()
+            .filter(|action| !action.hidden && !self.action_hidden(action))
+        {
             let Some(label) = cx
                 .keymap
                 .shortcut_all(&action.command)

@@ -15,6 +15,7 @@ use opencode_api::client::Client;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved, merge};
 use opencode_parity::{Fixture, compare, fixtures_dir};
+use opencode_plugin::{Definition, Setup};
 use opencode_tui::dialogs::{settings, status, theme_list};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
@@ -311,4 +312,172 @@ fn status_matches_typescript() {
     status::show(&tui);
     wait_for(&app, "No MCP servers");
     assert_dialog(&app, "E.18b/status-empty", "Status");
+}
+
+// Plugins -----------------------------------------------------------------------------------------------------
+
+fn server_plugins() -> Value {
+    json!([
+        {
+            "id": "team.plugins",
+            "source": { "type": "package", "target": "git+ssh://git@github.com/example/team-plugins.git", "version": "dadba13", "outdated": true },
+            "features": { "server": true },
+            "state": { "status": "active" },
+        },
+        {
+            "id": "audit",
+            "source": { "type": "local", "path": format!("{DIRECTORY}/.opencode/plugins/audit.ts") },
+            "features": { "server": true },
+            "state": { "status": "failed", "error": "Cannot find module 'zod' from audit.ts", "ref": "err_audit" },
+        },
+        { "id": "opencode.core", "source": { "type": "builtin" }, "features": { "server": true }, "state": { "status": "active" } },
+        { "id": "theme.pack", "source": { "type": "package", "target": "theme-pack" }, "features": { "tui": true }, "state": { "status": "active" } },
+    ])
+}
+
+/// The plugin list, `check` with the package no longer outdated, and `update`.
+fn plugin_server() -> Answer {
+    Box::new(|method, path, _| match (method, path) {
+        ("GET", "/api/location") => Some((200, location())),
+        ("GET", "/api/plugin") => Some((
+            200,
+            json!({ "location": location(), "data": server_plugins() }),
+        )),
+        ("POST", "/api/plugin/check") => {
+            let mut plugins = server_plugins();
+            plugins[0]["source"]["outdated"] = json!(false);
+            Some((200, json!({ "location": location(), "data": plugins })))
+        }
+        ("POST", "/api/plugin/update") => Some((204, Value::Null)),
+        _ => None,
+    })
+}
+
+/// A TUI plugin besides the built-ins; `mounted` counts its activations.
+fn team_plugin(mounted: Rc<std::cell::Cell<u32>>) -> Definition<Tui> {
+    Definition::new("team.tui", move |setup: &mut Setup<'_, Tui>| {
+        mounted.set(mounted.get() + 1);
+        let _ = setup;
+    })
+}
+
+fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, Rc<std::cell::Cell<u32>>) {
+    let mounted = mount_with(app, info(extra), plugin_server());
+    let activations = Rc::new(std::cell::Cell::new(0));
+    opencode_tui::plugins::host::add(&mounted.tui, team_plugin(activations.clone()));
+    (mounted, activations)
+}
+
+fn active(tui: &Tui, id: &str) -> bool {
+    tui.plugins
+        .entries()
+        .iter()
+        .any(|entry| entry.id == id && entry.status == opencode_plugin::Status::Active)
+}
+
+#[test]
+fn plugin_manager_matches_typescript() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    mounted.tui.keymap.dispatch("plugins.list", None);
+    wait_for(&app, "team.plugins");
+    assert_dialog(&app, "E.18b/plugins", "Plugins");
+    assert_eq!(
+        mounted.requests("/api/plugin"),
+        ["GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp"]
+    );
+
+    app.press("down");
+    assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
+    app.press("down");
+    assert_dialog(&app, "E.18b/plugins-outdated", "Plugins");
+
+    // Enter on the failed server plugin opens its error, with the source path and the reference.
+    app.press("up");
+    app.press("enter");
+    wait_for(&app, "Server plugin error");
+    assert_dialog(&app, "E.18b/plugins-error", "Server plugin error");
+    // Escape goes back to the list on the same row.
+    app.press("escape");
+    wait_for(&app, "view error enter");
+    assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
+
+    let app = TestApp::new(100, 60);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    wait_for(&app, "team.plugins");
+    app.press("ctrl+a");
+    wait_for(&app, "hide internal");
+    assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
+}
+
+#[test]
+fn plugin_manager_toggles_checks_and_updates() {
+    let app = TestApp::new(100, 30);
+    let (mounted, activations) = plugin_manager(&app, json!({}));
+    let tui = &mounted.tui;
+    opencode_tui::dialogs::plugins::show(tui);
+    wait_for(&app, "disable enter");
+    assert_eq!(activations.get(), 1);
+
+    // Enter disables the TUI plugin and enables it again.
+    app.press("enter");
+    wait_for(&app, "enable enter");
+    assert!(!active(tui, "team.tui"));
+    assert!(app.text().contains("inactive"), "{}", app.text());
+    app.press("enter");
+    wait_for(&app, "disable enter");
+    assert!(active(tui, "team.tui"));
+    assert_eq!(activations.get(), 2);
+
+    // ctrl+u updates the outdated package, then reads the list again.
+    app.press("down");
+    app.press("down");
+    wait_for(&app, "update ctrl+u");
+    app.press("ctrl+u");
+    app.wait_until(Duration::from_secs(5), || {
+        mounted.requests("/api/plugin").len() == 3
+    });
+    let update = mounted
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(_, path, _)| path.starts_with("/api/plugin/update"))
+        .map(|(_, _, body)| body.clone());
+    assert_eq!(
+        update,
+        Some(json!({ "targets": ["git+ssh://git@github.com/example/team-plugins.git"] }))
+    );
+
+    // ctrl+r checks for updates and takes the fresh flags.
+    app.press("ctrl+r");
+    wait_for(&app, "dadba13");
+    app.wait_until(Duration::from_secs(5), || {
+        !app.text().contains("update available")
+    });
+    assert!(!app.text().contains("update available"), "{}", app.text());
+    assert_eq!(
+        mounted.requests("/api/plugin"),
+        [
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "POST /api/plugin/update?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+            "POST /api/plugin/check?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
+        ]
+    );
+}
+
+#[test]
+fn a_configured_typescript_plugin_is_listed_as_skipped_with_its_reason() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({ "plugins": ["./broken.ts"] }));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    let screen = wait_for(&app, "skipped, local");
+    assert!(screen.contains("./broken.ts"), "{screen}");
+    // TUI rows sort by label: `./broken.ts` comes before `team.tui`.
+    assert!(screen.contains("view error enter"), "{screen}");
+    app.press("enter");
+    let screen = wait_for(&app, "TUI plugin error");
+    assert!(screen.contains(opencode_plugin::SKIPPED), "{screen}");
 }

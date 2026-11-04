@@ -1,7 +1,7 @@
 //! Error details dialog (E.18b): `packages/tui/src/component/dialog-error-details.tsx`.
 //!
-//! E.17b added [`view`] for the MCP dialog's failed servers. It has no `source` path line yet (TS
-//! `FilePath`); E.18b adds it for the plugin manager.
+//! E.17b added [`view`] for the MCP dialog's failed servers; the plugin manager (E.18b) adds the `source` path
+//! line under the title.
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -16,6 +16,8 @@ use crate::routes::Route;
 /// `DialogErrorDetails` props.
 pub struct Props {
     pub title: String,
+    /// A path or package shown under the title (TS `FilePath`).
+    pub source: Option<String>,
     pub error: String,
     pub context: Option<String>,
     pub diagnostic_ref: Option<String>,
@@ -166,7 +168,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
         .wrap(WrapMode::None)
         .truncate(true);
     let on_back = props.on_back.clone();
-    let head = header(
+    let head = View::new(app).child(&header(
         cx,
         HeaderProps {
             title_view: Some(title.as_any()),
@@ -174,7 +176,18 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             on_close: Some(on_back),
             ..HeaderProps::default()
         },
-    );
+    ));
+    if let Some(source) = &props.source {
+        head.add(
+            &Text::new(
+                app,
+                super::open::truncate_file_path(source, i64::from(width)),
+            )
+            .fg(theme.text.muted)
+            .wrap(WrapMode::None)
+            .truncate(true),
+        );
+    }
     opencode_ui::dialog::layout_view(
         cx,
         &head,
