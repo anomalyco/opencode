@@ -951,6 +951,28 @@ ctx.add(SettingsPage, {
   id as `target`.
 - A settings page has a `render`, so the host keeps it stable. Read its labels and entries from getters.
 
+Render the page with the app's settings components, so it looks like the app's own pages and search can reveal its
+rows:
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- A page of your own renders `SettingsLayout`, a section on a host page (`page`) renders `SettingsSection`, and rows
+  in a host section (`section`) render `SettingsRow`s.
+- A row's `id` is the `SettingEntry.id` that reveals it: search scrolls to the row and highlights it.
+- See [Settings components](#settings-components) for their props.
+
 #### Reference
 
 ```ts
@@ -1000,6 +1022,16 @@ only while it is `true`:
 ctx.add(Slot, {
   at: "session.location.menu",
   render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+The project menu is a host menu: render its rows with `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup`, and `MenuSeparator`,
+so they navigate with the keyboard and close the menu like the host's rows. See [Menu rows](#menu-rows).
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
 })
 ```
 
@@ -1221,6 +1253,120 @@ interface ComposerPillRow {
 }
 
 type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### Code blocks
+
+`CodeBlock` renders the fenced code blocks of the languages you list as your own UI, in place of the highlighted code.
+Use it for content that reads better drawn than as source, such as a ` ```csv ` table or a ` ```latex `
+formula:
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages` are compared with the first word of the fence's info string, lowercased: ` ```CSV title="Q3" `
+  matches `csv`. The host resolves no aliases, so list each name you accept.
+- `render` receives the block's `code`, its `language` and the `session` that shows it. Return `undefined` or `null` to
+  keep the highlighted code, for example when the source does not parse.
+- A render that throws records the error under your plugin, and the block shows its code. Your other contributions
+  keep working.
+- When several plugins list a language, the first contributed renders it. Your renderer also replaces the app's own
+  Mermaid diagram when you list `mermaid`.
+
+#### Streaming
+
+The host renders a block only once its closing fence arrives. While the block streams, and in a message that stopped
+mid-block, the user sees the highlighted code; then your UI replaces it in place. Your render never sees half a block.
+
+#### Where it applies
+
+| Surface                                                        | Code block content |
+| -------------------------------------------------------------- | ------------------ |
+| Timeline: assistant text and tool output                       | Yes                |
+| Side panels on the session screen, e.g. the Markdown preview   | Yes                |
+| `ctx.ui.Markdown` rendered on the session screen               | Yes                |
+| `ctx.ui.Code`, and Markdown inside your own `CodeBlock` render | No                 |
+| Settings pages, dialogs and other surfaces off the screen      | No                 |
+
+#### Layout and performance
+
+- Blocks of languages no plugin lists cost nothing; only a block of a listed language renders your UI, and only while
+  its timeline row is on screen.
+- The block grows and shrinks with your UI. Give asynchronous content a minimum height, so the timeline shifts less
+  when it arrives.
+- The block keeps its Copy button, which copies the source, and your `CodeBlockAction` buttons over its top end corner.
+
+### Code block actions
+
+`CodeBlockAction` adds a button beside the Copy button of the code blocks of the languages you list. `run` receives the
+same block a `CodeBlock` render receives:
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- The button shows once the block's closing fence arrives, so it never acts on half a command.
+- Buttons reveal with Copy on hover or keyboard focus, before it, in ascending `order`.
+- Read `title` from a getter so it follows the locale.
+- A `run` that throws or rejects is logged under your plugin and changes nothing else.
+
+#### Reference
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
 ```
 
 ### Link handlers
@@ -2049,6 +2195,86 @@ ctx.dialogs.open((dialog) => (
   sizes.
 - Escape and a click outside close the dialog. `closable: false` hides the header's close button.
 
+#### Menu rows
+
+`MenuItem`, `MenuSub`, `MenuGroup`, and `MenuSeparator` are rows for a menu the host renders, such as the
+`session.location.menu` slot. They navigate with the keyboard, show the host's muted icons and shortcut chips, and close
+the menu on a pick.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` takes the same fields as an entry of `Menu`'s `items`.
+- `MenuSub` opens its children in a submenu beside the row. `onOpenChange` tells you when, so you can load its rows
+  only while it is open.
+- `MenuGroup` puts rows under a heading, and `MenuSeparator` draws a line between rows.
+- `MenuItem`, `MenuSub`, and `MenuGroup` throw outside a menu: the host records the error and renders nothing of that
+  contribution.
+
+#### Selects
+
+`Select` picks one of a list of choices, as the app's settings rows pick a language. Its value is a string; the type of
+`options` narrows it.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` is the select's accessible name; the selected option's `label` is what it shows.
+- A `value` that no option has shows `placeholder`. Picking the selected choice again does not call `onChange`.
+
+#### Settings components
+
+`SettingsLayout`, `SettingsSection`, and `SettingsRow` render a [settings page](#settings-pages) the way the app renders
+its own: the page header, sections with headings over bordered lists, and rows with a title, a description, and a
+control at the end.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- Use `SettingsLayout` for a page of your own, `SettingsSection` for a section on a host page, and `SettingsRow` alone
+  for rows in a host section. Rows line up with the host's rows in every case.
+- `id` on a row is the `SettingEntry.id` that reveals it. Search that reveals the page's own id highlights the header.
+- `actions` sits at the end of the title row. A section's `footer` sits under its list, outside the border.
+- They take their look from the Settings screen's styles, so render them from a `SettingsPage`.
+
 #### Reference
 
 ```ts
@@ -2058,13 +2284,21 @@ interface Ui {
   IconButton(props: UiIconButtonProps): JSX.Element
   Tooltip(props: UiTooltipProps): JSX.Element
   Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
   Loader(props: UiLoaderProps): JSX.Element
   Dialog(props: UiDialogProps): JSX.Element
   Switch(props: UiSwitchProps): JSX.Element
   TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
   Keybind(props: UiKeybindProps): JSX.Element
   Markdown(props: UiMarkdownProps): JSX.Element
   Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
 }
 
 interface UiIconProps {
@@ -2135,6 +2369,19 @@ interface UiMenuGroup {
   items: UiMenuItem[]
 }
 
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
 interface UiLoaderProps {
   size?: "small" | "normal" | "large"
   class?: string
@@ -2186,6 +2433,43 @@ interface UiCodeProps {
   content: string
   language?: string
   class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
 }
 ```
 

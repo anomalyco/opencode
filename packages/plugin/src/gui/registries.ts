@@ -413,7 +413,8 @@ export interface SettingsPage {
   /** Search metadata, indexed without mounting the page. */
   readonly entries?: readonly SettingEntry[]
   /**
-   * Renders the page, section or rows.
+   * Renders the page, section or rows: `Ui.SettingsLayout` frames a page, `Ui.SettingsSection` a section, and
+   * `Ui.SettingsRow` is one row, each as the app's own settings render them.
    *
    * @param input - `target` is the entry search is revealing.
    */
@@ -684,6 +685,84 @@ export interface ComposerPill {
 }
 
 /**
+ * One complete fenced code block, as a `CodeBlock` render and a `CodeBlockAction` receive it. Do not destructure:
+ * `session` is a getter.
+ */
+export interface CodeBlockProps {
+  /** The source between the fences, without the final line break. */
+  readonly code: string
+  /**
+   * The fence's language: the first word of its info string, lowercased, without characters other than letters, digits
+   * and `_ # + . -`. For ```` ```Mermaid title="Flow" ```` it is `mermaid`; empty for a fence without one.
+   */
+  readonly language: string
+  /**
+   * The routed session of the screen that shows the block; a new object when another session is routed. Undefined for
+   * Markdown outside a session screen, where the host does not offer code block content today.
+   */
+  readonly session?: MountedSession
+}
+
+/**
+ * Renders the fenced code blocks of some languages as your own UI in place of the highlighted code, for example a
+ * diagram for ```` ```mermaid ```` or a table for ```` ```csv ````. Applies to Markdown on the session screen: the
+ * timeline (assistant text and tool output), side panels such as the file viewer's Markdown preview, and `ctx.ui.Markdown`
+ * rendered there. `ctx.ui.Code`, and Markdown your own render shows, keep the plain code, so a render never meets
+ * itself.
+ *
+ * The host renders a block only once its closing fence arrives: while it streams, and in a message that stopped
+ * mid-block, the user sees the highlighted code, then your UI replaces it in place. Blocks of other languages cost
+ * nothing. The block keeps its Copy button and `CodeBlockAction` buttons over the top end corner of your UI, and its
+ * height follows your UI as it grows; reserve the height you know (for example a minimum) so the timeline shifts less
+ * when asynchronous content arrives.
+ */
+export interface CodeBlock {
+  /**
+   * The languages whose blocks you render, compared with `CodeBlockProps.language`, e.g. `["csv", "tsv"]`. The host
+   * resolves no aliases: list each name you accept. When several contributions list a language, the first contributed
+   * renders it.
+   */
+  readonly languages: readonly string[]
+  /**
+   * Renders one block once, under your plugin's context; its own reactivity updates it, also when another session is
+   * routed. Return `undefined` or `null` to keep the highlighted code, e.g. for a source you cannot parse. A render that
+   * throws records the error under your plugin and the block shows its code; the plugin keeps running. The host
+   * renders it again only when the block or the set of contributions changes.
+   *
+   * @param props - The block and its session. Do not destructure.
+   * @returns Your UI for the block, or `undefined` or `null` to keep the code.
+   */
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+/**
+ * A button beside the Copy button of the fenced code blocks of some languages, for example "Run in terminal" for
+ * ```` ```sh ````. It shows where `CodeBlock` content shows, once the block's closing fence arrives, so it never acts on
+ * half a block. Buttons reveal with Copy on hover or focus.
+ */
+export interface CodeBlockAction {
+  /** The action's id, unique within the plugin. */
+  readonly id: string
+  /**
+   * The languages whose blocks show the button, compared with `CodeBlockProps.language`, e.g. `["sh", "bash", "shell"]`.
+   * The host resolves no aliases: list each name you accept.
+   */
+  readonly languages: readonly string[]
+  /** The button's icon. */
+  readonly icon: IconName
+  /** The button's accessible name and tooltip. Read it from a getter so it follows the locale. */
+  readonly title: string
+  /** Buttons list in ascending order, before Copy. Defaults to 0; ties keep contribution order. */
+  readonly order?: number
+  /**
+   * Runs when the user clicks the button. A throw or a rejection is logged under your plugin and changes nothing else.
+   *
+   * @param input - The clicked block and its session. Do not destructure.
+   */
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+/**
  * The seed colors a theme variant generates its scales from. Each is a hex color: `#rgb`, `#rgba`, `#rrggbb` or
  * `#rrggbbaa`.
  */
@@ -799,7 +878,10 @@ export interface SlotMap {
      */
     readonly compact: boolean
   }
-  /** Items in the project/location menu, after its location details. Omitted on loading headers without a screen. */
+  /**
+   * Items in the project/location menu, after its location details. Omitted on loading headers without a screen.
+   * Render rows with `Ui.MenuItem`, `Ui.MenuSub`, `Ui.MenuGroup` and `Ui.MenuSeparator`, so they match the host's.
+   */
   readonly "session.location.menu": {
     /** The menu's owning session screen; always present. */
     readonly screen: SessionScreen
@@ -933,6 +1015,41 @@ export const TitlebarItem = Registry.define<TitlebarItem>("titlebar-item")
  * ```
  */
 export const ComposerPill = Registry.define<ComposerPill>("composer-pill")
+
+/**
+ * The registry of renderers for fenced code blocks, by language.
+ *
+ * @example
+ * ```tsx
+ * ctx.add(CodeBlock, {
+ *   languages: ["csv"],
+ *   render: (props) => {
+ *     const rows = parseCsv(props.code)
+ *
+ *     return rows ? <CsvTable rows={rows} /> : undefined
+ *   },
+ * })
+ * ```
+ */
+export const CodeBlock = Registry.define<CodeBlock>("code-block")
+
+/**
+ * The registry of buttons beside a fenced code block's Copy button, by language.
+ *
+ * @example
+ * ```ts
+ * ctx.add(CodeBlockAction, {
+ *   id: "run",
+ *   languages: ["sh", "bash", "shell"],
+ *   icon: "terminal",
+ *   get title() {
+ *     return ctx.t("run")
+ *   },
+ *   run: (input) => runInTerminal(input.code, input.session),
+ * })
+ * ```
+ */
+export const CodeBlockAction = Registry.define<CodeBlockAction>("code-block-action")
 
 /**
  * The registry of content for the host's slots (`SlotMap`).
