@@ -332,10 +332,10 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    // Submitting keeps following only when already following. A reader scrolled up stays where they are; the
-    // jump-to-latest button takes them down.
+    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
     onResponseSubmit: () => {
-      if (input.timeline.follow.following()) input.timeline.actions.resume()
+      const anchor = input.timeline.follow.anchor()
+      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
     },
     openParent,
     focusPrompt: () => focusPrompt(),
