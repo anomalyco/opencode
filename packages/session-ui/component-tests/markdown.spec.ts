@@ -389,12 +389,13 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect((await artwork(missing)).mask).toContain("data:image/svg+xml")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
+
   // Routing disables the browser cache, so a loaded favicon's CSS artwork requests its URL again here. That includes
   // the story's own example.com link, whose favicon can load before this route exists and its artwork after.
-  const domains = requested
-    .map((url) => new URL(url).searchParams.get("domain"))
-    .filter((domain) => domain !== "example.com")
-  expect(new Set(domains)).toEqual(new Set(["developer.mozilla.org", "broken.example.org"]))
+  const domains = new Set(requested.map((url) => new URL(url).searchParams.get("domain")))
+  domains.delete("example.com")
+
+  expect(domains).toEqual(new Set(["developer.mozilla.org", "broken.example.org"]))
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
