@@ -1164,11 +1164,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
       reasoningDetailsObserved &&
-      !lifecycle.reasoning.has("reasoning-0") &&
+      !Lifecycle.isOpen(lifecycle, "reasoning", "reasoning-0") &&
       (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
     )
       lifecycle = Lifecycle.reasoningStart(lifecycle, events, "reasoning-0", deltaMetadata)
-    const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
+    const reasoningEmitted = state.reasoningEmitted || Lifecycle.isOpen(lifecycle, "reasoning", "reasoning-0")
 
     // Reasoning is one response-wide channel: it stays open alongside text and
     // refusal output so late reasoning deltas and details join the same block,

@@ -949,7 +949,7 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
 
 const onOutputTextDone = (state: ParserState, event: Event, id: string): StepResult => {
   if (state.message?.id === id) {
-    if (state.lifecycle.text.has(id) || event.text === undefined) return [state, NO_EVENTS]
+    if (Lifecycle.isOpen(state.lifecycle, "text", id) || event.text === undefined) return [state, NO_EVENTS]
     return onOutputTextDelta(state, { ...event, delta: event.text }, id)
   }
   const events: LLMEvent[] = []
@@ -1097,7 +1097,9 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
     const phase = messagePhase(item.phase)
     // A new message closes earlier messages, including ones that never streamed.
     const events: LLMEvent[] = []
-    const lifecycle = [...state.lifecycle.text]
+    const lifecycle = state.lifecycle.open
+      .filter((block) => block.kind === "text")
+      .map((block) => block.id)
       .filter((id) => id !== item.id)
       .reduce((lifecycle, id) => {
         const openPhase = state.message?.id === id ? state.message.phase : undefined
@@ -1369,7 +1371,7 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     // An output item's array position is its output index.
     for (const item of (event.response?.output ?? []).map((item, index) => resolveItem(state, item, index))) {
       // Terminal recovery cannot insert a checkpoint before already-emitted content.
-      if (item.type === "compaction" && state.lifecycle.stepStarted && !state.completedCompactions.has(item.id))
+      if (item.type === "compaction" && state.lifecycle.phase === "step" && !state.completedCompactions.has(item.id))
         return yield* ProviderShared.eventError(
           state.id,
           "Cannot recover a compaction checkpoint after output has been emitted",
@@ -1488,7 +1490,7 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
     if (
       event.item?.type === "reasoning" &&
       state.reasoningItems[event.item.id] === undefined &&
-      state.lifecycle.reasoning.size > 0
+      state.lifecycle.open.some((block) => block.kind === "reasoning")
     )
       return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
     return Effect.succeed(
