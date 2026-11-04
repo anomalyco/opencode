@@ -39,6 +39,8 @@ export class Types {
   private readonly referenced = new Map<string, string>()
   private readonly defaultable = new Set<string>()
   private readonly visiting = new Set<string>()
+  // Anonymous objects and unions by shape, so equal shapes (such as every `location` query) share one type.
+  private readonly shapes = new Map<string, string>()
 
   constructor(private readonly references: SchemaRepresentation.References) {}
 
@@ -87,14 +89,23 @@ export class Types {
       case "Never":
         return "()"
       case "Objects":
-        return this.objects(r, this.name(hint), hint)
+        return this.shaped(r, () => this.objects(r, this.name(hint), hint))
       case "Arrays":
         return this.arrays(r, hint)
       case "Union":
-        return this.union(r, hint, undefined)
+        return this.shaped(r, () => this.union(r, hint, undefined))
       default:
         return "serde_json::Value"
     }
+  }
+
+  private shaped(r: R, make: () => string) {
+    const key = JSON.stringify(r, (_, value) => (typeof value === "bigint" ? `${value}n` : value))
+    const existing = this.shapes.get(key)
+    if (existing !== undefined) return existing
+    const type = make()
+    this.shapes.set(key, type)
+    return type
   }
 
   private reference(ref: string): string {
@@ -190,7 +201,7 @@ export class Types {
         ? "()"
         : rest.length === 1
           ? this.type(rest[0], hint)
-          : this.union({ ...(r as SchemaRepresentation.Union), types: rest }, hint, undefined)
+          : this.type({ ...(r as SchemaRepresentation.Union), types: rest }, hint)
     if (optional && nullable) {
       return {
         type: `Option<Option<${inner}>>`,
