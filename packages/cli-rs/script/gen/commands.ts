@@ -1,5 +1,5 @@
 // Dumps the TypeScript CLI command tree (packages/cli/src/commands/commands.ts) to JSON. The Rust test
-// crates/cli/tests/tree.rs compares the clap tree against it: names, aliases, descriptions, arguments, flags.
+// crates/cli/src/tests/tree.rs compares the clap tree against it: names, aliases, descriptions, arguments, flags.
 import { Effect, Exit, Option } from "effect"
 import { GlobalFlag } from "effect/cli"
 import { Commands, PrintLogs } from "../../../cli/src/commands/commands"
