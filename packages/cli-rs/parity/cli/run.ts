@@ -35,6 +35,9 @@ export type CliCase = {
   timeout?: number
   // Rust lacks the command so far: the case runs only with `--sides ts,ts`.
   tsOnly?: boolean
+  // Compare only the first lines of stderr, when what follows names each client's own internals (a JS stack
+  // trace, the output of a different child process). The case says why.
+  stderrLines?: number
 }
 
 export function defineCli(value: CliCase) {
@@ -66,7 +69,10 @@ export async function runCli(side: Side, value: CliCase) {
     exit,
     ...(proc.signalCode ? { signal: proc.signalCode } : {}),
     stdout: normalize(stdout, context),
-    stderr: normalize(stderr, context),
+    stderr: normalize(
+      value.stderrLines === undefined ? stderr : stderr.split("\n").slice(0, value.stderrLines).join("\n"),
+      context,
+    ),
     requests: requestLog(server?.requests ?? [], context),
   }
 }
