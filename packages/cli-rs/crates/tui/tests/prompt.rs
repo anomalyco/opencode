@@ -492,3 +492,113 @@ fn home_prompt_creates_a_session_and_opens_it() {
     assert!(opened, "{:?}", setup.tui.route());
     setup.wait_for("Reply with ok");
 }
+
+/// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
+fn ts_root() -> Option<std::path::PathBuf> {
+    let root = std::env::var_os("OPENCODE_TS_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
+    let present = root.join("node_modules").is_dir()
+        && std::process::Command::new("bun")
+            .arg("--version")
+            .output()
+            .is_ok();
+    if !present {
+        eprintln!(
+            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
+            root.display()
+        );
+    }
+    present.then_some(root)
+}
+
+/// Runs `parity/oracle/E.2-history.ts`: the real `PromptHistoryProvider` on `state`.
+fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
+    use std::io::Write;
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.2-history.ts");
+    let mut child = std::process::Command::new("bun")
+        .arg("--cwd")
+        .arg(root.join("packages/tui"))
+        .args(["--preload", "@opentui/solid/preload"])
+        .arg(script)
+        .arg(root)
+        .arg(state)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(ops.to_string().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
+}
+
+/// P-FILE: the TypeScript TUI reads the history the Rust prompt writes, rewrites it byte for byte,
+/// and the Rust prompt reads what TypeScript appends.
+#[test]
+fn history_file_is_shared_with_typescript() {
+    let Some(root) = ts_root() else { return };
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("first");
+    setup.app.press("return");
+    setup.app.type_text("!ls -la");
+    setup.app.press("return");
+    setup.app.type_text("second \"quoted\" ünïcode");
+    setup.app.press("return");
+    let rust = setup.wait_history(3);
+    let state = setup._home.path().join("state");
+
+    let entry = json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [], "mode": "normal" });
+    let moves = typescript_history(
+        &root,
+        &state,
+        json!([
+            { "move": [-1, ""] },
+            { "move": [-1, "second \"quoted\" ünïcode"] },
+            { "move": [-1, "ls -la"] },
+            { "move": [-1, "first"] },
+            { "append": entry },
+        ]),
+    );
+    assert_eq!(
+        moves,
+        json!(["second \"quoted\" ünïcode", "ls -la", "first", null])
+    );
+    let typescript = std::fs::read_to_string(state.join("prompt-history.jsonl")).unwrap();
+    // TypeScript's load rewrites every entry as it serializes them: the Rust lines survive unchanged.
+    assert_eq!(typescript, format!("{rust}{}\n", entry));
+
+    let home = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(home.path().join("state")).unwrap();
+    std::fs::copy(
+        state.join("prompt-history.jsonl"),
+        home.path().join("state/prompt-history.jsonl"),
+    )
+    .unwrap();
+    let again = Setup::with_home(session_route(), home);
+    again.ready();
+    let loaded = again.app.wait_until(Duration::from_secs(5), || {
+        again.app.press("up");
+        let found = again.textarea().text() == "from typescript";
+        // Until the history loads, Up does nothing; Ctrl+C on an empty prompt would exit.
+        if !found && !again.textarea().text().is_empty() {
+            again.app.press("ctrl+c");
+        }
+        found
+    });
+    assert!(loaded, "{:?}", again.textarea().text());
+    again.app.press("up");
+    assert_eq!(again.textarea().text(), "second \"quoted\" ünïcode");
+}
