@@ -633,10 +633,28 @@ async function captureCardEdges(page: Page, card: Locator) {
   )
 }
 
-test("scrolls the timeline behind the composer region, fading at the card, and keeps its end above the region", async ({
-  page,
-}) => {
+// Without hover the activity pill grows to its 44px touch size, and the tail it floats in grows with it.
+for (const input of [
+  { name: "a pointer", touch: false, viewport: { width: 1400, height: 900 }, pill: 32 },
+  { name: "touch", touch: true, viewport: { width: 390, height: 844 }, pill: 44 },
+]) {
+  test.describe(`with ${input.name}`, () => {
+    test.use({ hasTouch: input.touch, isMobile: input.touch })
+
+    test("scrolls the timeline behind the composer region, fading at the card, and keeps its end above the region", async ({
+      page,
+    }) => {
+      await scrollsBehindComposerRegion(page, input)
+    })
+  })
+}
+
+async function scrollsBehindComposerRegion(
+  page: Page,
+  input: { viewport: { width: number; height: number }; pill: number },
+) {
   await setupTimeline(page, {
+    viewport: input.viewport,
     sessionMessages: [
       ...validateTimelineMessages(historyMessages(18)),
       { id: "msg_9000_user", type: "user", text: "Split the work.", time: { created: 1 } },
@@ -681,7 +699,10 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
       const dock = region.getBoundingClientRect()
       const card = region.querySelector('[data-component="composer"]')!.getBoundingClientRect()
       const pill = region.querySelector('[data-slot="session-activity-chip"]')!.getBoundingClientRect()
-      const hint = viewport.querySelector('[data-component="session-background-hint-row"]')!.getBoundingClientRect()
+      const row = viewport.querySelector('[data-component="session-background-hint-row"]')!
+      const hint = row.getBoundingClientRect()
+      // The live status lane that holds Working and the background hint.
+      const lane = row.parentElement!.getBoundingClientRect()
       const parts = [...viewport.querySelectorAll("[data-timeline-part-id]")]
       const last = parts.find((element) => element.textContent?.includes("The last answer ends"))!
 
@@ -695,13 +716,25 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
         ),
         // The pill floats above the region out of flow, so it never changes the inset the timeline scrolls above.
         floats: pill.bottom <= dock.top,
-        // It floats in the timeline's reserved tail, below the background hint and the last answer.
-        reserved: hint.bottom <= pill.top && last.getBoundingClientRect().bottom <= hint.top,
+        pill: Math.round(pill.height),
+        // It floats in the timeline's reserved tail, a clear gap below the live status lane and the last answer.
+        clearance: Math.round(pill.top - lane.bottom),
+        reserved: lane.top <= hint.top && last.getBoundingClientRect().bottom <= hint.top,
         atEnd: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1,
       }
     })
 
-  const expected = { behind: 0, inset: 0, fade: 0, floats: true, reserved: true, atEnd: true }
+  const expected = {
+    behind: 0,
+    inset: 0,
+    fade: 0,
+    floats: true,
+    pill: input.pill,
+    clearance: 14,
+    reserved: true,
+    atEnd: true,
+  }
+
   await expect.poll(geometry).toEqual(expected)
   const before = (await dock.boundingBox())!.height
 
@@ -715,7 +748,7 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
 
   await expect.poll(async () => (await dock.boundingBox())!.height).toBeGreaterThan(before + 40)
   await expect.poll(geometry).toEqual(expected)
-})
+}
 
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
