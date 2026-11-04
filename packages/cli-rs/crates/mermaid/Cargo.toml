@@ -11,3 +11,14 @@ workspace = true
 
 [dependencies]
 opencode-plugin.workspace = true
+opencode-ui.workspace = true
+opentui.workspace = true
+indexmap.workspace = true
+regex.workspace = true
+unicode-width.workspace = true
+fancy-regex = "0.18"
+html-escape = "0.3"
+unicode-segmentation = "1"
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -30,10 +30,8 @@ impl opencode_plugin::Host for Tui {
     }
 }
 
-/// The built-ins in TS order (`plugin/builtins.ts`). A built-in whose step has not landed has an empty setup;
-/// its step replaces the line with its plugin. The storybook (F14) is excepted (Q17).
+/// The built-ins in TS order (`plugin/builtins.ts`). The storybook (F14) is excepted (Q17).
 pub fn builtins() -> Vec<Definition<Tui>> {
-    let empty = |id: &str| Definition::new(id, |_| {});
     vec![
         super::home_footer::plugin(),
         super::prompt_footer::plugin(),
@@ -46,7 +44,7 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         crate::plugins::notifications::plugin(),
         crate::dialogs::plugins::plugin(),
         super::stats::plugin(),
-        empty("opencode.merman"), // P.3
+        opencode_mermaid::plugin(),
         opencode_latex::plugin(),
         super::diffs::viewer::plugin(),
     ]
