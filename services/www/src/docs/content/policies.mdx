@@ -112,7 +112,8 @@ lists. V1 files still load; see
 ## Tools
 
 `tool.use` statements hard-deny a [permission](/permissions) check. The resource is
-`<action>:<value>`, matched against every resource the tool checks.
+`<action>:<value>`, matched against every resource the tool checks, or
+`mcp:<url>#<tool>` for an [MCP tool](#mcp-tools).
 
 ```jsonc
 {
@@ -128,14 +129,15 @@ A denied check fails with `Blocked by configuration policy` instead of prompting
 applies after agent rules and saved approvals, so it overrides an `ask` and an
 "Allow always" approval alike.
 
-| Pattern                      | Blocks                                      |
-| ---------------------------- | ------------------------------------------- |
-| `shell:*`                    | Every shell command                         |
-| `read:*/.ssh/*`              | Reading SSH material                        |
-| `external_directory:*`       | Any access outside the Location or worktree |
-| `subagent:general`           | Launching one subagent                      |
-| `github_delete_repository:*` | One MCP tool                                |
-| `*`                          | Everything not already denied               |
+| Pattern                                                   | Blocks                                      |
+| --------------------------------------------------------- | ------------------------------------------- |
+| `shell:*`                                                 | Every shell command                         |
+| `read:*/.ssh/*`                                           | Reading SSH material                        |
+| `external_directory:*`                                    | Any access outside the Location or worktree |
+| `subagent:general`                                        | Launching one subagent                      |
+| `mcp:https://api.githubcopilot.com/mcp#delete_repository` | One MCP tool, by its server's URL           |
+| `github_delete_repository:*`                              | One MCP tool, by its server's local name    |
+| `*`                                                       | Everything not already denied               |
 
 A `tool.use` statement with `allow` never grants access. It only lifts an earlier
 broader `deny`, after which the agent's own rules decide.
@@ -150,6 +152,26 @@ broader `deny`, after which the agent's own rules decide.
 ```
 
 `git status` falls back to the agent's `shell` rule; every other command is blocked.
+
+### MCP tools
+
+To target an MCP tool, use `mcp:<url>#<tool>`. The URL part matches the server's URL
+as described in [Match MCP servers by URL](#match-mcp-servers-by-url), and the tool
+part matches the tool's name as the server lists it.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "mcp:https://api.githubcopilot.com/mcp#delete_*", "effect": "deny" },
+  ],
+}
+```
+
+This blocks the GitHub MCP server's `delete_*` tools whatever the server is called in
+local config. Tools with the same names on other servers are not affected.
+
+`<server>_<tool>:*`, such as `github_delete_repository:*`, matches the name local
+config gives the server, so it follows whichever server is configured under that name.
 
 ## Integrations
 
@@ -196,7 +218,7 @@ delivers; its own policies keep applying either way.
 
 | Action       | Resource                                                          |
 | ------------ | ----------------------------------------------------------------- |
-| `mcp.use`    | An [MCP server](/mcp-servers) by its configured name              |
+| `mcp.use`    | An [MCP server](/mcp-servers) by URL or by its configured name    |
 | `skill.use`  | A [skill](/skills) by its ID                                      |
 | `plugin.use` | A [plugin](/plugins) by unversioned package name or absolute path |
 
@@ -204,7 +226,7 @@ delivers; its own policies keep applying either way.
 {
   "policies": [
     { "action": "mcp.use", "resource": "*", "effect": "deny" },
-    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "mcp.use", "resource": "https://api.githubcopilot.com/mcp", "effect": "allow" },
     { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
   ],
 }
@@ -212,6 +234,36 @@ delivers; its own policies keep applying either way.
 
 A denied MCP server or skill is removed, and a denied plugin is not loaded, however
 it was configured.
+
+### Match MCP servers by URL
+
+An `mcp.use` resource that starts with `http://` or `https://` matches a remote
+server's URL. Any other resource matches the server's name, which is whatever local
+config calls it. A project can define its own server named `github`, so use a URL to
+target a specific server.
+
+Local servers have no URL, so only `*` or a name matches them. The example above
+blocks every local server, and every remote server outside
+`https://api.githubcopilot.com/mcp`, whatever its name.
+
+OpenCode normalizes both URLs before comparing them. It lowercases the scheme and
+host, drops default ports, the query, the fragment, and trailing slashes, and decodes
+percent-encoded letters, digits, `-`, `.`, `_`, and `~` in the path.
+
+| Resource                            | Matches                                                  | Does not match                                                   |
+| ----------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `https://api.githubcopilot.com/mcp` | `https://api.githubcopilot.com/mcp/`, `.../mcp/readonly` | `.../mcp-other`, `http://api.githubcopilot.com/mcp`              |
+| `https://mcp.vercel.com`            | Every path on `mcp.vercel.com`                           | `https://mcp.vercel.com.evil.com`, `https://mcp.vercel.com:8443` |
+| `https://*.datadoghq.com/v1/mcp`    | `https://us5.datadoghq.com/v1/mcp`                       | `https://evil.com/.datadoghq.com/v1/mcp`                         |
+| `https://mcp.example.com/*/mcp`     | `https://mcp.example.com/acme/mcp`                       | `https://mcp.example.com/acme/mcp/readonly`                      |
+| `https://*`                         | Every HTTPS server                                       | Plain HTTP servers and local servers                             |
+
+A `*` in the host matches within the host only. A path with `*` must match the whole
+path, and a path without one also matches the paths below it. `?` starts the query in
+a URL, so it is not a wildcard there.
+
+Clients older than 2.2.6 compare every `mcp.use` resource with server names and ignore
+`mcp:` tool statements, so URL statements match nothing there.
 
 ### Upgrading from `integration.use`
 
