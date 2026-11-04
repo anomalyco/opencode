@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod client_mcp;
+pub mod de;
 pub mod error;
 pub mod events;
 pub mod generated;
