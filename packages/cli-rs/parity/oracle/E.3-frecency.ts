@@ -1,4 +1,4 @@
-// P-FILE helper for E.3, driven by crates/tui/tests/complete.rs. Run it from <ts-root>/packages/tui with
+// P-FILE helper for E.3, driven by crates/tui/tests/all/complete.rs. Run it from <ts-root>/packages/tui with
 // OpenTUI's Solid preload, as E.2-history.ts runs.
 //
 //   bun E.3-frecency.ts <ts-root> <state> <cwd>    stdin: [path]; the real FrecencyProvider on <state>

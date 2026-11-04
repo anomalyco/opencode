@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for "Connect an integration" (packages/tui/src/component/dialog-integration.tsx).
-// crates/tui/tests/integrations.rs mounts the Rust TUI over the same responses (`INTEGRATIONS` and `ATTEMPT`
+// crates/tui/tests/all/integrations.rs mounts the Rust TUI over the same responses (`INTEGRATIONS` and `ATTEMPT`
 // below; keep both in step), hides the screen behind the dialog, sends the same keys, and compares the cells.
 // Nothing here connects anything: the fetch handler answers every write.
 import { onMount, type JSX } from "solid-js"

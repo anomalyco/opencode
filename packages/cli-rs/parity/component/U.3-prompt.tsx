@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for DialogPrompt (packages/tui/src/ui/dialog-prompt.tsx): crates/ui/tests/dialogs.rs. With a
+// P-COMP fixtures for DialogPrompt (packages/tui/src/ui/dialog-prompt.tsx): crates/ui/tests/all/dialogs.rs. With a
 // value and an action, empty with its placeholder, and busy.
 import { DialogPrompt } from "../../../tui/src/ui/dialog-prompt"
 import { renderComponent } from "../lib/component"

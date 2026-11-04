@@ -1,4 +1,4 @@
-// P-FILE for the `tabs` and `layout` storage keys (E.12): crates/tui/tests/tabs.rs runs this against the state
+// P-FILE for the `tabs` and `layout` storage keys (E.12): crates/tui/tests/all/tabs.rs runs this against the state
 // directory the Rust TUI writes, through the TS storage (`context/storage.tsx`, the same lock and atomic write) and
 // the TS tab model.
 //

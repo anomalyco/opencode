@@ -1,4 +1,4 @@
-// P-FILE helper for E.4, driven by crates/tui/tests/attach.rs. Run it from <ts-root>/packages/tui with
+// P-FILE helper for E.4, driven by crates/tui/tests/all/attach.rs. Run it from <ts-root>/packages/tui with
 // OpenTUI's Solid preload, as E.2-history.ts runs.
 //
 //   bun E.4-stash.ts <ts-root> <state>    stdin: [op]; the real PromptStashProvider on <state>

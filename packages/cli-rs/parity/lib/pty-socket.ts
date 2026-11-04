@@ -5,7 +5,7 @@
 // The fake is a tiny shell: it attaches as controller at the snapshot's size, replays `replay`, echoes input (a
 // carriage return becomes a line break), and answers a size change with `resized` and a checkpoint of everything it
 // printed. It records the URL, the frames it got, and every message it sent with the step and frame count it was
-// sent at, so crates/tui/tests/app.rs can replay the same exchange to the Rust TUI.
+// sent at, so crates/tui/tests/all/app.rs can replay the same exchange to the Rust TUI.
 
 export type PtyScript = {
   // The snapshot's size, which the server attaches at.

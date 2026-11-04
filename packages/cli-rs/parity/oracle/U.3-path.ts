@@ -1,5 +1,5 @@
 // P-ORACLE for crates/ui/src/path.rs: the TUI's formatPath and abbreviateHome (packages/tui/src/util/path-format.ts)
-// over POSIX and Windows paths. Writes parity/fixtures/U.3/path.json; crates/ui/tests/dialogs.rs expects the same
+// over POSIX and Windows paths. Writes parity/fixtures/U.3/path.json; crates/ui/tests/all/dialogs.rs expects the same
 // strings.
 import { abbreviateHome, formatPath } from "../../../tui/src/util/path-format"
 
