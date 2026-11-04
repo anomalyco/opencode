@@ -2,7 +2,7 @@ export * as Git from "./git.js"
 
 import os from "os"
 import path from "path"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
+import { Cache, Cause, Context, Deferred, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -211,25 +211,6 @@ const layer = Layer.effect(
     const locked = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) =>
       locks.withLock(repository.gitDirectory)(effect)
 
-    const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
-      const dotgit = yield* fs.up({ targets: [".git"], start: input, mode: "first" }).pipe(
-        Effect.map((matches) => matches[0]),
-        Effect.orElseSucceed(() => undefined),
-      )
-      if (!dotgit) return undefined
-
-      const cwd = path.dirname(dotgit)
-      const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
-      const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
-      if (!gitDir || !commonDir) return undefined
-
-      return new Repository({
-        worktree: AbsolutePath.make(topLevel ? resolvePath(cwd, topLevel) : cwd),
-        gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir)),
-        commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir)),
-      })
-    })
-
     const stamp = (target: string) =>
       fs.stat(target).pipe(
         Effect.map((info) =>
@@ -274,6 +255,40 @@ const layer = Layer.effect(
       ]
       const stamps = yield* Effect.forEach([dotGit, ...files], stamp, { concurrency: "unbounded" })
       return [gitDir, commonDir, head, ...files, ...stamps].join("\0")
+    })
+
+    const probe = Effect.fnUntraced(function* (dotgit: string) {
+      const cwd = path.dirname(dotgit)
+      const result = yield* run(cwd, proc, ["rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel"])
+      const [gitDir, commonDir, topLevel] = result.text.split(/\r?\n/)
+      if (!gitDir || !commonDir) return undefined
+
+      return new Repository({
+        worktree: AbsolutePath.make(topLevel ? resolvePath(cwd, topLevel) : cwd),
+        gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir)),
+        commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir)),
+      })
+    })
+
+    // Keyed by `.git` path plus its metadata fingerprint, so every Location boot and snapshot that rediscovers a
+    // repository reuses one probe instead of spawning git (~40ms on Windows). Failed probes are not kept.
+    const discoveries = yield* Cache.make({
+      capacity: 512,
+      lookup: (key: string) => probe(key.slice(0, key.indexOf("\u0000"))),
+    })
+
+    const discover = Effect.fn("Git.repo.discover")(function* (input: AbsolutePath) {
+      const dotgit = yield* fs.up({ targets: [".git"], start: input, mode: "first" }).pipe(
+        Effect.map((matches) => matches[0]),
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (!dotgit) return undefined
+      const metadata = yield* fingerprint(AbsolutePath.make(dotgit))
+      if (!metadata) return yield* probe(dotgit)
+      const key = `${dotgit}\u0000${metadata}`
+      return yield* Cache.get(discoveries, key).pipe(
+        Effect.tap((repository) => (repository ? Effect.void : Cache.invalidate(discoveries, key))),
+      )
     })
 
     const command = (cwd: string, args: string[]) =>
