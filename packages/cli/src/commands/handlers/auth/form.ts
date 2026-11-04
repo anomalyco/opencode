@@ -1,5 +1,5 @@
 import { confirm, log, multiselect, password, select, text, type Option } from "@clack/prompts"
-import { Effect, Schema } from "effect"
+import { Array, Effect, Schema } from "effect"
 import { Form } from "@opencode/schema/form"
 import { formValidateValue } from "@opencode/tui/util/form"
 import type { FormAnswer, FormField, FormFields } from "@opencode/client"
@@ -10,7 +10,7 @@ const custom = Symbol("custom")
 const decodeAnswer = Schema.decodeUnknownOption(Schema.fromJsonString(Form.Value))
 
 export const answerForm = Effect.fn("cli.auth.form")(function* (
-  fields: FormFields | undefined,
+  fields: FormFields | Form.Fields | undefined,
   input: ReadonlyArray<string> = [],
 ) {
   const supplied = new Map<string, string>()
@@ -43,12 +43,12 @@ export const answerForm = Effect.fn("cli.auth.form")(function* (
       const invalid = formValidateValue(field, value)
       if (invalid) return yield* Effect.fail(new Error(`${field.key}: ${invalid}`))
     }
-    if (value !== undefined) answer[field.key] = value
+    if (value !== undefined) answer[field.key] = Array.isArray<Form.Value>(value) ? [...value] : value
   }
   return answer
 })
 
-const suppliedAnswer = Effect.fn("cli.auth.form.answer")(function* (field: FormField, input: string) {
+const suppliedAnswer = Effect.fn("cli.auth.form.answer")(function* (field: FormField | Form.Field, input: string) {
   if (field.type === "external") {
     return yield* Effect.fail(new Error(`External form field requires interactive confirmation: ${field.key}`))
   }
@@ -57,7 +57,7 @@ const suppliedAnswer = Effect.fn("cli.auth.form.answer")(function* (field: FormF
   if (value._tag === "None") {
     return yield* Effect.fail(new Error(`Expected a JSON value for form field: ${field.key}`))
   }
-  return typeof value.value === "object" ? [...value.value] : value.value
+  return Array.isArray<Form.Value>(value.value) ? [...value.value] : value.value
 })
 
 export const secret = Effect.fn("cli.auth.secret")(function* (message: string) {
@@ -65,7 +65,7 @@ export const secret = Effect.fn("cli.auth.secret")(function* (message: string) {
   return yield* prompt<string>(() => password({ message, validate: (value) => (!value ? "Required" : undefined) }))
 })
 
-const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField) {
+const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField | Form.Field) {
   yield* requireInteractive("Authentication form input requires an interactive terminal")
   const message = field.title ?? field.key
   if (field.description) log.info(field.description)
@@ -106,7 +106,7 @@ const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField
       multiselect<string | typeof custom>({
         message,
         options,
-        initialValues: field.default,
+        initialValues: field.default ? [...field.default] : undefined,
         required: field.required || (field.minItems ?? 0) > 0,
       }),
     )
@@ -149,7 +149,7 @@ const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField
   return Number(value)
 })
 
-function active(field: FormField, answer: FormAnswer) {
+function active(field: FormField | Form.Field, answer: FormAnswer) {
   if (field.type === "external" || !field.when) return true
   return field.when.every((condition) => {
     const value = answer[condition.key]
@@ -163,7 +163,10 @@ function required(value: string | undefined) {
   return value ? undefined : "Required"
 }
 
-function validateText(field: Exclude<FormField, { type: "boolean" | "external" | "multiselect" }>, value?: string) {
+function validateText(
+  field: Exclude<FormField | Form.Field, { type: "boolean" | "external" | "multiselect" }>,
+  value?: string,
+) {
   if (!value) return field.required ? "Required" : undefined
   if (field.type === "number" || field.type === "integer") {
     const number = Number(value)

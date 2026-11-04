@@ -1,0 +1,129 @@
+---
+title: "Setup"
+description: "Declare installation questions and save answers as plugin options."
+---
+
+Plugin setup is an **unreleased, experimental prototype**. These commands require a development build with
+`plugin add --setup`; they are not available in released versions yet.
+
+## Declare questions
+
+Point `opencode.experimental.setup` in your `package.json` at a separate JSON file. OpenCode reads that declaration
+when the user installs with `--setup`, then saves the answers as plugin options.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "files": ["src", "setup.json"],
+  "dependencies": { "@opencode/plugin": "latest" },
+  "opencode": {
+    "experimental": {
+      "setup": "./setup.json"
+    }
+  }
+}
+```
+
+The path resolves from the installed package directory, not the user's working directory. Include the declaration
+in your published package's `files` list. It contains JSON data, not executable setup code.
+
+```json title="setup.json"
+{
+  "fields": [
+    { "key": "name", "type": "string", "title": "Your name", "required": true },
+    { "key": "enabled", "type": "boolean", "title": "Enable reviews?", "required": true, "default": true },
+    {
+      "key": "region",
+      "type": "string",
+      "title": "Region",
+      "required": true,
+      "options": [
+        { "value": "eu", "label": "Europe" },
+        { "value": "us", "label": "United States" }
+      ]
+    }
+  ],
+  "secrets": [{ "key": "apiKey", "title": "API key" }]
+}
+```
+
+- `key` is the option name. Keys must be unique across `fields` and `secrets`.
+- `title` labels a question; `description` adds help text. Without a title, the key is shown.
+- Ordinary fields support `string`, `boolean`, `number`, `integer`, and `multiselect`. A string field with `options`
+  becomes a selection list.
+- `required` controls whether an ordinary answer can be skipped. `default` supplies its initial value.
+- Setup requires a server or GUI part. TUI-only packages are not supported yet.
+- The declaration supplies installation questions. It is separate from the runtime `setup(ctx)` function.
+- A missing or invalid declared file stops setup without changing the config.
+
+## Read the answers
+
+Use `ctx.options` in the plugin's runtime setup, just as with manually configured options.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme",
+  setup(ctx) {
+    const enabled = ctx.options.enabled === true
+    const region = ctx.options.region
+    // Register your plugin's behavior using these options.
+  },
+})
+```
+
+Installation without `--setup` does not ask questions or apply the form's defaults. Keep manual configuration working
+and handle missing options in your plugin.
+
+## Handle secrets
+
+Declare credentials in `secrets`, not ordinary text fields. Each secret question asks the user to choose an environment
+variable name or an existing file path. The saved options contain references, never the entered credential value.
+
+```jsonc title="Saved plugin options"
+{
+  "package": "opencode-acme-plugin",
+  "options": {
+    "name": "Alex",
+    "enabled": true,
+    "region": "eu",
+    "apiKey": "{env:ACME_API_KEY}",
+  },
+}
+```
+
+- File references use `{file:/absolute/path/to/secret}`. Relative paths entered during setup resolve from the user's
+  working directory.
+- Secret questions run after ordinary fields, and every declared secret must have a source.
+- Setup does not create secret files, set environment variables, or store credentials in a vault.
+- The OpenCode server must have access to the variable or file. Normal config substitution resolves the reference
+  before the plugin receives `ctx.options`; do not log credential options.
+
+## Test locally
+
+Commit the plugin files, then run from the plugin's own Git repository. A local Git target exercises installation and
+the questionnaire without publishing to npm.
+
+```sh
+opencode plugin add "git+file://$PWD" --setup
+```
+
+To use an OpenCode source checkout instead of an installed executable:
+
+```sh
+bun run --cwd /path/to/opencode dev plugin add "git+file://$PWD" --setup
+```
+
+The installer reads committed files, not uncommitted edits. Completing setup writes to the real global config;
+[remove the plugin](/plugins#manage) after testing if it should not stay installed.
+
+After committing changes to an already installed plugin, refresh its cached package before running setup again:
+
+```sh
+opencode plugin update "git+file://$PWD"
+opencode plugin add "git+file://$PWD" --setup
+```

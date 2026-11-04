@@ -66,7 +66,7 @@ directories explicitly or move it under `.opencode/`.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["./plugins/local"]
+  "plugins": ["./plugins/local"],
 }
 ```
 
@@ -77,7 +77,7 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"],
 }
 ```
 
@@ -117,6 +117,31 @@ opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
 
 Branches, tags, complete commit hashes, and npm's `::path:` repository-subdirectory selectors are supported. Configure
 local paths directly; tarball and npm alias targets are not accepted by `plugin add`.
+
+### Interactive setup
+
+Interactive plugin setup is an **experimental prototype**. In a development build that includes it, pass
+`--setup` to answer the plugin author's installation questions:
+
+```sh
+opencode plugin add opencode-acme-plugin --setup
+```
+
+From an OpenCode source checkout, use `bun run dev` instead of `opencode`:
+
+```sh
+bun run dev plugin add opencode-acme-plugin --setup
+```
+
+- Answers are saved in the plugin's `options` in your global config. Repeating the command with the same package
+  target updates answered keys and preserves unrelated options.
+- Secret questions save an environment-variable or existing-file reference. They do not store a raw credential or
+  set the variable for you; the OpenCode server must be able to access the source.
+- Cancelling leaves the config unchanged, although the package may already be cached.
+- Without `--setup`, installation stays noninteractive. TUI-only packages do not support setup yet.
+- A plugin without setup questions installs normally and reports that it has none.
+
+Plugin authors can [reference a setup declaration from their package metadata](/build/plugins/setup).
 
 ## Reload
 

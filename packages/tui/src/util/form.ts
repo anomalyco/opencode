@@ -1,4 +1,5 @@
 import type { FormField, FormValue } from "@opencode/client"
+import type { Form } from "@opencode/schema/form"
 
 export type FormAnswerField = Exclude<FormField, { type: "external" }>
 
@@ -69,7 +70,10 @@ export function formSelected(field: FormField | undefined, value: FormValue | un
   return 0
 }
 
-export function formValidateValue(field: FormAnswerField, value: FormValue | undefined): string | undefined {
+export function formValidateValue(
+  field: FormAnswerField | Exclude<Form.Field, { type: "external" }>,
+  value: FormValue | Form.Value | undefined,
+): string | undefined {
   if (value === undefined) return field.required ? "Answer required" : undefined
   if (field.required && (value === "" || (Array.isArray(value) && value.length === 0)))
     return field.type === "multiselect" ? "Select at least one option" : "Answer required"
