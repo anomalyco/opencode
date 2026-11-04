@@ -130,9 +130,10 @@ fn home_lists_sessions_and_enter_opens_the_transcript() {
     wait_for(&app, "Write docs");
     assert_eq!(tui.route(), Route::Home);
 
-    // Ctrl+P opens the palette with the shell's commands; Escape closes it.
+    // Ctrl+P opens the palette with the shell's commands; Escape closes it. With sessions loaded,
+    // `session.list` is suggested first.
     app.press("ctrl+p");
-    let palette = wait_for(&app, "Exit the app");
+    let palette = wait_for(&app, "Switch session");
     assert!(palette.contains("Commands"), "{palette}");
     app.press("escape");
     assert!(!tui.dialogs.is_open());
