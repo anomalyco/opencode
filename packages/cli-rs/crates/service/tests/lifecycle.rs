@@ -10,11 +10,14 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use opencode_api::client::RequestOptions;
 use opencode_api::transport::{Reqwest, Transport};
+use opencode_local::paths::Paths;
+use opencode_service::connect::{self, Connection, Env};
 use opencode_service::contender::Delays;
 use opencode_service::ensure::{self, Ensured, Options, Timing};
 use opencode_service::stop::{self, Poll, Pty};
-use opencode_service::{handoff, standalone};
+use opencode_service::{follow, handoff, standalone};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
 
 fn fixture_script() -> PathBuf {
@@ -837,4 +840,140 @@ async fn a_standalone_server_that_exits_early_is_an_error() {
         error.to_string(),
         "Standalone server exited before reporting readiness"
     );
+}
+
+// `connect::resolve` and the managed client (review carbon-4), on private XDG directories: the
+// fixture registers under the channel `oc-x`, and the TS binary only records that a service was
+// started.
+struct Channel {
+    fixture: Fixture,
+    paths: Paths,
+    env: Env,
+}
+
+impl Channel {
+    fn new() -> Self {
+        let mut fixture = Fixture::new();
+        let root = fixture.dir.path().to_owned();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(root.clone().into()),
+            "XDG_STATE_HOME" => Some(root.join("xdg/state").into()),
+            "XDG_CONFIG_HOME" => Some(root.join("xdg/config").into()),
+            "XDG_DATA_HOME" => Some(root.join("xdg/data").into()),
+            "XDG_CACHE_HOME" => Some(root.join("xdg/cache").into()),
+            _ => None,
+        })
+        .unwrap();
+        std::fs::create_dir_all(&paths.state).unwrap();
+        fixture.registration = paths.state.join("service-oc-x.json");
+        let program = root.join("opencode-ts");
+        std::fs::write(
+            &program,
+            format!(
+                "#!/bin/sh\nexec bun {} {} record-start\n",
+                fixture_script().display(),
+                root.join("spawned").display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            &program,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        let env = Env {
+            ts_bin: Some(program.to_string_lossy().into_owned()),
+            ..Env::default()
+        };
+        Self {
+            fixture,
+            paths,
+            env,
+        }
+    }
+
+    async fn resolve(&self) -> Result<Connection, connect::Error> {
+        connect::resolve(
+            transport(),
+            &self.paths,
+            &self.env,
+            &connect::Options::default(),
+        )
+        .await
+    }
+
+    fn spawned(&self) -> bool {
+        self.fixture.dir.path().join("spawned.started").exists()
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_waits_for_a_starting_service_of_another_channel() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let process = channel.fixture.spawn("starting", &[]);
+    channel
+        .fixture
+        .wait_for_file(&channel.fixture.registration)
+        .await;
+    let channel = Arc::new(channel);
+    let resolving = channel.clone();
+    let result = tokio::spawn(async move { resolving.resolve().await });
+    channel
+        .fixture
+        .wait_for_file(&channel.fixture.file(".status-request"))
+        .await;
+    std::fs::write(channel.fixture.file(".release"), "").unwrap();
+    let connection = result.await.unwrap().unwrap();
+    assert_eq!(connection.endpoint.url, channel.fixture.info()["url"]);
+    assert!(!channel.spawned(), "a second service was started");
+    assert!(alive(process));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_reports_a_failed_service_of_another_channel() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let process = channel.fixture.spawn("failed-owner", &[]);
+    channel
+        .fixture
+        .wait_for_file(&channel.fixture.registration)
+        .await;
+    let error = channel.resolve().await.unwrap_err();
+    assert_eq!(error.to_string(), "Background service failed to start");
+    assert!(!channel.spawned(), "a second service was started");
+    assert!(channel.fixture.running(process));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_managed_client_follows_a_restarted_service() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let first = channel.fixture.spawn("compatible", &[]);
+    channel
+        .fixture
+        .wait_for_file(&channel.fixture.registration)
+        .await;
+    let connection = channel.resolve().await.unwrap();
+    let client = follow::client(transport(), &connection, &channel.paths, &channel.env).unwrap();
+    let request = RequestOptions::default();
+    assert_eq!(
+        client.server_info(&request).await.unwrap().pid,
+        i64::from(first)
+    );
+    // A restart: the service is gone, and its successor registers a new port.
+    signal(first, Signal::KILL);
+    channel.fixture.exited(first).await;
+    let second = channel.fixture.spawn("compatible", &[]);
+    until(
+        || channel.fixture.registration.exists() && channel.fixture.pid() == second,
+        "the successor's registration",
+    )
+    .await;
+    assert!(client.server_info(&request).await.is_err());
+    assert_eq!(
+        client.server_info(&request).await.unwrap().pid,
+        i64::from(second)
+    );
+    assert!(!channel.spawned(), "the client started a service");
 }

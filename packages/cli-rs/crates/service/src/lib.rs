@@ -5,6 +5,7 @@ pub mod contender;
 pub mod delegate;
 pub mod discover;
 pub mod ensure;
+pub mod follow;
 pub mod handoff;
 pub mod probe;
 pub mod spawn;

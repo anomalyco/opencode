@@ -26,10 +26,11 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         .thread_name("opencode-tui")
         .build()?;
     let transport = Arc::new(Reqwest::default());
+    let env = Env::from_env();
     let connection = runtime.block_on(connect::resolve(
         transport.clone(),
         &paths,
-        &Env::from_env(),
+        &env,
         &Options {
             server: context.server.server.clone(),
             standalone: context.server.standalone,
@@ -43,7 +44,8 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             }),
         },
     ))?;
-    let client = connection.endpoint.client(transport)?;
+    // A managed service's client follows the service when it restarts on a new port or password.
+    let client = opencode_service::follow::client(transport, &connection, &paths, &env)?;
     let info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
         log::warn!("failed to read cli.json: {error}");
         Default::default()
