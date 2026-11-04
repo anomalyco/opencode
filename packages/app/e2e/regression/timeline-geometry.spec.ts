@@ -734,6 +734,7 @@ async function scrollsBehindComposerRegion(
     reserved: true,
     atEnd: true,
   }
+
   await expect.poll(geometry).toEqual(expected)
   const before = (await dock.boundingBox())!.height
 
