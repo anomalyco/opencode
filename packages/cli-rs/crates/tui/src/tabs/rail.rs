@@ -15,7 +15,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
-use super::strip::{FADE_WIDTH, draw_chars, fade, feedback, indicator, take_width};
+use super::strip::{FADE_WIDTH, draw_chars, fade, feedback, indicator, paint_pulse, take_width};
 use super::{Status, Unread};
 use crate::app::Tui;
 use crate::frame::layout::SESSION_TABS_COMPACT_BREAKPOINT;
@@ -452,7 +452,7 @@ impl Component for Rail {
             let previous = index.checked_sub(1).and_then(|before| items.get(before));
             let previous_status = previous.map_or_else(Status::default, |item| item.status);
             let previous_glows = previous.is_some_and(|item| item.glows);
-            let previous_hue = feedback_of(&previous_status, &theme).unwrap_or(unread_color);
+            let previous_hue = super::strip::feedback(&previous_status, &theme).unwrap_or(unread_color);
             let previous_level = if previous.is_some_and(|item| item.selected)
                 && previous_status.attention.is_some()
             {
@@ -821,20 +821,7 @@ impl Component for Rail {
     }
 }
 
-fn feedback_of(status: &Status, theme: &opencode_ui::theme::Theme) -> Option<Color> {
-    feedback(status, theme)
-}
-
-/// Draws a pulse row: half blocks for an edge, a background otherwise.
-fn paint_cells(
-    painter: &mut Painter<'_>,
-    y: i32,
-    cells: Option<Vec<(Option<char>, Color, Color)>>,
-) {
-    for (x, (glyph, fg, bg)) in cells.into_iter().flatten().enumerate() {
-        match glyph {
-            Some(glyph) => painter.cell(x as i32, y, glyph, Style::new().fg(fg).bg(bg)),
-            None => painter.fill(x as i32, y, 1, 1, bg),
-        }
-    }
+/// Draws a pulse row across the rail.
+fn paint_cells(painter: &mut Painter<'_>, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
+    paint_pulse(painter, 0, y, cells);
 }
