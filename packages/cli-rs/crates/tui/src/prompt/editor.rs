@@ -88,6 +88,8 @@ pub struct Inner {
     bottom: View,
     metadata: Row,
     footer: Text,
+    /// The pointer is over the footer's location (E.20).
+    hovered: Cell<bool>,
     spinner: Spinner,
     pub(crate) mode: Cell<Mode>,
     /// The `PromptInfo` being edited; `text` follows the textarea.
@@ -178,12 +180,15 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let background = prompt_background(&theme);
     let (width, height) = app.size();
     let padding = if width < 44 { 1 } else { 2 };
+    let cursor = crate::features::system_commands::cursor(&tui.config);
     let textarea = Textarea::new(app)
         .set_keymap(Keymap::new())
         .colors(theme.text.base, background)
         .focused_colors(theme.text.base, background)
         .placeholder_color(theme.text.muted)
         .cursor_color(theme.text.base)
+        // `useCursorStyle` (E.20).
+        .cursor_style(cursor.0, cursor.1)
         .min_height(1)
         .max_height((height / 3).max(6))
         .grow(1.0)
@@ -255,6 +260,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         bottom,
         metadata,
         footer,
+        hovered: Cell::new(false),
         spinner,
         mode: Cell::new(Mode::Normal),
         prompt: RefCell::new(empty_prompt()),
@@ -268,6 +274,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         this: this.clone(),
     });
     connect(&inner);
+    connect_location(&inner);
     install_layers(tui, &inner);
     // After the prompt's layers, as TS renders it after them: the newer layer runs first, so its
     // `prompt.clear` wins while the popup shows.
@@ -495,7 +502,12 @@ impl Inner {
                 Some(branch) => format!("{directory}:{branch}"),
                 None => directory,
             };
-            vec![label.fg(theme.text.muted)]
+            let color = if self.hovered.get() {
+                theme.text.base
+            } else {
+                theme.text.muted
+            };
+            vec![label.fg(color)]
         };
         self.footer.set_text(footer);
         self.app.request_redraw();
@@ -604,6 +616,32 @@ fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_submit(move |_, _| {
         if let Some(prompt) = weak.upgrade() {
             super::submit::submit(&prompt, SessionInboxDelivery::Steer);
+        }
+    });
+}
+
+/// The footer's location brightens under the pointer, and a click opens the working directory dialog (E.20,
+/// `useWorkingDirectoryActions`). While a reply runs the footer shows the interrupt hint instead.
+fn connect_location(inner: &Rc<Inner>) {
+    let weak = Rc::downgrade(inner);
+    inner.footer.on_hover(move |_, hovered| {
+        let Some(prompt) = weak.upgrade() else { return };
+        prompt.hovered.set(hovered);
+        if let Some(tui) = prompt.tui.upgrade() {
+            prompt.refresh(&tui);
+        }
+    });
+    let weak = Rc::downgrade(inner);
+    inner.footer.on_mouse(move |_, event| {
+        if event.kind != MouseEventKind::Up(MouseButton::Left) {
+            return;
+        }
+        let Some(prompt) = weak.upgrade() else { return };
+        let Some(tui) = prompt.tui.upgrade() else {
+            return;
+        };
+        if !prompt.running(&tui) {
+            crate::dialogs::working_directory::show(&tui, &prompt.location(&tui).directory);
         }
     });
 }
