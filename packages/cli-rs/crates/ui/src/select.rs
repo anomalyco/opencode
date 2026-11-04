@@ -1059,7 +1059,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 if position == state.selected {
                     return Some(y);
                 }
-                y += 1 + state.filtered[index].details.len() as u32;
+                // TS scrolls by the laid-out row: a title's line breaks add rows, as the queued prompts' do.
+                let option = &state.filtered[index];
+                y += 1 + option.title.matches('\n').count() as u32 + option.details.len() as u32;
                 position += 1;
             }
         }
