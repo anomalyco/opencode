@@ -989,7 +989,7 @@ fn time_ago(now: f64, timestamp: f64) -> String {
 
 /// `truncateFilePath` for POSIX paths: keeps the root and the basename, then as many parents as
 /// fit, with `…` for the rest.
-fn truncate_file_path(value: &str, max: i64) -> String {
+pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
     if max <= 0 {
         return String::new();
     }
