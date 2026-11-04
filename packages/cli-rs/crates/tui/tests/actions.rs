@@ -653,7 +653,7 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
         "",
         "**Session ID:** ses_export_md",
         &created,
-        &markdown.lines().nth(4).unwrap().to_owned(),
+        markdown.lines().nth(4).unwrap(),
         "",
         "---",
         "",
@@ -780,6 +780,22 @@ fn dialogs_match_typescript() {
     kit.wait_for("Rename session");
     kit.only_dialog();
     assert_fixture(&kit.app.render(), "E.10a/rename");
+
+    let kit = Kit::sized(
+        100,
+        30,
+        session("ses_a", json!({})),
+        shifted.clone(),
+        vec![],
+    );
+    kit.ready();
+    opencode_tui::dialogs::export::result(
+        &kit.tui,
+        "/tmp/session-0b6c1f62-3d4e-4b7a-9f1e-2a5c8d7e6f40.md".into(),
+    );
+    kit.wait_for("Session exported");
+    kit.only_dialog();
+    assert_fixture(&kit.app.render(), "E.10a/export-result");
 
     let kit = open("session.export");
     kit.wait_for("Export session");
