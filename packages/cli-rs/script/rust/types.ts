@@ -90,7 +90,8 @@ export class Types {
         return "()"
       case "Objects":
         // An empty object says nothing about its role, so it keeps its own name instead of sharing one.
-        if (r.propertySignatures.length === 0 && r.indexSignatures.length === 0) return this.objects(r, this.name(hint), hint)
+        if (r.propertySignatures.length === 0 && r.indexSignatures.length === 0)
+          return this.objects(r, this.name(hint), hint)
         return this.shaped(r, () => this.objects(r, this.name(hint), hint))
       case "Arrays":
         return this.arrays(r, hint)
@@ -207,7 +208,7 @@ export class Types {
     if (optional && nullable) {
       return {
         type: `Option<Option<${inner}>>`,
-        attrs: ['default', 'deserialize_with = "crate::de::double_option"', 'skip_serializing_if = "Option::is_none"'],
+        attrs: ["default", 'deserialize_with = "crate::de::double_option"', 'skip_serializing_if = "Option::is_none"'],
       }
     }
     if (optional) return { type: `Option<${inner}>`, attrs: ["default", 'skip_serializing_if = "Option::is_none"'] }
@@ -217,7 +218,9 @@ export class Types {
 
   /** A union. `ref` names the reference it defines, if any. */
   union(r: SchemaRepresentation.Union, hint: string, ref: string | undefined): string {
-    const members = flatten(r.types).filter((member) => !["Undefined", "Never", "Void"].includes(this.deref(member)._tag))
+    const members = flatten(r.types).filter(
+      (member) => !["Undefined", "Never", "Void"].includes(this.deref(member)._tag),
+    )
     const nullable = members.some((member) => this.deref(member)._tag === "Null")
     const rest = members.filter((member) => this.deref(member)._tag !== "Null")
     const wrap = (type: string) => (nullable ? `Option<${type}>` : type)
@@ -234,7 +237,8 @@ export class Types {
         return wrap(values.every(Number.isInteger) ? "i64" : "f64")
       return wrap("serde_json::Value")
     }
-    if (resolved.every((member) => ["Literal", "String", "TemplateLiteral"].includes(member._tag))) return wrap("String")
+    if (resolved.every((member) => ["Literal", "String", "TemplateLiteral"].includes(member._tag)))
+      return wrap("String")
     if (resolved.every((member) => member._tag === "Objects")) {
       const tagged = this.discriminator(resolved as Array<Objects>)
       if (tagged !== undefined) return wrap(this.tagged(rest, tagged, ref ?? hint, ref))
@@ -260,7 +264,10 @@ export class Types {
       return this.tagValues(property.type)
     }
     const keys = members[0].propertySignatures.map((p) => String(p.name))
-    const ordered = [...keys.filter((key) => key === "type" || key === "_tag"), ...keys.filter((key) => key !== "type" && key !== "_tag")]
+    const ordered = [
+      ...keys.filter((key) => key === "type" || key === "_tag"),
+      ...keys.filter((key) => key !== "type" && key !== "_tag"),
+    ]
     for (const key of ordered) {
       const values = members.map((member) => tags(member, key))
       if (values.some((value) => value === undefined)) continue
@@ -319,13 +326,18 @@ export class Types {
     const arms = tag.values.flatMap((value, index) => [
       ...(value.exact.length === 0
         ? []
-        : [`            ${value.exact.map((item) => `Some(${JSON.stringify(item)})`).join(" | ")} => crate::de::variant(value).map(Self::${variants[index]}),`]),
+        : [
+            `            ${value.exact.map((item) => `Some(${JSON.stringify(item)})`).join(" | ")} => crate::de::variant(value).map(Self::${variants[index]}),`,
+          ]),
       ...value.prefixes.map(
         (prefix) =>
           `            Some(tag) if tag.starts_with(${JSON.stringify(prefix)}) => crate::de::variant(value).map(Self::${variants[index]}),`,
       ),
     ])
-    const ordered = [...arms.filter((arm) => !arm.includes("starts_with")), ...arms.filter((arm) => arm.includes("starts_with"))]
+    const ordered = [
+      ...arms.filter((arm) => !arm.includes("starts_with")),
+      ...arms.filter((arm) => arm.includes("starts_with")),
+    ]
     const tagMethod =
       kind === "boolean"
         ? ""
@@ -351,9 +363,16 @@ export class Types {
               : typeof resolved.literal === "boolean"
                 ? "Bool"
                 : "Number"
-            : ({ String: "String", TemplateLiteral: "String", Boolean: "Bool", Number: "Number", Arrays: "Array", Objects: "Object" } as Record<string, string>)[
-                resolved._tag
-              ] ?? "Value"
+            : ((
+                {
+                  String: "String",
+                  TemplateLiteral: "String",
+                  Boolean: "Bool",
+                  Number: "Number",
+                  Arrays: "Array",
+                  Objects: "Object",
+                } as Record<string, string>
+              )[resolved._tag] ?? "Value")
       const type =
         resolved._tag === "Literal"
           ? typeof resolved.literal === "string"
