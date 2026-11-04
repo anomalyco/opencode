@@ -219,6 +219,38 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
+  test("caps the image count when a max is given, dropping the oldest first", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = [image("1.png"), image("2.png"), image("3.png"), image("4.png")]
+    const result = boundImages(messages, 2)
+
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
+    expect(result[1]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
+    expect(result[2]).toBe(messages[2])
+    expect(result[3]).toBe(messages[3])
+  })
+
+  test("small images stay untouched without a count cap even when numerous", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = Array.from({ length: 40 }, (_, i) => image(`${i}.png`))
+    expect(boundImages(messages)).toBe(messages)
+  })
+
+  test("the tighter of the byte and count cuts wins", () => {
+    const image = "a".repeat(9 * 1024 * 1024)
+    const messages = Array.from({ length: 8 }, (_, i) =>
+      Message.user({ type: "media", media: Media.base64(image, "image/png"), filename: `${i}.png` }),
+    )
+    const removed = (result: ReturnType<typeof boundImages>) =>
+      result.filter((message) => message.content[0]?.type === "text").length
+    // The byte budget alone drops six of the eight.
+    expect(removed(boundImages(messages))).toBe(6)
+    // A count cap of 1 is tighter and drops seven.
+    expect(removed(boundImages(messages, 1))).toBe(7)
+  })
+
   test("replaces images nested in tool results", () => {
     const image = "a".repeat(13 * 1024 * 1024)
     const result = boundImages([
