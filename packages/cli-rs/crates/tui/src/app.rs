@@ -74,6 +74,8 @@ pub struct Tui {
     pub prompt: crate::prompt::editor::Shared,
     /// The config as settings writes left it (E.18a).
     pub settings: crate::dialogs::settings::Live,
+    /// The model and agent state (E.16).
+    pub local: Rc<crate::dialogs::model::Local>,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -240,12 +242,28 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page);
+    let local_files = deps
+        .roots
+        .as_ref()
+        .map(|roots| crate::dialogs::model::Files {
+            state: roots.paths.state.clone(),
+            storage: files.as_ref().and_then(|files| files.storage.clone()),
+        });
 
     let settings = crate::dialogs::settings::Live::new(
         deps.config.info.clone(),
         files.as_ref().map(|files| files.config.clone()),
     );
     let tui = Rc::new_cyclic(|this| Tui {
+        local: crate::dialogs::model::Local::new(
+            app,
+            deps.client.clone(),
+            deps.directory.clone(),
+            dialogs.clone(),
+            toasts.clone(),
+            local_files,
+            crate::dialogs::model::route_fn(this.clone()),
+        ),
         app: app.clone(),
         data,
         keymap,
@@ -280,6 +298,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     crate::features::system_commands::install(&tui);
     crate::dialogs::settings::install(&tui);
     crate::features::devtools::mount(&tui, &shell);
+    crate::dialogs::model::install(&tui);
     tui.navigate(deps.route);
     if deps.continue_ {
         continue_latest(&tui);
