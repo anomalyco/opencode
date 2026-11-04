@@ -63,10 +63,12 @@ test("exposes every standard HTTP API group", () => {
     "media",
     "schedule",
     "artifacts",
+    "job",
     "migration",
     "usage",
     "config",
   ])
+  expect(Object.keys(client.experimental.job)).toEqual(["list"])
   expect(Object.keys(client.experimental.session)).toEqual([
     "stats",
     "import",
