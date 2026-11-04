@@ -2,7 +2,10 @@
 // of requesting a diff, at the full-screen route's size of 100 columns with no file tree to show.
 import { defineApp } from "../../lib/app"
 
-const here = { directory: "/tmp/opencode/packages/tui", project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
+const here = {
+  directory: "/tmp/opencode/packages/tui",
+  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
+}
 
 export default defineApp({
   config: { experimental: { "new-designs": true }, diffs: { source: "committed" } },

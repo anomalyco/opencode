@@ -23,7 +23,12 @@ pub struct Selected {
 
 /// The hunk `offset` away: from the selected hunk while the view has not moved, else the first hunk below (or last
 /// above) the row under the sticky header.
-pub fn jump(hunks: &[Hunk], selected: Option<Selected>, scroll_top: i64, offset: i64) -> Option<Hunk> {
+pub fn jump(
+    hunks: &[Hunk],
+    selected: Option<Selected>,
+    scroll_top: i64,
+    offset: i64,
+) -> Option<Hunk> {
     let mut hunks = hunks.to_vec();
     hunks.sort_by_key(|hunk| hunk.y);
     let index = selected
@@ -77,10 +82,26 @@ mod tests {
     use super::*;
 
     const HUNKS: [Hunk; 4] = [
-        Hunk { file: 0, hunk: 0, y: 2 },
-        Hunk { file: 2, hunk: 0, y: 30 },
-        Hunk { file: 1, hunk: 0, y: 9 },
-        Hunk { file: 2, hunk: 1, y: 46 },
+        Hunk {
+            file: 0,
+            hunk: 0,
+            y: 2,
+        },
+        Hunk {
+            file: 2,
+            hunk: 0,
+            y: 30,
+        },
+        Hunk {
+            file: 1,
+            hunk: 0,
+            y: 9,
+        },
+        Hunk {
+            file: 2,
+            hunk: 1,
+            y: 46,
+        },
     ];
 
     #[test]
@@ -94,13 +115,38 @@ mod tests {
 
     #[test]
     fn jumps_continue_from_the_selected_hunk_until_the_view_moves() {
-        let selected = Selected { file: 2, hunk: 0, scroll_top: 20 };
+        let selected = Selected {
+            file: 2,
+            hunk: 0,
+            scroll_top: 20,
+        };
         // Clamped at the end, the view sits above the hunk; the selection still steps from it.
-        assert_eq!(jump(&HUNKS, Some(selected), 20, 1).map(|hunk| hunk.y), Some(46));
-        assert_eq!(jump(&HUNKS, Some(selected), 20, -1).map(|hunk| hunk.y), Some(9));
-        assert_eq!(jump(&HUNKS, Some(Selected { file: 0, hunk: 0, scroll_top: 0 }), 0, -1), None);
+        assert_eq!(
+            jump(&HUNKS, Some(selected), 20, 1).map(|hunk| hunk.y),
+            Some(46)
+        );
+        assert_eq!(
+            jump(&HUNKS, Some(selected), 20, -1).map(|hunk| hunk.y),
+            Some(9)
+        );
+        assert_eq!(
+            jump(
+                &HUNKS,
+                Some(Selected {
+                    file: 0,
+                    hunk: 0,
+                    scroll_top: 0
+                }),
+                0,
+                -1
+            ),
+            None
+        );
         // Scrolled since: the position decides again.
-        assert_eq!(jump(&HUNKS, Some(selected), 0, 1).map(|hunk| hunk.y), Some(9));
+        assert_eq!(
+            jump(&HUNKS, Some(selected), 0, 1).map(|hunk| hunk.y),
+            Some(9)
+        );
     }
 
     #[test]
@@ -118,7 +164,14 @@ mod tests {
         assert_eq!(card_top(0, None), 0);
         assert_eq!(card_top(7, None), 8);
         assert_eq!(card_top(7, Some(-3)), 4);
-        assert_eq!(hunk_top(&Hunk { file: 0, hunk: 0, y: 1 }), 0);
+        assert_eq!(
+            hunk_top(&Hunk {
+                file: 0,
+                hunk: 0,
+                y: 1
+            }),
+            0
+        );
         assert_eq!(clamp_scroll(30, 40, 34), 6);
         assert_eq!(clamp_scroll(-1, 10, 34), 0);
     }

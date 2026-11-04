@@ -36,7 +36,16 @@ export async function repoDiff(base: RepoFiles, changes: RepoFiles, context = 12
     git("commit", "-q", "-m", "base")
     await write(changes)
     git("add", "-A")
-    const output = git("diff", "--cached", "--no-color", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", `-U${context}`, "main")
+    const output = git(
+      "diff",
+      "--cached",
+      "--no-color",
+      "--no-renames",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      `-U${context}`,
+      "main",
+    )
     return output
       .split(/^(?=diff --git )/m)
       .filter(Boolean)

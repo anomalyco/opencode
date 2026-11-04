@@ -48,7 +48,10 @@ pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
     let mut tree = Tree::default();
     let mut directories: Vec<(String, usize)> = Vec::new();
     for (file, path) in files.into_iter().enumerate() {
-        let segments: Vec<&str> = path.split('/').filter(|segment| !segment.is_empty()).collect();
+        let segments: Vec<&str> = path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .collect();
         let Some((name, parents)) = segments.split_last() else {
             continue;
         };
@@ -59,7 +62,10 @@ pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
                 directory.push('/');
             }
             directory.push_str(segment);
-            let existing = directories.iter().find(|(path, _)| *path == directory).map(|(_, id)| *id);
+            let existing = directories
+                .iter()
+                .find(|(path, _)| *path == directory)
+                .map(|(_, id)| *id);
             let id = existing.unwrap_or_else(|| {
                 let id = add(&mut tree, segment, parent, depth, Kind::Directory, None);
                 directories.push((directory.clone(), id));
@@ -67,9 +73,17 @@ pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
             });
             parent = Some(id);
         }
-        add(&mut tree, name, parent, parents.len(), Kind::File, Some(file));
+        add(
+            &mut tree,
+            name,
+            parent,
+            parents.len(),
+            Kind::File,
+            Some(file),
+        );
     }
-    let order = |tree: &Tree, ids: &mut Vec<usize>| ids.sort_by(|left, right| compare(tree, *left, *right));
+    let order =
+        |tree: &Tree, ids: &mut Vec<usize>| ids.sort_by(|left, right| compare(tree, *left, *right));
     let mut roots = std::mem::take(&mut tree.roots);
     order(&tree, &mut roots);
     tree.roots = roots;
@@ -81,7 +95,14 @@ pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
     tree
 }
 
-fn add(tree: &mut Tree, name: &str, parent: Option<usize>, depth: usize, kind: Kind, file: Option<usize>) -> usize {
+fn add(
+    tree: &mut Tree,
+    name: &str,
+    parent: Option<usize>,
+    depth: usize,
+    kind: Kind,
+    file: Option<usize>,
+) -> usize {
     let id = tree.nodes.len();
     tree.nodes.push(Node {
         id,
@@ -109,7 +130,13 @@ fn compare(tree: &Tree, left: usize, right: usize) -> std::cmp::Ordering {
 
 /// `flattenFileTree`: every row, or with `expanded` only the rows under expanded directories.
 pub fn flatten(tree: &Tree, expanded: Option<&Expanded>) -> Vec<Row> {
-    fn visit(tree: &Tree, expanded: Option<&Expanded>, id: usize, depth: usize, rows: &mut Vec<Row>) {
+    fn visit(
+        tree: &Tree,
+        expanded: Option<&Expanded>,
+        id: usize,
+        depth: usize,
+        rows: &mut Vec<Row>,
+    ) {
         let node = &tree.nodes[id];
         if node.kind == Kind::File {
             rows.push(Row {
@@ -122,7 +149,9 @@ pub fn flatten(tree: &Tree, expanded: Option<&Expanded>) -> Vec<Row> {
             return;
         }
         let mut chain = vec![node];
-        while let [only] = chain.last().map_or(&[][..], |last| last.children.as_slice())
+        while let [only] = chain
+            .last()
+            .map_or(&[][..], |last| last.children.as_slice())
             && tree.nodes[*only].kind == Kind::Directory
         {
             chain.push(&tree.nodes[*only]);
@@ -167,7 +196,8 @@ pub fn ordered_files(rows: &[Row]) -> Vec<usize> {
 /// `movePatchFileIndex`: `offset` files from `current` in `files`, clamped; the first when `current` is not there.
 pub fn move_file(files: &[usize], current: Option<usize>, offset: i64) -> Option<usize> {
     let first = *files.first()?;
-    let Some(index) = current.and_then(|current| files.iter().position(|&file| file == current)) else {
+    let Some(index) = current.and_then(|current| files.iter().position(|&file| file == current))
+    else {
         return Some(first);
     };
     let last = files.len() as i64 - 1;
@@ -186,7 +216,12 @@ pub fn all_expanded(tree: &Tree) -> Expanded {
 /// `toggleFileTreeDirectory`.
 pub fn toggle(tree: &Tree, expanded: &Expanded, selected: usize) -> Expanded {
     let mut next = expanded.clone();
-    if tree.nodes.get(selected).is_some_and(|node| node.kind == Kind::Directory) && !next.remove(&selected) {
+    if tree
+        .nodes
+        .get(selected)
+        .is_some_and(|node| node.kind == Kind::Directory)
+        && !next.remove(&selected)
+    {
         next.insert(selected);
     }
     next
@@ -247,19 +282,33 @@ pub struct Pane<'a> {
 pub type OnRow = Rc<dyn Fn(&Row)>;
 
 /// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows, and the help footer.
-pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnRow, on_source: Rc<dyn Fn()>) -> View {
+pub fn pane(
+    app: &App,
+    theme: &Theme,
+    input: &Pane<'_>,
+    tree: &Tree,
+    on_row: OnRow,
+    on_source: Rc<dyn Fn()>,
+) -> View {
     let surface = theme.background.raised.base;
     let faint = tint(theme.text.muted, surface, 0.45);
     let rail = tint(theme.text.muted, surface, 0.7);
     let content_width = (i64::from(input.width) - 6).max(0);
-    let reviewed_count = (0..input.files.len()).filter(|&file| (input.reviewed)(file)).count();
+    let reviewed_count = (0..input.files.len())
+        .filter(|&file| (input.reviewed)(file))
+        .count();
 
     let label = Text::new(app, input.source)
         .fg(theme.text.action.secondary.base)
         .bold()
         .wrap(WrapMode::None)
         .shrink(0.0);
-    let switch = View::new(app).row().grow(1.0).basis(Length::Auto).min_width(0).child(&label);
+    let switch = View::new(app)
+        .row()
+        .grow(1.0)
+        .basis(Length::Auto)
+        .min_width(0)
+        .child(&label);
     if let Some(detail) = input.detail {
         switch.add(
             &Text::new(app, format!(" · {detail}"))
@@ -304,7 +353,9 @@ pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnR
             Kind::Directory if input.expanded.contains(&row.id) => "▾ ",
             Kind::Directory => "▸ ",
         };
-        let depth = (row.depth as i64).min(((content_width - 3) / 2).max(0)).max(0);
+        let depth = (row.depth as i64)
+            .min(((content_width - 3) / 2).max(0))
+            .max(0);
         let indent = "│ ".repeat(depth as usize);
         let name_width = content_width - width(&indent) - width(marker);
         let name = match row.kind {
@@ -320,7 +371,10 @@ pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnR
             Some(Status::Deleted) => ("D", theme.diff.text.removed),
             Some(Status::Unknown) => ("?", theme.text.muted),
         };
-        let name = Text::new(app, name).fg(foreground).wrap(WrapMode::None).truncate(true);
+        let name = Text::new(app, name)
+            .fg(foreground)
+            .wrap(WrapMode::None)
+            .truncate(true);
         if selected {
             name.bold();
         }
@@ -340,7 +394,13 @@ pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnR
                     .margin_edge(Edge::Right, 1)
                     .child(&name),
             )
-            .child(&Text::new(app, status).fg(status_color).wrap(WrapMode::None).width(1).shrink(0.0));
+            .child(
+                &Text::new(app, status)
+                    .fg(status_color)
+                    .wrap(WrapMode::None)
+                    .width(1)
+                    .shrink(0.0),
+            );
         let base = surface;
         let hover = theme.background.raised.high;
         let container = View::new(app)
@@ -388,7 +448,16 @@ pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnR
                 .shrink(0.0)
                 .padding_edge(Edge::Top, 1)
                 .padding_edge(Edge::Bottom, 1)
-                .child(&Text::new(app, vec![help.clone().fg(theme.text.base), " help".fg(theme.text.muted)]).wrap(WrapMode::None)),
+                .child(
+                    &Text::new(
+                        app,
+                        vec![
+                            help.clone().fg(theme.text.base),
+                            " help".fg(theme.text.muted),
+                        ],
+                    )
+                    .wrap(WrapMode::None),
+                ),
         );
     }
     View::new(app)
@@ -406,14 +475,22 @@ pub fn pane(app: &App, theme: &Theme, input: &Pane<'_>, tree: &Tree, on_row: OnR
 mod tests {
     use super::*;
 
-    const FILES: [&str; 5] = ["README.md", "src/b.ts", "src/lexer/token.ts", "docs/deep/one/a.md", "src/a.ts"];
+    const FILES: [&str; 5] = [
+        "README.md",
+        "src/b.ts",
+        "src/lexer/token.ts",
+        "docs/deep/one/a.md",
+        "src/a.ts",
+    ];
 
     #[test]
     fn trees_sort_directories_first_and_collapse_chains() {
         let tree = build(FILES);
         let rows = flatten(&tree, None);
-        let rows: Vec<(usize, &str, Option<usize>)> =
-            rows.iter().map(|row| (row.depth, row.name.as_str(), row.file)).collect();
+        let rows: Vec<(usize, &str, Option<usize>)> = rows
+            .iter()
+            .map(|row| (row.depth, row.name.as_str(), row.file))
+            .collect();
         assert_eq!(
             rows,
             [
@@ -433,15 +510,26 @@ mod tests {
     #[test]
     fn collapsed_directories_hide_their_files() {
         let tree = build(FILES);
-        let src = flatten(&tree, None).iter().find(|row| row.name == "src").unwrap().id;
+        let src = flatten(&tree, None)
+            .iter()
+            .find(|row| row.name == "src")
+            .unwrap()
+            .id;
         let expanded = toggle(&tree, &all_expanded(&tree), src);
-        let names: Vec<String> = flatten(&tree, Some(&expanded)).into_iter().map(|row| row.name).collect();
+        let names: Vec<String> = flatten(&tree, Some(&expanded))
+            .into_iter()
+            .map(|row| row.name)
+            .collect();
         assert_eq!(names, ["docs/deep/one", "a.md", "src", "README.md"]);
         assert!(toggle(&tree, &expanded, src).contains(&src));
         let token = parents_of(&tree, 2).unwrap();
         assert!(token.contains(&src) && token.len() == 2);
         // A file is not a directory to toggle.
-        let file = flatten(&tree, None).iter().find(|row| row.file == Some(0)).unwrap().id;
+        let file = flatten(&tree, None)
+            .iter()
+            .find(|row| row.file == Some(0))
+            .unwrap()
+            .id;
         assert_eq!(toggle(&tree, &expanded, file), expanded);
     }
 
@@ -459,7 +547,13 @@ mod tests {
     #[test]
     fn directory_chains_drop_leading_segments() {
         assert_eq!(truncate_directory_chain("a/b/c/d", 20), "a/b/c/d");
-        assert_eq!(truncate_directory_chain("alpha/beta/gamma/delta", 14), "…/gamma/delta");
-        assert_eq!(truncate_directory_chain("alpha/beta/gamma/delta", 8), "…/delta");
+        assert_eq!(
+            truncate_directory_chain("alpha/beta/gamma/delta", 14),
+            "…/gamma/delta"
+        );
+        assert_eq!(
+            truncate_directory_chain("alpha/beta/gamma/delta", 8),
+            "…/delta"
+        );
     }
 }
