@@ -701,7 +701,7 @@ fn tool_markdown(item: &Value) -> String {
     )
 }
 
-/// `new Date(ms).toLocaleString()` in en-US: `3/3/2026, 12:00:00 PM`, with a narrow no-break space before AM/PM.
+/// `new Date(ms).toLocaleString()` in en-US as Bun prints it: `3/3/2026, 12:00:00 PM`.
 fn locale_string(ms: f64) -> String {
     use chrono::TimeZone;
     if !ms.is_finite() {
@@ -710,7 +710,7 @@ fn locale_string(ms: f64) -> String {
     chrono::Local
         .timestamp_millis_opt(ms as i64)
         .single()
-        .map(|date| date.format("%-m/%-d/%Y, %-I:%M:%S\u{202f}%p").to_string())
+        .map(|date| date.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string())
         .unwrap_or_else(|| "Invalid Date".to_owned())
 }
 
@@ -720,4 +720,104 @@ fn toast(tui: &Tui, message: Result<&str, &str>) {
         Err(message) => (Variant::Error, message),
     };
     tui.toasts.show(ToastOptions::new(variant, message));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn messages(values: Value) -> Vec<SessionMessageInfo> {
+        serde_json::from_value(values).unwrap()
+    }
+
+    #[test]
+    fn last_reply_takes_the_text_parts_or_a_completed_summary() {
+        let reply = |content: Value| {
+            json!({
+                "id": "msg_2", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+                "time": { "created": 2 }, "content": content,
+            })
+        };
+        let user = json!({ "id": "msg_1", "type": "user", "text": "Hi", "time": { "created": 1 } });
+        assert_eq!(last_reply(&messages(json!([user]))), None);
+        let texts = reply(json!([
+            { "type": "text", "id": "a", "text": "  One" },
+            { "type": "reasoning", "id": "b", "text": "hidden" },
+            { "type": "text", "id": "c", "text": "Two  " },
+        ]));
+        assert_eq!(
+            last_reply(&messages(json!([user, texts]))).as_deref(),
+            Some("One\nTwo")
+        );
+        let empty = reply(json!([{ "type": "reasoning", "id": "b", "text": "only thoughts" }]));
+        assert_eq!(last_reply(&messages(json!([empty]))).as_deref(), Some(""));
+        // A completed compaction with a summary counts; a blank one is skipped.
+        let compaction = |id: &str, summary: &str| {
+            json!({
+                "id": id, "type": "compaction", "status": "completed", "reason": "manual", "summary": summary,
+                "time": { "created": 3 },
+            })
+        };
+        let list = json!([
+            texts,
+            compaction("msg_3", " Summary "),
+            compaction("msg_4", "  ")
+        ]);
+        assert_eq!(last_reply(&messages(list)).as_deref(), Some("Summary"));
+    }
+
+    #[test]
+    fn tool_markdown_follows_the_state() {
+        let tool = |state: Value| json!({ "type": "tool", "name": "bash", "state": state });
+        assert_eq!(
+            tool_markdown(&tool(
+                json!({ "status": "error", "input": "ls", "error": { "message": "denied" } })
+            )),
+            "**Tool: bash**\n\n**Input:**\n```json\nls\n```\n\ndenied"
+        );
+        assert_eq!(
+            tool_markdown(&tool(json!({ "status": "running", "input": { "a": 1 } }))),
+            "**Tool: bash**\n\n**Input:**\n```json\n{\n  \"a\": 1\n}\n```\n\n"
+        );
+        let files = json!({
+            "status": "completed",
+            "content": [
+                { "type": "text", "text": "out" },
+                { "type": "file", "uri": "file:///a.png", "name": "a.png" },
+                { "type": "file", "uri": "file:///b.png" },
+            ],
+        });
+        assert_eq!(
+            tool_markdown(&tool(files)),
+            "**Tool: bash**\n\n**Input:**\n```json\nundefined\n```\n\nout\na.png\nfile:///b.png"
+        );
+    }
+
+    #[test]
+    fn markdown_without_thinking_or_tools_drops_empty_replies() {
+        let transcript = json!({
+            "info": {
+                "id": "ses_a", "title": "Chat", "projectID": "project", "cost": 0,
+                "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                "time": { "created": 0, "updated": 0 }, "location": { "directory": "/project" },
+            },
+            "messages": [
+                { "type": "user", "text": "Hi" },
+                { "type": "assistant", "content": [{ "type": "reasoning", "text": "hm" }, { "type": "tool", "name": "x", "state": {} }] },
+                { "type": "shell", "command": "ls", "output": { "output": "a\nb" } },
+                { "type": "compaction", "summary": "skipped" },
+            ],
+        });
+        let text = markdown(&transcript, false, false);
+        let body = text.split_once("---\n\n").unwrap().1;
+        assert_eq!(
+            body,
+            "## User\n\nHi\n\n---\n\n## Shell\n\n```\n$ ls\na\nb\n```\n"
+        );
+        assert!(
+            text.starts_with("# Chat\n\n**Session ID:** ses_a\n**Created:** "),
+            "{text}"
+        );
+    }
 }
