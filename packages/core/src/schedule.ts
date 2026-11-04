@@ -1,7 +1,7 @@
 export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
-import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, isNotNull, isNull, lte, min, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, FiberMap, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -30,6 +30,7 @@ import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import type { LocationServices } from "./location-services.js"
 import type { Permission } from "./permission.js"
 import { AbsolutePath } from "./schema.js"
 import { Session } from "./session.js"
@@ -238,13 +239,25 @@ const layer = Layer.effect(
     })
     const settings = (session: SessionSchema.Info) => readSettings.pipe(instances.provide(session))
     // A schedule with no Session has no location of its own, so it follows the global config.
+    const globalLocation = Location.Ref.make({ directory: AbsolutePath.make(global.config) })
     const globalSettings = readSettings.pipe(
-      Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))),
+      Effect.provide(locations.get(globalLocation)),
       // The global config directory always exists; treat a missing one as schedules off.
       Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
         Effect.succeed({ enabled: false, timezone: undefined }),
       ),
     )
+    const settingsFor = (session: SessionSchema.Info | undefined) =>
+      session === undefined ? globalSettings : settings(session)
+    // Runs in the Session's Location, or in the global config Location without a Session. Both this and `globalSettings`
+    // use the same ref, so a session-less schedule adds no second cached entry.
+    const inLocation = <A, E, R>(
+      session: SessionSchema.Info | undefined,
+      effect: Effect.Effect<A, E, R>,
+    ): Effect.Effect<A, E | FileSystem.DirectoryNotFoundError, Exclude<R, LocationServices>> =>
+      session === undefined
+        ? effect.pipe(Effect.provide(locations.get(globalLocation)))
+        : effect.pipe(instances.provide(session))
 
     const find = (id: ID) =>
       db
@@ -313,7 +326,7 @@ const layer = Layer.effect(
      */
     const conclude = Effect.fnUntraced(function* (
       row: Row,
-      session: SessionSchema.Info,
+      session: SessionSchema.Info | undefined,
       due: number,
       now: number,
       late: boolean,
@@ -326,6 +339,8 @@ const layer = Layer.effect(
         yield* update(row, { ...values, last_run: { durationMs: 0, output: "", error: reason } })
         return
       }
+      // Only narrows the type: `step` never fires a session-less prompt row.
+      if (session === undefined) return yield* Effect.die(new Error("A prompt schedule needs a Session"))
       const run = row.run_count + 1
       const id = yield* admitWake(row, session.id, run, due, late, `${row.action.prompt}\n\n[${reason}]`, meta)
       // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
@@ -343,16 +358,18 @@ const layer = Layer.effect(
      */
     const execute = (
       row: Row,
-      session: SessionSchema.Info,
+      session: SessionSchema.Info | undefined,
       action: ShellAction,
       run: number,
       message: string | undefined,
     ) =>
-      ScheduleAction.run(session, action, {
-        OPENCODE_SCHEDULE_ID: row.id,
-        ...(message?.trim() ? { OPENCODE_SCHEDULE_MESSAGE: message } : {}),
-      }).pipe(
-        instances.provide(session),
+      inLocation(
+        session,
+        ScheduleAction.run(session, action, {
+          OPENCODE_SCHEDULE_ID: row.id,
+          ...(message?.trim() ? { OPENCODE_SCHEDULE_MESSAGE: message } : {}),
+        }),
+      ).pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
           const error = Cause.squash(cause)
@@ -377,7 +394,12 @@ const layer = Layer.effect(
         ),
       )
 
-    const fire = Effect.fnUntraced(function* (row: Row, session: SessionSchema.Info, due: number, now: number) {
+    const fire = Effect.fnUntraced(function* (
+      row: Row,
+      session: SessionSchema.Info | undefined,
+      due: number,
+      now: number,
+    ) {
       const late = now - due >= LATE_AFTER
       const next = following(row, now)
 
@@ -385,11 +407,14 @@ const layer = Layer.effect(
       const outcome: ScheduleCheck.Outcome =
         check === null
           ? { ok: true, wake: true, state: null }
-          : yield* ScheduleCheck.evaluate(session, check, row.state ?? null, {
-              messageID: SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`),
-              now,
-              checks: row.checks,
-            }).pipe(instances.provide(session))
+          : yield* inLocation(
+              session,
+              ScheduleCheck.evaluate(session, check, row.state ?? null, {
+                messageID: SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`),
+                now,
+                checks: row.checks,
+              }),
+            )
 
       if (!outcome.ok) {
         const strikes = row.failures + 1
@@ -492,6 +517,8 @@ const layer = Layer.effect(
         return
       }
 
+      // Only narrows the type: `step` never fires a session-less prompt row.
+      if (session === undefined) return yield* Effect.die(new Error("A prompt schedule needs a Session"))
       const id = yield* admitWake(
         row,
         session.id,
@@ -512,16 +539,19 @@ const layer = Layer.effect(
 
     const step = Effect.fnUntraced(function* (row: Row, now: number) {
       const due = row.next_due_at
-      if (due === null || row.session_id === null) return
+      if (due === null) return
+      // A legacy prompt row with no Session has nothing to wake. Leave it due instead of firing or pausing it.
+      if (row.session_id === null && row.action.type === "prompt") return
       if (!(yield* claimLeader(yield* Clock.currentTimeMillis))) return
-      const session = yield* sessions.get(row.session_id)
-      if (!(yield* settings(session)).enabled) {
-        // Reading the flag boots the Session's location, so check again in an hour rather than every tick. The row
-        // keeps its due time, so once the flag is back on it catches up like any missed slot.
+      const session = row.session_id === null ? undefined : yield* sessions.get(row.session_id)
+      if (!(yield* settingsFor(session)).enabled) {
+        // Reading the flag boots the Session's location, or the global one without a Session, so check again in an
+        // hour rather than every tick. The row keeps its due time, so once the flag is back on it catches up like any
+        // missed slot.
         yield* update(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }
-      if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
+      if (session !== undefined && row.last_message_id !== null && (yield* pending(row.last_message_id))) {
         // The wake that followed admission may have been lost; waking again is harmless.
         yield* execution.wake(session.id)
         const next = following(row, now)
@@ -615,6 +645,7 @@ const layer = Layer.effect(
       .selectDistinct({ sessionID: ScheduleTable.session_id })
       .from(ScheduleTable)
       .innerJoin(SessionInboxTable, eq(SessionInboxTable.id, ScheduleTable.last_message_id))
+      .where(isNotNull(ScheduleTable.session_id))
       .all()
       .pipe(
         Effect.orDie,
@@ -726,12 +757,7 @@ const layer = Layer.effect(
       })
     }
 
-    const firstDue = Effect.fnUntraced(function* (
-      when: When,
-      hasCheck: boolean,
-      zone: DateTime.TimeZone,
-      now: number,
-    ) {
+    const firstDue = Effect.fnUntraced(function* (when: When, hasCheck: boolean, zone: DateTime.TimeZone, now: number) {
       switch (when.type) {
         case "in":
           return now + (yield* duration(when.in))
@@ -783,19 +809,23 @@ const layer = Layer.effect(
       create: Effect.fn("Schedule.create")(function* (input) {
         const session = input.sessionID === undefined ? undefined : yield* sessions.get(input.sessionID)
         const missingDirectory = () =>
-          Effect.fail(new InvalidError({ reason: `Session directory does not exist: ${session?.location.directory}` }))
+          Effect.fail(
+            new InvalidError({
+              reason: `Schedule directory does not exist: ${session?.location.directory ?? global.config}`,
+            }),
+          )
         const config =
           session === undefined
             ? yield* globalSettings
             : yield* settings(session).pipe(Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
         if (!config.enabled) return yield* new DisabledError()
-        // Without a Session there is nothing to wake, so prompt actions and gates that need one wait for session-less
-        // firing (2/3).
+        // A schedule with no Session has nothing to wake and no agent to ask, so it only runs shell commands. Shell
+        // gates are allowed; a code check and a prompt both need a Session.
         if (session === undefined) {
           if (input.action.type === "prompt")
             return yield* new InvalidError({ reason: "A schedule without a Session needs a run command" })
-          if (input.if !== undefined || input.until !== undefined)
-            return yield* new InvalidError({ reason: "if and until need a Session" })
+          if (input.if?.type === "code" || input.until?.type === "code")
+            return yield* new InvalidError({ reason: "A code check needs a Session" })
         }
         const check = yield* resolveStoredCheck(input)
         if (input.action.type === "prompt" && input.action.prompt.trim() === "")
@@ -806,8 +836,7 @@ const layer = Layer.effect(
           if (input.action.timeout !== undefined) yield* duration(input.action.timeout)
         }
         const when = input.when ?? (check?.mode === "until" ? DEFAULT_UNTIL_EVERY : undefined)
-        if (when === undefined)
-          return yield* new InvalidError({ reason: "when is required unless until is set" })
+        if (when === undefined) return yield* new InvalidError({ reason: "when is required unless until is set" })
         const zone = yield* resolveZone(when.tz ?? config.timezone)
         const now = yield* Clock.currentTimeMillis
         const due = yield* firstDue(when, check !== undefined, zone, now)
@@ -819,30 +848,35 @@ const layer = Layer.effect(
 
         const scheduleID = ID.create()
         const seeded =
-          session === undefined || check === undefined
+          check === undefined
             ? UNSEEDED
             : yield* Effect.gen(function* () {
-                yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
-                  instances.provide(session),
-                  Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
-                )
+                // Nothing is asked without a Session: the caller that created it is trusted.
+                if (session !== undefined)
+                  yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
+                    instances.provide(session),
+                    Effect.mapError((error) =>
+                      typeof error === "string" ? new InvalidError({ reason: error }) : error,
+                    ),
+                    Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
+                  )
                 const shouldSeed =
                   check.mode === "until" ||
                   check.condition.type === "code" ||
                   (check.condition.type === "shell" && check.condition.changes === true)
                 if (!shouldSeed) return UNSEEDED
-                const init = yield* ScheduleCheck.evaluate(session, check, null, {
-                  messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
-                  now,
-                  checks: 0,
-                }).pipe(
-                  instances.provide(session),
-                  Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
-                )
+                const init = yield* inLocation(
+                  session,
+                  ScheduleCheck.evaluate(session, check, null, {
+                    messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
+                    now,
+                    checks: 0,
+                  }),
+                ).pipe(Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
                 if (!init.ok) {
                   // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
-                  if (init.invalid || check.condition.type === "code") return yield* new InvalidError({ reason: init.error })
+                  if (init.invalid || check.condition.type === "code")
+                    return yield* new InvalidError({ reason: init.error })
                   return UNSEEDED
                 }
                 if (check.mode === "until" && init.wake)
@@ -894,7 +928,7 @@ const layer = Layer.effect(
         if (seeded.matched) {
           // An until check that already matched still runs a shell action; otherwise the schedule would silently do
           // nothing. It runs in the background like any other.
-          if (input.action.type === "shell" && session !== undefined)
+          if (input.action.type === "shell")
             yield* FiberMap.run(running, row.id, execute(row, session, input.action, 1, seeded.message), {
               onlyIfMissing: true,
             })

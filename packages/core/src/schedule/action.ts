@@ -34,9 +34,12 @@ export const authorize = Effect.fnUntraced(function* (
   })
 })
 
-/** Runs one shell action under narrow unattended permissions. Never fails: every outcome becomes a run result. */
+/**
+ * Runs one shell action under narrow unattended permissions. Never fails: every outcome becomes a run result. Without a
+ * Session it runs in the global config Location and asks for nothing, because the caller that created it is trusted.
+ */
 export const run = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   action: ScheduleSchema.ShellAction,
   env: Record<string, string>,
 ) {

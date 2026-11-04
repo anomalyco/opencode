@@ -132,6 +132,7 @@ const testEnvironment = Layer.effect(
     const files = Environment.makeFiles(memory)
     yield* files.mkdir(enabledDirectory).pipe(Effect.orDie)
     yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
+    yield* files.mkdir(globalDirectory).pipe(Effect.orDie)
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
         const script = command._tag === "StandardCommand" ? String(command.args.at(-1) ?? command.command) : "pipeline"
@@ -620,19 +621,17 @@ describe("Schedule", () => {
     }),
   )
 
-  it.effect("creates a session-less shell schedule that does not fire yet", () =>
+  it.effect("fires a session-less shell action in the global location", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
       globalFlag.on = true
-      expect(yield* schedules.enabled()).toBe(true)
+      shellState.stdout = "hi"
 
       const schedule = yield* schedules.create({
         when: { type: "in", in: "5 minutes" },
         action: { type: "shell", run: "echo hi", timeout: "1 minute" },
       })
       expect(schedule.sessionID).toBeUndefined()
-      expect(schedule.action).toEqual({ type: "shell", run: "echo hi", timeout: "1 minute" })
-      expect(iso(schedule.nextDueAt)).toBe("1970-01-01T00:05:00.000Z")
 
       const { db } = yield* Database.Service
       const row = yield* db
@@ -643,15 +642,20 @@ describe("Schedule", () => {
         .pipe(Effect.orDie)
       expect(row?.session_id).toBeNull()
 
-      // Session-less firing arrives in 2/3, so a due row still does nothing.
       yield* TestClock.adjust("5 minutes")
       yield* schedules.tick
-      expect(shellState.runs).toEqual([])
-      expect((yield* schedules.get(schedule.id)).runCount).toBe(0)
+      expect(shellState.runs).toEqual(["echo hi"])
+      expect(shellState.cwds).toEqual([globalDirectory])
+      expect(shellState.envs[0]).toMatchObject({ OPENCODE_SCHEDULE_ID: schedule.id })
+      expect(wakes).toEqual([])
+      expect(yield* pending).toEqual([])
+      const info = yield* schedules.get(schedule.id)
+      expect(info).toMatchObject({ status: "done", runCount: 1, lastOutcome: "fired" })
+      expect(info.lastRun).toMatchObject({ exitCode: 0, output: "hi" })
     }),
   )
 
-  it.effect("refuses a session-less schedule while the global flag is off", () =>
+  it.effect("skips a session-less schedule while the global flag is off", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
       expect(yield* schedules.enabled()).toBe(false)
@@ -663,10 +667,113 @@ describe("Schedule", () => {
           }),
         ),
       ).toMatchObject({ _tag: "Schedule.DisabledError" })
+
+      // A row left over from when the flag was on stays put until the flag comes back.
+      const { db } = yield* Database.Service
+      const id = Schedule.ID.create()
+      yield* db
+        .insert(ScheduleTable)
+        .values({
+          id,
+          session_id: null,
+          action: { type: "shell", run: "echo hi" },
+          when: { type: "in", in: "1 minute" },
+          tz: "UTC",
+          next_due_at: 0,
+          time_created: 0,
+          time_updated: 0,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(shellState.runs).toEqual([])
+      expect(yield* schedules.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
     }),
   )
 
-  it.effect("refuses a session-less prompt, if or until", () =>
+  it.effect("runs a session-less shell action without asking for permissions", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      agentRules = [{ action: "*", resource: "*", effect: "deny" }]
+      // Boots the global location with the deny rules, so an asserted permission would stop the run.
+      expect(yield* schedules.enabled()).toBe(true)
+
+      const schedule = yield* schedules.create({
+        when: { type: "in", in: "1 minute" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(shellState.runs).toEqual(["echo hi"])
+      expect((yield* schedules.get(schedule.id)).lastRun?.error).toBeUndefined()
+    }),
+  )
+
+  it.effect("gates a session-less shell action on a shell if check", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      shellState.stdout = "new reply"
+      const schedule = yield* schedules.create({
+        when: { type: "in", in: "1 minute" },
+        if: { type: "shell", run: "probe" },
+        action: { type: "shell", run: "echo hi" },
+      })
+
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(shellState.runs).toEqual(["probe", "echo hi"])
+      expect(shellState.envs[1]).toMatchObject({
+        OPENCODE_SCHEDULE_ID: schedule.id,
+        OPENCODE_SCHEDULE_MESSAGE: "new reply",
+      })
+      expect(yield* schedules.get(schedule.id)).toMatchObject({ status: "done", runCount: 1 })
+    }),
+  )
+
+  it.effect("runs a session-less until check that already passes at creation", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      const schedule = yield* schedules.create({
+        until: { type: "shell", run: "true" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      yield* schedules.tick
+      expect(shellState.runs).toEqual(["true", "echo hi"])
+      const info = yield* schedules.get(schedule.id)
+      expect(info).toMatchObject({ status: "done" })
+      expect(info.lastRun).toMatchObject({ exitCode: 0 })
+    }),
+  )
+
+  it.effect("pauses a session-less shell action after 3 failed checks without waking anything", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      const schedule = yield* schedules.create({
+        when: { type: "every", every: "1 minute" },
+        if: { type: "shell", run: "check", is: "ok" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      shellState.exitCode = 1
+      shellState.stderr = "nope"
+
+      for (const _ of [1, 2, 3]) {
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+      }
+      const info = yield* schedules.get(schedule.id)
+      expect(info.status).toBe("paused")
+      expect(info.lastRun?.error).toContain("Schedule paused after 3 failed checks")
+      expect(shellState.runs).toEqual(["check", "check", "check"])
+      expect(wakes).toEqual([])
+    }),
+  )
+
+  it.effect("refuses a session-less prompt or code check", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
       globalFlag.on = true
@@ -678,16 +785,45 @@ describe("Schedule", () => {
       expect(
         yield* invalid({
           when: { type: "every", every: "1 minute" },
-          if: { type: "shell", run: "true" },
+          if: { type: "code", code: "true" },
           action: { type: "shell", run: "echo hi" },
         }),
       ).toMatchObject({ _tag: "Schedule.InvalidError" })
-      expect(
-        yield* invalid({
-          until: { type: "shell", run: "true" },
-          action: { type: "shell", run: "echo hi" },
-        }),
-      ).toMatchObject({ _tag: "Schedule.InvalidError" })
+      // A shell gate needs nothing but a Location, so it is accepted.
+      const accepted = yield* schedules.create({
+        when: { type: "every", every: "1 minute" },
+        if: { type: "shell", run: "true" },
+        action: { type: "shell", run: "echo hi" },
+      })
+      expect(accepted.status).toBe("active")
+    }),
+  )
+
+  it.effect("ignores a legacy session-less prompt row", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      globalFlag.on = true
+      const { db } = yield* Database.Service
+      const id = Schedule.ID.create()
+      yield* db
+        .insert(ScheduleTable)
+        .values({
+          id,
+          session_id: null,
+          action: { type: "prompt", prompt: "poll" },
+          when: { type: "in", in: "1 minute" },
+          tz: "UTC",
+          next_due_at: 0,
+          time_created: 0,
+          time_updated: 0,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(wakes).toEqual([])
+      expect(yield* pending).toEqual([])
+      expect(yield* schedules.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: undefined })
     }),
   )
 

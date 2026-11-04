@@ -129,9 +129,12 @@ export const authorize = Effect.fnUntraced(function* (
   }
 })
 
-/** Runs one check in the Session's Location under narrow unattended permissions and a 30s wall-clock cap. */
+/**
+ * Runs one check under narrow unattended permissions and a 30s wall-clock cap, in the Session's Location or the global
+ * config Location without a Session. A code check needs a Session.
+ */
 export const evaluate = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   check: ScheduleSchema.StoredCheck,
   prevState: Schema.Json,
   context: RunContext,
@@ -142,16 +145,19 @@ export const evaluate = Effect.fnUntraced(function* (
       case "shell":
         return yield* runShell(session, check.condition, prevState)
       case "code":
+        // A code check runs with the Session's agent, permissions and tool context, which a session-less schedule lacks.
+        if (session === undefined) return { ok: false as const, error: "A code check needs a Session", invalid: true }
         return yield* runCode(session, check.condition, prevState, context)
     }
   })
   return yield* run.pipe(
     Effect.timeoutOption(TIMEOUT_MS),
-    Effect.map((result): Outcome =>
-      Option.match(result, {
-        onNone: () => ({ ok: false, error: `Check timed out after ${TIMEOUT_MS}ms` }),
-        onSome: (outcome) => outcome,
-      }),
+    Effect.map(
+      (result): Outcome =>
+        Option.match(result, {
+          onNone: () => ({ ok: false, error: `Check timed out after ${TIMEOUT_MS}ms` }),
+          onSome: (outcome) => outcome,
+        }),
     ),
   )
 })
@@ -346,9 +352,7 @@ export const scanShell = Effect.fnUntraced(function* (command: string, cwd?: str
     })
     .pipe(Effect.mapError((error) => error.message))
   const shell = yield* shellSelect.resolve({ priority: "compat" })
-  const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(
-    Effect.mapError((error) => error.message),
-  )
+  const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(Effect.mapError((error) => error.message))
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
     access
       .resolve({ path: FileAccess.resolvePath(target.absolute, directory), kind: "directory" })
@@ -361,11 +365,16 @@ export const scanShell = Effect.fnUntraced(function* (command: string, cwd?: str
   return { shell, cwd: target.absolute, workspaceID: location.workspaceID, external, commands }
 })
 
+/**
+ * Asks once for the shell and `external_directory` permissions a shell check or action needs. Without a Session nothing
+ * is asked: a session-less schedule was created by a trusted API caller. This is the only place that trust rule lives.
+ */
 export const assertShellPermissions = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   scanned: { readonly external: ReadonlyArray<string>; readonly commands: ReadonlyArray<string> },
   metadata?: Record<string, unknown>,
 ) {
+  if (session === undefined) return
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
@@ -407,7 +416,7 @@ const authorizeShell = Effect.fnUntraced(function* (
 })
 
 const runShell = Effect.fnUntraced(function* (
-  session: SessionSchema.Info,
+  session: SessionSchema.Info | undefined,
   condition: ScheduleSchema.ShellCondition,
   prevState: Schema.Json,
 ) {
@@ -461,8 +470,7 @@ const runShell = Effect.fnUntraced(function* (
   const output = executed.success
   const trimmed = output.stdout.trim()
   const message = trimmed === "" ? undefined : trimmed
-  const hasPredicate =
-    condition.is !== undefined || condition.matches !== undefined || condition.changes === true
+  const hasPredicate = condition.is !== undefined || condition.matches !== undefined || condition.changes === true
 
   if (!hasPredicate) {
     return wakeOutcome(output.exitCode === 0, null, message)
