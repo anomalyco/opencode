@@ -92,7 +92,7 @@ fn open(target: &str) -> Result<(), String> {
 }
 
 /// A sink for tests: while a [`Capture`] lives on the UI thread, opens and copies are recorded instead of
-/// reaching the system.
+/// reaching the system, and clipboard reads take the queued `clipboard` outcomes (`Empty` once none are left).
 #[doc(hidden)]
 pub mod testing {
     use super::*;
@@ -105,6 +105,7 @@ pub mod testing {
     pub struct Sink {
         pub opened: RefCell<Vec<String>>,
         pub copied: RefCell<Vec<String>>,
+        pub clipboard: RefCell<std::collections::VecDeque<opentui::native::ClipboardOutcome>>,
     }
 
     /// Records until dropped.

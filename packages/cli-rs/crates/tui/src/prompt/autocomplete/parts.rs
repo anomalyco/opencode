@@ -1,9 +1,11 @@
 //! Mentions as prompt parts: each `@file`, `@agent`, and `@skill` in the text is an atomic extmark,
 //! highlighted and deleted as one unit, tied to its entry in the `PromptInfo`'s `files`, `agents`, or
-//! `skills` (`component/prompt/index.tsx:765-880`, `insertPart` in `autocomplete.tsx`).
+//! `skills` (`component/prompt/index.tsx:765-880`, `insertPart` in `autocomplete.tsx`). Compact pastes
+//! (`pasted`) and pasted attachments (E.4) are parts on the same marks.
 //!
-//! The `PromptInfo` keeps each part's `mention` (`start`, `end`, `text`). Every edit moves the marks;
-//! [`sync`] then copies their ranges into the parts and drops the parts whose marks went.
+//! The `PromptInfo` keeps each part's `mention` (`start`, `end`, `text`), or a paste's `source`. Every
+//! edit moves the marks; [`sync`] then copies their ranges into the parts and drops the parts whose
+//! marks went.
 
 use std::cell::RefCell;
 
@@ -24,16 +26,18 @@ pub enum Kind {
     File,
     Agent,
     Skill,
+    Pasted,
 }
 
 impl Kind {
-    const ALL: [Kind; 3] = [Kind::File, Kind::Agent, Kind::Skill];
+    const ALL: [Kind; 4] = [Kind::File, Kind::Agent, Kind::Skill, Kind::Pasted];
 
-    fn key(self) -> &'static str {
+    pub(crate) fn key(self) -> &'static str {
         match self {
             Kind::File => "files",
             Kind::Agent => "agents",
             Kind::Skill => "skills",
+            Kind::Pasted => "pasted",
         }
     }
 
@@ -42,6 +46,15 @@ impl Kind {
             Kind::File => "extmark.file",
             Kind::Agent => "extmark.agent",
             Kind::Skill => "extmark.skill",
+            Kind::Pasted => "extmark.paste",
+        }
+    }
+
+    /// Where a part keeps its range: a paste's `source`, everything else's `mention`.
+    fn range(self) -> &'static str {
+        match self {
+            Kind::Pasted => "source",
+            _ => "mention",
         }
     }
 }
@@ -53,6 +66,20 @@ pub struct Parts(RefCell<Vec<(ExtmarkId, Kind, usize)>>);
 impl Parts {
     pub fn clear(&self) {
         self.0.borrow_mut().clear();
+    }
+
+    /// Ties `mark` to entry `index` of `kind`'s list.
+    pub fn track(&self, mark: ExtmarkId, kind: Kind, index: usize) {
+        self.0.borrow_mut().push((mark, kind, index));
+    }
+
+    /// The part `mark` stands for.
+    pub fn get(&self, mark: ExtmarkId) -> Option<(Kind, usize)> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|(id, _, _)| *id == mark)
+            .map(|&(_, kind, index)| (kind, index))
     }
 }
 
@@ -141,7 +168,7 @@ pub fn restore(prompt: &Inner) {
             .cloned()
             .unwrap_or_default();
         for (index, part) in list.iter().enumerate() {
-            let mention = &part["mention"];
+            let mention = &part[kind.range()];
             if mention["text"].as_str().is_none_or(str::is_empty) {
                 continue;
             }
@@ -162,7 +189,7 @@ pub fn sync(prompt: &Inner) {
     marks.sort_by_key(|mark| mark.id);
     let mapped = prompt.parts.0.borrow().clone();
     let mut info = prompt.prompt.borrow_mut();
-    let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 3] = Default::default();
+    let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 4] = Default::default();
     for mark in &marks {
         let Some(&(_, kind, index)) = mapped.iter().find(|(id, _, _)| *id == mark.id) else {
             continue;
@@ -170,16 +197,16 @@ pub fn sync(prompt: &Inner) {
         let Some(mut part) = info[kind.key()].get(index).cloned() else {
             continue;
         };
-        if !part.get("mention").is_some_and(Value::is_object) {
+        if !part.get(kind.range()).is_some_and(Value::is_object) {
             continue;
         }
-        part["mention"]["start"] = json!(mark.start);
-        part["mention"]["end"] = json!(mark.end);
+        part[kind.range()]["start"] = json!(mark.start);
+        part[kind.range()]["end"] = json!(mark.end);
         lists[kind as usize].push((Some(mark.id), part));
     }
     // `preserveMentionlessPromptAttachments`: mentionless files keep their places, and mentioned
     // ones are filled in order from the marks.
-    let [files, agents, skills] = lists;
+    let [files, agents, skills, pasted] = lists;
     let files = match info.get("files").and_then(Value::as_array) {
         None => files,
         Some(current) => {
@@ -196,7 +223,7 @@ pub fn sync(prompt: &Inner) {
         }
     };
     let mut next = Vec::new();
-    for (kind, list) in Kind::ALL.into_iter().zip([files, agents, skills]) {
+    for (kind, list) in Kind::ALL.into_iter().zip([files, agents, skills, pasted]) {
         let had = info.get(kind.key()).is_some();
         for (index, (id, _)) in list.iter().enumerate() {
             if let Some(id) = id {
@@ -251,11 +278,16 @@ pub fn replace(textarea: &Textarea, start: u32, end: u32, text: &str) {
 
 /// An atomic mark in the kind's `extmark.*` style.
 fn options(prompt: &Inner, kind: Kind) -> ExtmarkOptions {
+    styled(prompt, kind.scope())
+}
+
+/// An atomic mark in the style of `scope`: pasted attachments are files in the `extmark.paste` style.
+pub(crate) fn styled(prompt: &Inner, scope: &str) -> ExtmarkOptions {
     let options = ExtmarkOptions::default().atomic();
     let Some(tui) = prompt.tui.upgrade() else {
         return options;
     };
-    match opencode_ui::code::syntax_theme(&tui.page()).get(kind.scope()) {
+    match opencode_ui::code::syntax_theme(&tui.page()).get(scope) {
         Some(style) => options.style(style),
         None => options,
     }
