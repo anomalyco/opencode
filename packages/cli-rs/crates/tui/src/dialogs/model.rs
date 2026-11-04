@@ -1063,13 +1063,18 @@ pub fn show(local: &Rc<Local>, provider: Option<String>) {
         return;
     }
     local.load_usage(true);
+    open(local, provider, String::new());
+}
+
+// Opens the connected models with `filter` typed, as a reopen keeps it.
+fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
     let weak = Rc::downgrade(local);
     local.dialogs.replace(
         move |cx| {
             let Some(local) = weak.upgrade() else {
                 return View::new(&cx.app);
             };
-            build(cx, &local, provider)
+            build(cx, &local, provider, &filter)
         },
         None,
         DialogOptions::default(),
@@ -1088,6 +1093,7 @@ fn build(
     cx: &Rc<opencode_ui::dialog::DialogCx>,
     local: &Rc<Local>,
     provider: Option<String>,
+    filter: &str,
 ) -> View {
     let new_designs = cx.new_designs;
     // Under new designs, favoriting does not reorder the list until the dialog is reopened.
@@ -1188,6 +1194,9 @@ fn build(
         },
     ];
     let (view, handle) = select::select(cx, props);
+    if !filter.is_empty() {
+        handle.set_filter(filter);
+    }
     // Refresh the rows as the catalog, the favorites, or the connections change. When the usage action or the
     // connected state would change the footer, the dialog opens again with the same filter.
     let weak = Rc::downgrade(local);
@@ -1202,7 +1211,8 @@ fn build(
             reopened.set(true);
             let provider = provider.clone();
             let again = local.clone();
-            local.app.defer(move |_| show(&again, provider));
+            let filter = handle.filter();
+            local.app.defer(move |_| open(&again, provider, filter));
             return;
         }
         handle.set_options(options(&handle.filter()));
