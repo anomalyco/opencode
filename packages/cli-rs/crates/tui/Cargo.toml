@@ -10,9 +10,20 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+opentui.workspace = true
+opencode-api.workspace = true
+opencode-local.workspace = true
 opencode-ui.workspace = true
 opencode-store.workspace = true
 opencode-service.workspace = true
 opencode-plugin.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
+indexmap.workspace = true
+log.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+futures-util.workspace = true

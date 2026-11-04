@@ -1042,6 +1042,7 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
+ "log",
  "opencode-acp",
  "opencode-api",
  "opencode-drive",
@@ -1052,6 +1053,7 @@ dependencies = [
  "opencode-tui",
  "opencode-ui",
  "serde_json",
+ "tokio",
  "url",
 ]
 
@@ -1163,12 +1165,21 @@ dependencies = [
 name = "opencode-tui"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures-util",
+ "indexmap",
+ "log",
+ "opencode-api",
  "opencode-latex",
+ "opencode-local",
  "opencode-mermaid",
  "opencode-plugin",
  "opencode-service",
  "opencode-store",
  "opencode-ui",
+ "opentui",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
