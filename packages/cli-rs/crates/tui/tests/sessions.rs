@@ -348,7 +348,7 @@ impl Kit {
     }
 
     /// The dialog's reads, in order: location, projects, and sessions. The home's own list read
-    /// (T.1 remounts the home after theme discovery, and it reads again by `directory`) and the
+    /// (by `directory`; a theme change that alters the colors remounts the home, which reads again) and the
     /// prompt's catalog reads after connect are left out; TS does not order those against the
     /// dialog.
     fn dialog_reads(&self) -> Vec<String> {
@@ -378,15 +378,8 @@ impl Kit {
     }
 
     fn open_list(&self) -> String {
-        // Theme discovery remounts the home once after startup. When that lands between the two keys, focus moves
-        // to the new prompt and the keymap drops the pending leader, so press the sequence again.
-        for _ in 0..3 {
-            self.app.press("ctrl+x");
-            self.app.press("l");
-            if self.tui.dialogs.is_open() {
-                break;
-            }
-        }
+        self.app.press("ctrl+x");
+        self.app.press("l");
         assert!(self.tui.dialogs.is_open(), "{}", self.app.text());
         self.wait_for("Fix the parser")
     }
