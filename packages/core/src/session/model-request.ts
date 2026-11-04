@@ -33,6 +33,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Config } from "../config.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
@@ -45,6 +46,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
+import { Option } from "effect"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
@@ -214,7 +216,7 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+export const boundImages = (messages: LLMRequest["messages"], maxImages?: number) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -235,6 +237,10 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
     if (kept <= IMAGE_BYTES_TRIGGER) continue
     while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
   }
+  // A count-based cap cuts strictly by position: providers like vLLM limit the number of images per
+  // request independently of their byte size, so small images can still overflow a small per-request cap.
+  const countCut = maxImages === undefined ? 0 : Math.max(0, sizes.length - maxImages)
+  cut = Math.max(cut, countCut)
   if (cut === 0) return messages
 
   let index = 0
@@ -262,6 +268,11 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const transport = yield* SessionModelTransport.Service
     const app = yield* App.Metadata
+    // Read on every prepare: `media.image.max_images` is location-scoped, like the blob setting.
+    const config = yield* Effect.serviceOption(Config.Service)
+    const maxImages = Option.isSome(config)
+      ? Config.latest(yield* config.value.entries(), "media")?.image?.max_images
+      : undefined
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* <
       S extends SessionRequest & { tools?: Definitions },
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
@@ -328,7 +339,7 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider), maxImages),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,
