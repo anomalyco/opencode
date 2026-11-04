@@ -6,7 +6,11 @@ export default defineCli({
   args: ["run", "hello"],
   server: server({
     events: () => [
-      event("form.created", { form: { id: "frm_1", sessionID: "ses_run", metadata: { kind: "question" }, fields: [] } }, 12),
+      event(
+        "form.created",
+        { form: { id: "frm_1", sessionID: "ses_run", metadata: { kind: "question" }, fields: [] } },
+        12,
+      ),
       ...textStep("Assumed yes."),
     ],
     routes: [{ method: "DELETE", path: "/api/session/ses_run/form/frm_1", status: 204 }],
