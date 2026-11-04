@@ -49,7 +49,7 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "Tokens",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
+      deviation: ["V01-plain-transcript"],
     },
   ],
 })

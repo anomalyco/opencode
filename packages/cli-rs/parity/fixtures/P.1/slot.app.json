@@ -30,9 +30,6 @@
           "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
       ],
-      "deviation": [
-        "P01-read-only-prompt"
-      ],
       "fixture": "P.1/slot/home"
     }
   ],

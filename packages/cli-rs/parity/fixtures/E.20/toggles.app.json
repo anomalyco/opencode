@@ -30,8 +30,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/home"
     },
@@ -55,8 +54,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/settings"
     },
@@ -73,8 +71,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/animations"
     },
@@ -105,8 +102,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/wrapping"
     },
@@ -136,8 +132,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/editor"
     },
@@ -172,8 +167,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/pastes"
     },
@@ -206,8 +200,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/title"
     }
