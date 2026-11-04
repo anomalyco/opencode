@@ -4,7 +4,8 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Clock, Effect, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -960,6 +961,71 @@ describe("OpencodePlugin", () => {
           expect(yield* rejected(Provider.ID.opencode)).toEqual(explained)
           expect(yield* rejected(Provider.ID.anthropic)).toEqual(denied)
           expect(state.requests).toBe(2)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("reloads a Console config older than the poll interval before admitting a prompt", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { requests: 0, resource: "shell:sudo *" }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            state.requests++
+            return Response.json({
+              providers: {},
+              policies: [{ action: "tool.use", resource: state.resource, effect: "deny" }],
+            })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const config = yield* Config.Service
+          const hooks = yield* PluginHooks.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+          const prompt = hooks
+            .trigger("session", "prompt", {
+              sessionID: Session.ID.make("ses_console"),
+              messageID: SessionMessage.ID.make("msg_console"),
+              prompt: { text: "hello" },
+              delivery: "steer",
+            })
+            .pipe(inProcess(server))
+          expect(state.requests).toBe(1)
+          state.resource = "edit:*.env"
+
+          yield* prompt
+          expect(state.requests).toBe(1)
+          expect(yield* consolePolicies(config)).toEqual([
+            { action: "tool.use", resource: "shell:sudo *", effect: "deny" },
+          ])
+
+          // The machine slept for 70 seconds: its wall clock moved on, but the poll's timer has not fired yet.
+          const clock = yield* Clock.clockWith(Effect.succeed)
+          const slept = 70_000
+          yield* prompt.pipe(
+            Effect.provideService(Clock.Clock, {
+              ...clock,
+              currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe() + slept,
+              currentTimeMillis: Effect.sync(() => clock.currentTimeMillisUnsafe() + slept),
+              currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
+              currentTimeNanos: Effect.sync(() => clock.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n),
+            }),
+          )
+          expect(state.requests).toBe(2)
+          expect(yield* consolePolicies(config)).toEqual([
+            { action: "tool.use", resource: "edit:*.env", effect: "deny" },
+          ])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

@@ -510,6 +510,9 @@ export const OpencodePlugin = define<
     })
     yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()
+    // The timer pauses while the machine sleeps, so the first prompt after waking could run with a stale config,
+    // such as an expired MCP server token. Admission waits for a config older than the poll interval to reload.
+    yield* ctx.session.hook("prompt", () => (snapshot.connection ? check() : Effect.void))
   }),
 })
 
