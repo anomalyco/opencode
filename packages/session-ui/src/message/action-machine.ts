@@ -50,10 +50,7 @@ export function transitionMessageAction(state: MessageActionState, event: Messag
   return { state: { status: "idle", attempts: state.attempt }, effects: [] }
 }
 
-export function viewMessageActions(
-  state: MessageActionState,
-  capabilities: MessageActionCapabilities,
-): { readonly disabled: Record<MessageAction, boolean> } {
+export function viewMessageActions(state: MessageActionState, capabilities: MessageActionCapabilities) {
   const disabled = (action: MessageAction) => state.status === "running" || !canStart(action, capabilities)
 
   return {

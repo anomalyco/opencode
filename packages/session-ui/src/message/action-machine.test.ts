@@ -9,7 +9,9 @@ import {
 } from "./action-machine"
 
 const offered = { canPending: true, canRevert: true, canFork: true }
+
 const steer: MessageActionCapabilities = { ...offered, pending: true }
+
 const delivered: MessageActionCapabilities = { ...offered, pending: false }
 
 function replay(events: MessageActionEvent[], state = createMessageActionState()) {
