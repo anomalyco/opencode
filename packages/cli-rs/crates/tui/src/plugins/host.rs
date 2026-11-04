@@ -49,7 +49,10 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         "opencode.latex",           // P.2
         "opencode.diffs",           // E.15a
     ]
-    .map(|id| Definition::new(id, |_| {}))
+    .map(|id| match id {
+        crate::plugins::notifications::ID => crate::plugins::notifications::plugin(),
+        _ => Definition::new(id, |_| {}),
+    })
     .into()
 }
 
