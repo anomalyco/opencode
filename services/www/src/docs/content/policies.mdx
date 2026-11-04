@@ -63,6 +63,9 @@ more characters and `?` matches one.
 This denies `company-us` and `company-eu`. A pattern ending in ` *` also matches the
 value without arguments, so `shell:git push *` covers `git push` on its own.
 
+URL resources for MCP servers follow their own rules; see
+[Match MCP servers by URL](#match-mcp-servers-by-url).
+
 ## Order
 
 When several statements match, the last one wins. There is no specificity rule, so
@@ -157,7 +160,9 @@ broader `deny`, after which the agent's own rules decide.
 
 To target an MCP tool, use `mcp:<url>#<tool>`. The URL part matches the server's URL
 as described in [Match MCP servers by URL](#match-mcp-servers-by-url), and the tool
-part matches the tool's name as the server lists it.
+part matches the tool's name as the server lists it, with `*` and `?` wildcards. A
+resource without `#` matches nothing. `mcp:*#<tool>` matches the tool on every server,
+including local ones.
 
 ```jsonc
 {
@@ -167,11 +172,11 @@ part matches the tool's name as the server lists it.
 }
 ```
 
-This blocks the GitHub MCP server's `delete_*` tools whatever the server is called in
-local config. Tools with the same names on other servers are not affected.
+This blocks the `delete_*` tools on GitHub's MCP server, whatever local config names
+the server. Tools with the same names on other servers still run.
 
-`<server>_<tool>:*`, such as `github_delete_repository:*`, matches the name local
-config gives the server, so it follows whichever server is configured under that name.
+`<server>_<tool>:*`, such as `github_delete_repository:*`, matches by local name
+instead, so it applies to whichever server a config names `github`.
 
 ## Integrations
 
@@ -216,11 +221,11 @@ delivers; its own policies keep applying either way.
 
 ## MCP servers, skills, and plugins
 
-| Action       | Resource                                                          |
-| ------------ | ----------------------------------------------------------------- |
-| `mcp.use`    | An [MCP server](/mcp-servers) by URL or by its configured name    |
-| `skill.use`  | A [skill](/skills) by its ID                                      |
-| `plugin.use` | A [plugin](/plugins) by unversioned package name or absolute path |
+| Action       | Resource                                                                   |
+| ------------ | -------------------------------------------------------------------------- |
+| `mcp.use`    | An [MCP server](/mcp-servers) by URL, or by the name local config gives it |
+| `skill.use`  | A [skill](/skills) by its ID                                               |
+| `plugin.use` | A [plugin](/plugins) by unversioned package name or absolute path          |
 
 ```jsonc
 {
@@ -242,28 +247,37 @@ server's URL. Any other resource matches the server's name, which is whatever lo
 config calls it. A project can define its own server named `github`, so use a URL to
 target a specific server.
 
-Local servers have no URL, so only `*` or a name matches them. The example above
-blocks every local server, and every remote server outside
-`https://api.githubcopilot.com/mcp`, whatever its name.
+Local servers have no URL, so only `*` or a name matches them. The example in
+[MCP servers, skills, and plugins](#mcp-servers-skills-and-plugins) blocks every local
+server and allows only remote servers at or below `https://api.githubcopilot.com/mcp`,
+whatever local config names them.
 
-OpenCode normalizes both URLs before comparing them. It lowercases the scheme and
-host, drops default ports, the query, the fragment, and trailing slashes, and decodes
-percent-encoded letters, digits, `-`, `.`, `_`, and `~` in the path.
+OpenCode normalizes both URLs before comparing them. It:
 
-| Resource                            | Matches                                                  | Does not match                                                   |
-| ----------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
-| `https://api.githubcopilot.com/mcp` | `https://api.githubcopilot.com/mcp/`, `.../mcp/readonly` | `.../mcp-other`, `http://api.githubcopilot.com/mcp`              |
-| `https://mcp.vercel.com`            | Every path on `mcp.vercel.com`                           | `https://mcp.vercel.com.evil.com`, `https://mcp.vercel.com:8443` |
-| `https://*.datadoghq.com/v1/mcp`    | `https://us5.datadoghq.com/v1/mcp`                       | `https://evil.com/.datadoghq.com/v1/mcp`                         |
-| `https://mcp.example.com/*/mcp`     | `https://mcp.example.com/acme/mcp`                       | `https://mcp.example.com/acme/mcp/readonly`                      |
-| `https://*`                         | Every HTTPS server                                       | Plain HTTP servers and local servers                             |
+- lowercases the scheme and host
+- drops default ports, a trailing dot on the host, credentials, the query and the
+  fragment
+- collapses repeated slashes and removes a trailing slash
+- decodes percent-encoded letters, digits, `-`, `.`, `_` and `~` in the path
 
-A `*` in the host matches within the host only. A path with `*` must match the whole
-path, and a path without one also matches the paths below it. `?` starts the query in
-a URL, so it is not a wildcard there.
+| Resource                              | Matches                                                                                                                                        | Does not match                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `https://api.githubcopilot.com/mcp`   | `https://api.githubcopilot.com/mcp/`, `.../mcp/readonly`, `https://api.githubcopilot.com./mcp`, `https://user:token@api.githubcopilot.com/mcp` | `.../mcp-other`, `http://api.githubcopilot.com/mcp`              |
+| `https://mcp.vercel.com`              | Every path on `mcp.vercel.com`                                                                                                                 | `https://mcp.vercel.com.evil.com`, `https://mcp.vercel.com:8443` |
+| `https://*.datadoghq.com/v1/mcp`      | `https://us5.datadoghq.com/v1/mcp`                                                                                                             | `https://evil.com/.datadoghq.com/v1/mcp`                         |
+| `https://api.githubcopilot.com/mcp/*` | `https://api.githubcopilot.com/mcp`, `.../mcp/readonly`                                                                                        | `.../mcp-other`                                                  |
+| `https://mcp.example.com/*/mcp`       | `https://mcp.example.com/acme/mcp`, `https://mcp.example.com/acme/team/mcp`                                                                    | `https://mcp.example.com/acme/mcp/readonly`                      |
+| `https://*`                           | Every HTTPS server                                                                                                                             | Plain HTTP servers and local servers                             |
+
+A pattern with no path matches every path on the host. A literal path matches itself
+and the paths below it, at a `/` boundary. A path ending in `/*` also matches the path
+before it. Elsewhere, a path with `*` must match the whole path, and its `*` can span
+`/`. A `*` in the host matches within the host only. `?` starts the query in a URL, so
+it is not a wildcard there.
 
 Clients older than 2.2.6 compare every `mcp.use` resource with server names and ignore
-`mcp:` tool statements, so URL statements match nothing there.
+`mcp:` tool statements, so URL statements match nothing there. On those clients, a URL
+`deny` blocks nothing, and a `*` deny followed by a URL `allow` blocks every MCP server.
 
 ### Upgrading from `integration.use`
 
