@@ -300,7 +300,7 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     setup.app.type_text("/");
     // The first ten of the sorted list, keymap commands with their titles.
     let screen = setup.wait_for("/agents");
-    for row in ["/cd", "/help", "/exit", "Change working directory"] {
+    for row in ["/cd", "/compact", "/exit", "Change working directory"] {
         assert!(screen.contains(row), "{row:?} missing:\n{screen}");
     }
     // The server's command, with its description.

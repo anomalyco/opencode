@@ -359,7 +359,15 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
     // A bare `/rename` asks for a generated title, then reads the session back.
     kit.clear();
     kit.app.type_text("/rename");
+    // The first Enter takes the slash completion, as in TS; the second submits.
     kit.app.press("return");
+    let completed = kit
+        .app
+        .wait_until(Duration::from_secs(5), || kit.prompt_text() != "/rename");
+    assert!(completed, "{:?}", kit.prompt_text());
+    if kit.writes().is_empty() {
+        kit.app.press("return");
+    }
     assert_eq!(
         kit.wait_writes(1),
         [r#"PATCH /api/session/ses_a {"title":""}"#]
