@@ -274,7 +274,12 @@ fn check(tui: &Tui) {
 
 /// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
 /// is logged; for a command (`toast`) it also shows "Unable to load terminal", as the TS commands do.
-pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
+pub(crate) fn refresh(
+    tui: &Tui,
+    session: &SessionID,
+    toast: bool,
+    then: impl FnOnce(&Tui) + 'static,
+) {
     tui.terminals
         .lists
         .borrow_mut()

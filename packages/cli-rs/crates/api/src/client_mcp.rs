@@ -171,7 +171,8 @@ impl Connector for Tungstenite {
                     }
                 }
                 let close = tokio_tungstenite::tungstenite::protocol::CloseFrame {
-                    code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
+                    code:
+                        tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
                     reason: "".into(),
                 };
                 let _ = sink.send(ws::Message::Close(Some(close))).await;
@@ -550,8 +551,7 @@ mod tests {
             json!({ "content": [{ "type": "text", "text": "hi" }] })
         );
         assert_eq!(
-            peer.call(json!({ "name": "fail", "arguments": {} }))
-                .await["result"],
+            peer.call(json!({ "name": "fail", "arguments": {} })).await["result"],
             json!({ "content": [{ "type": "text", "text": "boom" }], "isError": true })
         );
         assert_eq!(
