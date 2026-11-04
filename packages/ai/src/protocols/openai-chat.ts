@@ -8,13 +8,11 @@ import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
-  AIErrorReason,
   InvalidProviderOutputError,
   LLMEvent,
   ProviderInternalError,
   UnknownProviderError,
   Usage,
-  type FinishReasonDetails,
   type AssistantMessage,
   type CacheHint,
   type LLMRequest,
@@ -345,23 +343,11 @@ export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 const DONE = "[DONE]" as const
 const OpenAIChatStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(OpenAIChatEvent)])
 
-interface PendingToolDelta {
-  readonly id?: string
-  readonly name?: string
-  readonly input: string
-  readonly extraContent?: Schema.Schema.Type<typeof ExtraContent>
-}
-
 export interface ParserState {
   readonly providerMetadataKey: string
-  readonly tools: ToolStream.State<number>
   readonly custom: ReadonlyMap<string, OpenAIFreeform.Custom>
-  /** Stream indexes of custom tool calls, whose JSON fragment closes when the call finishes. */
-  readonly customCalls: ReadonlySet<number>
-  readonly pendingTools: Partial<Record<number, PendingToolDelta>>
-  readonly toolCallEvents: ReadonlyArray<LLMEvent>
+  readonly toolCalls: ToolStream.Slots<number>
   readonly usage?: Usage
-  readonly finishReason?: FinishReasonDetails
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
   /** A scalar reasoning field (`reasoning_content`, ...) has carried text in this stream. */
@@ -370,7 +356,6 @@ export interface ParserState {
   readonly reasoningDetailsObserved: boolean
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
-  readonly nextToolIndex: number
   readonly requireFinishReason: boolean
 }
 
@@ -973,15 +958,48 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
   })
 }
 
-const toolIndexByID = (
-  tools: ParserState["tools"],
-  pendingTools: ParserState["pendingTools"],
-  id: string | undefined,
-) => {
-  if (!id) return undefined
-  const entry = Object.entries({ ...pendingTools, ...tools }).find(([, tool]) => tool?.id === id)
-  return entry ? Number(entry[0]) : undefined
-}
+// Compatible providers may omit indexes. Prefer durable identity, then use
+// batch position for parallel deltas or the latest call for sparse chunks.
+const appendTools = (
+  state: ParserState,
+  slots: ReadonlyMap<number, ToolStream.Slot>,
+  deltas: ReadonlyArray<OpenAIChatToolCallDelta>,
+) =>
+  deltas.reduce(
+    (result, tool, position) => {
+      const matched = tool.id
+        ? [...result.slots].find(([, slot]) => ToolStream.slotID(slot) === tool.id)?.[0]
+        : undefined
+      const fallback = deltas.length > 1 ? position : (result.latestToolIndex ?? position)
+      const fallbackID = ToolStream.slotID(result.slots.get(fallback))
+      const index =
+        tool.index ??
+        matched ??
+        (tool.id && fallbackID && fallbackID !== tool.id ? Math.max(-1, ...result.slots.keys()) + 1 : fallback)
+      const slot = result.slots.get(index)
+      const name = tool.function?.name || tool.custom?.name || undefined
+      // Custom calls stream raw text; re-encode it as JSON arguments for the call's field.
+      const raw = tool.custom?.input ?? ""
+      const text = tool.custom
+        ? slot?.freeform
+          ? OpenAIFreeform.streamDelta(raw)
+          : OpenAIFreeform.streamStart(
+              state.custom.get((slot?.status === "open" ? slot.tool.name : slot?.name) ?? name ?? ""),
+              raw,
+            )
+        : (tool.function?.arguments ?? "")
+      const extraContent = decodeExtraContent(tool.extra_content)
+      const next = ToolStream.slotDelta(result.slots, index, {
+        id: tool.id || undefined,
+        name,
+        text,
+        freeform: Boolean(tool.custom),
+        providerMetadata: extraContent && { [state.providerMetadataKey]: { extraContent } },
+      })
+      return { slots: next.slots, latestToolIndex: index, events: [...result.events, ...next.events] }
+    },
+    { slots, latestToolIndex: state.latestToolIndex, events: [] as ReadonlyArray<LLMEvent> },
+  )
 
 const reasoningDelta = (
   delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null | undefined,
@@ -1110,20 +1128,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
           normalized: yield* mapFinishReason(event, rawFinishReason),
           raw: choice?.native_finish_reason ?? rawFinishReason,
         }
-      : state.finishReason
+      : undefined
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
-    let tools = state.tools
-    let pendingTools = state.pendingTools
-    let customCalls = state.customCalls
-    let latestToolIndex = state.latestToolIndex
-    let nextToolIndex = state.nextToolIndex
-
     let lifecycle = state.lifecycle
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
     if (
-      state.finishReason !== undefined &&
+      state.toolCalls.status === "finished" &&
       toolDeltas.some(
         (tool) =>
           Boolean(tool.id) ||
@@ -1165,74 +1177,17 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     if (delta?.refusal) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
 
-    // Compatible providers may omit indexes. Prefer durable identity, then use
-    // batch position for parallel deltas or the latest call for sparse chunks.
-    for (const [position, tool] of toolDeltas.entries()) {
-      const matched = toolIndexByID(tools, pendingTools, tool.id || undefined)
-      const fallback = toolDeltas.length > 1 ? position : (latestToolIndex ?? position)
-      const fallbackTool = tools[fallback] ?? pendingTools[fallback]
-      const index =
-        tool.index ?? matched ?? (tool.id && fallbackTool?.id && fallbackTool.id !== tool.id ? nextToolIndex : fallback)
-      const current = tools[index]
-      const pending = pendingTools[index]
-      const id = current?.id ?? pending?.id ?? (tool.id || undefined)
-      const name = current?.name ?? pending?.name ?? (tool.function?.name || tool.custom?.name || undefined)
-      // Custom calls stream raw text; re-encode it as JSON arguments for the call's field.
-      const opening = Boolean(tool.custom) && !customCalls.has(index)
-      if (opening) customCalls = new Set([...customCalls, index])
-      const raw = tool.custom?.input ?? ""
-      const fragment = tool.custom
-        ? opening
-          ? OpenAIFreeform.streamStart(state.custom.get(name ?? ""), raw)
-          : OpenAIFreeform.streamDelta(raw)
-        : (tool.function?.arguments ?? "")
-      const text = `${pending?.input ?? ""}${fragment}`
-      const extraContent = pending?.extraContent ?? decodeExtraContent(tool.extra_content)
-      latestToolIndex = index
-      nextToolIndex = Math.max(nextToolIndex, index + 1)
-      if (!current && (!id || !name)) {
-        pendingTools = {
-          ...pendingTools,
-          [index]: { id: id || undefined, name: name || undefined, input: text, extraContent },
-        }
-        continue
-      }
-      if (pending) {
-        pendingTools = { ...pendingTools }
-        delete pendingTools[index]
-      }
-      const result = ToolStream.appendOrStart(
-        ADAPTER,
-        tools,
-        index,
-        {
-          id: id || undefined,
-          name: name || undefined,
-          text,
-          providerMetadata: extraContent && { [state.providerMetadataKey]: { extraContent } },
-        },
-        "OpenAI Chat tool call delta is missing id or name",
-      )
-      if (ToolStream.isError(result))
-        return yield* new AIError({
-          reason: AIErrorReason.make({
-            ...result.reason,
-            message: result.message,
-            cause: result.reason.cause,
-            body: ProviderShared.encodeJson(event),
-          }),
-        })
-      tools = result.tools
-      if (result.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
-      events.push(...result.events)
-    }
+    const streamed =
+      state.toolCalls.status === "streaming" ? appendTools(state, state.toolCalls.slots, toolDeltas) : undefined
+    if (streamed?.events.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
+    events.push(...(streamed?.events ?? []))
 
-    const incompleteTools = finishReason?.normalized === "content-filter" || finishReason?.normalized === "length"
     if (
+      streamed !== undefined &&
       finishReason !== undefined &&
-      !incompleteTools &&
-      state.finishReason === undefined &&
-      Object.keys(pendingTools).length
+      finishReason.normalized !== "content-filter" &&
+      finishReason.normalized !== "length" &&
+      ToolStream.hasBufferedSlot(streamed.slots)
     )
       return yield* ProviderShared.eventError(
         ADAPTER,
@@ -1240,48 +1195,40 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ProviderShared.encodeJson(event),
       )
 
-    // Filtering or truncation terminates the response without confirming pending tool calls.
-    const finished =
-      finishReason !== undefined &&
-      !incompleteTools &&
-      state.finishReason === undefined &&
-      Object.keys(tools).length > 0
-        ? yield* finishTools(tools, customCalls)
-        : undefined
+    const toolCalls: ToolStream.Slots<number> =
+      streamed === undefined
+        ? state.toolCalls
+        : finishReason === undefined
+          ? { status: "streaming", slots: streamed.slots }
+          : {
+              status: "finished",
+              reason: finishReason,
+              events: yield* ToolStream.finishSlots(
+                ADAPTER,
+                streamed.slots,
+                finishReason.normalized,
+                OpenAIFreeform.streamEnd,
+              ),
+            }
 
     return [
       {
-        providerMetadataKey: state.providerMetadataKey,
-        tools: finished?.tools ?? tools,
-        custom: state.custom,
-        customCalls,
-        pendingTools,
-        toolCallEvents: finished?.events ?? state.toolCallEvents,
+        ...state,
+        toolCalls,
         usage,
-        finishReason: state.finishReason ?? finishReason,
         lifecycle,
         reasoningField,
         reasoningTextObserved,
-        reasoningDetails: state.reasoningDetails,
         reasoningDetailsObserved,
         reasoningEmitted,
-        latestToolIndex,
-        nextToolIndex,
-        requireFinishReason: state.requireFinishReason,
+        latestToolIndex: streamed?.latestToolIndex ?? state.latestToolIndex,
       },
       events,
     ] as const
   })
 
-// Custom calls close their JSON fragment before every pending call finishes.
-const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ReadonlySet<number>) {
-  const closed = OpenAIFreeform.close(tools, customCalls)
-  const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
-  return { tools: finished.tools, events: [...closed.events, ...finished.events] }
-})
-
 export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
-  if (state.finishReason === undefined && state.requireFinishReason)
+  if (state.toolCalls.status === "streaming" && state.requireFinishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({
         message: "OpenAI Chat stream ended without finish_reason",
@@ -1291,15 +1238,15 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
     })
   const events: LLMEvent[] = []
   const toolCallEvents =
-    state.finishReason === undefined && Object.keys(state.tools).length > 0
-      ? (yield* finishTools(state.tools, state.customCalls)).events
-      : state.toolCallEvents
+    state.toolCalls.status === "finished"
+      ? state.toolCalls.events
+      : yield* ToolStream.finishSlots(ADAPTER, state.toolCalls.slots, undefined, OpenAIFreeform.streamEnd)
   const hasToolCalls = toolCallEvents.length > 0
-  const reason = state.finishReason
+  const finishReason = state.toolCalls.status === "finished" ? state.toolCalls.reason : undefined
+  const reason = finishReason
     ? {
-        ...state.finishReason,
-        normalized:
-          state.finishReason.normalized === "stop" && hasToolCalls ? "tool-calls" : state.finishReason.normalized,
+        ...finishReason,
+        normalized: finishReason.normalized === "stop" && hasToolCalls ? "tool-calls" : finishReason.normalized,
       }
     : { normalized: hasToolCalls ? ("tool-calls" as const) : ("stop" as const) }
   // Snapshot details at publish time so the emitted event never observes later
@@ -1342,20 +1289,16 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: OpenAIChatStreamEvent,
-    initial: (request) => ({
+    initial: (request): ParserState => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
-      tools: ToolStream.empty<number>(),
       custom: OpenAIFreeform.tools(request),
-      customCalls: new Set<number>(),
-      pendingTools: {},
-      toolCallEvents: [],
+      toolCalls: { status: "streaming", slots: new Map() },
       lifecycle: Lifecycle.initial(),
       reasoningField: request.model.compatibility?.reasoningField,
       reasoningTextObserved: false,
       reasoningDetails: [],
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
-      nextToolIndex: 0,
       requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
     }),
     step: (state: ParserState, event) => (event === DONE ? Effect.succeed([state, []] as const) : step(state, event)),

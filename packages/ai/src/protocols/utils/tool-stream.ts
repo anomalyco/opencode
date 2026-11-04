@@ -1,5 +1,12 @@
 import { Effect, Option } from "effect"
-import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
+import {
+  AIError,
+  type FinishReasonDetails,
+  LLMEvent,
+  type ProviderMetadata,
+  type ToolCall,
+  type ToolInputError,
+} from "../../schema/index.js"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
 import { parse } from "./partial-json.js"
 
@@ -98,13 +105,16 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   )
 }
 
-const finishEvents = (tool: PendingTool, event: ToolCall | ToolInputError): ReadonlyArray<LLMEvent> => [
+const inputEnd = (tool: PendingTool) =>
   LLMEvent.toolInputEnd({
     id: tool.id,
     name: tool.name,
     namespace: tool.namespace,
     providerMetadata: tool.providerMetadata,
-  }),
+  })
+
+const finishEvents = (tool: PendingTool, event: ToolCall | ToolInputError): ReadonlyArray<LLMEvent> => [
+  inputEnd(tool),
   event,
 ]
 
@@ -235,6 +245,103 @@ export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =
         toolCall(route, tool).pipe(Effect.map((event) => finishEvents(tool, event))),
       ).pipe(Effect.map((events) => events.flat())),
     }
+  })
+
+/**
+ * One Chat tool call under its stream key. Chat providers may split the call id
+ * and name across deltas, so a slot buffers argument text until both arrive and
+ * only then opens with `tool-input-start`. Freeform calls stream raw text that
+ * the parser re-encodes as JSON arguments.
+ */
+export type Slot =
+  | {
+      readonly status: "buffering"
+      readonly freeform: boolean
+      readonly id?: string
+      readonly name?: string
+      readonly input: string
+      readonly providerMetadata?: ProviderMetadata
+    }
+  | { readonly status: "open"; readonly freeform: boolean; readonly tool: PendingTool }
+
+/**
+ * Chat tool calls stream until the first finish reason, which settles every
+ * slot. The settled events wait for the end of the stream so late text and
+ * reasoning still precede them.
+ */
+export type Slots<K extends StreamKey> =
+  | { readonly status: "streaming"; readonly slots: ReadonlyMap<K, Slot> }
+  | { readonly status: "finished"; readonly reason: FinishReasonDetails; readonly events: ReadonlyArray<LLMEvent> }
+
+export const slotID = (slot: Slot | undefined) => (slot?.status === "open" ? slot.tool.id : slot?.id)
+
+/** Add one delta to a slot, opening it once both id and name are known. */
+export const slotDelta = <K extends StreamKey>(
+  slots: ReadonlyMap<K, Slot>,
+  key: K,
+  delta: {
+    readonly id?: string
+    readonly name?: string
+    readonly text: string
+    readonly freeform: boolean
+    readonly providerMetadata?: ProviderMetadata
+  },
+) => {
+  const slot = slots.get(key)
+  if (slot?.status === "open") {
+    if (delta.text.length === 0) return { slots, events: [] }
+    const tool = {
+      ...slot.tool,
+      input: `${slot.tool.input}${delta.text}`,
+      providerMetadata: slot.tool.providerMetadata ?? delta.providerMetadata,
+    }
+    return { slots: new Map(slots).set(key, { ...slot, tool }), events: [inputDelta(tool, delta.text)] }
+  }
+  const id = slot?.id ?? delta.id
+  const name = slot?.name ?? delta.name
+  const input = `${slot?.input ?? ""}${delta.text}`
+  const freeform = slot?.freeform ?? delta.freeform
+  const providerMetadata = slot?.providerMetadata ?? delta.providerMetadata
+  if (!id || !name)
+    return {
+      slots: new Map(slots).set(key, { status: "buffering", freeform, id, name, input, providerMetadata }),
+      events: [],
+    }
+  const tool = { id, name, input, providerMetadata }
+  return {
+    slots: new Map(slots).set(key, { status: "open", freeform, tool }),
+    events: input.length > 0 ? [inputStart(tool), inputDelta(tool, input)] : [inputStart(tool)],
+  }
+}
+
+export const hasBufferedSlot = (slots: ReadonlyMap<StreamKey, Slot>) =>
+  [...slots.values()].some((slot) => slot.status === "buffering")
+
+/**
+ * Settle every open slot. A completed response parses each call, appending
+ * `freeformEnd` to freeform input first. Truncation and filtering abandon open
+ * calls: their input ends without a call, and the consumer settles them as
+ * incomplete. Buffered slots never started, so they produce nothing.
+ */
+export const finishSlots = <K extends StreamKey>(
+  route: string,
+  slots: ReadonlyMap<K, Slot>,
+  reason: FinishReasonDetails["normalized"] | undefined,
+  freeformEnd = "",
+) =>
+  Effect.gen(function* () {
+    const open = [...slots.values()].flatMap((slot) => (slot.status === "open" ? [slot] : []))
+    if (reason === "length" || reason === "content-filter") return open.map((slot) => inputEnd(slot.tool))
+    const closed = open.map((slot) =>
+      slot.freeform && freeformEnd
+        ? { tool: { ...slot.tool, input: `${slot.tool.input}${freeformEnd}` }, delta: freeformEnd }
+        : { tool: slot.tool, delta: "" },
+    )
+    const deltas = closed.flatMap((item) => (item.delta ? [inputDelta(item.tool, item.delta)] : []))
+    const calls = yield* Effect.forEach(closed, (item) =>
+      toolCall(route, item.tool).pipe(Effect.map((event) => finishEvents(item.tool, event))),
+    )
+    return [...deltas, ...calls.flat()]
   })
 
 export * as ToolStream from "./tool-stream.js"

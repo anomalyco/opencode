@@ -6,6 +6,7 @@ import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 // ---------------------------------------------------------------------------
 // Public options and request body
@@ -280,8 +281,12 @@ const step = Effect.fn("VeniceChat.step")(function* (state: State, event: typeof
   for (const call of delta?.tool_calls ?? []) {
     if (!call.thought_signature) continue
     const index = call.index ?? result[0].latestToolIndex
+    const toolCalls = result[0].toolCalls
     const id =
-      call.id ?? (index === undefined ? undefined : (result[0].tools[index]?.id ?? result[0].pendingTools[index]?.id))
+      call.id ??
+      (index === undefined || toolCalls.status === "finished"
+        ? undefined
+        : ToolStream.slotID(toolCalls.slots.get(index)))
     if (id) tools[id] = call.thought_signature
   }
   return [

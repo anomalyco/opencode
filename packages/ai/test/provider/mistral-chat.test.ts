@@ -674,21 +674,34 @@ describe("Mistral Chat", () => {
         })
       }
 
-      const truncated = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              chunk({
-                tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":' } }],
-              }),
-              chunk({}, "length"),
+      for (const [raw, normalized] of [
+        ["length", "length"],
+        ["content_filter", "content-filter"],
+      ] as const) {
+        const truncated = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                chunk({
+                  tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":' } }],
+                }),
+                chunk({ tool_calls: [{ index: 1, id: "Cd34Ef56G", function: { arguments: "{}" } }] }),
+                chunk({}, raw),
+              ),
             ),
           ),
-        ),
-      )
-      expect(truncated.finishReason).toEqual({ normalized: "length", raw: "length" })
-      expect(truncated.events.some(LLMEvent.is.toolCall)).toBe(false)
-      expect(truncated.events.some(LLMEvent.is.toolInputEnd)).toBe(false)
+        )
+        expect(truncated.finishReason).toEqual({ normalized, raw })
+        // The open call closes its input without a call; the call that never got a name was never started.
+        expect(truncated.events.map((event) => event.type)).toEqual([
+          "step-start",
+          "tool-input-start",
+          "tool-input-delta",
+          "tool-input-end",
+          "step-finish",
+          "finish",
+        ])
+      }
     }),
   )
 
@@ -719,13 +732,34 @@ describe("Mistral Chat", () => {
       )
       expect(missingFinish.message).toContain("without finish_reason")
 
-      const lateContent = yield* LLMClient.generate(request).pipe(
+      const lateText = yield* LLMClient.generate(request).pipe(
         Effect.provide(
-          fixedResponse(sseEvents(chunk({}, "stop"), chunk({ content: [{ type: "text", text: "late" }] }))),
+          fixedResponse(
+            sseEvents(
+              chunk({ content: "Hello" }),
+              chunk({}, "stop"),
+              chunk({ content: [{ type: "text", text: " late" }] }),
+              chunk({ content: [{ type: "thinking", thinking: "late thought" }] }),
+            ),
+          ),
+        ),
+      )
+      expect(lateText.text).toBe("Hello late")
+      expect(lateText.reasoning).toBe("late thought")
+      expect(lateText.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+
+      const lateTool = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({}, "stop"),
+              chunk({ tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: "{}" } }] }),
+            ),
+          ),
         ),
         Effect.flip,
       )
-      expect(lateContent.message).toContain("content after the finish reason")
+      expect(lateTool.message).toContain("content after the finish reason")
     }),
   )
 

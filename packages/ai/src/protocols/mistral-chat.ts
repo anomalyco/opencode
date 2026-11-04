@@ -12,7 +12,6 @@ import {
   ProviderInternalError,
   UnknownProviderError,
   Usage,
-  type FinishReasonDetails,
   type LLMRequest,
   type MediaPart,
   type ToolCallPart,
@@ -413,11 +412,6 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
 })
 
 type ToolKey = string | number
-interface PendingTool {
-  readonly id: string
-  readonly name?: string
-  readonly input: string
-}
 
 interface ActiveContent {
   readonly type: "text" | "reasoning"
@@ -427,18 +421,15 @@ interface ActiveContent {
 }
 
 export interface ParserState {
-  readonly tools: ToolStream.State<ToolKey>
-  readonly pendingTools: Partial<Record<ToolKey, PendingTool>>
+  readonly toolCalls: ToolStream.Slots<ToolKey>
   readonly toolIDs: ReadonlyMap<string, string>
   readonly usedToolIDs: ReadonlySet<string>
-  readonly completedTools: ReadonlyArray<LLMEvent>
   readonly latestToolKey?: ToolKey
   readonly generatedTools: number
   readonly lifecycle: Lifecycle.State
   readonly active?: ActiveContent
   readonly nextContent: number
   readonly usage?: Usage
-  readonly finishReason?: FinishReasonDetails
 }
 
 const mapUsage = (usage: MistralEvent["usage"]): Usage | undefined => {
@@ -580,13 +571,10 @@ const toolText = (tool: MistralToolDelta) => {
   return value === null || value === undefined ? "" : ProviderShared.encodeJson(value)
 }
 
-const appendTools = Effect.fnUntraced(function* (
-  initial: ParserState,
-  events: LLMEvent[],
-  deltas: ReadonlyArray<MistralToolDelta>,
-) {
-  if (deltas.length === 0) return initial
+const appendTools = (initial: ParserState, events: LLMEvent[], deltas: ReadonlyArray<MistralToolDelta>) => {
+  if (deltas.length === 0 || initial.toolCalls.status === "finished") return initial
   let state = closeActive(initial, events)
+  let slots = initial.toolCalls.slots
   for (const [position, delta] of deltas.entries()) {
     const wireID = delta.id?.trim() || undefined
     const providedID = wireID === "null" ? undefined : wireID
@@ -597,54 +585,32 @@ const appendTools = Effect.fnUntraced(function* (
         : deltas.length > 1
           ? `position:${position}`
           : (state.latestToolKey ?? `missing:${state.generatedTools}`))
-    const existing = state.tools[key]
-    const pending = state.pendingTools[key]
-    const source = providedID ?? `generated:${String(key)}`
-    const normalized =
-      existing || pending ? { id: existing?.id ?? pending?.id ?? "", state } : normalizeStreamToolID(state, source)
-    state = normalized.state
-    const name = existing?.name ?? pending?.name ?? (delta.function?.name?.trim() || undefined)
-    const text = `${pending?.input ?? ""}${toolText(delta)}`
-    if (!name) {
-      state = {
-        ...state,
-        pendingTools: { ...state.pendingTools, [key]: { id: normalized.id, input: text } },
-        latestToolKey: key,
-        generatedTools: state.generatedTools + (!providedID && !pending ? 1 : 0),
-      }
-      continue
-    }
-    const result = ToolStream.appendOrStart(
-      ADAPTER,
-      state.tools,
-      key,
-      { id: normalized.id, name, text },
-      "Mistral Chat tool call delta is missing a name",
-    )
-    if (ToolStream.isError(result)) return yield* result
-    if (result.events.length > 0) state = { ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }
-    events.push(...result.events)
-    const pendingTools = { ...state.pendingTools }
-    delete pendingTools[key]
+    const slot = slots.get(key)
+    const normalized = slot
+      ? { id: ToolStream.slotID(slot), state }
+      : normalizeStreamToolID(state, providedID ?? `generated:${String(key)}`)
+    const next = ToolStream.slotDelta(slots, key, {
+      id: normalized.id,
+      name: delta.function?.name?.trim() || undefined,
+      text: toolText(delta),
+      freeform: false,
+    })
+    slots = next.slots
     state = {
-      ...state,
-      tools: result.tools,
-      pendingTools,
+      ...normalized.state,
+      lifecycle: next.events.length > 0 ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle,
       latestToolKey: key,
-      generatedTools: state.generatedTools + (!providedID && !existing && !pending ? 1 : 0),
+      generatedTools: state.generatedTools + (!providedID && !slot ? 1 : 0),
     }
+    events.push(...next.events)
   }
-  return state
-})
+  return { ...state, toolCalls: { status: "streaming" as const, slots } }
+}
 
-const hasLateContent = (event: MistralEvent) => {
-  const delta = event.choices?.[0]?.delta
-  if (typeof delta?.content === "string" && delta.content.length > 0) return true
-  if (Array.isArray(delta?.content) && delta.content.length > 0) return true
-  return (delta?.tool_calls ?? []).some(
+const hasLateToolCall = (event: MistralEvent) =>
+  (event.choices?.[0]?.delta?.tool_calls ?? []).some(
     (tool) => Boolean(tool.id) || Boolean(tool.function?.name) || tool.function?.arguments !== undefined,
   )
-}
 
 const step = Effect.fnUntraced(function* (state: ParserState, event: MistralEvent) {
   if (event.error) {
@@ -659,19 +625,18 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: MistralEven
   }
   const events: LLMEvent[] = []
   const usage = mapUsage(event.usage) ?? state.usage
-  if (state.finishReason) {
-    if (hasLateContent(event))
-      return yield* ProviderShared.eventError(
-        ADAPTER,
-        "Mistral Chat received content after the finish reason",
-        ProviderShared.encodeJson(event),
-      )
-    return [{ ...state, usage }, events] as const
-  }
+  // Like OpenAI Chat, text and reasoning after the finish reason still belong to the response; tool calls do not.
+  if (state.toolCalls.status === "finished" && hasLateToolCall(event))
+    return yield* ProviderShared.eventError(
+      ADAPTER,
+      "Mistral Chat received content after the finish reason",
+      ProviderShared.encodeJson(event),
+    )
   const choice = event.choices?.[0]
   const withContent = choice?.delta?.content == null ? state : appendContent(state, events, choice.delta.content)
-  const withTools = yield* appendTools(withContent, events, choice?.delta?.tool_calls ?? [])
-  if (!choice?.finish_reason) return [{ ...withTools, usage }, events] as const
+  const withTools = appendTools(withContent, events, choice?.delta?.tool_calls ?? [])
+  if (!choice?.finish_reason || withTools.toolCalls.status === "finished")
+    return [{ ...withTools, usage }, events] as const
 
   const finishReason = {
     normalized: mapFinishReason(choice.finish_reason),
@@ -688,30 +653,21 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: MistralEven
     })
   }
   const incomplete = finishReason.normalized === "length" || finishReason.normalized === "content-filter"
-  if (!incomplete && Object.keys(withTools.pendingTools).length > 0)
+  if (!incomplete && ToolStream.hasBufferedSlot(withTools.toolCalls.slots))
     return yield* ProviderShared.eventError(
       ADAPTER,
       "Mistral Chat tool call delta is missing a name",
       ProviderShared.encodeJson(event),
     )
-  const finished =
-    !incomplete && Object.keys(withTools.tools).length > 0
-      ? yield* ToolStream.finishAll(ADAPTER, withTools.tools)
-      : undefined
+  const calls = yield* ToolStream.finishSlots(ADAPTER, withTools.toolCalls.slots, finishReason.normalized)
   return [
-    {
-      ...withTools,
-      tools: finished?.tools ?? withTools.tools,
-      completedTools: finished?.events ?? withTools.completedTools,
-      usage,
-      finishReason,
-    },
+    { ...withTools, toolCalls: { status: "finished" as const, reason: finishReason, events: calls }, usage },
     events,
   ] as const
 })
 
 const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
-  if (!state.finishReason)
+  if (state.toolCalls.status === "streaming")
     return yield* new AIError({
       reason: new InvalidProviderOutputError({
         message: "Mistral Chat stream ended without finish_reason",
@@ -721,12 +677,13 @@ const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
     })
   const events: LLMEvent[] = []
   const closed = closeActive(state, events)
-  const lifecycle = closed.completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
-  events.push(...closed.completedTools)
+  const calls = state.toolCalls.events
+  const lifecycle = calls.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
+  events.push(...calls)
   const reason =
-    state.finishReason.normalized === "stop" && closed.completedTools.some(LLMEvent.is.toolCall)
-      ? { ...state.finishReason, normalized: "tool-calls" as const }
-      : state.finishReason
+    state.toolCalls.reason.normalized === "stop" && calls.some(LLMEvent.is.toolCall)
+      ? { ...state.toolCalls.reason, normalized: "tool-calls" as const }
+      : state.toolCalls.reason
   Lifecycle.finish(lifecycle, events, { reason, usage: closed.usage })
   return events
 })
@@ -737,11 +694,9 @@ export const protocol = Protocol.make({
   stream: {
     event: MistralStreamEvent,
     initial: (): ParserState => ({
-      tools: ToolStream.empty<ToolKey>(),
-      pendingTools: {},
+      toolCalls: { status: "streaming", slots: new Map() },
       toolIDs: new Map(),
       usedToolIDs: new Set(),
-      completedTools: [],
       generatedTools: 0,
       lifecycle: Lifecycle.initial(),
       nextContent: 0,

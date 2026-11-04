@@ -249,4 +249,40 @@ describe("ToolStream", () => {
       })
     }),
   )
+
+  it.effect("buffers a chat slot until id and name arrive, then opens it once", () =>
+    Effect.gen(function* () {
+      const buffered = ToolStream.slotDelta(new Map(), 0, { id: "call_1", text: '{"query"', freeform: false })
+      const opened = ToolStream.slotDelta(buffered.slots, 0, { name: "lookup", text: ':"weather"', freeform: false })
+      const repeated = ToolStream.slotDelta(opened.slots, 0, {
+        id: "call_1",
+        name: "lookup",
+        text: "",
+        freeform: false,
+      })
+      const closed = ToolStream.slotDelta(repeated.slots, 0, { text: "}", freeform: false })
+
+      expect(buffered.events).toEqual([])
+      expect([...buffered.slots.values()].map((slot) => slot.status)).toEqual(["buffering"])
+      expect(opened.events.map((event) => event.type)).toEqual(["tool-input-start", "tool-input-delta"])
+      expect(repeated.events).toEqual([])
+      expect([...closed.slots.values()].map((slot) => slot.status)).toEqual(["open"])
+      expect(yield* ToolStream.finishSlots(ADAPTER, closed.slots, "stop")).toEqual([
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+      ])
+    }),
+  )
+
+  it.effect("ends open chat slots without a call on length or content filter", () =>
+    Effect.gen(function* () {
+      const open = ToolStream.slotDelta(new Map(), 0, { id: "call_1", name: "lookup", text: '{"q', freeform: false })
+      const slots = ToolStream.slotDelta(open.slots, 1, { id: "call_2", text: "{}", freeform: false }).slots
+
+      for (const reason of ["length", "content-filter"] as const)
+        expect(yield* ToolStream.finishSlots(ADAPTER, slots, reason)).toEqual([
+          { type: "tool-input-end", id: "call_1", name: "lookup" },
+        ])
+    }),
+  )
 })

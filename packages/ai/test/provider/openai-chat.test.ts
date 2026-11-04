@@ -2039,7 +2039,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("does not finalize streamed tool calls when content is filtered", () =>
+  it.effect("closes streamed tool input without a call when content is filtered", () =>
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
@@ -2068,6 +2068,7 @@ describe("OpenAI Chat route", () => {
           text: '{"query":"weather"',
           input: { query: "weather" },
         },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
           type: "step-finish",
           index: 0,
@@ -2094,7 +2095,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("does not finalize streamed tool calls when output is truncated", () =>
+  it.effect("closes streamed tool input without a call when output is truncated", () =>
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
@@ -2123,6 +2124,7 @@ describe("OpenAI Chat route", () => {
           text: '{"query":"weather"}',
           input: { query: "weather" },
         },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
           type: "step-finish",
           index: 0,
@@ -2146,6 +2148,33 @@ describe("OpenAI Chat route", () => {
       )
       expect(missingIdentity.finishReason).toEqual({ normalized: "length", raw: "length" })
       expect(missingIdentity.toolCalls).toEqual([])
+    }),
+  )
+
+  it.effect("opens a buffered tool call once under its stream index", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { arguments: '{"query"' } }] }),
+        deltaChunk({ tool_calls: [{ id: "call_1", function: { name: "lookup", arguments: ':"weather"' } }] }),
+        deltaChunk({ tool_calls: [{ index: 0, function: { name: "lookup", arguments: "}" } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.map((event) => event.type)).toEqual([
+        "step-start",
+        "tool-input-start",
+        "tool-input-delta",
+        "tool-input-delta",
+        "tool-input-end",
+        "tool-call",
+        "step-finish",
+        "finish",
+      ])
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
     }),
   )
 
