@@ -356,7 +356,6 @@ fn show(tui: &Tui, tracker: &Tracker) {
                     primary,
                     ..FooterProps::default()
                 }),
-                None,
             )
         },
         None,

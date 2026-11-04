@@ -58,6 +58,8 @@ impl Transport for Fixture {
                 200,
                 json!({ "location": { "directory": "/project" }, "data": list(&self.global) }),
             ),
+            // The goal footer's RPC read (E.14); no goal is set.
+            ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
             ("POST" | "DELETE", _) => {
                 let body = request
                     .body

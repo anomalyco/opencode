@@ -43,6 +43,8 @@ impl Transport for Fixture {
             ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": self.root })),
             ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": self.child })),
+            // The goal footer's RPC read (E.14); no goal is set.
+            ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
             ("POST", _) => {
                 let body = request
                     .body

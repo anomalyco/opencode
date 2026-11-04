@@ -237,8 +237,17 @@ impl Inner {
             (true, true) => Place::Docked,
             (true, false) => Place::Overlay,
         };
-        if self.placed.replace(place) == place {
+        let before = self.placed.replace(place);
+        if before == place {
             return;
+        }
+        // The sections skip syncs while hidden, so they catch up as the sidebar shows.
+        if before == Place::Hidden {
+            let everything = Changes::everything();
+            self.slots
+                .borrow()
+                .iter()
+                .for_each(|slot| slot.sync(tui, &everything));
         }
         self.panel.detach();
         if place == Place::Docked {
