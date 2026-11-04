@@ -32,10 +32,28 @@ pub struct Connected {
 /// `ServerConnection.resolve()` with the command's `--server` and `--standalone`, and a client for it.
 /// Keep the result for as long as the command talks to the server.
 pub async fn connect(context: &Context) -> anyhow::Result<Connected> {
-    connect_in(context, &Paths::from_env()?, &Env::from_env()).await
+    connect_in(context, &Paths::from_env()?, &Env::from_env(), false).await
 }
 
-async fn connect_in(context: &Context, paths: &Paths, env: &Env) -> anyhow::Result<Connected> {
+/// `ServerConnection.resolve({ autostart: false })` (`run`): a running service, else a standalone server, so a
+/// one-off command never leaves a new service running.
+pub async fn connect_without_autostart(context: &Context) -> anyhow::Result<Connected> {
+    connect_in(context, &Paths::from_env()?, &Env::from_env(), true).await
+}
+
+impl Connected {
+    /// True for a registered background service (`Resolved.service` in TS).
+    pub fn is_service(&self) -> bool {
+        matches!(self._connection.source, connect::Source::Service { .. })
+    }
+}
+
+async fn connect_in(
+    context: &Context,
+    paths: &Paths,
+    env: &Env,
+    standalone_fallback: bool,
+) -> anyhow::Result<Connected> {
     let transport: Arc<dyn Transport> = Arc::new(Reqwest::default());
     let connection = connect::resolve(
         transport.clone(),
@@ -45,8 +63,8 @@ async fn connect_in(context: &Context, paths: &Paths, env: &Env) -> anyhow::Resu
             server: context.server.server.clone(),
             standalone: context.server.standalone,
             client_version: crate::help::VERSION.to_owned(),
-            // `ServerConnection.resolve()` with no arguments: start the service quietly when none runs.
-            standalone_fallback: false,
+            // Without it, `ServerConnection.resolve()` with no arguments: start the service quietly when none runs.
+            standalone_fallback,
             on_start: None,
         },
     )
@@ -170,7 +188,7 @@ process.exit(0)
             },
         };
         // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
-        let server = connect_in(&context, &paths, &env).await.unwrap();
+        let server = connect_in(&context, &paths, &env, false).await.unwrap();
         let info = server.client.server_info(&RequestOptions::default()).await;
         assert_eq!(info.unwrap().version, "test");
     }
