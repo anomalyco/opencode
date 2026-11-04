@@ -15,7 +15,10 @@ pub mod state;
 pub mod target;
 
 pub use changes::Changes;
+pub use forms::Form;
 pub use inbox::{InboxExt, PendingStatus, Prompt};
+pub use location::{Catalog, Location, LocationData};
 pub use messages::{LoadMore, MessageExt, Transcript};
 pub use sessions::CreateSession;
+pub use shells::Shell;
 pub use state::{Data, Error, Options, SessionStatus, State, Task};

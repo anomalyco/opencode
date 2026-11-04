@@ -11,6 +11,7 @@ use opencode_api::generated::*;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+use crate::location::{Catalog, Location};
 use crate::sessions::Outcome;
 use crate::state::{Data, Error, SessionStatus, State};
 
@@ -27,6 +28,14 @@ pub(crate) enum Follow {
     Renamed(SessionID, String),
     /// The `session.active` snapshot of connection `token`.
     Active(u64),
+    /// The default location's info, its VCS, and the projects, after `server.connected`.
+    Rehydrate,
+    /// Catalogs of a location, read together (already invalidated).
+    Catalogs(Vec<Catalog>, Location),
+    /// A catalog read once a burst of events under the key goes quiet (already invalidated).
+    Settle(String, Catalog, Location),
+    /// The web search providers of a location.
+    Websearch(Location),
 }
 
 impl Data {
@@ -61,6 +70,19 @@ impl Data {
             Follow::Message(session, message) => self.fetch_message(session, message),
             Follow::Renamed(session, title) => self.renamed(session, title),
             Follow::Active(token) => self.rehydrate(token),
+            Follow::Rehydrate => {
+                self.rehydrate_location();
+                let default = self.read(|state| state.default_location().clone());
+                self.refresh_catalogs(vec![Catalog::Vcs], default);
+                let projects = self.project_sync();
+                self.refresh(projects);
+            }
+            Follow::Catalogs(catalogs, location) => self.refresh_catalogs(catalogs, location),
+            Follow::Settle(key, catalog, location) => self.settle(key, catalog, location),
+            Follow::Websearch(location) => {
+                let task = self.websearch_refresh(Some(&location));
+                self.refresh(task);
+            }
         }
     }
 
@@ -153,7 +175,7 @@ impl State {
             V2Event::ServerConnected(_) => {
                 let token = self.token();
                 self.active_updates = Some((token, Default::default()));
-                return vec![Follow::Active(token)];
+                return vec![Follow::Active(token), Follow::Rehydrate];
             }
             V2Event::SessionCreated(event) => return self.on_session_created(&event.data),
             V2Event::SessionDeleted(event) => self.mark_deleted(&event.data.session_id),
@@ -276,8 +298,17 @@ impl State {
             V2Event::PermissionReplied(event) => {
                 self.remove_permission(&event.data.session_id, &event.data.request_id)
             }
-            // Projects, forms, shells, locations, and catalogs are F.8.
-            _ => {}
+            V2Event::ProjectUpdated(event) => self.on_project_updated(&event.data),
+            V2Event::WorktreeResolved(event) => return self.on_worktree_resolved(&event.data),
+            V2Event::FormReplied(event) => {
+                let location = event.location.as_ref().map(Location::from);
+                self.remove_form(&event.data.session_id, &event.data.id, location.as_ref());
+            }
+            V2Event::FormCancelled(event) => {
+                let location = event.location.as_ref().map(Location::from);
+                self.remove_form(&event.data.session_id, &event.data.id, location.as_ref());
+            }
+            _ => return self.on_catalog_event(event),
         }
         Vec::new()
     }

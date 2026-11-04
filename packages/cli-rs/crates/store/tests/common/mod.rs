@@ -22,12 +22,20 @@ pub struct Req {
     pub method: String,
     pub path: String,
     pub query: Vec<(String, String)>,
+    pub headers: Vec<(String, String)>,
     pub body: Option<Value>,
 }
 
 impl Req {
     pub fn param(&self, name: &str) -> Option<&str> {
         self.query
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
             .iter()
             .find(|(key, _)| key == name)
             .map(|(_, value)| value.as_str())
@@ -77,6 +85,7 @@ impl Transport for Fake {
                 .query_pairs()
                 .map(|(key, value)| (key.into_owned(), value.into_owned()))
                 .collect(),
+            headers: request.headers.clone(),
             body: request
                 .body
                 .as_ref()
