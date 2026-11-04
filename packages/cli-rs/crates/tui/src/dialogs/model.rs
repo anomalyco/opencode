@@ -1475,6 +1475,29 @@ pub fn install(tui: &Rc<Tui>) {
     local.load();
 }
 
+/// The agent and model the prompt shows and submits: what the user chose here (`useLocal`) once this
+/// state has its catalog, else the prompt's own reading of the catalog.
+pub fn prompt_selection(
+    tui: &Tui,
+    catalog: &crate::prompt::metadata::Catalog,
+    session: Option<&SessionInfo>,
+) -> Option<crate::prompt::metadata::Selection> {
+    let base = catalog.selection(session);
+    let local = &tui.local;
+    let Some(agent) = local.agent().filter(|_| local.catalog_ready()) else {
+        return base;
+    };
+    let model = local
+        .selection()
+        .map(|selection| crate::prompt::metadata::Choice {
+            provider_id: selection.model.provider_id,
+            model_id: selection.model.model_id,
+            variant: selection.variant,
+        })
+        .or_else(|| base.and_then(|base| base.model));
+    Some(crate::prompt::metadata::Selection { agent, model })
+}
+
 /// The [`RouteFn`] of the TUI: the routed session and what the store holds of it.
 pub fn route_fn(tui: Weak<Tui>) -> RouteFn {
     Rc::new(move || {

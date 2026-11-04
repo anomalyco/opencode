@@ -559,9 +559,16 @@ impl Connect {
             .methods
             .into_iter()
             .find_map(|method| match method {
-                IntegrationMethod::Oauth(method) if method.id.0 == "device" => {
-                    Some((method.label, method.form.unwrap_or_default()))
-                }
+                // The fields as JSON: only `type`, `key`, and `default` matter for the answer.
+                IntegrationMethod::Oauth(method) if method.id.0 == "device" => Some((
+                    method.label,
+                    method
+                        .form
+                        .unwrap_or_default()
+                        .iter()
+                        .filter_map(|field| serde_json::to_value(field).ok())
+                        .collect(),
+                )),
                 _ => None,
             })
     }
