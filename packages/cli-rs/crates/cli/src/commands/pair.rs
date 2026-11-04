@@ -216,7 +216,11 @@ mod tests {
         let text = links(
             &["http://127.0.0.1:4096".into(), "http://[::1]:4096/".into()],
             "abc",
-            600 work once and expire in 10 minutes.\n\n  http://127.0.0.1:4096/auth/connect/abc\n  http://[::1]:4096/auth/connect/abc\n\n"
+            600,
+        );
+        assert_eq!(
+            text,
+            "\n  Open a link to connect. Links work once and expire in 10 minutes.\n\n  http://127.0.0.1:4096/auth/connect/abc\n  http://[::1]:4096/auth/connect/abc\n\n"
         );
         assert!(links(&[], "abc", 90).contains("expire in 2 minutes.\n\n  (no server URLs)\n"));
         let remote = links(&["https://x.example/base".into()], "abc", 600);
