@@ -1,8 +1,10 @@
 import type { ToolCall } from "./protocol"
 
 export const MAX_ROUNDS = 50
+
 /** How long the delegator has to finish a response, from the delegation or from the tool outputs that resume it. */
 export const RESPONSE_TIMEOUT = 60_000
+
 /** Each tool call in a round gets this long; above wait_for_session's 90 s server wait. */
 export const TOOL_TIMEOUT = 100_000
 
@@ -204,8 +206,7 @@ function responded(
 // Without a delegation ID, a response belongs to the delegation already bound to it, else to the oldest one still
 // waiting for a response. Delegations running tools have not asked for one yet.
 function owner(state: VoiceDelegationState, event: Routed) {
-  if (typeof event.delegationID === "string")
-    return state.delegations.filter(responding).find((item) => item.id === event.delegationID)
+  if (event.delegationID) return state.delegations.filter(responding).find((item) => item.id === event.delegationID)
 
   if (event.responseID && state.finished.includes(event.responseID)) return undefined
   const waiting = state.delegations.filter(responding)

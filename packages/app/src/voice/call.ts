@@ -28,6 +28,16 @@ export type CallState = {
   title: string
 }
 
+type CallRuntime = {
+  transport?: VoiceTransport
+  viewing: SessionInfo
+  muted: boolean
+  ended: boolean
+  watching: boolean
+  ready: boolean
+  joining: boolean
+}
+
 const outcomes = ["completed", "failed", "incomplete", "cancelled"] as const
 
 export function createVoiceCall(input: {
@@ -53,15 +63,7 @@ export function createVoiceCall(input: {
     tabs: input.tabs,
   })
 
-  const state: {
-    transport?: VoiceTransport
-    viewing: SessionInfo
-    muted: boolean
-    ended: boolean
-    watching: boolean
-    ready: boolean
-    joining: boolean
-  } = {
+  const state: CallRuntime = {
     viewing: input.session,
     muted: false,
     ended: false,
@@ -112,7 +114,7 @@ export function createVoiceCall(input: {
     state.joining = true
     input.change({ status: "connecting", failure: undefined })
     await connect()
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (!state.ended) drop(error instanceof VoiceFailure ? error.reason : "connection")
       })
       .finally(() => {

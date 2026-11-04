@@ -48,6 +48,7 @@ test("an untagged response reaches the open delegation while another runs tools"
     { type: "response.finished", delegationID: "del_1", responseID: "resp_1", outcome: "completed" },
     created("del_2"),
   ])
+
   expect(running.effects.filter((effect) => effect.type === "round").map((effect) => effect.id)).toEqual(["del_1"])
 
   const second = replay(
@@ -57,6 +58,7 @@ test("an untagged response reaches the open delegation while another runs tools"
     ],
     running.state,
   )
+
   expect(finishes(second.effects)).toEqual([{ type: "finish", id: "del_2", outcome: "answered" }])
 
   const first = replay(
@@ -73,6 +75,7 @@ test("an untagged response reaches the open delegation while another runs tools"
     ],
     second.state,
   )
+
   expect(first.effects).toContainEqual({ type: "outputs", outputs: [{ call_id: "call_1", output: "{}" }] })
   expect(finishes(first.effects)).toEqual([{ type: "finish", id: "del_1", outcome: "answered" }])
   // Session replies wait on this; before, del_2 never finished and replies were never announced.
@@ -106,6 +109,7 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
   })
 
   const responding = attempt(start.state, "del_1")
+
   const running = replay(
     [
       call("call_1"),
@@ -114,9 +118,11 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
     ],
     start.state,
   )
+
   expect(finishes(running.effects)).toEqual([])
 
   const round = attempt(running.state, "del_1")
+
   const timedOut = replay(
     [
       { type: "delegation.timeout", id: "del_1", attempt: round },
@@ -124,6 +130,7 @@ test("a timeout discards only its delegation and ignores an earlier phase's time
     ],
     running.state,
   )
+
   expect(timedOut.effects).toEqual([{ type: "finish", id: "del_1", outcome: "discarded" }])
   expect(timedOut.state.delegations.map((delegation) => delegation.id)).toEqual(["del_2"])
 })
