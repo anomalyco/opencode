@@ -612,7 +612,8 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
             .into_iter()
             .filter_map(|mut action| {
                 // An action with neither shows its title alone; one with a command hides without a shortcut.
-                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none()) else {
+                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none())
+                else {
                     return Some(action);
                 };
                 action.key = Some(cx.keymap.shortcut(command)?);
