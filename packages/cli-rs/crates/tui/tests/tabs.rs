@@ -6,11 +6,13 @@
 //!
 //! The cell-level proofs are the P-APP scenarios `E.12/tab-strip` and `E.12/rail-resize`.
 
+#[path = "support/wait.rs"]
+mod wait;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
@@ -22,6 +24,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+use wait::WAIT;
 
 const CHANNEL: &str = "test";
 
@@ -117,9 +120,7 @@ fn mount(width: u16, config: Value) -> Harness {
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -129,7 +130,21 @@ impl Harness {
         self.tui.navigate(Route::Session {
             id: opencode_api::generated::SessionID(id.into()),
         });
-        self.app.wait_until(Duration::from_millis(200), || false);
+        let opened = self
+            .app
+            .wait_until(WAIT, || self.ids().iter().any(|tab| tab == id));
+        assert!(opened, "no {id} tab: {:?}", self.ids());
+    }
+
+    /// Waits until the tabs are `ids` and the route is the session `route`, or home.
+    fn wait_tabs(&self, ids: &[&str], route: Option<&str>) {
+        let route = route.map_or(Route::Home, |id| Route::Session {
+            id: opencode_api::generated::SessionID(id.into()),
+        });
+        let found = self
+            .app
+            .wait_until(WAIT, || self.ids() == ids && self.tui.route() == route);
+        assert!(found, "tabs {:?}, route {:?}", self.ids(), self.tui.route());
     }
 
     fn file(&self, key: &str) -> Value {
@@ -146,9 +161,7 @@ impl Harness {
 
     /// Waits until `key`'s file satisfies `check`.
     fn wait_file(&self, key: &str, check: impl Fn(&Value) -> bool) -> Value {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || check(&self.file(key)));
+        let found = self.app.wait_until(WAIT, || check(&self.file(key)));
         let value = self.file(key);
         assert!(found, "{key}.json: {value}");
         value
@@ -162,6 +175,11 @@ impl Harness {
             .map(|tab| tab.session_id)
             .collect()
     }
+}
+
+/// The stored tabs once both sessions are open and their titles have loaded.
+fn both_tabs() -> Value {
+    json!([{ "sessionID": "ses_a", "title": "Fix the parser" }, { "sessionID": "ses_b", "title": "Write the docs" }])
 }
 
 fn cwd() -> String {
@@ -180,37 +198,15 @@ fn tabs_open_close_and_persist_in_the_cwd_scope() {
         screen.lines().next().unwrap().contains("Fix the parser"),
         "{screen}"
     );
-    let file = h.wait_file("tabs", |file| {
-        file["cwd"][cwd()]["tabs"]
-            .as_array()
-            .is_some_and(|tabs| tabs.len() == 2)
-    });
-    assert_eq!(
-        file["cwd"][cwd()]["tabs"],
-        json!([{ "sessionID": "ses_a", "title": "Fix the parser" }, { "sessionID": "ses_b", "title": "Write the docs" }])
-    );
+    let file = h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
     assert_eq!(file["cwd"][cwd()]["unread"], json!({}));
 
     // `<leader>w` closes the open tab and goes back to the previous one; `ctrl+shift+t` reopens it.
     h.app.press("ctrl+x");
     h.app.press("w");
-    h.app.wait_until(Duration::from_millis(100), || false);
-    assert_eq!(h.ids(), ["ses_a"]);
-    assert_eq!(
-        h.tui.route(),
-        Route::Session {
-            id: opencode_api::generated::SessionID("ses_a".into())
-        }
-    );
+    h.wait_tabs(&["ses_a"], Some("ses_a"));
     h.app.press("ctrl+shift+t");
-    h.app.wait_until(Duration::from_millis(100), || false);
-    assert_eq!(h.ids(), ["ses_a", "ses_b"]);
-    assert_eq!(
-        h.tui.route(),
-        Route::Session {
-            id: opencode_api::generated::SessionID("ses_b".into())
-        }
-    );
+    h.wait_tabs(&["ses_a", "ses_b"], Some("ses_b"));
 }
 
 #[test]
@@ -224,7 +220,7 @@ fn deleting_the_open_tab_selects_another_without_a_toast() {
         "location": { "directory": "/project" },
         "data": { "sessionID": "ses_b" },
     }));
-    let moved = h.app.wait_until(Duration::from_secs(5), || {
+    let moved = h.app.wait_until(WAIT, || {
         h.tui.route()
             == Route::Session {
                 id: opencode_api::generated::SessionID("ses_a".into()),
@@ -241,9 +237,7 @@ fn clear_closes_the_tab_and_goes_home() {
     h.open("ses_b");
     h.wait_for("Write the docs");
     h.tui.keymap.dispatch("session.clear", None);
-    h.app.wait_until(Duration::from_millis(100), || false);
-    assert_eq!(h.tui.route(), Route::Home);
-    assert_eq!(h.ids(), ["ses_a"]);
+    h.wait_tabs(&["ses_a"], None);
     // Home shows the strip with the new-session tab.
     let screen = h.wait_for("New session");
     assert!(
@@ -286,18 +280,23 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
 
     // Drag the handle (on the boundary's right cell, column 69) to column 89: the panel is 50 wide.
     h.app.drag((69, 10), (89, 10));
-    h.app.wait_until(Duration::from_millis(100), || false);
-    let screen = h.app.text();
-    let row = screen
-        .lines()
-        .find(|line| line.contains("panel for"))
-        .unwrap();
-    assert_eq!(row.chars().position(|c| c == 'p'), Some(90), "{screen}");
+    let column = || {
+        h.app
+            .text()
+            .lines()
+            .find(|line| line.contains("panel for"))
+            .and_then(|row| row.chars().position(|c| c == 'p'))
+    };
+    assert!(
+        h.app.wait_until(WAIT, || column() == Some(90)),
+        "{}",
+        h.app.text()
+    );
     h.wait_file("layout", |layout| layout["paneWidth"] == 50);
 
     // Leaving the panel's session closes it.
     h.open("ses_b");
-    assert!(h.tui.panels.current().is_none());
+    assert!(h.app.wait_until(WAIT, || h.tui.panels.current().is_none()));
 }
 
 // P-FILE: the TS client reads what Rust wrote and Rust reads what TS wrote, under the same lock.
@@ -310,27 +309,21 @@ fn tabs_and_layout_are_shared_with_the_typescript_client() {
         json!({ "animations": false, "tabs": { "layout": "vertical" } }),
     );
     h.open("ses_b");
-    h.wait_file("tabs", |file| {
-        file["cwd"][cwd()]["tabs"]
-            .as_array()
-            .is_some_and(|tabs| tabs.len() == 2)
-    });
+    // The second tab's title lands with its session read.
+    h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
     // The rail's handle sits on column 41; a drag to 30 stores 31.
     h.app.drag((41, 10), (30, 10));
     h.wait_file("layout", |layout| layout["verticalTabsWidth"] == 31);
 
     let state = h.state.to_string_lossy().into_owned();
     let read = run(&script, &["load", &state, CHANNEL]);
-    assert_eq!(
-        read["tabs"]["cwd"][cwd()]["tabs"],
-        json!([{ "sessionID": "ses_a", "title": "Fix the parser" }, { "sessionID": "ses_b", "title": "Write the docs" }])
-    );
+    assert_eq!(read["tabs"]["cwd"][cwd()]["tabs"], both_tabs());
     assert_eq!(read["layout"]["verticalTabsWidth"], 31);
 
     // TS moves a tab and widens the rail; the running Rust TUI's storage watch picks both up.
     run(&script, &["move", &state, CHANNEL, &cwd(), "ses_b", "0"]);
     run(&script, &["width", &state, CHANNEL, "50"]);
-    let reloaded = h.app.wait_until(Duration::from_secs(5), || {
+    let reloaded = h.app.wait_until(WAIT, || {
         h.ids() == ["ses_b", "ses_a"] && h.tui.frame.rail_width(&h.tui) == 50
     });
     assert!(

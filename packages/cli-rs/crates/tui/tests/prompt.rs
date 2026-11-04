@@ -1,6 +1,9 @@
 //! The prompt (E.2) over a fixture server that records requests: editing through the `input.*`
 //! layer, submit, queue, history, drafts, shell mode, clear, interrupt, and a new session from home.
 
+#[path = "support/wait.rs"]
+mod wait;
+
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -17,6 +20,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+use wait::WAIT;
 
 /// A request the fixture saw: method, path, and JSON body.
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
@@ -200,9 +204,7 @@ impl Setup {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -232,9 +234,9 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<Value> {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
-            self.requests(method, suffix).len() >= count
-        });
+        let found = self
+            .app
+            .wait_until(WAIT, || self.requests(method, suffix).len() >= count);
         assert!(
             found,
             "no {method} …{suffix}: {:?}",
@@ -249,9 +251,9 @@ impl Setup {
     }
 
     fn wait_history(&self, lines: usize) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
-            self.history().lines().count() >= lines
-        });
+        let found = self
+            .app
+            .wait_until(WAIT, || self.history().lines().count() >= lines);
         assert!(found, "history has {:?}", self.history());
         self.history()
     }
@@ -514,7 +516,7 @@ fn home_prompt_creates_a_session_and_opens_it() {
     let id = created[0]["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
     assert_eq!(prompts[0]["text"], "Reply with ok");
-    let opened = setup.app.wait_until(Duration::from_secs(5), || {
+    let opened = setup.app.wait_until(WAIT, || {
         setup.tui.route()
             == Route::Session {
                 id: SessionID(id.clone()),
@@ -625,7 +627,7 @@ fn history_file_is_shared_with_typescript() {
     .unwrap();
     let again = Setup::with_home(session_route(), home);
     again.ready();
-    let loaded = again.app.wait_until(Duration::from_secs(5), || {
+    let loaded = again.app.wait_until(WAIT, || {
         again.app.press("up");
         let found = again.textarea().text() == "from typescript";
         // Until the history loads, Up does nothing; Ctrl+C on an empty prompt would exit.

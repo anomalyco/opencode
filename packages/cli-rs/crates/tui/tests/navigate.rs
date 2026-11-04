@@ -1,5 +1,8 @@
 //! Scrolling, message navigation, the scrollbar, and groups (E.8) over a long fixture session.
 
+#[path = "support/wait.rs"]
+mod wait;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,6 +16,7 @@ use opencode_local::cli_config::{Info, Resolved, Session, Verbosity};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+use wait::WAIT;
 
 /// Serves one session's messages, newest page first, `limit` at a time, with a cursor that counts the
 /// messages older than the page.
@@ -151,9 +155,7 @@ fn open(messages: Vec<Value>, info: Info) -> Harness {
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -162,13 +164,25 @@ impl Harness {
     fn press(&self, key: &str) -> String {
         self.app.press(key);
         self.app.advance(Duration::from_millis(1));
-        self.app.text()
+        self.idle()
+    }
+
+    /// Renders frames until none is pending and no older page is loading: a move near the top runs
+    /// two frames later (`after_layout`), and a backfill lands whenever its page arrives.
+    fn idle(&self) -> String {
+        let idle = self.app.wait_until(WAIT, || {
+            self.app.render();
+            !self.app.needs_frame() && !self.app.text().contains("Loading session history…")
+        });
+        let screen = self.app.text();
+        assert!(idle, "never idle:\n{screen}");
+        screen
     }
 
     fn dispatch(&self, command: &str) -> String {
         self.tui.keymap.dispatch(command, None);
         self.app.advance(Duration::from_millis(1));
-        self.app.text()
+        self.idle()
     }
 
     /// The row a line shows on, if it does.
@@ -242,12 +256,6 @@ fn page_up_backfills_then_last_returns_to_the_tail() {
         }
         let previous = screen;
         screen = h.press("pageup");
-        if screen.contains("Loading session history…") {
-            assert!(h.app.wait_until(Duration::from_secs(5), || {
-                !h.app.text().contains("Loading session history…")
-            }));
-            screen = h.app.text();
-        }
         let first = previous
             .lines()
             .skip(TOP)
@@ -353,7 +361,6 @@ fn message_navigation_aligns_messages_with_the_top() {
     // Walking back past the loaded history loads older pages.
     for _ in 0..80 {
         h.dispatch("session.message.user.previous");
-        h.app.wait_until(Duration::from_millis(50), || false);
     }
     let screen = h.wait_for("┃  Question 1\n");
     assert_eq!(
