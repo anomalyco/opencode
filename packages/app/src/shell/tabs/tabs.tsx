@@ -13,6 +13,7 @@ import { uuid } from "@opencode/util/uuid"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
+import { createSessionPreview } from "./preview"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
 import {
   createDraftComposerState,
@@ -177,6 +178,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (recent.key && !next.some((tab) => tabKey(tab) === recent.key)) setRecentKey(undefined)
       const keys = new Set(next.map(tabKey))
 
+      const previewTab = preview.current()
+
+      if (previewTab) keys.add(tabKey(previewTab))
+
       for (const key of Object.keys(info)) {
         if (!keys.has(key)) removeInfo(key)
       }
@@ -197,6 +202,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     const navigateTab = (tab: Tab) => {
+      if (preview.current()) {
+        void startTransition(() => {
+          preview.clear()
+          setRecentKey(tabKey(tab))
+          navigate(tabHref(tab))
+        })
+
+        return
+      }
+
       const href = tabHref(tab)
       setRecentKey(tabKey(tab))
       navigate(href)
@@ -212,12 +227,46 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (tab.type === "draft") removeDraftPersisted(tab.draftID)
     }
 
+    const preview = createSessionPreview({
+      tabs: () => store,
+      onKeep: (tab): SessionTab => actions.addSessionTab(tab),
+      onNavigate: (tab, isPreview) => {
+        if (isPreview) {
+          navigate(tabHref(tab))
+
+          return
+        }
+
+        navigateTab(tab)
+      },
+      onDiscard: disposeTab,
+    })
+
+    const previewRoute = () => {
+      const current = preview.current()
+
+      const route = currentRoute()
+
+      return (
+        !!current &&
+        route.type === "session" &&
+        current.server === route.server &&
+        (current.sessionId === route.sessionId || current.routeSessionId === route.sessionId)
+      )
+    }
+
     const removeTab = (index: number) => {
       const tab = store[index]
 
       if (!tab) return
       const key = tabKey(tab)
-      const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
+
+      const nextTab = nextTabAfterClose(
+        store,
+        index,
+        !previewRoute() && recentKey() === key && location.pathname !== "/",
+      )
+
       closing.add(key)
       void startTransition(() => {
         setStore(
@@ -237,12 +286,53 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const actions = {
+      preview: preview.current,
+      previewSession(tab: Omit<SessionTab, "type">) {
+        void startTransition(() => preview.open(tab))
+      },
+      keepPreview(tab?: SessionTab) {
+        void startTransition(() => preview.keep(tab))
+      },
+      closePreview() {
+        if (!preview.current()) return
+        void startTransition(() => {
+          preview.clear()
+          const next = store.find((tab) => tabKey(tab) === recentKey()) ?? store.at(-1)
+
+          if (next) {
+            navigateTab(next)
+
+            return
+          }
+
+          navigate("/")
+        })
+      },
+      sessionTab(server: ServerConnection.Key, sessionID: string) {
+        const current = preview.current()
+
+        return (
+          findSessionTab(store, server, sessionID) ??
+          (current ? findSessionTab([current], server, sessionID) : undefined)
+        )
+      },
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
-        const existing = store.find((item) => tabKey(item) === tabKey(next))
 
-        if (existing) return existing
+        const current = preview.current()
+
+        const existing = store.find(
+          (item): item is SessionTab => item.type === "session" && tabKey(item) === tabKey(next),
+        )
+
+        if (existing) {
+          if (current?.server === next.server && current.sessionId === next.sessionId) preview.release()
+
+          return existing
+        }
+
         void startTransition(() => {
+          if (current?.server === next.server && current.sessionId === next.sessionId) preview.release()
           setStore(
             produce((tabs) => {
               if (tabs.some((item) => tabKey(item) === tabKey(next))) return
@@ -276,6 +366,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const tab = { type: "draft" as const, draftID, ...draft }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
+          preview.clear()
           setStore(
             produce((tabs) => {
               tabs.push(tab)
@@ -417,7 +508,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             .reduce((stack, entry) => pushClosedTab(stack, entry.tab, entry.index, info[tabKey(entry.tab)]), stack),
         )
 
-        const active = recentKey()
+        const active = previewRoute() ? undefined : recentKey()
 
         entries.forEach((entry) => closing.add(tabKey(entry.tab)))
         void startTransition(() => {
@@ -463,6 +554,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
       },
       removeSessionTab(input: Omit<SessionTab, "type">) {
+        const current = preview.current()
+
+        if (
+          current?.server === input.server &&
+          (current.sessionId === input.sessionId || current.routeSessionId === input.sessionId)
+        )
+          actions.closePreview()
         updateClosed((stack) => removeClosedTabs(stack, input.server, [input.sessionId]))
 
         const index = store.findIndex(
@@ -480,6 +578,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const removed = store.filter((tab) => tab.server === key).map(tabKey)
         setStore((tabs) => tabs.filter((tab) => tab.server !== key))
 
+        if (preview.current()?.server === key) actions.closePreview()
+
         for (const key of removed) memory.remove(key)
 
         for (const key of removed) removeInfo(key)
@@ -490,6 +590,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       removeSessions: (input: SessionTabsRemovedDetail) => {
         const targetServer = input.server
+
+        const current = preview.current()
+
+        if (current?.server === targetServer && input.sessionIDs.includes(current.sessionId)) actions.closePreview()
         updateClosed((stack) => removeClosedTabs(stack, targetServer, input.sessionIDs))
 
         const removed = store
@@ -572,6 +676,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       select: navigateTab,
       remember(tab: Tab) {
+        preview.activate(tab)
         const key = tabKey(tab)
 
         if (recentKey() !== key) setRecentKey(key)
@@ -579,7 +684,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       rememberSessionRoute(tab: SessionTab, sessionId: string, parentId?: string) {
         const index = store.findIndex((item) => tabKey(item) === tabKey(tab))
 
-        if (index === -1) return
+        if (index === -1) {
+          if (preview.current() === tab) preview.setRoute(sessionId, parentId)
+
+          return
+        }
+
         setStore(
           index,
           produce((item) => {
@@ -591,6 +701,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
       toggleHome(input: { home: boolean; current?: Tab }) {
         if (input.home) {
+          const current = preview.current()
+
+          if (current) {
+            navigate(tabHref(current))
+
+            return
+          }
+
           const tab = store.find((tab) => tabKey(tab) === recentKey())
 
           if (tab) navigateTab(tab)
@@ -599,7 +717,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         }
 
         if (input.current) {
-          setRecentKey(tabKey(input.current))
+          if (input.current !== preview.current()) setRecentKey(tabKey(input.current))
           navigate("/")
 
           return

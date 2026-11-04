@@ -1639,7 +1639,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
     id: `ses_inbox_${String(index).padStart(2, "0")}`,
     title: `Inbox session ${index}`,
     directory: index === 14 ? "C:/OpenCode/Inbox/worktrees/unopened" : "C:/OpenCode/Inbox",
-    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index },
+    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index, viewed: T0 + 100 },
   }))
 
   await mockWorkspace(page, {
@@ -1774,13 +1774,21 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await mockWorkspace(page, {
     name: "CurrentInbox",
     sessions: [
-      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0 } },
-      { id: "ses_current_search", title: "Older Search session", time: { created: T0, updated: T0, idle: T0 } },
-      { id: "ses_current_recent", title: "Recent inbox session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_current_search",
+        title: "Older Search session",
+        time: { created: T0, updated: T0, idle: T0, viewed: T0 },
+      },
+      {
+        id: "ses_current_recent",
+        title: "Recent inbox session",
+        time: { created: T0, updated: T0 + 2, idle: T0 + 2, viewed: T0 + 2 },
+      },
       ...Array.from({ length: 9 }, (_, index) => ({
         id: `ses_current_extra_${index}`,
         title: `Other recent session ${index}`,
-        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index },
+        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index, viewed: T0 + 3 + index },
       })),
     ],
     seed: {
@@ -1823,3 +1831,213 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await expectPath(page, "/")
   await expect(rows).toHaveCount(10)
 })
+
+test("the inbox keeps every unread result separate from expandable Recent, including never-run sessions", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "InboxSections",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_unread_${index}`,
+        title: `Unread result ${index}`,
+        outcome: index === 0 ? "failed" : "succeeded",
+        time: { created: T0, updated: T0 + index, idle: T0 + index },
+      })),
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_read_${index}`,
+        title: index === 0 ? "Never-run session" : `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: index ? T0 + 100 - index : undefined, viewed: T0 + 200 },
+      })),
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const unread = inbox.getByRole("group", { name: "Unread", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(unread).toContainText(Array.from({ length: 12 }, (_, index) => `Unread result ${11 - index}`))
+  await expect(unread.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
+  await expect(recent).toContainText([
+    "Never-run session",
+    ...Array.from({ length: 9 }, (_, index) => `Read session ${index + 1}`),
+  ])
+  await expect(recent).toHaveCount(10)
+  await expect(inbox.locator('[data-slot="sidebar-inbox-item"][tabindex="0"]')).toHaveCount(1)
+
+  await unread.filter({ hasText: "Unread result 11" }).focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(unread.filter({ hasText: "Unread result 10" })).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(recent.filter({ hasText: "Read session 9" })).toBeFocused()
+  await page.keyboard.press("Home")
+  await expect(unread.filter({ hasText: "Unread result 11" })).toBeFocused()
+
+  await inbox.getByRole("button", { name: "Show more", exact: true }).click()
+  await expect(recent).toHaveCount(12)
+  await expect(recent.filter({ hasText: "Read session 11" })).toHaveCount(1)
+  await expect(unread).toHaveCount(12)
+  await page.reload()
+  await expect(recent).toHaveCount(12)
+  await inbox.getByRole("button", { name: "Show less", exact: true }).click()
+  await expect(recent).toHaveCount(10)
+  await expect(unread).toHaveCount(12)
+})
+
+test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxWaiting",
+    sessions: [
+      {
+        id: "ses_waiting_old",
+        title: "Oldest waiting session",
+        time: { created: T0, updated: T0 + 60_000, busy: T0 },
+      },
+      {
+        id: "ses_waiting_new",
+        title: "Newer waiting session",
+        time: { created: T0, updated: T0 + 9 * 60_000, busy: T0 + 5 * 60_000 },
+      },
+      {
+        id: "ses_waiting_live",
+        title: "New live question",
+        time: { created: T0, updated: T0 + 2 * 60_000, busy: T0 + 60_000 },
+      },
+    ],
+    sessionStatus: {
+      ses_waiting_old: { type: "running" },
+      ses_waiting_new: { type: "running" },
+      ses_waiting_live: { type: "running" },
+    },
+    sessionPermissions: {
+      ses_waiting_old: [{ id: "perm_inbox_old", sessionID: "ses_waiting_old", action: "shell", resources: ["build"] }],
+      ses_waiting_new: [{ id: "perm_inbox_new", sessionID: "ses_waiting_new", action: "shell", resources: ["test"] }],
+    },
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+
+  const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+
+  await page.goto("/")
+  await pending.arrived
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  await expect(inbox.getByText("Sessions you work on will appear here", { exact: true })).toHaveCount(0)
+  pending.release()
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session"])
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(inbox.getByRole("status")).toBeEmpty()
+  workspace.push([
+    {
+      id: "evt_inbox_question",
+      type: "form.created",
+      created: T0 + 8 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_inbox_question",
+          sessionID: "ses_waiting_live",
+          title: "Choose a library",
+          metadata: { kind: "question" },
+          fields: [{ key: "library", type: "string", title: "Library" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session", "New live question"])
+  await expect(needs.filter({ hasText: "New live question" })).toContainText("2m")
+  await expect(inbox.getByRole("status")).toHaveText("New live question has a question.")
+  await expect(inbox.getByRole("status")).toHaveCount(1)
+})
+
+test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "horizontal")
+  await page.goto(sessionHref(a.id))
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  const dot = tab.locator('[data-mark="attention"]')
+
+  // The first reply proves the client holds the request; auto-accept still owns it, so the tab only shows work.
+  await reply.arrived
+  await expect(tab.locator('[data-mark="busy"]')).toBeVisible()
+  await expect(dot).toBeHidden()
+
+  reply.release()
+  await expect(dot).toBeVisible()
+  await expect(tab.locator('[data-mark="busy"]')).toBeHidden()
+  expect(reply.attempts()).toBe(3)
+})
+
+test("the inbox moves a session to Needs attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "inbox")
+  await page.goto(sessionHref(a.id))
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: b.title })
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await reply.arrived
+  await expect(row).toHaveAttribute("data-status", "working")
+  await expect(needs).toHaveCount(0)
+
+  reply.release()
+  await expect(needs).toHaveCount(1)
+  await expect(needs).toContainText(b.title)
+  await expect(needs).toHaveAttribute("data-status", "approval")
+  expect(reply.attempts()).toBe(3)
+})
+
+// Auto-accept is on and every reply to session B's permission fails. The first reply waits for `release()`; then it
+// and both retries fail, and auto-accept gives up.
+async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox") {
+  const permissionID = "permission-gave-up"
+  const released = Promise.withResolvers<void>()
+  const arrived = Promise.withResolvers<void>()
+  const attempts = { count: 0 }
+
+  await mockWorkspace(page, {
+    name: "GaveUp",
+    sessions: [a, b],
+    sessionPermissions: {
+      [b.id]: [
+        { id: permissionID, sessionID: b.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      settings: { appearance: { tabLayout }, permissions: { autoApprove: true } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.route(new RegExp(`/api/session/${b.id}/permission/${permissionID}/reply(\\?|$)`), async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attempts.count++
+    arrived.resolve()
+
+    if (attempts.count === 1) await released.promise
+    await route.fulfill({ status: 500, json: { message: "Reply failed" } })
+  })
+
+  return {
+    arrived: arrived.promise,
+    release: () => released.resolve(),
+    attempts: () => attempts.count,
+  }
+}

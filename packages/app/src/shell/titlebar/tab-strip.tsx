@@ -113,6 +113,7 @@ function SessionTabEntry(
     id: string
     index: number
     active: boolean
+    highlightActive?: boolean
     orientation: "horizontal" | "vertical"
     serverCtx: ServerCtx | undefined
     onVisibleChange: (visible: boolean) => void
@@ -312,7 +313,7 @@ function SessionTabEntry(
         tab={props.tab}
         id={props.id}
         index={props.index}
-        active={props.active}
+        active={props.active && props.highlightActive !== false}
         orientation={props.orientation}
         session={session()}
         preparing={!!pending()}
@@ -392,6 +393,7 @@ function DraftTabSlot(
 
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
+  highlightActive?: boolean
   tabs: Tab[]
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
@@ -621,6 +623,7 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={visibleIndex()}
                       active={props.currentTab === tab}
+                      highlightActive={props.highlightActive}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       serverCtx={serverCtx()}
                       onVisibleChange={(visible) => setVisibility(id, visible)}
@@ -641,7 +644,7 @@ export function TitlebarTabStrip(props: {
                     tab={tab}
                     id={id}
                     index={visibleIndex()}
-                    active={props.currentTab === tab}
+                    active={props.currentTab === tab && props.highlightActive !== false}
                     orientation={vertical() ? "vertical" : "horizontal"}
                     title={language.t("session.tab.session")}
                     onNavigate={(element) => {

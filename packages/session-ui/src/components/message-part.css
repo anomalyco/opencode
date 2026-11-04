@@ -1246,6 +1246,19 @@
     /* Nested sticky file headers stop below the open group header. */
     > [data-slot="collapsible-content"] {
       --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
+      position: relative;
+      margin-inline-start: 12px;
+      padding-inline-start: 12px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: -0.25px;
+        inset-block: 6px;
+        width: 0.5px;
+        background-color: var(--v2-border-border-base);
+        pointer-events: none;
+      }
     }
   }
 }

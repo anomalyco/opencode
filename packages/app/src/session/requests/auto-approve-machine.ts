@@ -97,8 +97,9 @@ export function transitionAutoApprove(state: AutoApproveState, event: AutoApprov
   ])
 }
 
-// Whether the permission dock shows a pending request. Auto-approve hides it only while a cycle can still answer it.
-export function isDockVisible(state: AutoApproveState, autoApprove: boolean) {
+// Whether a pending request waits on the user, so the permission dock shows it and every badge counts it.
+// Auto-approve hides it only while a cycle can still answer it.
+export function needsUser(state: AutoApproveState, autoApprove: boolean) {
   if (state.status === "replied") return false
 
   if (state.status === "gave-up") return true

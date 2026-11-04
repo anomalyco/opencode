@@ -2,7 +2,7 @@ import { Overlay, Portal, Root, Trigger } from "@kobalte/core/dialog"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { onMount } from "solid-js"
+import { onMount, type JSX } from "solid-js"
 
 const docs = `### Overview
 Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
@@ -45,16 +45,10 @@ function dialogHeader(title: string, description: string) {
 }
 
 // Opens through the dialog stack, so a preview that holds its dialogs holds this one too.
-function OpenAtOnce() {
+function OpenStoryDialog(props: { render: () => JSX.Element }) {
   const dialog = useDialog()
 
-  const open = () =>
-    dialog.show(() => (
-      <Dialog>
-        {dialogHeader("Dialog", "Description")}
-        <DialogBody>Dialog body content.</DialogBody>
-      </Dialog>
-    ))
+  const open = () => void dialog.show(props.render)
 
   onMount(open)
 
@@ -66,7 +60,16 @@ function OpenAtOnce() {
 }
 
 export const Basic = {
-  render: () => <OpenAtOnce />,
+  render: () => (
+    <OpenStoryDialog
+      render={() => (
+        <Dialog>
+          {dialogHeader("Dialog", "Description")}
+          <DialogBody>Dialog body content.</DialogBody>
+        </Dialog>
+      )}
+    />
+  ),
 }
 
 export const Sizes = {
@@ -116,20 +119,16 @@ export const Sizes = {
 
 export const TitleOnly = {
   render: () => (
-    <Root defaultOpen>
-      <Trigger as={Button} variant="neutral">
-        Open dialog
-      </Trigger>
-      <Portal>
-        <Overlay />
+    <OpenStoryDialog
+      render={() => (
         <Dialog>
           <DialogHeader>
             <DialogTitle>Open project</DialogTitle>
           </DialogHeader>
           <DialogBody>Dialog body content.</DialogBody>
         </Dialog>
-      </Portal>
-    </Root>
+      )}
+    />
   ),
 }
 
@@ -157,12 +156,8 @@ export const HeaderControls = {
 
 export const WithFooter = {
   render: () => (
-    <Root defaultOpen>
-      <Trigger as={Button} variant="neutral">
-        Open dialog
-      </Trigger>
-      <Portal>
-        <Overlay />
+    <OpenStoryDialog
+      render={() => (
         <Dialog fit>
           {dialogHeader("Save changes", "Your changes will be lost if you don't save them.")}
           <DialogFooter>
@@ -170,19 +165,15 @@ export const WithFooter = {
             <Button variant="contrast">Save</Button>
           </DialogFooter>
         </Dialog>
-      </Portal>
-    </Root>
+      )}
+    />
   ),
 }
 
 export const WithFooterThreeButtons = {
   render: () => (
-    <Root defaultOpen>
-      <Trigger as={Button} variant="neutral">
-        Open dialog
-      </Trigger>
-      <Portal>
-        <Overlay />
+    <OpenStoryDialog
+      render={() => (
         <Dialog fit>
           {dialogHeader("Unsaved changes", "You have unsaved changes. What would you like to do?")}
           <DialogFooter>
@@ -193,8 +184,8 @@ export const WithFooterThreeButtons = {
             <Button variant="contrast">Save</Button>
           </DialogFooter>
         </Dialog>
-      </Portal>
-    </Root>
+      )}
+    />
   ),
 }
 

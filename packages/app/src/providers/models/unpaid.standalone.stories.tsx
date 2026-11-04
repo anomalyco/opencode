@@ -3,6 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createSignal, onMount } from "solid-js"
 import { DialogSelectModelUnpaid } from "./unpaid"
+import { DialogStoryRuntime } from "@/components-lab/dialog-story-runtime"
 
 const names = [
   "MiMo V2.5 Free",
@@ -57,5 +58,9 @@ export default {
 }
 
 export const WithoutProviders = {
-  render: (args) => <SelectModelWithoutProviders count={args.count} />,
+  render: (args) => (
+    <DialogStoryRuntime>
+      <SelectModelWithoutProviders count={args.count} />
+    </DialogStoryRuntime>
+  ),
 }

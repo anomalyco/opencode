@@ -302,18 +302,6 @@ function Open(props: { initial?: string }) {
 
 export default { title: "App/Dialogs/SSH", id: "app-dialog-ssh" }
 
-export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
-
-export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
-
-export const IncompatibleHost = { render: () => <Fixture incompatible /> }
-
-export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }
-
-export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
-
-export const KeyReconnect = { render: () => <Fixture initial="required" session keyOnly connectionDelay={3000} /> }
-
 export const Host = { render: () => <Fixture /> }
 
 export const Connecting = { render: () => <Fixture initial="connecting" /> }
@@ -325,3 +313,15 @@ export const SlowPassword = { render: () => <Fixture initial="password" response
 export const Confirmation = { render: () => <Fixture initial="confirmation" /> }
 
 export const Failure = { render: () => <Fixture initial="failure" /> }
+
+export const IncompatibleHost = { render: () => <Fixture incompatible /> }
+
+export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
+
+export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
+
+export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }
+
+export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
+
+export const KeyReconnect = { render: () => <Fixture initial="required" session keyOnly connectionDelay={3000} /> }

@@ -242,10 +242,9 @@ function RootSettings() {
       })),
     },
     {
-      items: [...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs()],
-    },
-    {
       items: [
+        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+        ...pluginTabs(),
         {
           value: "servers",
           icon: pageIcons.servers,
@@ -253,11 +252,14 @@ function RootSettings() {
         },
       ],
     },
-    ...(experimentalSettingsAvailable
-      ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
-      : []),
     {
-      items: [...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs("about")],
+      items: [
+        ...pluginTabs("about"),
+        ...(experimentalSettingsAvailable
+          ? experimentalTab.map((item) => ({ ...item, label: language.t(item.label) }))
+          : []),
+        ...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })),
+      ],
     },
   ])
 
