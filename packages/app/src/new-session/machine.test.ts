@@ -59,7 +59,11 @@ test("a failed session create on an existing checkout rolls back to the draft in
   ])
 })
 
-test.each<{ name: string; events: NewSessionStartEvent[]; steps: { state: string; effects: string[] }[] }>([
+test.each<{
+  name: string
+  events: NewSessionStartEvent[]
+  steps: { state: NewSessionStartState["type"]; effects: string[] }[]
+}>([
   {
     name: "an existing checkout",
     events: [start(main), { type: "session.created", attempt: 1 }],
@@ -131,7 +135,7 @@ test("a new worktree creates the Session in the created directory", () => {
   ])
 })
 
-test.each<{ name: string; events: NewSessionStartEvent[]; effects: unknown[] }>([
+test.each<{ name: string; events: NewSessionStartEvent[]; effects: NewSessionStartEffect[] }>([
   {
     name: "worktree creation fails",
     events: [start(fresh, { figma: true }), { type: "worktree.failed", attempt: 1, message: "No space" }],
@@ -231,7 +235,7 @@ test("disposing aborts only an active attempt and ends the machine", () => {
   expect(result.effects).toEqual([])
 })
 
-test("the view shows worktree creation and MCP preparation only during those phases", () => {
+test("the view names worktree creation and shows MCP preparation only during those phases", () => {
   expect(
     [
       replay([start(fresh, { figma: true })]).state,
@@ -240,9 +244,9 @@ test("the view shows worktree creation and MCP preparation only during those pha
       createNewSessionStartState(),
     ].map(viewNewSessionStart),
   ).toEqual([
-    { creatingWorktree: true, preparingMcp: false },
-    { creatingWorktree: false, preparingMcp: true },
-    { creatingWorktree: false, preparingMcp: false },
-    { creatingWorktree: false, preparingMcp: false },
+    { status: "session.new.worktree.creating", preparingMcp: false },
+    { status: "session.new.starting", preparingMcp: true },
+    { status: "session.new.starting", preparingMcp: false },
+    { status: "session.new.starting", preparingMcp: false },
   ])
 })

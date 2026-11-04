@@ -126,12 +126,16 @@ export function transitionNewSessionStart(
 }
 
 export type NewSessionStartView = {
-  readonly creatingWorktree: boolean
+  // The pending session screen's status line.
+  readonly status: "session.new.worktree.creating" | "session.new.starting"
   readonly preparingMcp: boolean
 }
 
 export function viewNewSessionStart(state: NewSessionStartState): NewSessionStartView {
-  return { creatingWorktree: state.type === "worktree", preparingMcp: state.type === "mcp" }
+  return {
+    status: state.type === "worktree" ? "session.new.worktree.creating" : "session.new.starting",
+    preparingMcp: state.type === "mcp",
+  }
 }
 
 function start(

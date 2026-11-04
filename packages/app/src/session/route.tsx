@@ -90,9 +90,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
               role="status"
               class="mt-3 flex min-h-6 items-center text-[13px] font-medium leading-[var(--line-height-compact)] text-v2-text-text-muted"
             >
-              <Show when={props.pending.view().creatingWorktree}>
-                <TextShimmer text={language.t("session.new.worktree.creating")} active />
-              </Show>
+              <TextShimmer text={language.t(props.pending.view().status)} active />
             </div>
           </div>
         </div>
