@@ -413,11 +413,11 @@ fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
     kit.app.press("down");
     kit.app.press("escape");
     let found = kit.app.wait_until(Duration::from_secs(5), || {
-        // Below the header: the bar row above the prompt, then the prompt.
+        // Below the tab strip: the bar row above the prompt, then the prompt.
         kit.app
             .text()
             .lines()
-            .nth(4)
+            .nth(2)
             .is_some_and(|line| line.contains("First question"))
     });
     assert!(found, "{}", kit.app.text());
@@ -430,6 +430,8 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.ready();
     kit.tui.keymap.dispatch("session.fork", None);
     let screen = kit.wait_for("Fork session");
+    // The dialog's rows; the transcript above it shows the same prompts.
+    let screen = &screen[screen.find("Fork session").unwrap()..];
     let order = ["Full session", "Fix the bug in parse", "Read the parser"];
     let positions: Vec<_> = order
         .iter()
