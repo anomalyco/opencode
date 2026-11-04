@@ -83,7 +83,9 @@ impl Transport for Fixture {
             ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => {
                 (204, Value::Null)
             }
-            ("GET", path) if path.starts_with("/api/session/ses_b/") => (200, json!({ "data": [] })),
+            ("GET", path) if path.starts_with("/api/session/ses_b/") => {
+                (200, json!({ "data": [] }))
+            }
             _ => (404, json!({})),
         };
         let body = if status == 204 {
@@ -145,9 +147,11 @@ impl Setup {
             std::fs::write(paths.state.join(name), text).unwrap();
         }
         let seen = Seen::default();
-        let client =
-            Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() }))
-                .unwrap();
+        let client = Client::with_transport(
+            "http://opencode.local",
+            Arc::new(Fixture { seen: seen.clone() }),
+        )
+        .unwrap();
         let app = TestApp::new(100, 30);
         let tui = opencode_tui::mount(
             &app,
@@ -263,10 +267,7 @@ fn acknowledged_commits_clear_the_drafts() {
         setup.agent().as_deref() == Some("reviewer")
     });
     setup.tui.local.set_agent("build");
-    setup
-        .tui
-        .local
-        .set(&Model::new("openai", "gpt-5"), false);
+    setup.tui.local.set(&Model::new("openai", "gpt-5"), false);
     setup.submit("switch", 1);
     assert_eq!(setup.writes("/agent")[0]["agent"], "build");
     setup.emit(
@@ -335,14 +336,19 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
             text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n"
         })
     });
-    assert!(saved, "{:?}", std::fs::read_to_string(&file).unwrap().get(..200));
+    assert!(
+        saved,
+        "{:?}",
+        std::fs::read_to_string(&file).unwrap().get(..200)
+    );
     assert_eq!(history.step(-1, ""), Some(entry));
     assert_eq!(history.step(-1, "early").unwrap()["text"], "old");
 }
 
-/// carbon-7: past the limit the rewrite keeps a line the TS TUI appended after this one loaded.
+/// carbon-7: a save past the limit keeps a line the TS TUI appended after this one loaded; the next
+/// load trims the file to the newest 50.
 #[test]
-fn a_trim_keeps_lines_another_client_appended() {
+fn a_save_past_the_limit_keeps_lines_another_client_appended() {
     let full: String = (0..50)
         .map(|n| format!("{{\"text\":\"{n}\",\"pasted\":[]}}\n"))
         .collect();
@@ -354,16 +360,23 @@ fn a_trim_keeps_lines_another_client_appended() {
     });
     setup.tui.prompt.history.step(1, "49");
     let file = setup.state().join("prompt-history.jsonl");
-    let mut append = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
+    let mut append = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&file)
+        .unwrap();
     std::io::Write::write_all(&mut append, b"{\"text\":\"from ts\",\"pasted\":[]}\n").unwrap();
     setup.submit("from rust", 1);
-    setup.wait("the trim", || {
+    setup.wait("the save", || {
         setup.file("prompt-history.jsonl").contains("from rust")
     });
-    let text = setup.file("prompt-history.jsonl");
-    let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines.len(), 50, "{text}");
-    assert_eq!(lines[48], "{\"text\":\"from ts\",\"pasted\":[]}");
-    assert!(lines[49].contains("\"from rust\""), "{text}");
-    assert_eq!(lines[0], "{\"text\":\"2\",\"pasted\":[]}");
+    let history = opencode_local::jsonl::History::load(&setup.state());
+    let texts: Vec<&str> = history
+        .entries()
+        .iter()
+        .filter_map(|entry| entry["text"].as_str())
+        .collect();
+    assert_eq!(texts.len(), 50);
+    assert_eq!(texts[0], "2");
+    assert_eq!(texts[48..], ["from ts", "from rust"]);
+    assert_eq!(setup.file("prompt-history.jsonl").lines().count(), 50);
 }
