@@ -14,7 +14,9 @@ use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
-use opencode_ui::keymap::{Keybinds, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{
+    Bind, COMMAND_PALETTE_COMMAND, GLOBAL_MODE, Keybinds, KeymapLayer, Slash, TuiCommand,
+};
 use opencode_ui::theme::{
     Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions,
 };
@@ -292,6 +294,8 @@ fn install_keys(tui: &Rc<Tui>) {
         )));
     });
 
+    // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
+    // reaches them over a dialog, and separate layers bind their keys.
     let weak = tui.weak();
     let command = |id: &str, run: fn(&Tui)| {
         let weak = weak.clone();
@@ -300,8 +304,15 @@ fn install_keys(tui: &Rc<Tui>) {
                 run(&tui);
             }
         })
+        .bind(Bind::Off)
     };
-    let layer = KeymapLayer {
+    let bindings = |mode: Option<&str>, names: &[&str]| KeymapLayer {
+        mode: mode.map(str::to_owned),
+        bindings: names.iter().map(|name| (*name).to_owned()).collect(),
+        ..KeymapLayer::default()
+    };
+    let commands = KeymapLayer {
+        mode: Some(GLOBAL_MODE.to_owned()),
         commands: vec![
             command("app.exit", |tui| tui.app.quit())
                 .title("Exit the app")
@@ -319,15 +330,24 @@ fn install_keys(tui: &Rc<Tui>) {
                 .palette()
                 .suggested(route_is_session(&tui.weak()))
                 .slash(slash("new", &[])),
-            command(opencode_ui::keymap::COMMAND_PALETTE_COMMAND, |tui| {
+            command(COMMAND_PALETTE_COMMAND, |tui| {
                 palette::show(&tui.dialogs, Vec::new())
             }),
         ],
         ..KeymapLayer::default()
     };
-    match tui.keymap.layer(layer) {
-        Ok(disposer) => tui.layers.borrow_mut().push(disposer),
-        Err(error) => log::error!("app keymap layer: {error}"),
+    // E.2 enables the `app.exit` layer only while the prompt is empty (`app.tsx:1329-1335`).
+    let layers = [
+        commands,
+        bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show"]),
+        bindings(Some(GLOBAL_MODE), &["session.new"]),
+        bindings(None, &["app.exit"]),
+    ];
+    for layer in layers {
+        match tui.keymap.layer(layer) {
+            Ok(disposer) => tui.layers.borrow_mut().push(disposer),
+            Err(error) => log::error!("app keymap layer: {error}"),
+        }
     }
 }
 

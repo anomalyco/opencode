@@ -75,8 +75,11 @@ dialogs (absolute, z 3000), toasts (in root)
 - After every key, if `leader_deadline()` is set, a timer at that instant calls `expire_leader`.
 - `textarea_enabled` reads `Tui::textarea`, a slot E.2 fills with the prompt's textarea; while it holds,
   the textarea's own key handling must be off (E.2).
-- T.1's layer has `app.exit` (Ctrl+C, Ctrl+D, `<leader>q`), `command.palette.show` (Ctrl+P),
-  `help.show`, and `session.new` (`<leader>n`), which goes home as in TS. `exit_on_ctrl_c` is off: Ctrl+C
+- As `app.tsx:1303-1335`, T.1's commands sit in a `global` layer without bindings (so the palette
+  reaches them over a dialog), and separate layers bind keys: `command.palette.show` (Ctrl+P) and
+  `help.show` in base mode, `session.new` (`<leader>n`, goes home) in global mode, and `app.exit`
+  (Ctrl+C, Ctrl+D, `<leader>q`) in base mode. E.2 enables the `app.exit` layer only while the prompt
+  is empty. `exit_on_ctrl_c` is off: Ctrl+C
   reaches the keymap, so an open dialog closes first, as in TS. Quitting restores the terminal.
 
 ## Theme
