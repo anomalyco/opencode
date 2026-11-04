@@ -17,6 +17,7 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionInfo,
+  SessionMessageAssistant,
   SessionMessageInfo,
   SessionInboxInfo,
   ShellInfo,
@@ -60,6 +61,27 @@ interface LocationCollection<Value> {
 
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
+/** One part of an assistant message: text, reasoning or a tool call. */
+export type SessionPart = SessionMessageAssistant["content"][number]
+
+/** How much of its model's context window a session's last turn used. */
+export interface SessionUsage {
+  /** Input, output, reasoning and cache tokens of the last assistant turn with usage. */
+  readonly tokens: number
+  /** The model's context window, when the model is known. */
+  readonly limit?: number
+  /** `tokens` as a rounded percentage of `limit`. */
+  readonly percent?: number
+}
+
+/** The goal `/goal` set on a session. */
+export interface SessionGoal {
+  readonly objective: string
+  readonly status: "active" | "paused" | "complete"
+  /** Why the goal last changed. */
+  readonly reason?: string
+}
+
 export interface Data {
   readonly on: <Type extends OpenCodeEvent["type"]>(
     type: Type,
@@ -73,6 +95,17 @@ export interface Data {
     family(sessionID: string): string[]
     cost(sessionID: string): number
     status(sessionID: string): "idle" | "running"
+    /**
+     * The context window the session's last turn used, up to its revert point.
+     * Undefined until a turn reports usage. Reactive when read in a Solid computation.
+     */
+    usage(sessionID: string): SessionUsage | undefined
+    /**
+     * The session's goal, or undefined when none is set or the server has no
+     * goal plugin. Fetched on first read and kept current from the server.
+     * Reactive when read in a Solid computation.
+     */
+    goal(sessionID: string): SessionGoal | undefined
     readonly pending: {
       list(sessionID: string): SessionInboxInfo[]
       sync(sessionID: string): Promise<void>
@@ -85,6 +118,13 @@ export interface Data {
       get(sessionID: string, messageID: string): SessionMessageInfo | undefined
       sync(sessionID: string): Promise<void>
       invalidate(sessionID: string): void
+    }
+    readonly part: {
+      /**
+       * One part of an assistant message, by the `partID` a session.part.*
+       * slot receives. Reactive when read in a Solid computation.
+       */
+      get(sessionID: string, messageID: string, partID: string): SessionPart | undefined
     }
     readonly permission: {
       list(sessionID: string): PermissionRequest[] | undefined
@@ -168,7 +208,7 @@ export interface SessionMessageInput {
   readonly messageID: string
 }
 
-/** One part of an assistant message; read it with data.session.message.get. */
+/** One part of an assistant message; read it with data.session.part.get. */
 export interface SessionPartInput extends SessionMessageInput {
   readonly partID: string
 }
