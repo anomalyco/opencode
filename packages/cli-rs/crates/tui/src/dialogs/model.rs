@@ -1079,8 +1079,7 @@ fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
     );
 }
 
-impl Local {
-}
+impl Local {}
 
 // The select of `DialogConnectedModels`.
 fn build(
@@ -1097,7 +1096,13 @@ fn build(
         let provider = provider.clone();
         Rc::new(move |query: &str| {
             weak.upgrade().map_or_else(Vec::new, |local| {
-                options(&local, provider.as_deref(), query, &favorites_at_open, marker)
+                options(
+                    &local,
+                    provider.as_deref(),
+                    query,
+                    &favorites_at_open,
+                    marker,
+                )
             })
         })
     };
@@ -1236,7 +1241,11 @@ fn options(
             option.footer_fg = Some(marker);
         }
         let provider = providers.iter().find(|item| item.id == model.provider_id);
-        option.detail = Some(detail(model, true, usage_label(usage.as_ref(), model, provider)));
+        option.detail = Some(detail(
+            model,
+            true,
+            usage_label(usage.as_ref(), model, provider),
+        ));
     };
     let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
         if !show_sections {
@@ -1364,7 +1373,8 @@ fn usage_label(
         ));
     }
     let paid = !model.cost.iter().all(|cost| cost.input == 0.0);
-    (crate::dialogs::usage::served_by_console(provider) && paid).then(|| ("No limit".to_owned(), false))
+    (crate::dialogs::usage::served_by_console(provider) && paid)
+        .then(|| ("No limit".to_owned(), false))
 }
 
 /// `ModelDetail`: the selected model's price (unless `price` is false), input modalities, context window, and
@@ -1426,7 +1436,11 @@ pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> 
             }
             None => {
                 if price {
-                    row.add(&Text::new(app, cost.as_str()).fg(theme.text.muted).wrap(WrapMode::None));
+                    row.add(
+                        &Text::new(app, cost.as_str())
+                            .fg(theme.text.muted)
+                            .wrap(WrapMode::None),
+                    );
                 } else {
                     row.justify(Justify::Start);
                 }
