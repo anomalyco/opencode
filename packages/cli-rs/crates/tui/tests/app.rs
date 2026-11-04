@@ -86,6 +86,7 @@ fn run(recording: &Recording) -> (bool, String) {
             fork: args.fork,
             agent: args.agent.clone(),
             model: args.model.clone(),
+            auto: args.auto,
             ..Args::default()
         },
     );
