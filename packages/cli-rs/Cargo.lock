@@ -1168,6 +1168,7 @@ name = "opencode-tui"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "chrono",
  "futures-util",
  "indexmap",
  "log",
@@ -1182,6 +1183,7 @@ dependencies = [
  "opencode-ui",
  "opentui",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
