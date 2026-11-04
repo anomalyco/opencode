@@ -1201,6 +1201,7 @@ describe("OpencodePlugin", () => {
       Effect.sync(() => {
         const state = { sso: false }
         const hanging: (() => void)[] = []
+        const waiting = Promise.withResolvers<void>()
         const server = Bun.serve({
           port: 0,
           fetch: (request) => {
@@ -1210,12 +1211,18 @@ describe("OpencodePlugin", () => {
               { _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn_1" },
               { status: 403 },
             )
+            waiting.resolve()
             return new Promise<Response>((resolve) => hanging.push(() => resolve(response)))
           },
         })
-        return { server, state, release: () => hanging.splice(0).forEach((resolve) => resolve()) }
+        return {
+          server,
+          state,
+          waiting: waiting.promise,
+          release: () => hanging.splice(0).forEach((resolve) => resolve()),
+        }
       }),
-      ({ server, state, release }) =>
+      ({ server, state, waiting, release }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const hooks = yield* PluginHooks.Service
@@ -1243,7 +1250,7 @@ describe("OpencodePlugin", () => {
               ),
               Effect.forkChild({ startImmediately: true }),
             )
-          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+          yield* Effect.promise(() => waiting)
           yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("second") })
           yield* drain
 
