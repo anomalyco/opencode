@@ -186,13 +186,19 @@ fn answer(tui: &Tui, question: String, text: String) {
             let markdown =
                 opencode_ui::markdown::view(app, &page, &syntax, &renderers, conceal, false);
             markdown.set_markdown(&text);
-            let scroll = ScrollBox::new(app).scrollbars(false).max_height(max);
-            scroll.add(
-                &View::new(app)
-                    .padding_x(DIALOG_INSET)
-                    .padding_y(1)
-                    .child(&markdown),
-            );
+            let scroll = ScrollBox::new(app).scrollbars(false).height(1);
+            let content = View::new(app)
+                .shrink(0.0)
+                .padding_x(DIALOG_INSET)
+                .padding_y(1)
+                .child(&markdown);
+            // `maxHeight`: the box is as high as the answer and its padding, up to 60% of the screen.
+            let fit = scroll.clone();
+            markdown.on_resize(move |cx, rect| {
+                fit.height((rect.height.ceil() as u32 + 2).clamp(1, max));
+                cx.app().request_redraw();
+            });
+            scroll.add(&content);
             // Copying swaps the action for `✓ copied` in the success color; the key and a click both copy.
             let copy: Rc<RefCell<Option<Action>>> = Rc::default();
             let trigger = {
@@ -243,19 +249,17 @@ fn answer(tui: &Tui, question: String, text: String) {
                 .margin_x(-(DIALOG_INSET as i32))
                 .bg(page.background.raised.high)
                 .child(&scroll);
-            let layout = dialog::layout(
+            let footer = View::new(app).child(&dialog::footer(
                 cx,
-                &header,
-                &body,
-                Some(FooterProps {
+                FooterProps {
                     primary: vec![action],
                     ..FooterProps::default()
-                }),
-                None,
-            );
+                },
+            ));
+            let layout = dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1);
             {
                 let footer_cx = cx.clone();
-                let layout = layout.clone();
+                let footer = footer.clone();
                 let success = theme.text.feedback.success.base;
                 let weak = weak.clone();
                 let text = text.clone();
@@ -268,10 +272,8 @@ fn answer(tui: &Tui, question: String, text: String) {
                     }
                     let mut done = FooterAction::new("✓ copied").on_trigger(again.clone());
                     done.color = Some(success);
-                    if let Some(last) = layout.children().last() {
-                        last.detach();
-                    }
-                    layout.add(&dialog::footer(
+                    footer.clear();
+                    footer.add(&dialog::footer(
                         &footer_cx,
                         FooterProps {
                             primary: vec![done],
