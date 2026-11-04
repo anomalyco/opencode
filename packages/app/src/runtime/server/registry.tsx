@@ -1,8 +1,9 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLanguage } from "@/runtime/i18n/language"
-import { batch, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createResource, untrack } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { pathKey } from "@/workspaces/path-key"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerEntry } from "@opencode/plugin/gui"
 import { ServerHttp, ServerHttpBase, ServerKey, ServerState } from "./persistence"
@@ -47,12 +48,39 @@ function loopbackOrigin(url: string) {
   return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
 }
 
+// A filesystem root ("/", "C:/") is too broad to open as a project.
+export function adoptable(directory: string) {
+  return !!directory && !pathKey(directory).endsWith("/")
+}
+
+// Fetches the server's location on each connect and adopts its directory. Waits for the
+// stored projects: adopting into the empty pre-hydration list would overwrite them.
+// Only the location is tracked, so closing the last project does not re-adopt.
+export function adoptServerDirectory(input: {
+  hydrated: () => boolean
+  connected: () => boolean
+  location: () => Promise<{ directory: string }>
+  adopt: (directory: string) => void
+}) {
+  const [location] = createResource(
+    () => input.hydrated() && input.connected(),
+    () => input.location().catch(() => undefined),
+  )
+
+  createEffect(() => {
+    const directory = location()?.directory ?? ""
+
+    if (adoptable(directory)) untrack(() => input.adopt(directory))
+  })
+}
+
 // Project data comes from the server; this keeps which projects this client has used and the last one.
 export function createServerProjects(input: {
   scope: () => ServerScope
   store: Store<StoredState>
   setStore: SetStoreFunction<StoredState>
 }) {
+  const usedProjects = () => input.store.projects[input.scope()] ?? []
   const used = () => input.store.usedProjectIDs[input.scope()] ?? []
 
   const use = (projectIDs: string[]) => {
@@ -63,6 +91,13 @@ export function createServerProjects(input: {
   }
 
   return {
+    /** Opens a directory only when this server has no open projects, so a fresh client lands somewhere
+     * without reordering an existing list. Directories the user closed stay closed. */
+    adopt(directory: string) {
+      if (usedProjects().length > 0) return
+      input.setStore("projects", input.scope(), [{ worktree: directory }])
+      input.setStore("lastProjectID", input.scope(), directory)
+    },
     last() {
       return input.store.lastProjectID[input.scope()]
     },
