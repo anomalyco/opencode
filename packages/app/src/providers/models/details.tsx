@@ -37,7 +37,7 @@ export function ModelDetails(props: {
   const label = (type: Input) => language.t(`model.details.input.${type}`)
 
   const summary = () =>
-    new Intl.ListFormat(language.intl(), { style: "short", type: "unit" }).format([
+    new Intl.ListFormat(language.intl(), { style: "short", type: "conjunction" }).format([
       ...input().map(label),
       ...(props.model.capabilities.toolcall ? [language.t("model.details.tools")] : []),
     ])

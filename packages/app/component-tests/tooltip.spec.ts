@@ -1,5 +1,15 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("separates model capabilities in the Simplified Chinese flyout", async ({ mount, page }) => {
+  await mount("app-dialog-model-selector--dialog", { globals: { locale: "zh" } })
+  const dialog = page.getByRole("dialog", { name: "选择模型", exact: true })
+  await expect(dialog).toBeVisible()
+  await page.mouse.move(0, 0)
+  await dialog.locator('[data-option-key="openai:gpt-5.6-sol"]').hover()
+  const flyout = page.locator('[data-slot="model-dialog-flyout"]')
+  await expect(flyout.getByText("Text、Image和Tools", { exact: true })).toBeVisible()
+})
+
 story("opens a neighbouring tooltip without the open delay", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--appearances")
   await root.getByText("Standard", { exact: true }).hover()
