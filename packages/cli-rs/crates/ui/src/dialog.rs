@@ -749,9 +749,10 @@ pub fn legacy_button(cx: &DialogCx, label: &str, padding: u32, run: impl Fn() + 
 }
 
 /// Sends keys to the keymap before any widget, as the TUI's keymap provider does: a key the keymap handles does
-/// not reach the focused widget.
+/// not reach the focused widget. The keymap's focus follows the app's first, so target layers see it.
 pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {
     app.on_key_capture(move |cx, key| {
+        keymap.keymap().set_focus(focus_path(cx.app()));
         let result = keymap.handle_key(key);
         if result.prevent_default {
             cx.prevent_default();
@@ -760,4 +761,11 @@ pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {
             cx.stop_propagation();
         }
     })
+}
+
+/// The focused widget's id followed by its ancestors' ids, the path `Keymap::set_focus` takes.
+pub fn focus_path(app: &App) -> Vec<FocusId> {
+    std::iter::successors(app.focused(), |widget| widget.parent())
+        .map(|widget| widget.id())
+        .collect()
 }

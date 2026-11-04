@@ -8,7 +8,7 @@ use opencode_ui::keymap::{Keybinds, Options};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::{Catalog, Theme, ThemeError, ThemeMode};
-use opencode_ui::{alert, confirm, help, palette, toast};
+use opencode_ui::{alert, confirm, help, palette, path, prompt, toast};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use std::cell::RefCell;
@@ -412,4 +412,138 @@ fn help_matches_typescript() {
     assert_fixture(&kit.app.render(), "U.3/help");
     kit.app.press("return");
     assert!(!kit.dialogs.is_open());
+}
+
+fn open_prompt(kit: &Kit, props: prompt::PromptProps) -> Rc<RefCell<Option<prompt::Prompt>>> {
+    let handle = Rc::new(RefCell::new(None));
+    let slot = handle.clone();
+    kit.dialogs.replace(
+        |cx| {
+            let (view, prompt) = prompt::prompt(cx, props);
+            *slot.borrow_mut() = Some(prompt);
+            view
+        },
+        None,
+        Default::default(),
+    );
+    handle
+}
+
+#[test]
+fn prompt_matches_typescript_and_submits_on_enter() {
+    let kit = kit(70, 16);
+    let submitted = Rc::new(RefCell::new(Vec::<String>::new()));
+    let generated = Rc::new(RefCell::new(0));
+    let (log, count) = (submitted.clone(), generated.clone());
+    open_prompt(
+        &kit,
+        prompt::PromptProps {
+            title: "Rename session".into(),
+            value: Some("My session".into()),
+            actions: vec![prompt::PromptAction {
+                title: "generate".into(),
+                command: "dialog.worktree.generate".into(),
+                command_title: None,
+                run: Rc::new(move |prompt| {
+                    *count.borrow_mut() += 1;
+                    prompt.set_value("generated");
+                }),
+            }],
+            on_confirm: Some(Rc::new(move |value| {
+                log.borrow_mut().push(value.to_owned())
+            })),
+            ..Default::default()
+        },
+    );
+    assert_fixture(&kit.app.render(), "U.3/prompt");
+    kit.app.type_text("!");
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), ["My session!"]);
+    kit.app.press("tab");
+    assert_eq!(*generated.borrow(), 1);
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), ["My session!", "generated"]);
+    // Ctrl+C clears the text first, then closes.
+    kit.app.press("ctrl+c");
+    assert!(kit.dialogs.is_open());
+    kit.app.press("ctrl+c");
+    assert!(!kit.dialogs.is_open());
+}
+
+#[test]
+fn prompt_placeholder_and_busy_match_typescript() {
+    let kit = kit(70, 16);
+    open_prompt(
+        &kit,
+        prompt::PromptProps {
+            title: "Worktree name".into(),
+            placeholder: Some("feature-branch".into()),
+            ..Default::default()
+        },
+    );
+    assert_fixture(&kit.app.render(), "U.3/prompt-empty");
+
+    let kit = self::kit(70, 16);
+    let submitted = Rc::new(RefCell::new(0));
+    let count = submitted.clone();
+    let handle = open_prompt(
+        &kit,
+        prompt::PromptProps {
+            title: "Connecting".into(),
+            value: Some("token".into()),
+            busy: true,
+            busy_text: Some("Checking…".into()),
+            on_confirm: Some(Rc::new(move |_| *count.borrow_mut() += 1)),
+            ..Default::default()
+        },
+    );
+    assert_fixture(&kit.app.render(), "U.3/prompt-busy");
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), 0);
+    handle.borrow().as_ref().unwrap().set_busy(false);
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), 1);
+}
+
+/// P-ORACLE: `parity/fixtures/U.3/path.json` holds the TypeScript `formatPath` and `abbreviateHome` results
+/// (`parity/oracle/U.3-path.ts`). `abbreviateHome` of a relative input resolves against the process's working
+/// directory, which differs between the two runs, so those cases are skipped.
+#[test]
+fn path_formatting_matches_typescript() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/U.3/path.json")).unwrap();
+    let mut failures = Vec::new();
+    for case in fixture.as_array().unwrap() {
+        let text = |key: &str| case[key].as_str().unwrap();
+        let (input, base, home) = (text("input"), text("base"), text("home"));
+        let forward = case["forwardSlashes"].as_bool().unwrap();
+        let format = path::format_path(input, base, (!home.is_empty()).then_some(home), forward);
+        if format != text("format") {
+            failures.push(format!(
+                "format {input:?} base {base:?} home {home:?} /{forward}: {:?} != {format:?}",
+                text("format")
+            ));
+        }
+        let windows_home = home.starts_with("\\\\") || home.get(1..2) == Some(":");
+        let rooted = if windows_home {
+            input.starts_with(['/', '\\']) || input.get(1..2) == Some(":")
+        } else {
+            input.starts_with('/')
+        };
+        if !forward && (rooted || home.is_empty()) {
+            let abbreviate = path::abbreviate_home(input, home);
+            if abbreviate != text("abbreviate") {
+                failures.push(format!(
+                    "abbreviate {input:?} home {home:?}: {:?} != {abbreviate:?}",
+                    text("abbreviate")
+                ));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} cases differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
