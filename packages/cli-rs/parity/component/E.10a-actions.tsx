@@ -3,7 +3,8 @@
 // fork (dialog-fork.tsx), rename (component/dialog-session-rename.tsx), and export options
 // (ui/dialog-export-options.tsx). crates/tui/tests/actions.rs (`dialogs_match_typescript`) mounts the Rust TUI over
 // the same session and messages (`turns()` there; keep both in step), hides the screen behind the dialog, and
-// compares the cells. Times render in UTC here; the Rust test shifts the messages by its local offset.
+// compares the cells. The Rust TUI is the `new-designs` one, so the experiment is on. Times render in UTC here;
+// the Rust test shifts the messages by its local offset.
 process.env.TZ = "UTC"
 
 import { onMount, type JSX } from "solid-js"
@@ -74,7 +75,9 @@ async function render(fixture: string, open: () => JSX.Element, ready: (frame: s
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
             <ArgsProvider>
-              <ConfigProvider config={createTuiResolvedConfig({ animations: false })}>
+              <ConfigProvider
+                config={createTuiResolvedConfig({ animations: false, experimental: { "new-designs": true } })}
+              >
                 <Keymap.Provider>
                   <ToastProvider>
                     <RouteProvider initialRoute={{ type: "session", sessionID: "ses_a" }}>
@@ -139,8 +142,7 @@ await render(
   () => <DialogExportOptions defaultThinking={true} />,
   (frame) => frame.includes("Export session"),
   async (setup) => {
-    setup.mockInput.pressTab()
-    setup.mockInput.pressEnter()
+    setup.mockInput.pressArrow("right")
     await Bun.sleep(50)
   },
 )
