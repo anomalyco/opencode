@@ -383,6 +383,8 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::PersistentPtyUpdated(_)
             // Plugin RPC events, which the goal footer follows (E.14); it reads again on `server.connected`.
             | V2Event::Rpc(_)
+            // The worktrees dialog reads its list again (E.11b).
+            | V2Event::WorktreeUpdated(_)
     )
 }
 

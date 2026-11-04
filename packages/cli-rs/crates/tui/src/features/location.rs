@@ -84,7 +84,7 @@ pub(crate) fn reconnected(tui: &Tui) {
 }
 
 /// `location.set`.
-fn set(tui: &Tui, location: Location) {
+pub(crate) fn set(tui: &Tui, location: Location) {
     *tui.location.reference.borrow_mut() = Some(location.clone());
     if connected(tui) {
         sync(tui, Some(location));

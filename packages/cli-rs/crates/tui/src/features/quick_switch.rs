@@ -1,1 +1,86 @@
-//! Quick switch and pinning (E.11b).
+//! Quick switch (E.11b, row W03; `app.tsx:841-848,1323-1327`, `context/local.tsx:549-601`): with tabs off,
+//! `<leader>1` to `<leader>9` open the pinned root sessions in pin order. Pins are toggled in the session
+//! list (`session.pin.toggle`, `dialogs::session_list::pins`); a deleted session loses its pin.
+
+use std::rc::Rc;
+
+use opencode_api::generated::{SessionID, V2Event};
+use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opentui::keymap::Condition;
+
+use crate::app::Tui;
+use crate::dialogs::session_list::pins;
+use crate::routes::Route;
+
+pub fn install(tui: &Rc<Tui>) {
+    let weak = tui.weak();
+    let enabled = {
+        let weak = weak.clone();
+        move || {
+            let weak = weak.clone();
+            Condition::when(move || weak.upgrade().is_some_and(|tui| !tui.config.tabs.enabled))
+        }
+    };
+    let commands: Vec<TuiCommand> = (1..=9)
+        .map(|slot| {
+            let weak = weak.clone();
+            TuiCommand::new(format!("session.quick_switch.{slot}"), move |_, _| {
+                if let Some(tui) = weak.upgrade() {
+                    quick_switch(&tui, slot);
+                }
+            })
+            .bind(Bind::Off)
+            .title(format!("Switch to session in quick slot {slot}"))
+            .group("Session")
+            .enabled(enabled())
+        })
+        .collect();
+    let names = commands
+        .iter()
+        .filter_map(|command| command.id.clone())
+        .collect();
+    let layers = [
+        KeymapLayer {
+            mode: Some(GLOBAL_MODE.to_owned()),
+            commands,
+            ..KeymapLayer::default()
+        },
+        // `pinnedSessionBindingCommands`, bound only while tabs are off.
+        KeymapLayer {
+            mode: Some(GLOBAL_MODE.to_owned()),
+            enabled: enabled(),
+            bindings: names,
+            ..KeymapLayer::default()
+        },
+    ];
+    for layer in layers {
+        // The layers live as long as the keymap, which the TUI owns.
+        if let Err(error) = tui.keymap.layer(layer) {
+            log::error!("quick switch keymap layer: {error}");
+        }
+    }
+}
+
+/// `quickSwitch`: opens the session in `slot` (1-based), unless it is open already.
+pub fn quick_switch(tui: &Tui, slot: usize) {
+    let Some(target) = pins::slots(tui).into_iter().nth(slot - 1) else {
+        return;
+    };
+    if tui.route() == (Route::Session { id: target.clone() }) {
+        return;
+    }
+    tui.navigate(Route::Session { id: target });
+}
+
+/// `session.deleted` prunes the session's pin (`prune`).
+pub(crate) fn event(tui: &Tui, event: &V2Event) {
+    if let V2Event::SessionDeleted(event) = event {
+        prune(tui, &event.data.session_id);
+    }
+}
+
+fn prune(tui: &Tui, id: &SessionID) {
+    if pins::list(tui).contains(id) {
+        pins::toggle(tui, id);
+    }
+}
