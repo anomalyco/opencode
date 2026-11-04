@@ -39,10 +39,6 @@ pub fn install() {
 
 /// Registers a teardown step that runs when a signal arrives; dropping the guard removes it. `label` names
 /// the step in the report when it does not finish in time.
-#[allow(
-    dead_code,
-    reason = "for the commands that own teardown work (plan C steps)"
-)]
 pub fn on_shutdown(label: impl Into<String>, step: impl FnOnce() + Send + 'static) -> Registration {
     let shutdown = SHUTDOWN.get().cloned();
     let id = shutdown.as_ref().map_or(0, |shutdown| {
