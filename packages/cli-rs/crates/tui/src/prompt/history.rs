@@ -16,34 +16,53 @@ use super::editor::Inner;
 
 /// The app's prompt history. Without a state directory nothing is kept, as nothing is written.
 #[derive(Clone, Default)]
-pub struct History(Arc<Mutex<Option<jsonl::History>>>);
+pub struct History {
+    slot: Arc<Mutex<Option<jsonl::History>>>,
+    /// Entries not appended yet, in submit order.
+    queue: Arc<Mutex<Vec<Value>>>,
+    state: Option<PathBuf>,
+}
 
 impl History {
     /// Loads `<state>/prompt-history.jsonl` on a blocking thread; until then the history is empty.
     pub fn load(app: &App, state: Option<PathBuf>) -> Self {
-        let history = Self::default();
-        if let Some(state) = state {
-            let slot = history.0.clone();
-            app.runtime().spawn_blocking(move || {
-                let loaded = jsonl::History::load(&state);
-                if let Ok(mut slot) = slot.lock() {
-                    *slot = Some(loaded);
-                }
-            });
-        }
+        let history = Self {
+            state,
+            ..Self::default()
+        };
+        history.write(app);
         history
     }
 
     /// `move(direction, input)`.
     pub fn step(&self, direction: i64, input: &str) -> Option<Value> {
-        self.0.lock().ok()?.as_mut()?.step(direction, input)
+        self.slot.lock().ok()?.as_mut()?.step(direction, input)
     }
 
     /// `append(entry)`, written on a blocking thread.
     pub fn append(&self, app: &App, entry: Value) {
-        let slot = self.0.clone();
+        if self.state.is_none() {
+            return;
+        }
+        if let Ok(mut queue) = self.queue.lock() {
+            queue.push(entry);
+        }
+        self.write(app);
+    }
+
+    /// Loads the file if no task has yet, then appends every queued entry. Blocking tasks run in any order,
+    /// so each one takes the whole queue while it holds the history: entries land in submit order, and one
+    /// submitted before the load finished is not lost.
+    fn write(&self, app: &App) {
+        let Some(state) = self.state.clone() else {
+            return;
+        };
+        let (slot, queue) = (self.slot.clone(), self.queue.clone());
         app.runtime().spawn_blocking(move || {
-            if let Some(history) = slot.lock().ok().as_mut().and_then(|slot| slot.as_mut()) {
+            let Ok(mut slot) = slot.lock() else { return };
+            let history = slot.get_or_insert_with(|| jsonl::History::load(&state));
+            let entries = queue.lock().map(|mut queue| std::mem::take(&mut *queue));
+            for entry in entries.unwrap_or_default() {
                 history.append(entry);
             }
         });
