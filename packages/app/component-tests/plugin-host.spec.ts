@@ -1066,6 +1066,7 @@ story(
       const Other = Ipc.define({ id: "other.ipc", methods: {} })
       const [available, setAvailable] = createSignal(false)
       const [awake, setAwake] = createSignal(false)
+      const [failed, setFailed] = createSignal(false)
       const kept: Kept = {}
 
       const client = {
@@ -1076,6 +1077,7 @@ story(
 
       const host = mountPlugins({
         ipc: (token: { readonly id: string }) => (token.id === Awake.id && available() ? client : undefined),
+        ipcFailed: (token: { readonly id: string }) => token.id === Awake.id && failed(),
         definitions: [{ id: "acme", windowEntry: async () => ({ default: (ctx: Context) => void (kept.ctx = ctx) }) }],
       })
 
@@ -1085,6 +1087,16 @@ story(
       if (!ctx) throw new Error("the plugin never set up")
 
       const main = ctx.main(Awake)
+      // A call that waits rejects once main fails to answer the window's subscribe, instead of waiting forever.
+      const stuck = main.get()
+      setFailed(true)
+
+      const unanswered = await stuck.then(
+        () => false,
+        (cause: unknown) => String(cause).includes("unavailable: failed"),
+      )
+
+      setFailed(false)
       const waiting = main.get()
       const before = main.state()
       setAwake(true)
@@ -1111,10 +1123,11 @@ story(
 
       host.unmount()
 
-      return { before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
+      return { unanswered, before, answered, state, foreign, rejected, same: ctx.main(Awake) === main }
     }, fixture)
 
     expect(result).toEqual({
+      unanswered: true,
       before: undefined,
       answered: true,
       state: { awake: true },
