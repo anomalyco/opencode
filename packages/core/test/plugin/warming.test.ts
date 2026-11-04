@@ -38,9 +38,13 @@ const start = Effect.gen(function* () {
     },
     session: {
       get: () => Effect.succeed({ parentID: undefined }),
-      // A keep-alive takes a while, so overlapping loops would each send one.
+      // Like the real one, a keep-alive runs the generate hook before it is sent, and takes a while, so overlapping
+      // loops would each send one.
       generate: () =>
-        Effect.sync(() => void warmed.push("keep-alive")).pipe(Effect.andThen(Effect.sleep("30 seconds"))),
+        turn("short").pipe(
+          Effect.andThen(Effect.sync(() => void warmed.push("keep-alive"))),
+          Effect.andThen(Effect.sleep("30 seconds")),
+        ),
       hook: (name: string, callback: (event: SessionHooks["context"]) => Effect.Effect<void>) =>
         Effect.sync(() => void hooks.set(name, callback)),
     },
@@ -53,7 +57,7 @@ const start = Effect.gen(function* () {
       model: Model.Ref.make({ providerID, id: Model.ID.make(model) }),
       messages: [],
     } as unknown as SessionHooks["context"]).pipe(Effect.andThen(Effect.yieldNow))
-  return { warmed, turn, hooks }
+  return { warmed, turn }
 })
 
 describe("WarmingPlugin", () => {
@@ -79,13 +83,13 @@ describe("WarmingPlugin", () => {
     }),
   )
 
-  it.effect("ignores compaction, which runs on the compaction model", () =>
+  it.effect("keeps warming while each keep-alive runs the generate hook", () =>
     Effect.gen(function* () {
-      const { warmed, turn, hooks } = yield* start
-      expect(hooks.has("compaction")).toBe(false)
-      yield* turn("uncached")
+      const { warmed, turn } = yield* start
+      yield* turn("short")
+
       yield* TestClock.adjust("10 minutes")
-      expect(warmed).toEqual([])
+      expect(warmed).toEqual(["keep-alive", "keep-alive"])
     }),
   )
 })

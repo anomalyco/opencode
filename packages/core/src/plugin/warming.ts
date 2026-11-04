@@ -60,6 +60,8 @@ export const Plugin = define({
     // One loop per session: a turn restarts it, so it times from the latest settings, and a loop whose session stopped
     // warming ends when it next wakes.
     const loops = yield* FiberMap.make<Session.ID>()
+    // Sessions whose keep-alive is in flight. Its generate hook runs inside the loop, which must not restart itself.
+    const warming = new Set<Session.ID>()
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
@@ -104,9 +106,11 @@ export const Plugin = define({
 
         const last = current.last
         yield* Effect.logInfo("warming session", { sessionID, last })
-        yield* ctx.session
-          .generate({ sessionID, prompt: current.settings.prompt })
-          .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
+        warming.add(sessionID)
+        yield* ctx.session.generate({ sessionID, prompt: current.settings.prompt }).pipe(
+          Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })),
+          Effect.ensuring(Effect.sync(() => warming.delete(sessionID))),
+        )
         const latest = sessions.get(sessionID)
         if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
         return yield* loop(sessionID)
@@ -122,18 +126,6 @@ export const Plugin = define({
         const settings = yield* loadSettings(event)
         if (!settings) {
           sessions.delete(event.sessionID)
-          return
-        }
-
-        // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
-        const message = event.messages.at(-1)
-        if (
-          message?.role === "user" &&
-          message.content.length === 1 &&
-          message.content[0]?.type === "text" &&
-          (message.content[0].text === active?.settings.prompt || message.content[0].text === settings.prompt)
-        ) {
-          if (active) active.settings = settings
           return
         }
 
@@ -159,8 +151,8 @@ export const Plugin = define({
     yield* ctx.session.hook("context", (event) =>
       Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
     )
-    // Compaction is not hooked: it runs on the compaction model, whose warming settings aren't the session's.
-    yield* ctx.session.hook("generate", hook)
+    // Compaction is not hooked: it can run on its own model, whose warming settings aren't the session's.
+    yield* ctx.session.hook("generate", (event) => (warming.has(event.sessionID) ? Effect.void : hook(event)))
   }),
 })
 
