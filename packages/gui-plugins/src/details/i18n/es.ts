@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "No hay complementos configurados",
   skills: "Habilidades",
   "skills.empty": "No hay habilidades configuradas",
-  lsp: "LSP",
-  "lsp.empty": "No hay servidores LSP configurados",
   failed: "Fallido",
   retry: "Reintentar",
   connecting: "Conectando…",

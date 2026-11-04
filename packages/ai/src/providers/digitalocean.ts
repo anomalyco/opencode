@@ -4,7 +4,7 @@ import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { cacheControl } from "../protocols/utils/cache.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
@@ -12,6 +12,7 @@ import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { bearerRouteDefaults } from "./settings.js"
 
 export const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
@@ -56,23 +57,25 @@ const responsesRoute = Route.make({
 export const routes = [route, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const auth = AuthOptions.bearer(input, ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_API_KEY", "DO_INFERENCE_API_KEY"])
-  const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
+  const options = bearerRouteDefaults(
+    input,
+    ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_API_KEY", "DO_INFERENCE_API_KEY"],
+    baseURL,
+  )
   const configured = route.with(options)
   const configuredResponses = responsesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "digitalocean",
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth,
+    endpoint: options.endpoint,
+    auth: options.auth,
     // DigitalOcean serves TypeSafe's Jev, which needs this header for images.
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
     http: input.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
-  const media = MediaRoute.deployment({ ...input, baseURL: endpoint ?? baseURL }, auth)
+  const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   const chat = (modelID: string | ModelID) =>

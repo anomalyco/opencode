@@ -179,19 +179,32 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
   const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
 
   await menu.hover()
+  await expect(thumb).toHaveCSS("opacity", "0")
+  await page.mouse.wheel(0, 100)
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await expect(thumb).toHaveCSS("opacity", "1")
-  await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+  await expect(thumb).toHaveCSS("opacity", "0")
+
+  await page.mouse.wheel(0, 100)
+  await expect(thumb).toHaveCSS("opacity", "1")
+  await thumb.hover()
+  await expect(menu).not.toHaveAttribute("data-scrolling")
+  await expect(thumb).toHaveCSS("opacity", "1")
 
   const track = (await menu.boundingBox())!
 
   const handle = (await thumb.boundingBox())!
 
-  await thumb.hover()
   await page.mouse.down()
   await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4)
   await page.mouse.up()
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
   await expect(page.getByRole("option", { name: /^worktree-23 / })).toBeInViewport()
+  await thumb.hover()
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, track.y + 4)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(0)
 })
 
 for (const row of [
@@ -845,6 +858,36 @@ test("retains the draft and reuses the created workspace after session creation 
   expect(mock.prompts[0]).toMatchObject({ sessionID: mock.creates[1]!.id, body: { text } })
   expect(mock.calls).toEqual(["worktree", "session", "session", "prompt"])
   await expectPath(page, sessionHref(String(mock.creates[1]!.id)))
+  await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
+test("keeps the draft on the main checkout when session creation fails, then retries from it", async ({ page }) => {
+  const creates: string[] = []
+
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    onSessionCreate: (body, attempt) => {
+      creates.push(String(body.id))
+
+      return failFirstCreate(body, attempt)
+    },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+
+  await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
+  await expectPath(page, draftHref(draftID))
+  await expect(view.editor).toHaveText(text)
+  await expect(submit(page)).toBeEnabled()
+  expect(creates).toHaveLength(1)
+  await expect(tabLink(page, creates[0]!)).toHaveCount(0)
+  await expect(page.locator('[data-component="user-message"]')).toHaveCount(0)
+
+  await submit(page).click()
+
+  await expect.poll(() => creates.length).toBe(2)
+  await expectPath(page, sessionHref(creates[1]!))
   await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
 })
 

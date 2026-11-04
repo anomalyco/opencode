@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "לא הוגדרו תוספים",
   skills: "מיומנויות",
   "skills.empty": "לא הוגדרו מיומנויות",
-  lsp: "LSP",
-  "lsp.empty": "לא הוגדרו שרתי LSP",
   failed: "נכשל",
   retry: "ניסיון חוזר",
   connecting: "מתחבר…",

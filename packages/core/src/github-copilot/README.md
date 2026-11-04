@@ -20,6 +20,8 @@ preserve the intentional Copilot adaptations: the `copilot` options and metadata
 namespace, `thinking_budget`, reasoning text and opaque reasoning, stateless
 Responses requests with encrypted reasoning, rotating response item IDs, and
 explicit function-tool strictness taking precedence over the global fallback.
+Paths OpenCode never calls are trimmed: models only stream (`doGenerate`
+throws), and hosted tools keep only their schemas, not the tool factories.
 
 `copilot-provider.ts` is the local adapter assembly entrypoint used by
 `plugin/provider/github-copilot.ts`. `models.ts` is OpenCode-owned catalog

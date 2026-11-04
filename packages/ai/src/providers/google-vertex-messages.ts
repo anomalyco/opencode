@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
@@ -66,29 +66,14 @@ const route = Route.make({
 
 export const routes = [route]
 
-const configuredRoute = (input: Config) => {
-  if ("apiKey" in input && input.apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Messages does not support API keys" })
-  const {
-    accessToken: _accessToken,
-    auth: _auth,
-    baseURL,
-    location: inputLocation,
-    project: inputProject,
-    ...rest
-  } = input
-  const location = GoogleVertexShared.location(inputLocation)
-  const project = GoogleVertexShared.project(inputProject)
-  return route.with({
-    ...rest,
-    endpoint: {
-      baseURL:
-        baseURL ??
-        `https://${GoogleVertexShared.host(location)}/v1/projects/${GoogleVertexShared.requireProject(project)}/locations/${location}/publishers/anthropic/models`,
-    },
-    auth: GoogleVertexShared.oauth(input, project),
-  })
-}
+const configuredRoute = (input: Config) =>
+  GoogleVertexShared.oauthRoute(
+    route,
+    "Messages",
+    input,
+    (project, location) =>
+      `https://${GoogleVertexShared.host(location)}/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
+  )
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
@@ -106,17 +91,8 @@ export const provider = {
 
 export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
-  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {},
-) => {
-  if (apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Messages does not support API keys" })
-  return configure({
-    accessToken,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    location,
-    project,
-    providerOptions,
-  }).model(modelID)
-}
+  settings = {},
+) =>
+  configure(GoogleVertexShared.oauthSettings<AnthropicMessages.ProviderOptionsInput>("Messages", settings)).model(
+    modelID,
+  )

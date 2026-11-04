@@ -2,10 +2,10 @@ import { Option, Schema } from "effect"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
+  type BaseRequest,
   CacheHint,
   type CachePolicy,
   type GenerationOptions,
-  type HttpOptions,
   JsonSchema,
   type LanguageModel,
   type LanguageModelProviderOptions,
@@ -41,7 +41,6 @@ export const TextPart = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Text" })
 export type TextPart = Schema.Schema.Type<typeof TextPart>
@@ -51,10 +50,20 @@ export const MediaPart = Schema.Struct({
   media: Media.AssetSchema,
   filename: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
+
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type MediaPartInput = Omit<MediaPart, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+
+const mediaPart = (input: MediaPartInput): MediaPart => {
+  const { mediaType, ...part } = input
+  return { ...part, media: Media.make(input.media, mediaType) }
+}
 
 const toolResultValueSchema = Schema.Union([
   Schema.Struct({
@@ -135,7 +144,6 @@ export const ToolCallPart = withStatics(
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
   {
@@ -153,7 +161,6 @@ export const ToolResultPart = withStatics(
     result: ToolResultValue,
     providerExecuted: Schema.optional(Schema.Boolean),
     cache: Schema.optional(CacheHint),
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolResult" }),
   {
@@ -170,7 +177,6 @@ export const ToolResultPart = withStatics(
       result: ToolResultValue.make(input.result, input.resultType),
       providerExecuted: input.providerExecuted,
       cache: input.cache,
-      metadata: input.metadata,
       providerMetadata: input.providerMetadata,
     }),
   },
@@ -182,7 +188,6 @@ export const ReasoningPart = Schema.Struct({
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
@@ -232,56 +237,133 @@ export const ContentPart = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
-export class Message extends Schema.Class<Message>("LLM.Message")({
+export class SystemMessage extends Schema.Class<SystemMessage>("LLM.SystemMessage")({
   id: Schema.optional(Schema.String),
-  role: MessageRole,
-  content: Schema.Array(ContentPart),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  providerMetadata: Schema.optional(ProviderMetadata),
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  role: Schema.Literal("system"),
+  content: Schema.Array(Schema.Union([TextPart, EffortPart]).pipe(Schema.toTaggedUnion("type"))),
 }) {}
 
+export class UserMessage extends Schema.Class<UserMessage>("LLM.UserMessage")({
+  id: Schema.optional(Schema.String),
+  role: Schema.Literal("user"),
+  content: Schema.Array(Schema.Union([TextPart, MediaPart]).pipe(Schema.toTaggedUnion("type"))),
+  providerMetadata: Schema.optional(ProviderMetadata),
+}) {}
+
+export class AssistantMessage extends Schema.Class<AssistantMessage>("LLM.AssistantMessage")({
+  id: Schema.optional(Schema.String),
+  role: Schema.Literal("assistant"),
+  content: Schema.Array(
+    Schema.Union([TextPart, ReasoningPart, ToolCallPart, ToolResultPart, MediaPart, CompactionPart]).pipe(
+      Schema.toTaggedUnion("type"),
+    ),
+  ),
+  providerMetadata: Schema.optional(ProviderMetadata),
+}) {}
+
+export class ToolMessage extends Schema.Class<ToolMessage>("LLM.ToolMessage")({
+  id: Schema.optional(Schema.String),
+  role: Schema.Literal("tool"),
+  content: Schema.Array(ToolResultPart),
+}) {}
+
+export type Message = SystemMessage | UserMessage | AssistantMessage | ToolMessage
+
+export type ContentPartInput = Exclude<ContentPart, MediaPart> | MediaPartInput
+
 export namespace Message {
-  export type ContentInput = string | ContentPart | ReadonlyArray<ContentPart>
-  export type SystemContentInput = string | TextPart | ReadonlyArray<TextPart>
-  export type Input = Omit<ConstructorParameters<typeof Message>[0], "content"> & {
-    readonly content: ContentInput
+  export type ContentInput<Part extends { readonly type: string } = ContentPartInput> =
+    | string
+    | Part
+    | ReadonlyArray<Part>
+  export type SystemContentInput = ContentInput<TextPart>
+  export type UserContentInput = ContentInput<TextPart | MediaPartInput>
+  export type AssistantContentInput = ContentInput<
+    Exclude<AssistantMessage["content"][number], MediaPart> | MediaPartInput
+  >
+  type RoleInput<Props, Content> = Omit<Props, "content"> & { readonly content: Content }
+  export type SystemInput = RoleInput<
+    ConstructorParameters<typeof SystemMessage>[0],
+    ContentInput<SystemMessage["content"][number]>
+  >
+  export type UserInput = RoleInput<ConstructorParameters<typeof UserMessage>[0], UserContentInput>
+  export type AssistantInput = RoleInput<ConstructorParameters<typeof AssistantMessage>[0], AssistantContentInput>
+  export type ToolInput = RoleInput<
+    ConstructorParameters<typeof ToolMessage>[0],
+    ToolResultPart | ReadonlyArray<ToolResultPart>
+  >
+  export type Input = SystemInput | UserInput | AssistantInput | ToolInput
+}
+
+const messageSchema = Schema.Union([SystemMessage, UserMessage, AssistantMessage, ToolMessage]).pipe(
+  Schema.toTaggedUnion("role"),
+  Schema.annotate({ identifier: "LLM.Message" }),
+)
+
+const text = (value: string): TextPart => ({ type: "text", text: value })
+
+const isParts = <Part extends { readonly type: string }>(
+  input: Part | ReadonlyArray<Part>,
+): input is ReadonlyArray<Part> => Array.isArray(input)
+
+const content = <Part extends { readonly type: string }>(
+  input: string | Part | ReadonlyArray<Part>,
+): Array<TextPart | Part> => (typeof input === "string" ? [text(input)] : isParts(input) ? [...input] : [input])
+
+function contentWithMedia(input: Message.UserContentInput): UserMessage["content"]
+function contentWithMedia(input: Message.AssistantContentInput): AssistantMessage["content"]
+function contentWithMedia(input: Message.ContentInput): ReadonlyArray<ContentPart>
+function contentWithMedia(input: Message.ContentInput): ReadonlyArray<ContentPart> {
+  return content(input).map((part) => (part.type === "media" ? mediaPart(part) : part))
+}
+
+function make(input: SystemMessage | Message.SystemInput): SystemMessage
+function make(input: UserMessage | Message.UserInput): UserMessage
+function make(input: AssistantMessage | Message.AssistantInput): AssistantMessage
+function make(input: ToolMessage | Message.ToolInput): ToolMessage
+function make(input: Message | Message.Input): Message
+function make(input: Message | Message.Input): Message {
+  switch (input.role) {
+    case "system":
+      return input instanceof SystemMessage ? input : new SystemMessage({ ...input, content: content(input.content) })
+    case "user":
+      return input instanceof UserMessage
+        ? input
+        : new UserMessage({ ...input, content: contentWithMedia(input.content) })
+    case "assistant":
+      return input instanceof AssistantMessage
+        ? input
+        : new AssistantMessage({ ...input, content: contentWithMedia(input.content) })
+    case "tool":
+      return input instanceof ToolMessage
+        ? input
+        : new ToolMessage({ ...input, content: isParts(input.content) ? [...input.content] : [input.content] })
   }
+  // Untyped callers can still pass an unknown role; reject it the way the schema does.
+  return Schema.decodeUnknownSync(messageSchema)(input)
+}
 
-  export const text = (value: string): ContentPart => ({ type: "text", text: value })
-
-  export const media = (asset: Media.Asset, options?: Omit<MediaPart, "type" | "media">): MediaPart => ({
-    type: "media",
-    media: asset,
-    ...options,
-  })
-
-  export const content = (input: ContentInput) =>
-    typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]
-
-  export const make = (input: Message | Input) => {
-    if (input instanceof Message) return input
-    return new Message({ ...input, content: content(input.content) })
-  }
-
-  export const user = (content: ContentInput) => make({ role: "user", content })
-
-  export const assistant = (content: ContentInput) => make({ role: "assistant", content })
-
+export const Message = withStatics(messageSchema, {
+  text,
+  // Typed through `MediaPartInput` so packages that infer types from `Message` can still emit declarations.
+  media: (media: MediaPartInput["media"], options?: Omit<MediaPartInput, "type" | "media">): MediaPart =>
+    mediaPart({ type: "media", media, ...options }),
+  content: contentWithMedia,
+  make,
+  user: (input: Message.UserContentInput) => make({ role: "user", content: input }),
+  assistant: (input: Message.AssistantContentInput) => make({ role: "assistant", content: input }),
   /**
    * Add an operator-authored instruction at this chronological point in the
    * conversation. This is distinct from the initial `LLMRequest.system`
    * prompt. Keep raw retrieved, tool, and web content out of privileged system
    * updates; pass that untrusted content through ordinary user/tool channels.
    */
-  export const system = (content: SystemContentInput) => make({ role: "system", content })
-
-  export const effort = (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
-    make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] })
-
-  export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
-    make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
-}
+  system: (input: Message.SystemContentInput) => make({ role: "system", content: input }),
+  effort: (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
+    make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] }),
+  tool: (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
+    make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] }),
+})
 
 /**
  * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
@@ -301,7 +383,6 @@ const toolDefinitionFields = {
   outputSchema: Schema.optional(JsonSchema),
   freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }
 
@@ -405,20 +486,17 @@ export namespace ToolChoice {
  * A normalized text request, the plain object `ai.request(...)` returns. Edit it with a spread, such as
  * `{ ...request, messages: [...request.messages, next] }`, or pass the edited object back to `ai.request`.
  */
-export interface LLMRequest<Model extends LanguageModel = LanguageModel> {
+export interface LLMRequest<Model extends LanguageModel = LanguageModel>
+  extends BaseRequest<Model, LanguageModelProviderOptions<Model>> {
   readonly id?: string
-  readonly model: Model
   readonly system: ReadonlyArray<SystemPart>
   readonly messages: ReadonlyArray<Message>
   readonly tools: ReadonlyArray<ToolEntry>
   readonly toolChoice?: ToolChoice
   readonly generation?: GenerationOptions
-  readonly providerOptions?: LanguageModelProviderOptions<Model>
-  readonly http?: HttpOptions
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
-  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
   readonly includeRaw?: boolean
 }

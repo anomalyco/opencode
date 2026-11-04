@@ -5,6 +5,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { SessionTurn } from "@opencode/util/session-turn"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
@@ -109,6 +110,16 @@ export function createSessionTimelineRowRenderer(input: {
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
 
+  const turns = createMemo(() => {
+    const messages = [...input.projection.messageByID().values()]
+
+    return {
+      messages,
+      legacy: SessionTurn.legacy(messages),
+      indexes: new Map(messages.map((message, index) => [message.id, index])),
+    }
+  })
+
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
     const rows = input.projection.rows()
@@ -194,17 +205,17 @@ export function createSessionTimelineRowRenderer(input: {
 
     if (user?.type !== "user") return null
 
-    const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
-      number | undefined
-    >((latest, message) => {
-      if (message.time.completed === undefined) return latest
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
 
-      return latest === undefined ? message.time.completed : Math.max(latest, message.time.completed)
-    }, undefined)
+    if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
-    if (completed === undefined || completed < user.time.created) return undefined
-
-    return completed - user.time.created
+    return SessionTurn.duration(turns().messages, message, {
+      index: turns().indexes.get(message.id),
+      legacy: turns().legacy,
+    })
   }
 
   const copyContentID = (messageID: string) => {
@@ -455,6 +466,23 @@ export function createSessionTimelineRowRenderer(input: {
       return value.steps.length > 0 ? value : undefined
     })
 
+    const turnTokensPerSecond = createMemo(() => {
+      const current = ref()
+
+      if (!current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const messages = input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages
+
+      const last = messages.at(-1)
+
+      if (!last) return undefined
+
+      return SessionTurn.tokensPerSecond(turns().messages, last, {
+        index: turns().indexes.get(last.id),
+        legacy: turns().legacy,
+      })
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -468,6 +496,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
@@ -1004,6 +1033,29 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <Notice messageID={current().messageID} />
+        </Frame>
+      )
+    }
+
+    if (Predicate.isTagged(row(), "NewMessages")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "NewMessages")) throw new Error("Expected a new-messages timeline row")
+
+        return value
+      }
+
+      return (
+        <Frame row={current()}>
+          <div
+            data-slot="session-timeline-notice"
+            aria-hidden={current().read}
+            class={`w-full py-2 ${padding()}`}
+            classList={{ invisible: current().read }}
+          >
+            <TimelineSeparator label={i18n.t("ui.sessionTimeline.notice.newMessages")} />
+          </div>
         </Frame>
       )
     }

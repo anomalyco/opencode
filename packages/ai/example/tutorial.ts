@@ -184,7 +184,7 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
       Effect.succeed({
         model: request.model.id,
         input: request.messages
-          .flatMap((message) => message.content)
+          .flatMap((message) => [...message.content])
           .filter((part) => part.type === "text")
           .map((part) => part.text)
           .join("\n"),

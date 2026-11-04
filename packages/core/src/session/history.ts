@@ -353,6 +353,32 @@ export const synthetics = Effect.fn("SessionHistory.synthetics")(function* (
   return yield* Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
 })
 
+/**
+ * The unfinished assistant messages `load(db, sessionID, "latest")` would return, read without the rest of the
+ * transcript. Only these can hold a tool call that is still streaming or running.
+ */
+export const incompleteAssistants = Effect.fn("SessionHistory.incompleteAssistants")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const compaction = yield* latestCompaction(db, sessionID, "latest")
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "assistant"),
+        sql`json_extract(${SessionMessageTable.data}, '$.time.completed') is null`,
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  return yield* decodeMessageRows(db, rows)
+})
+
 /** The id and text of the session's first user message. */
 export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,

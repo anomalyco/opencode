@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const png = Buffer.from(
@@ -359,34 +359,43 @@ story("keeps favicon space stable across loading and failure without fetching pr
   const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
   const docs = markdown.getByRole("link", { name: "docs" })
-  const image = docs.locator(".markdown-link-favicon img")
+  const mark = docs.locator(".markdown-link-favicon")
+
+  const artwork = (mark: Locator) =>
+    mark.evaluate((icon) => {
+      const style = getComputedStyle(icon, "::before")
+
+      return { mask: style.maskImage, background: style.backgroundImage }
+    })
+
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
-  await expect(image).toHaveCSS("opacity", "0")
-  expect((await docs.locator(".markdown-link-favicon").boundingBox())?.width).toBe(14)
+  await expect(mark).not.toHaveAttribute("data-loaded", "")
+  expect((await artwork(mark)).mask).toContain("data:image/svg+xml")
+  expect((await mark.boundingBox())?.width).toBe(14)
   // A late web font swap also changes the link width; measure after fonts settle.
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
   release()
-  await expect(image).toHaveAttribute("data-loaded", "")
-  await expect(image).toHaveCSS("opacity", "1")
-  await expect(image).not.toHaveAttribute("role", "button")
-  expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
+  await expect(mark).toHaveAttribute("data-loaded", "")
+  expect(await artwork(mark)).toEqual({
+    mask: "none",
+    background: expect.stringContaining("https://www.google.com/s2/favicons?domain=developer.mozilla.org"),
+  })
+  await expect(mark.locator("img")).toBeHidden()
   expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
-  expect(
-    await image.evaluate((favicon) => {
-      const image = favicon.getBoundingClientRect()
-      const box = favicon.parentElement!.getBoundingClientRect()
 
-      return image.top + image.height / 2 - (box.top + box.height / 2)
-    }),
-  ).toBe(0)
-
-  await expect(
-    markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img"),
-  ).not.toHaveAttribute("data-loaded", "")
+  const missing = markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon")
+  await expect(missing).not.toHaveAttribute("data-loaded", "")
+  expect((await artwork(missing)).mask).toContain("data:image/svg+xml")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
-  expect(requested).toHaveLength(2)
+
+  // Routing disables the browser cache, so a loaded favicon's CSS artwork requests its URL again here. That includes
+  // the story's own example.com link, whose favicon can load before this route exists and its artwork after.
+  const domains = new Set(requested.map((url) => new URL(url).searchParams.get("domain")))
+  domains.delete("example.com")
+
+  expect(domains).toEqual(new Set(["developer.mozilla.org", "broken.example.org"]))
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
@@ -436,6 +445,39 @@ story("keeps link icons on the same line as the start of their label", async ({ 
 
   expect(result.widths).toEqual([])
   expect(result.long).toBeGreaterThan(1)
+})
+
+story("selects the whole paragraph on triple click across link icons", async ({ page }) => {
+  await page.route("https://www.google.com/s2/favicons?**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: png }),
+  )
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: "The release is running ([run 41750815701](https://github.com/Hona/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
+      cached: true,
+    })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator(".markdown-link-favicon img[data-loaded]")).toHaveCount(1)
+
+  // Click the plain text after the last link, so the selection has to extend back across both icons.
+  const point = await markdown.evaluate((root: HTMLElement) => {
+    const text = root.querySelector("p")!.lastChild!
+    const range = document.createRange()
+    range.setStart(text, text.textContent!.indexOf("more"))
+    range.setEnd(text, text.textContent!.indexOf("more") + 4)
+    const box = range.getBoundingClientRect()
+
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  })
+
+  await page.mouse.click(point.x, point.y, { clickCount: 3 })
+
+  expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe(
+    "The release is running (run 41750815701), see MDN for more.",
+  )
 })
 
 story("scrolls fragment links to their heading inside the document's scroller", async ({ page }) => {
@@ -494,6 +536,32 @@ story("keeps inline code backgrounds 18px tall", async ({ page }) => {
   expect(
     await code.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height)),
   ).toEqual([18, 18])
+})
+
+story("keeps inline code geometry when a completed stream turns it into a file link", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Edit `src/file.ts` to fix it", streaming: true })
+  }, fixture)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const harness = page.getByTestId("markdown-fixture")
+  const code = harness.locator(":not(pre) > code")
+  await expect(code).toHaveText("src/file.ts")
+  await expect(code).not.toHaveAttribute("data-inline-code-kind")
+
+  const geometry = () =>
+    code.evaluate((element) => {
+      const next = document.createRange()
+      next.selectNodeContents(element.nextSibling!)
+      const box = element.getBoundingClientRect()
+
+      return { left: box.left, right: box.right, next: next.getBoundingClientRect().left }
+    })
+
+  const before = await geometry()
+  await harness.getByLabel("Streaming").uncheck()
+  await expect(code).toHaveAttribute("data-inline-code-kind", "path")
+  expect(await geometry()).toEqual(before)
 })
 
 story("shares in-flight Markdown rendering without overwriting a reclaimed cache entry", async ({ page }) => {

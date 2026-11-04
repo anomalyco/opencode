@@ -388,22 +388,6 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects non-text chronological system update content before send", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          model: opus48,
-          messages: [
-            Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("Anthropic Messages system messages only support text content for now")
-    }),
-  )
-
   it.effect("falls back for unsupported native chronological system update placement", () =>
     Effect.gen(function* () {
       expect(
@@ -855,6 +839,65 @@ describe("Anthropic Messages route", () => {
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
+    }),
+  )
+
+  it.effect("lowers per-part Anthropic media options from provider metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: {
+                anthropic: { file_id: "file_img", transformations: { oversized_image: "downsize" } },
+              },
+            }),
+            Message.media(Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }), {
+              filename: "report.pdf",
+              providerMetadata: { anthropic: { context: "Q3", citations: { enabled: true } } },
+            }),
+            Message.media(Media.base64("aGk=", "text/plain"), {
+              filename: "notes.txt",
+              providerMetadata: { anthropic: { title: "Notes" } },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[0]?.content).toEqual([
+        {
+          type: "image",
+          source: { type: "file", file_id: "file_img" },
+          transformations: { oversized_image: "downsize" },
+        },
+        {
+          type: "document",
+          source: { type: "url", url: "https://example.com/report.pdf" },
+          title: "report.pdf",
+          context: "Q3",
+          citations: { enabled: true },
+        },
+        { type: "document", source: { type: "text", media_type: "text/plain", data: "hi" }, title: "Notes" },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid per-part Anthropic media options", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: { anthropic: { transformations: { oversized_image: "shrink" } } },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("oversized_image")
     }),
   )
 

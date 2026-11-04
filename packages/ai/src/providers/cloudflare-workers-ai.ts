@@ -7,8 +7,9 @@ import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { CloudflareShared } from "./cloudflare-shared.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
 export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
@@ -32,26 +33,10 @@ export type Settings = ProviderPackage.Settings &
 
 export type { CloudflareWorkersAIImageOptions } from "../protocols/cloudflare-workers-ai-images.js"
 
-export const baseURL = (input: WorkersAIURL) => {
-  if (input.baseURL) return input.baseURL
-  if (!input.accountId)
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareWorkersAI.configure requires accountId unless baseURL is supplied",
-    })
-  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(input.accountId)}/ai/v1`
-}
+export const baseURL = (input: WorkersAIURL) => CloudflareShared.baseURL(input, id, "CloudflareWorkersAI")
 
 /** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
-export const runBaseURL = (input: WorkersAIURL) => {
-  const url = Endpoint.trimBaseUrl(baseURL(input))
-  if (!url.endsWith("/ai/v1"))
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareWorkersAI needs accountId or a baseURL ending in /ai/v1 to derive the Run API base",
-    })
-  return `${url.slice(0, -"/v1".length)}/run`
-}
+export const runBaseURL = (input: WorkersAIURL) => CloudflareShared.runBaseURL(input, id, "CloudflareWorkersAI")
 
 export const route = Route.make({
   id: "cloudflare-workers-ai",
