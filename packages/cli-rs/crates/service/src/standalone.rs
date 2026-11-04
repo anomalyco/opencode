@@ -93,6 +93,11 @@ pub async fn start(command: &[OsString], cwd: &Path, print_logs: bool) -> Result
 }
 
 impl Server {
+    /// Waits until the server exits on its own (`endpoint.exited`).
+    pub async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        self.child.wait().await
+    }
+
     /// Ends the lease, then SIGTERM, then SIGKILL after 3 s, and waits for the exit.
     pub async fn shutdown(mut self) {
         self.lease.take();

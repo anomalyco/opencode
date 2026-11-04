@@ -10,6 +10,21 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
+base64.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+log = { workspace = true, features = ["kv"] }
 opencode-api.workspace = true
 opencode-service.workspace = true
 opencode-store.workspace = true
+percent-encoding.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["io-std"] }
+tokio-util.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1052,9 +1052,22 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "opencode-acp"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "base64",
+ "chrono",
+ "futures-util",
+ "indexmap",
+ "log",
  "opencode-api",
  "opencode-service",
  "opencode-store",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "url",
 ]
 
 [[package]]
