@@ -1,11 +1,12 @@
-//! The `opencode.merman` plugin (`plugin.ts`) and its diagram widget (`StaticDiagramRenderable`).
+//! The `opencode.merman` plugin (`plugin.ts`, `createMermaidCodeBlockRenderer`) and its diagram widget
+//! (`StaticDiagramRenderable`).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use opencode_plugin::{Definition, Host};
-use opentui::prelude::{App, Attributes, Edge, Length, Span, Style, Text, Widget, WrapMode};
+use opentui::prelude::{App, Attributes, Color, Length, Span, Style, Text, Widget, WrapMode};
 use opentui::widget::{AnyWidget, CodeBlock, Content};
 
 use crate::{Diagram, Kind, Palette, Rendered, render};
@@ -14,36 +15,43 @@ pub const ID: &str = "opencode.merman";
 
 pub fn plugin<H: Host>() -> Definition<H> {
     Definition::new(ID, |setup| {
-        // The kind each diagram widget shows, for the last-good fallback while a fence streams.
-        let kinds: Rc<RefCell<HashMap<u32, Kind>>> = Rc::default();
-        setup.code_block("mermaid", move |block, theme| render_block(block, &Palette::from_theme(theme), &kinds));
+        let renderer = Rc::new(Renderer::default());
+        setup.code_block("mermaid", move |block, theme| renderer.render(block, &Palette::from_theme(theme)));
     })
 }
 
-fn render_block(block: &CodeBlock<'_>, palette: &Palette, kinds: &RefCell<HashMap<u32, Kind>>) -> Option<AnyWidget> {
-    let previous = block.previous.map(|widget| (widget.clone(), kinds.borrow_mut().remove(&widget.id())));
-    let (diagram, kind) = match render(block.code, block.app.size().0, palette) {
-        Rendered::Diagram(diagram) => {
-            let kind = diagram.kind;
-            (diagram, kind)
-        }
-        Rendered::Code => return None,
-        Rendered::Syntax { kind, prefix } => {
-            if let Some((widget, Some(previous))) = previous
-                && previous == kind
-            {
-                kinds.borrow_mut().insert(widget.id(), kind);
-                return Some(widget);
-            }
-            (prefix?, kind)
-        }
-    };
-    let widget = widget(block.app, &diagram).as_any();
-    kinds.borrow_mut().insert(widget.id(), kind);
-    Some(widget)
+/// The `mermaid` code-block renderer. It remembers the kind each diagram widget shows, so a fence whose newest
+/// text does not parse keeps its last diagram of the same kind while it streams.
+#[derive(Default)]
+pub struct Renderer {
+    kinds: RefCell<HashMap<u32, Kind>>,
 }
 
-/// TS `StaticDiagramRenderable`: full width, the diagram's height, no wrap, not selectable, one row above.
+impl Renderer {
+    pub fn render(&self, block: &CodeBlock<'_>, palette: &Palette) -> Option<AnyWidget> {
+        let previous = block.previous.map(|widget| (widget.clone(), self.kinds.borrow_mut().remove(&widget.id())));
+        let diagram = match render(block.code, block.app.size().0, palette) {
+            Rendered::Diagram(diagram) => diagram,
+            Rendered::Code => return None,
+            Rendered::Syntax { kind, prefix } => {
+                if let Some((widget, Some(previous))) = previous
+                    && previous == kind
+                {
+                    self.kinds.borrow_mut().insert(widget.id(), kind);
+                    return Some(widget);
+                }
+                prefix?
+            }
+        };
+        let widget = widget(block.app, &diagram).as_any();
+        self.kinds.borrow_mut().insert(widget.id(), diagram.kind);
+        Some(widget)
+    }
+}
+
+/// TS `StaticDiagramRenderable`: full width, the diagram's height, no wrap, not selectable. TS also sets one row
+/// of top margin, which Core's Markdown uses as the gap before the block; the Rust Markdown widget puts that gap
+/// between blocks itself, so a margin here would double it.
 pub fn widget(app: &App, diagram: &Diagram) -> Text {
     let mut spans: Vec<Span<'static>> = Vec::new();
     for (index, line) in diagram.lines.iter().enumerate() {
@@ -62,9 +70,10 @@ pub fn widget(app: &App, diagram: &Diagram) -> Text {
         }
     }
     Text::new(app, Content(spans))
+        // TS `TextRenderable`'s default fg, which unstyled cells (blank interiors, run gaps) keep.
+        .fg(Color::rgb(255, 255, 255))
         .wrap(WrapMode::None)
         .selectable(false)
         .width(Length::percent(100.0))
         .height(diagram.height() as u16)
-        .margin_edge(Edge::Top, 1)
 }
