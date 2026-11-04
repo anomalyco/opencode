@@ -519,19 +519,28 @@ impl Data {
             .id
             .clone()
             .unwrap_or_else(|| SessionID(opencode_api::id::session()));
-        let location = input.location.clone().unwrap_or_else(|| LocationPublicRef {
-            directory: AbsolutePath(self.inner.options.directory.clone()),
-        });
         let mut state = self.lock();
+        let location = input.location.clone().unwrap_or_else(|| LocationPublicRef {
+            directory: AbsolutePath(state.default_location().directory.clone()),
+        });
         let fresh = !state.info.contains_key(&id);
         state.clear_deleted(&id);
         if fresh {
             let created = now();
+            let project_id = input
+                .project_id
+                .clone()
+                .or_else(|| {
+                    state
+                        .location(Some(&(&location).into()))
+                        .and_then(|data| data.info.as_ref())
+                        .map(|info| info.project.id.clone())
+                })
+                .unwrap_or_default();
             state.session_outbox.insert(id.clone());
             state.remember(SessionInfo {
                 id: id.clone(),
-                // TS falls back to the location's project; locations are F.8.
-                project_id: input.project_id.clone().unwrap_or_default(),
+                project_id,
                 agent: input.agent.clone(),
                 model: input.model.clone(),
                 cost: 0.0,
