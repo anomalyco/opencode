@@ -431,6 +431,23 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
 
 /// The built-in `opencode.latex` plugin (P.2) draws `latex` fences in assistant text as Unicode math.
 #[test]
+fn mermaid_fences_render_as_diagrams() {
+    let text = "The flow:\n\n```mermaid\nflowchart LR\n  A[Idea] --> B[Parse]\n```";
+    let messages = vec![
+        user("msg_1", 1000, "Draw it"),
+        assistant(
+            "msg_2",
+            1500,
+            json!([{ "type": "text", "text": text }]),
+            Some(4000),
+        ),
+    ];
+    let h = open(60, 20, "ses_m", messages, Info::default());
+    let screen = h.wait_for("│ Idea ├───▶│ Parse │");
+    assert!(!screen.contains("flowchart LR"), "{screen}");
+}
+
+#[test]
 fn latex_fences_render_as_math() {
     let text = "The roots:\n\n```latex\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\n```";
     let messages = vec![
