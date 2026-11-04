@@ -1245,6 +1245,8 @@ export function AssistantReasoningContent(props: {
   id: string
   content: SessionMessageAssistantReasoning
   streaming: boolean
+  /** Count the live timer from here when the displayed reasoning predates the newest user prompt. */
+  elapsedSince?: number
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -1294,7 +1296,10 @@ export function AssistantReasoningContent(props: {
               </span>
               <Show when={props.streaming && props.content.time?.created !== undefined}>
                 <ToolElapsed
-                  time={{ created: props.content.time!.created, ran: props.content.time!.created }}
+                  time={{
+                    created: props.elapsedSince ?? props.content.time!.created,
+                    ran: props.elapsedSince ?? props.content.time!.created,
+                  }}
                   running
                 />
               </Show>

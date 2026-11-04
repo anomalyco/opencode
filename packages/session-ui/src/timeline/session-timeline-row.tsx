@@ -31,6 +31,7 @@ import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { TimelineSeparator } from "../components/timeline-separator"
+import { anchorElapsedStart } from "../components/tool-elapsed"
 import {
   SessionAssistantContent,
   SessionContextToolGroup,
@@ -1247,6 +1248,17 @@ export function createSessionTimelineRowRenderer(input: {
         return content?.type === "reasoning" ? content : undefined
       })
 
+      // The row keeps showing the previous turn's reasoning until the new turn streams its own.
+      // Anchor on the newest user prompt so a fresh follow-up counts from when it was sent.
+      const elapsedStart = createMemo(() => {
+        const item = content()
+        const created = item?.time?.created
+
+        if (created === undefined) return undefined
+
+        return anchorElapsedStart(created, input.projection.messageByID().values())
+      })
+
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
@@ -1257,6 +1269,7 @@ export function createSessionTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
+                    elapsedSince={elapsedStart()}
                     defaultOpen={
                       input.timelineDetail
                         ? input.timelineDetail().thinking.details === "expanded"
