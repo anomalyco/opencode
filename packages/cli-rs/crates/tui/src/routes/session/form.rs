@@ -743,12 +743,18 @@ impl FormPrompt {
 impl Drop for FormPrompt {
     fn drop(&mut self) {
         let inner = &self.0;
-        inner.layers.take();
-        inner.intercept.take();
-        inner.mode.take();
+        let keys: Vec<Disposer> = inner
+            .layers
+            .take()
+            .into_iter()
+            .chain(inner.intercept.take())
+            .chain(inner.mode.take())
+            .collect();
         let Some(tui) = inner.tui.upgrade() else {
+            keys.into_iter().for_each(Disposer::dispose);
             return;
         };
+        dispose_later(&tui.app, keys);
         for id in inner.handlers.take() {
             tui.app.remove_handler(id);
         }
@@ -1008,7 +1014,10 @@ impl Inner {
         let input = SessionFormReplyInput {
             session_id: self.form.info.session_id.clone(),
             form_id: self.form.info.id.clone(),
-            answer,
+            answer: answer
+                .into_iter()
+                .map(|(key, value)| (key, wire(value)))
+                .collect(),
         };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
@@ -1693,7 +1702,7 @@ impl Inner {
             return;
         };
         // Keys follow the state.
-        self.layers.take();
+        dispose_later(&tui.app, self.layers.take());
         for layer in self.layers() {
             match tui.keymap.layer(layer) {
                 Ok(disposer) => self.layers.borrow_mut().push(disposer),
@@ -2212,6 +2221,15 @@ impl Inner {
     }
 }
 
+/// Removes key registrations once the current event is done: a command may cause this while the keymap runs it.
+/// A dropped `Disposer` keeps its registration.
+pub(crate) fn dispose_later(app: &App, disposers: Vec<Disposer>) {
+    if disposers.is_empty() {
+        return;
+    }
+    app.defer(move |_| disposers.into_iter().for_each(Disposer::dispose));
+}
+
 fn review_max_height(height: u16) -> usize {
     usize::from(height).saturating_sub(14).max(3)
 }
@@ -2244,8 +2262,31 @@ fn checkbox(app: &App, theme: &Theme, checked: bool, active: bool) -> Text {
         })
 }
 
+/// JavaScript sends a whole number as `3`, not `3.0`.
+fn wire(value: FormValue) -> FormValue {
+    match value {
+        FormValue::Number(number)
+            if number.fract() == 0.0 && number.abs() < 9_007_199_254_740_992.0 =>
+        {
+            FormValue::Unknown(serde_json::Value::from(number as i64))
+        }
+        value => value,
+    }
+}
+
+/// Replaces the browser launch; for tests, which must not open one.
+static OPENER: std::sync::OnceLock<fn(&str) -> bool> = std::sync::OnceLock::new();
+
+#[doc(hidden)]
+pub fn set_url_opener(opener: fn(&str) -> bool) {
+    let _ = OPENER.set(opener);
+}
+
 /// `openUrl`: http and https links only, in the system browser.
 fn open_url(input: &str) -> bool {
+    if let Some(opener) = OPENER.get() {
+        return opener(input);
+    }
     let Ok(url) = url::Url::parse(input) else {
         return false;
     };

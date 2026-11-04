@@ -174,9 +174,12 @@ impl Permission {
 impl Drop for Permission {
     fn drop(&mut self) {
         let inner = &self.0;
-        inner.layer.take();
         inner.overlay.detach();
-        if let (Some(tui), Some(id)) = (inner.tui.upgrade(), inner.resize.take()) {
+        let Some(tui) = inner.tui.upgrade() else {
+            return;
+        };
+        super::form::dispose_later(&tui.app, inner.layer.take().into_iter().collect());
+        if let Some(id) = inner.resize.take() {
             tui.app.remove_handler(id);
         }
     }
@@ -253,11 +256,12 @@ impl Inner {
 
     /// Registers the stage's keys and draws it.
     fn stage_changed(self: &Rc<Self>) {
-        self.layer.take();
         self.reject.take();
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
+        // A dropped `Disposer` keeps its layer registered.
+        super::form::dispose_later(&tui.app, self.layer.take().into_iter().collect());
         let stage = self.prompted.borrow().stage;
         let prompting = self.prompted.borrow().request.is_some();
         if prompting {
