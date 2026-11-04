@@ -5,7 +5,9 @@
 use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
+use opencode_api::generated::{
+    AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput,
+};
 use opencode_ui::keymap::{Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -68,9 +70,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     let client = tui.data.client().clone();
     let weak = prompt.this.clone();
     let failed = |tui: &Tui, error: String| {
-        tui.toasts.show(
-            ToastOptions::new(Variant::Error, error).title("Failed to change directory"),
-        );
+        tui.toasts
+            .show(ToastOptions::new(Variant::Error, error).title("Failed to change directory"));
     };
     let Some(session) = prompt.session.clone() else {
         let input = LocationGetInput {
@@ -79,7 +80,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
             }),
         };
         tui.app.spawn(
-            async move { client.location_get(&input, &RequestOptions::default()).await },
+            async move {
+                client
+                    .location_get(&input, &RequestOptions::default())
+                    .await
+            },
             move |_, result| {
                 let Some(prompt) = weak.upgrade() else { return };
                 let Some(tui) = prompt.tui.upgrade() else {
@@ -106,7 +111,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
         delivery: None,
     };
     tui.app.spawn(
-        async move { client.session_move(&request, &RequestOptions::default()).await },
+        async move {
+            client
+                .session_move(&request, &RequestOptions::default())
+                .await
+        },
         move |_, result| {
             let Some(prompt) = weak.upgrade() else { return };
             let Some(tui) = prompt.tui.upgrade() else {

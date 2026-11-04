@@ -97,11 +97,7 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     let mut part = part;
     part["mention"] = range;
     list.push(part);
-    prompt
-        .parts
-        .0
-        .borrow_mut()
-        .push((id, kind, list.len() - 1));
+    prompt.parts.0.borrow_mut().push((id, kind, list.len() - 1));
 }
 
 /// The skills dialog's pick: `@id ` at the cursor, unless the prompt has the skill

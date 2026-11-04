@@ -1,0 +1,2355 @@
+{
+ "corpus": {
+  "command": [
+   {
+    "display": "/leader",
+    "description": "Leader key for keybind combinations"
+   },
+   {
+    "display": "/app.exit",
+    "description": "Exit the application"
+   },
+   {
+    "display": "/app.clear",
+    "description": "Clear the screen in mini"
+   },
+   {
+    "display": "/app.debug",
+    "description": "Toggle debug panel"
+   },
+   {
+    "display": "/app.console",
+    "description": "Toggle console"
+   },
+   {
+    "display": "/app.scrap",
+    "description": "Open scrap screen"
+   },
+   {
+    "display": "/app.toggle.animations",
+    "description": "Toggle animations"
+   },
+   {
+    "display": "/app.toggle.file_context",
+    "description": "Toggle file context"
+   },
+   {
+    "display": "/app.toggle.diffwrap",
+    "description": "Toggle diff wrapping"
+   },
+   {
+    "display": "/app.toggle.paste_summary",
+    "description": "Toggle paste summary"
+   },
+   {
+    "display": "/command.palette.show",
+    "description": "List available commands"
+   },
+   {
+    "display": "/help.show",
+    "description": "Open help dialog"
+   },
+   {
+    "display": "/docs.open",
+    "description": "Open documentation"
+   },
+   {
+    "display": "/opencode.settings",
+    "description": "Open settings"
+   },
+   {
+    "display": "/server.pair",
+    "description": "Pair device"
+   },
+   {
+    "display": "/service.restart",
+    "description": "Restart service"
+   },
+   {
+    "display": "/location.reload",
+    "description": "Reload configuration"
+   },
+   {
+    "display": "/diff.open",
+    "description": "Open diff viewer"
+   },
+   {
+    "display": "/diff.close",
+    "description": "Close diff viewer"
+   },
+   {
+    "display": "/diff.down",
+    "description": "Move diff viewer down"
+   },
+   {
+    "display": "/diff.up",
+    "description": "Move diff viewer up"
+   },
+   {
+    "display": "/diff.page.down",
+    "description": "Page diff viewer down"
+   },
+   {
+    "display": "/diff.page.up",
+    "description": "Page diff viewer up"
+   },
+   {
+    "display": "/diff.half_page.down",
+    "description": "Scroll diff viewer down half a page"
+   },
+   {
+    "display": "/diff.half_page.up",
+    "description": "Scroll diff viewer up half a page"
+   },
+   {
+    "display": "/diff.first",
+    "description": "Go to the start of the diff"
+   },
+   {
+    "display": "/diff.last",
+    "description": "Go to the end of the diff"
+   },
+   {
+    "display": "/diff.toggle",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "/diff.expand",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "/diff.expand_all",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "/diff.collapse",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "/diff.switch_focus",
+    "description": "Deprecated: keyboard navigation always controls the diff"
+   },
+   {
+    "display": "/diff.next_hunk",
+    "description": "Jump to next diff hunk"
+   },
+   {
+    "display": "/diff.previous_hunk",
+    "description": "Jump to previous diff hunk"
+   },
+   {
+    "display": "/diff.next_file",
+    "description": "Jump to next diff file"
+   },
+   {
+    "display": "/diff.previous_file",
+    "description": "Jump to previous diff file"
+   },
+   {
+    "display": "/diff.toggle_file_tree",
+    "description": "Toggle diff viewer file tree"
+   },
+   {
+    "display": "/diff.single_patch",
+    "description": "Toggle single patch view"
+   },
+   {
+    "display": "/diff.switch_source",
+    "description": "Switch diff viewer source"
+   },
+   {
+    "display": "/diff.toggle_view",
+    "description": "Toggle diff viewer split or unified view"
+   },
+   {
+    "display": "/diff.toggle_fullscreen",
+    "description": "Toggle diff viewer full screen"
+   },
+   {
+    "display": "/diff.mark_reviewed",
+    "description": "Toggle selected diff file reviewed"
+   },
+   {
+    "display": "/diff.help",
+    "description": "Show more diff viewer shortcuts"
+   },
+   {
+    "display": "/prompt.editor",
+    "description": "Open external editor"
+   },
+   {
+    "display": "/theme.switch",
+    "description": "List available themes"
+   },
+   {
+    "display": "/theme.switch_mode",
+    "description": "Switch between light and dark theme mode"
+   },
+   {
+    "display": "/theme.mode.lock",
+    "description": "Lock or unlock theme mode"
+   },
+   {
+    "display": "/session.sidebar.toggle",
+    "description": "Toggle sidebar"
+   },
+   {
+    "display": "/pane.focus.left",
+    "description": "Focus session pane"
+   },
+   {
+    "display": "/pane.focus.right",
+    "description": "Focus right pane"
+   },
+   {
+    "display": "/terminal.select",
+    "description": "Select terminal"
+   },
+   {
+    "display": "/terminal.toggle",
+    "description": "Toggle terminal pane"
+   },
+   {
+    "display": "/terminal.close",
+    "description": "Close terminal pane"
+   },
+   {
+    "display": "/session.toggle.scrollbar",
+    "description": "Toggle session scrollbar"
+   },
+   {
+    "display": "/opencode.status",
+    "description": "View status"
+   },
+   {
+    "display": "/opencode.debug",
+    "description": "View debug info"
+   },
+   {
+    "display": "/session.export",
+    "description": "Export session to editor"
+   },
+   {
+    "display": "/session.copy",
+    "description": "Copy session transcript"
+   },
+   {
+    "display": "/session.copy.id",
+    "description": "Copy session ID"
+   },
+   {
+    "display": "/session.move",
+    "description": "Manage workspaces"
+   },
+   {
+    "display": "/session.new",
+    "description": "Create a new session"
+   },
+   {
+    "display": "/session.list",
+    "description": "List all sessions"
+   },
+   {
+    "display": "/open.menu",
+    "description": "Open recent sessions and projects"
+   },
+   {
+    "display": "/session.tab.next",
+    "description": "Switch to next open session tab"
+   },
+   {
+    "display": "/session.tab.previous",
+    "description": "Switch to previous open session tab"
+   },
+   {
+    "display": "/session.tab.history.back",
+    "description": "Go back in session tab history"
+   },
+   {
+    "display": "/session.tab.history.forward",
+    "description": "Go forward in session tab history"
+   },
+   {
+    "display": "/session.tab.next_unread",
+    "description": "Switch to next unread session tab"
+   },
+   {
+    "display": "/session.tab.previous_unread",
+    "description": "Switch to previous unread session tab"
+   },
+   {
+    "display": "/session.tab.close",
+    "description": "Close current session tab"
+   },
+   {
+    "display": "/session.tab.reopen",
+    "description": "Reopen last closed session tab"
+   },
+   {
+    "display": "/session.timeline",
+    "description": "Show session timeline"
+   },
+   {
+    "display": "/session.fork",
+    "description": "Fork session from message"
+   },
+   {
+    "display": "/session.rename",
+    "description": "Rename session"
+   },
+   {
+    "display": "/session.delete",
+    "description": "Delete session"
+   },
+   {
+    "display": "/session.share",
+    "description": "Deprecated: session sharing was removed"
+   },
+   {
+    "display": "/session.unshare",
+    "description": "Deprecated: session sharing was removed"
+   },
+   {
+    "display": "/session.interrupt",
+    "description": "Interrupt current session"
+   },
+   {
+    "display": "/session.background",
+    "description": "Background blocking session tools"
+   },
+   {
+    "display": "/session.compact",
+    "description": "Compact the session"
+   },
+   {
+    "display": "/session.aside",
+    "description": "Ask a side question"
+   },
+   {
+    "display": "/session.cd",
+    "description": "Change working directory"
+   },
+   {
+    "display": "/session.queued_prompts",
+    "description": "Manage queued prompts"
+   },
+   {
+    "display": "/queued_prompt.undo",
+    "description": "Undo queued prompt"
+   },
+   {
+    "display": "/queued_prompt.delete",
+    "description": "Delete queued prompt"
+   },
+   {
+    "display": "/session.toggle.exploration_grouping",
+    "description": "Toggle related tool call grouping"
+   },
+   {
+    "display": "/session.verbosity.cycle",
+    "description": "Cycle transcript verbosity"
+   },
+   {
+    "display": "/session.child.first",
+    "description": "Toggle subagent picker"
+   },
+   {
+    "display": "/session.child.next",
+    "description": "Go to next child session"
+   },
+   {
+    "display": "/session.child.previous",
+    "description": "Go to previous child session"
+   },
+   {
+    "display": "/session.parent",
+    "description": "Go to parent session"
+   },
+   {
+    "display": "/session.pin.toggle",
+    "description": "Pin or unpin session in the session list"
+   },
+   {
+    "display": "/session.quick_switch.1",
+    "description": "Switch to session in quick slot 1"
+   },
+   {
+    "display": "/session.quick_switch.2",
+    "description": "Switch to session in quick slot 2"
+   },
+   {
+    "display": "/session.quick_switch.3",
+    "description": "Switch to session in quick slot 3"
+   },
+   {
+    "display": "/session.quick_switch.4",
+    "description": "Switch to session in quick slot 4"
+   },
+   {
+    "display": "/session.quick_switch.5",
+    "description": "Switch to session in quick slot 5"
+   },
+   {
+    "display": "/session.quick_switch.6",
+    "description": "Switch to session in quick slot 6"
+   },
+   {
+    "display": "/session.quick_switch.7",
+    "description": "Switch to session in quick slot 7"
+   },
+   {
+    "display": "/session.quick_switch.8",
+    "description": "Switch to session in quick slot 8"
+   },
+   {
+    "display": "/session.quick_switch.9",
+    "description": "Switch to session in quick slot 9"
+   },
+   {
+    "display": "/session.tab.select.1",
+    "description": "Switch to session tab 1"
+   },
+   {
+    "display": "/session.tab.select.2",
+    "description": "Switch to session tab 2"
+   },
+   {
+    "display": "/session.tab.select.3",
+    "description": "Switch to session tab 3"
+   },
+   {
+    "display": "/session.tab.select.4",
+    "description": "Switch to session tab 4"
+   },
+   {
+    "display": "/session.tab.select.5",
+    "description": "Switch to session tab 5"
+   },
+   {
+    "display": "/session.tab.select.6",
+    "description": "Switch to session tab 6"
+   },
+   {
+    "display": "/session.tab.select.7",
+    "description": "Switch to session tab 7"
+   },
+   {
+    "display": "/session.tab.select.8",
+    "description": "Switch to session tab 8"
+   },
+   {
+    "display": "/session.tab.select.9",
+    "description": "Switch to session tab 9"
+   },
+   {
+    "display": "/session.tab.select.10",
+    "description": "Switch to session tab 10"
+   },
+   {
+    "display": "/stash.delete",
+    "description": "Delete stash entry"
+   },
+   {
+    "display": "/model.dialog.provider",
+    "description": "Open provider list from model dialog"
+   },
+   {
+    "display": "/model.dialog.favorite",
+    "description": "Toggle model favorite status"
+   },
+   {
+    "display": "/model.dialog.usage",
+    "description": "Open usage limits from model dialog"
+   },
+   {
+    "display": "/model.list",
+    "description": "List available models"
+   },
+   {
+    "display": "/model.cycle_recent",
+    "description": "Next recently used model"
+   },
+   {
+    "display": "/model.cycle_recent_reverse",
+    "description": "Previous recently used model"
+   },
+   {
+    "display": "/model.cycle_favorite",
+    "description": "Next favorite model"
+   },
+   {
+    "display": "/model.cycle_favorite_reverse",
+    "description": "Previous favorite model"
+   },
+   {
+    "display": "/mcp.list",
+    "description": "List MCP servers"
+   },
+   {
+    "display": "/usage.show",
+    "description": "View usage limits"
+   },
+   {
+    "display": "/provider.connect",
+    "description": "Connect integration"
+   },
+   {
+    "display": "/agent.list",
+    "description": "List agents"
+   },
+   {
+    "display": "/agent.cycle",
+    "description": "Next agent"
+   },
+   {
+    "display": "/agent.cycle.reverse",
+    "description": "Previous agent"
+   },
+   {
+    "display": "/variant.cycle",
+    "description": "Cycle model variants"
+   },
+   {
+    "display": "/variant.list",
+    "description": "List model variants"
+   },
+   {
+    "display": "/session.page.up",
+    "description": "Scroll messages up by one page"
+   },
+   {
+    "display": "/session.page.down",
+    "description": "Scroll messages down by one page"
+   },
+   {
+    "display": "/session.line.up",
+    "description": "Scroll messages up by one line"
+   },
+   {
+    "display": "/session.line.down",
+    "description": "Scroll messages down by one line"
+   },
+   {
+    "display": "/session.half.page.up",
+    "description": "Scroll messages up by half page"
+   },
+   {
+    "display": "/session.half.page.down",
+    "description": "Scroll messages down by half page"
+   },
+   {
+    "display": "/session.first",
+    "description": "Navigate to first message"
+   },
+   {
+    "display": "/session.last",
+    "description": "Navigate to last message"
+   },
+   {
+    "display": "/session.message.next",
+    "description": "Navigate to next message"
+   },
+   {
+    "display": "/session.message.previous",
+    "description": "Navigate to previous message"
+   },
+   {
+    "display": "/session.message.user.next",
+    "description": "Navigate to next user message"
+   },
+   {
+    "display": "/session.message.user.previous",
+    "description": "Navigate to previous user message"
+   },
+   {
+    "display": "/session.messages_last_user",
+    "description": "Navigate to last user message"
+   },
+   {
+    "display": "/messages.copy",
+    "description": "Copy message"
+   },
+   {
+    "display": "/session.undo",
+    "description": "Undo message"
+   },
+   {
+    "display": "/session.redo",
+    "description": "Redo message"
+   },
+   {
+    "display": "/session.toggle.thinking",
+    "description": "Toggle thinking blocks visibility"
+   },
+   {
+    "display": "/prompt.submit",
+    "description": "Submit prompt"
+   },
+   {
+    "display": "/prompt.queue",
+    "description": "Queue prompt"
+   },
+   {
+    "display": "/prompt.editor_context.clear",
+    "description": "Clear editor context"
+   },
+   {
+    "display": "/prompt.images.view",
+    "description": "View image attachments"
+   },
+   {
+    "display": "/prompt.skills",
+    "description": "Open skill selector"
+   },
+   {
+    "display": "/prompt.stash",
+    "description": "Stash prompt"
+   },
+   {
+    "display": "/prompt.stash.pop",
+    "description": "Pop stashed prompt"
+   },
+   {
+    "display": "/prompt.stash.list",
+    "description": "List stashed prompts"
+   },
+   {
+    "display": "/prompt.clear",
+    "description": "Clear input field"
+   },
+   {
+    "display": "/prompt.paste",
+    "description": "Paste from clipboard"
+   },
+   {
+    "display": "/input.submit",
+    "description": "Submit input"
+   },
+   {
+    "display": "/input.newline",
+    "description": "Insert newline in input"
+   },
+   {
+    "display": "/input.move.left",
+    "description": "Move cursor left in input"
+   },
+   {
+    "display": "/input.move.right",
+    "description": "Move cursor right in input"
+   },
+   {
+    "display": "/input.move.up",
+    "description": "Move cursor up in input"
+   },
+   {
+    "display": "/input.move.down",
+    "description": "Move cursor down in input"
+   },
+   {
+    "display": "/input.select.left",
+    "description": "Select left in input"
+   },
+   {
+    "display": "/input.select.right",
+    "description": "Select right in input"
+   },
+   {
+    "display": "/input.select.up",
+    "description": "Select up in input"
+   },
+   {
+    "display": "/input.select.down",
+    "description": "Select down in input"
+   },
+   {
+    "display": "/input.line.home",
+    "description": "Move to start of line in input"
+   },
+   {
+    "display": "/input.line.end",
+    "description": "Move to end of line in input"
+   },
+   {
+    "display": "/input.select.line.home",
+    "description": "Select to start of line in input"
+   },
+   {
+    "display": "/input.select.line.end",
+    "description": "Select to end of line in input"
+   },
+   {
+    "display": "/input.visual.line.home",
+    "description": "Move to start of visual line in input"
+   },
+   {
+    "display": "/input.visual.line.end",
+    "description": "Move to end of visual line in input"
+   },
+   {
+    "display": "/input.select.visual.line.home",
+    "description": "Select to start of visual line in input"
+   },
+   {
+    "display": "/input.select.visual.line.end",
+    "description": "Select to end of visual line in input"
+   },
+   {
+    "display": "/input.buffer.home",
+    "description": "Move to start of buffer in input"
+   },
+   {
+    "display": "/input.buffer.end",
+    "description": "Move to end of buffer in input"
+   },
+   {
+    "display": "/input.select.buffer.home",
+    "description": "Select to start of buffer in input"
+   },
+   {
+    "display": "/input.select.buffer.end",
+    "description": "Select to end of buffer in input"
+   },
+   {
+    "display": "/input.delete.line",
+    "description": "Delete line in input"
+   },
+   {
+    "display": "/input.delete.to.line.end",
+    "description": "Delete to end of line in input"
+   },
+   {
+    "display": "/input.delete.to.line.start",
+    "description": "Delete to start of line in input"
+   },
+   {
+    "display": "/input.backspace",
+    "description": "Backspace in input"
+   },
+   {
+    "display": "/input.delete",
+    "description": "Delete character in input"
+   },
+   {
+    "display": "/input.undo",
+    "description": "Undo in input"
+   },
+   {
+    "display": "/input.redo",
+    "description": "Redo in input"
+   },
+   {
+    "display": "/input.word.forward",
+    "description": "Move word forward in input"
+   },
+   {
+    "display": "/input.word.backward",
+    "description": "Move word backward in input"
+   },
+   {
+    "display": "/input.select.word.forward",
+    "description": "Select word forward in input"
+   },
+   {
+    "display": "/input.select.word.backward",
+    "description": "Select word backward in input"
+   },
+   {
+    "display": "/input.delete.word.forward",
+    "description": "Delete word forward in input"
+   },
+   {
+    "display": "/input.delete.word.backward",
+    "description": "Delete word backward in input"
+   },
+   {
+    "display": "/input.select.all",
+    "description": "Select all in input"
+   },
+   {
+    "display": "/prompt.history.previous",
+    "description": "Previous history item"
+   },
+   {
+    "display": "/prompt.history.next",
+    "description": "Next history item"
+   },
+   {
+    "display": "/composer.subagent.up",
+    "description": "Previous subagent"
+   },
+   {
+    "display": "/composer.subagent.down",
+    "description": "Next subagent"
+   },
+   {
+    "display": "/composer.subagent.select",
+    "description": "Navigate to subagent"
+   },
+   {
+    "display": "/composer.subagent.interrupt",
+    "description": "Interrupt subagent"
+   },
+   {
+    "display": "/composer.shell.up",
+    "description": "Previous shell"
+   },
+   {
+    "display": "/composer.shell.down",
+    "description": "Next shell"
+   },
+   {
+    "display": "/composer.shell.select",
+    "description": "View shell output"
+   },
+   {
+    "display": "/composer.shell.kill",
+    "description": "Kill shell command"
+   },
+   {
+    "display": "/composer.terminal.up",
+    "description": "Previous terminal"
+   },
+   {
+    "display": "/composer.terminal.down",
+    "description": "Next terminal"
+   },
+   {
+    "display": "/composer.terminal.select",
+    "description": "Select terminal"
+   },
+   {
+    "display": "/dialog.select.prev",
+    "description": "Move to previous dialog item"
+   },
+   {
+    "display": "/dialog.select.next",
+    "description": "Move to next dialog item"
+   },
+   {
+    "display": "/dialog.select.page_up",
+    "description": "Move up one page in dialog"
+   },
+   {
+    "display": "/dialog.select.page_down",
+    "description": "Move down one page in dialog"
+   },
+   {
+    "display": "/dialog.select.home",
+    "description": "Move to first dialog item"
+   },
+   {
+    "display": "/dialog.select.end",
+    "description": "Move to last dialog item"
+   },
+   {
+    "display": "/dialog.select.submit",
+    "description": "Submit selected dialog item"
+   },
+   {
+    "display": "/dialog.prompt.submit",
+    "description": "Submit dialog prompt"
+   },
+   {
+    "display": "/dialog.integration.rename",
+    "description": "Rename integration account"
+   },
+   {
+    "display": "/dialog.integration.delete",
+    "description": "Delete integration account"
+   },
+   {
+    "display": "/dialog.worktree.generate",
+    "description": "Generate worktree name"
+   },
+   {
+    "display": "/dialog.move_session.new",
+    "description": "New worktree"
+   },
+   {
+    "display": "/dialog.move_session.move",
+    "description": "Move session to worktree"
+   },
+   {
+    "display": "/dialog.move_session.delete",
+    "description": "Delete worktree"
+   },
+   {
+    "display": "/dialog.move_session.refresh",
+    "description": "Refresh worktrees"
+   },
+   {
+    "display": "/prompt.autocomplete.prev",
+    "description": "Move to previous autocomplete item"
+   },
+   {
+    "display": "/prompt.autocomplete.next",
+    "description": "Move to next autocomplete item"
+   },
+   {
+    "display": "/prompt.autocomplete.hide",
+    "description": "Hide autocomplete"
+   },
+   {
+    "display": "/prompt.autocomplete.select",
+    "description": "Select autocomplete item"
+   },
+   {
+    "display": "/prompt.autocomplete.complete",
+    "description": "Complete autocomplete item"
+   },
+   {
+    "display": "/permission.prompt.fullscreen",
+    "description": "Toggle permission prompt fullscreen"
+   },
+   {
+    "display": "/plugins.toggle",
+    "description": "Toggle plugin"
+   },
+   {
+    "display": "/dialog.mcp.toggle",
+    "description": "Toggle MCP server"
+   },
+   {
+    "display": "/dialog.plugins.error",
+    "description": "View plugin error"
+   },
+   {
+    "display": "/dialog.plugins.update",
+    "description": "Update plugin from plugin dialog"
+   },
+   {
+    "display": "/dialog.plugins.check",
+    "description": "Check for plugin updates from plugin dialog"
+   },
+   {
+    "display": "/terminal.suspend",
+    "description": "Suspend terminal"
+   },
+   {
+    "display": "/terminal.title.toggle",
+    "description": "Toggle terminal title"
+   },
+   {
+    "display": "/plugins.list",
+    "description": "Open plugin manager dialog"
+   },
+   {
+    "display": "/which-key.toggle",
+    "description": "Toggle which-key panel"
+   },
+   {
+    "display": "/which-key.layout.toggle",
+    "description": "Switch which-key layout"
+   },
+   {
+    "display": "/which-key.pending.toggle",
+    "description": "Toggle which-key pending preview"
+   },
+   {
+    "display": "/which-key.group.previous",
+    "description": "Previous which-key group"
+   },
+   {
+    "display": "/which-key.group.next",
+    "description": "Next which-key group"
+   },
+   {
+    "display": "/which-key.scroll.up",
+    "description": "Scroll which-key up"
+   },
+   {
+    "display": "/which-key.scroll.down",
+    "description": "Scroll which-key down"
+   },
+   {
+    "display": "/which-key.page.up",
+    "description": "Page which-key up"
+   },
+   {
+    "display": "/which-key.page.down",
+    "description": "Page which-key down"
+   },
+   {
+    "display": "/which-key.home",
+    "description": "Jump to first which-key binding"
+   },
+   {
+    "display": "/which-key.end",
+    "description": "Jump to last which-key binding"
+   }
+  ],
+  "reference": [
+   {
+    "display": "@leader",
+    "description": "Leader key for keybind combinations"
+   },
+   {
+    "display": "@app.exit",
+    "description": "Exit the application"
+   },
+   {
+    "display": "@app.clear",
+    "description": "Clear the screen in mini"
+   },
+   {
+    "display": "@app.debug",
+    "description": "Toggle debug panel"
+   },
+   {
+    "display": "@app.console",
+    "description": "Toggle console"
+   },
+   {
+    "display": "@app.scrap",
+    "description": "Open scrap screen"
+   },
+   {
+    "display": "@app.toggle.animations",
+    "description": "Toggle animations"
+   },
+   {
+    "display": "@app.toggle.file_context",
+    "description": "Toggle file context"
+   },
+   {
+    "display": "@app.toggle.diffwrap",
+    "description": "Toggle diff wrapping"
+   },
+   {
+    "display": "@app.toggle.paste_summary",
+    "description": "Toggle paste summary"
+   },
+   {
+    "display": "@command.palette.show",
+    "description": "List available commands"
+   },
+   {
+    "display": "@help.show",
+    "description": "Open help dialog"
+   },
+   {
+    "display": "@docs.open",
+    "description": "Open documentation"
+   },
+   {
+    "display": "@opencode.settings",
+    "description": "Open settings"
+   },
+   {
+    "display": "@server.pair",
+    "description": "Pair device"
+   },
+   {
+    "display": "@service.restart",
+    "description": "Restart service"
+   },
+   {
+    "display": "@location.reload",
+    "description": "Reload configuration"
+   },
+   {
+    "display": "@diff.open",
+    "description": "Open diff viewer"
+   },
+   {
+    "display": "@diff.close",
+    "description": "Close diff viewer"
+   },
+   {
+    "display": "@diff.down",
+    "description": "Move diff viewer down"
+   },
+   {
+    "display": "@diff.up",
+    "description": "Move diff viewer up"
+   },
+   {
+    "display": "@diff.page.down",
+    "description": "Page diff viewer down"
+   },
+   {
+    "display": "@diff.page.up",
+    "description": "Page diff viewer up"
+   },
+   {
+    "display": "@diff.half_page.down",
+    "description": "Scroll diff viewer down half a page"
+   },
+   {
+    "display": "@diff.half_page.up",
+    "description": "Scroll diff viewer up half a page"
+   },
+   {
+    "display": "@diff.first",
+    "description": "Go to the start of the diff"
+   },
+   {
+    "display": "@diff.last",
+    "description": "Go to the end of the diff"
+   },
+   {
+    "display": "@diff.toggle",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "@diff.expand",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "@diff.expand_all",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "@diff.collapse",
+    "description": "Deprecated: file tree is mouse-controlled"
+   },
+   {
+    "display": "@diff.switch_focus",
+    "description": "Deprecated: keyboard navigation always controls the diff"
+   },
+   {
+    "display": "@diff.next_hunk",
+    "description": "Jump to next diff hunk"
+   },
+   {
+    "display": "@diff.previous_hunk",
+    "description": "Jump to previous diff hunk"
+   },
+   {
+    "display": "@diff.next_file",
+    "description": "Jump to next diff file"
+   },
+   {
+    "display": "@diff.previous_file",
+    "description": "Jump to previous diff file"
+   },
+   {
+    "display": "@diff.toggle_file_tree",
+    "description": "Toggle diff viewer file tree"
+   },
+   {
+    "display": "@diff.single_patch",
+    "description": "Toggle single patch view"
+   },
+   {
+    "display": "@diff.switch_source",
+    "description": "Switch diff viewer source"
+   },
+   {
+    "display": "@diff.toggle_view",
+    "description": "Toggle diff viewer split or unified view"
+   },
+   {
+    "display": "@diff.toggle_fullscreen",
+    "description": "Toggle diff viewer full screen"
+   },
+   {
+    "display": "@diff.mark_reviewed",
+    "description": "Toggle selected diff file reviewed"
+   },
+   {
+    "display": "@diff.help",
+    "description": "Show more diff viewer shortcuts"
+   },
+   {
+    "display": "@prompt.editor",
+    "description": "Open external editor"
+   },
+   {
+    "display": "@theme.switch",
+    "description": "List available themes"
+   },
+   {
+    "display": "@theme.switch_mode",
+    "description": "Switch between light and dark theme mode"
+   },
+   {
+    "display": "@theme.mode.lock",
+    "description": "Lock or unlock theme mode"
+   },
+   {
+    "display": "@session.sidebar.toggle",
+    "description": "Toggle sidebar"
+   },
+   {
+    "display": "@pane.focus.left",
+    "description": "Focus session pane"
+   },
+   {
+    "display": "@pane.focus.right",
+    "description": "Focus right pane"
+   },
+   {
+    "display": "@terminal.select",
+    "description": "Select terminal"
+   },
+   {
+    "display": "@terminal.toggle",
+    "description": "Toggle terminal pane"
+   },
+   {
+    "display": "@terminal.close",
+    "description": "Close terminal pane"
+   },
+   {
+    "display": "@session.toggle.scrollbar",
+    "description": "Toggle session scrollbar"
+   },
+   {
+    "display": "@opencode.status",
+    "description": "View status"
+   },
+   {
+    "display": "@opencode.debug",
+    "description": "View debug info"
+   },
+   {
+    "display": "@session.export",
+    "description": "Export session to editor"
+   },
+   {
+    "display": "@session.copy",
+    "description": "Copy session transcript"
+   },
+   {
+    "display": "@session.copy.id",
+    "description": "Copy session ID"
+   },
+   {
+    "display": "@session.move",
+    "description": "Manage workspaces"
+   },
+   {
+    "display": "@session.new",
+    "description": "Create a new session"
+   },
+   {
+    "display": "@session.list",
+    "description": "List all sessions"
+   },
+   {
+    "display": "@open.menu",
+    "description": "Open recent sessions and projects"
+   },
+   {
+    "display": "@session.tab.next",
+    "description": "Switch to next open session tab"
+   },
+   {
+    "display": "@session.tab.previous",
+    "description": "Switch to previous open session tab"
+   },
+   {
+    "display": "@session.tab.history.back",
+    "description": "Go back in session tab history"
+   },
+   {
+    "display": "@session.tab.history.forward",
+    "description": "Go forward in session tab history"
+   },
+   {
+    "display": "@session.tab.next_unread",
+    "description": "Switch to next unread session tab"
+   },
+   {
+    "display": "@session.tab.previous_unread",
+    "description": "Switch to previous unread session tab"
+   },
+   {
+    "display": "@session.tab.close",
+    "description": "Close current session tab"
+   },
+   {
+    "display": "@session.tab.reopen",
+    "description": "Reopen last closed session tab"
+   },
+   {
+    "display": "@session.timeline",
+    "description": "Show session timeline"
+   },
+   {
+    "display": "@session.fork",
+    "description": "Fork session from message"
+   },
+   {
+    "display": "@session.rename",
+    "description": "Rename session"
+   },
+   {
+    "display": "@session.delete",
+    "description": "Delete session"
+   },
+   {
+    "display": "@session.share",
+    "description": "Deprecated: session sharing was removed"
+   },
+   {
+    "display": "@session.unshare",
+    "description": "Deprecated: session sharing was removed"
+   },
+   {
+    "display": "@session.interrupt",
+    "description": "Interrupt current session"
+   },
+   {
+    "display": "@session.background",
+    "description": "Background blocking session tools"
+   },
+   {
+    "display": "@session.compact",
+    "description": "Compact the session"
+   },
+   {
+    "display": "@session.aside",
+    "description": "Ask a side question"
+   },
+   {
+    "display": "@session.cd",
+    "description": "Change working directory"
+   },
+   {
+    "display": "@session.queued_prompts",
+    "description": "Manage queued prompts"
+   },
+   {
+    "display": "@queued_prompt.undo",
+    "description": "Undo queued prompt"
+   },
+   {
+    "display": "@queued_prompt.delete",
+    "description": "Delete queued prompt"
+   },
+   {
+    "display": "@session.toggle.exploration_grouping",
+    "description": "Toggle related tool call grouping"
+   },
+   {
+    "display": "@session.verbosity.cycle",
+    "description": "Cycle transcript verbosity"
+   },
+   {
+    "display": "@session.child.first",
+    "description": "Toggle subagent picker"
+   },
+   {
+    "display": "@session.child.next",
+    "description": "Go to next child session"
+   },
+   {
+    "display": "@session.child.previous",
+    "description": "Go to previous child session"
+   },
+   {
+    "display": "@session.parent",
+    "description": "Go to parent session"
+   },
+   {
+    "display": "@session.pin.toggle",
+    "description": "Pin or unpin session in the session list"
+   },
+   {
+    "display": "@session.quick_switch.1",
+    "description": "Switch to session in quick slot 1"
+   },
+   {
+    "display": "@session.quick_switch.2",
+    "description": "Switch to session in quick slot 2"
+   },
+   {
+    "display": "@session.quick_switch.3",
+    "description": "Switch to session in quick slot 3"
+   },
+   {
+    "display": "@session.quick_switch.4",
+    "description": "Switch to session in quick slot 4"
+   },
+   {
+    "display": "@session.quick_switch.5",
+    "description": "Switch to session in quick slot 5"
+   },
+   {
+    "display": "@session.quick_switch.6",
+    "description": "Switch to session in quick slot 6"
+   },
+   {
+    "display": "@session.quick_switch.7",
+    "description": "Switch to session in quick slot 7"
+   },
+   {
+    "display": "@session.quick_switch.8",
+    "description": "Switch to session in quick slot 8"
+   },
+   {
+    "display": "@session.quick_switch.9",
+    "description": "Switch to session in quick slot 9"
+   },
+   {
+    "display": "@session.tab.select.1",
+    "description": "Switch to session tab 1"
+   },
+   {
+    "display": "@session.tab.select.2",
+    "description": "Switch to session tab 2"
+   },
+   {
+    "display": "@session.tab.select.3",
+    "description": "Switch to session tab 3"
+   },
+   {
+    "display": "@session.tab.select.4",
+    "description": "Switch to session tab 4"
+   },
+   {
+    "display": "@session.tab.select.5",
+    "description": "Switch to session tab 5"
+   },
+   {
+    "display": "@session.tab.select.6",
+    "description": "Switch to session tab 6"
+   },
+   {
+    "display": "@session.tab.select.7",
+    "description": "Switch to session tab 7"
+   },
+   {
+    "display": "@session.tab.select.8",
+    "description": "Switch to session tab 8"
+   },
+   {
+    "display": "@session.tab.select.9",
+    "description": "Switch to session tab 9"
+   },
+   {
+    "display": "@session.tab.select.10",
+    "description": "Switch to session tab 10"
+   },
+   {
+    "display": "@stash.delete",
+    "description": "Delete stash entry"
+   },
+   {
+    "display": "@model.dialog.provider",
+    "description": "Open provider list from model dialog"
+   },
+   {
+    "display": "@model.dialog.favorite",
+    "description": "Toggle model favorite status"
+   },
+   {
+    "display": "@model.dialog.usage",
+    "description": "Open usage limits from model dialog"
+   },
+   {
+    "display": "@model.list",
+    "description": "List available models"
+   },
+   {
+    "display": "@model.cycle_recent",
+    "description": "Next recently used model"
+   },
+   {
+    "display": "@model.cycle_recent_reverse",
+    "description": "Previous recently used model"
+   },
+   {
+    "display": "@model.cycle_favorite",
+    "description": "Next favorite model"
+   },
+   {
+    "display": "@model.cycle_favorite_reverse",
+    "description": "Previous favorite model"
+   },
+   {
+    "display": "@mcp.list",
+    "description": "List MCP servers"
+   },
+   {
+    "display": "@usage.show",
+    "description": "View usage limits"
+   },
+   {
+    "display": "@provider.connect",
+    "description": "Connect integration"
+   },
+   {
+    "display": "@agent.list",
+    "description": "List agents"
+   },
+   {
+    "display": "@agent.cycle",
+    "description": "Next agent"
+   },
+   {
+    "display": "@agent.cycle.reverse",
+    "description": "Previous agent"
+   },
+   {
+    "display": "@variant.cycle",
+    "description": "Cycle model variants"
+   },
+   {
+    "display": "@variant.list",
+    "description": "List model variants"
+   },
+   {
+    "display": "@session.page.up",
+    "description": "Scroll messages up by one page"
+   },
+   {
+    "display": "@session.page.down",
+    "description": "Scroll messages down by one page"
+   },
+   {
+    "display": "@session.line.up",
+    "description": "Scroll messages up by one line"
+   },
+   {
+    "display": "@session.line.down",
+    "description": "Scroll messages down by one line"
+   },
+   {
+    "display": "@session.half.page.up",
+    "description": "Scroll messages up by half page"
+   },
+   {
+    "display": "@session.half.page.down",
+    "description": "Scroll messages down by half page"
+   },
+   {
+    "display": "@session.first",
+    "description": "Navigate to first message"
+   },
+   {
+    "display": "@session.last",
+    "description": "Navigate to last message"
+   },
+   {
+    "display": "@session.message.next",
+    "description": "Navigate to next message"
+   },
+   {
+    "display": "@session.message.previous",
+    "description": "Navigate to previous message"
+   },
+   {
+    "display": "@session.message.user.next",
+    "description": "Navigate to next user message"
+   },
+   {
+    "display": "@session.message.user.previous",
+    "description": "Navigate to previous user message"
+   },
+   {
+    "display": "@session.messages_last_user",
+    "description": "Navigate to last user message"
+   },
+   {
+    "display": "@messages.copy",
+    "description": "Copy message"
+   },
+   {
+    "display": "@session.undo",
+    "description": "Undo message"
+   },
+   {
+    "display": "@session.redo",
+    "description": "Redo message"
+   },
+   {
+    "display": "@session.toggle.thinking",
+    "description": "Toggle thinking blocks visibility"
+   },
+   {
+    "display": "@prompt.submit",
+    "description": "Submit prompt"
+   },
+   {
+    "display": "@prompt.queue",
+    "description": "Queue prompt"
+   },
+   {
+    "display": "@prompt.editor_context.clear",
+    "description": "Clear editor context"
+   },
+   {
+    "display": "@prompt.images.view",
+    "description": "View image attachments"
+   },
+   {
+    "display": "@prompt.skills",
+    "description": "Open skill selector"
+   },
+   {
+    "display": "@prompt.stash",
+    "description": "Stash prompt"
+   },
+   {
+    "display": "@prompt.stash.pop",
+    "description": "Pop stashed prompt"
+   },
+   {
+    "display": "@prompt.stash.list",
+    "description": "List stashed prompts"
+   },
+   {
+    "display": "@prompt.clear",
+    "description": "Clear input field"
+   },
+   {
+    "display": "@prompt.paste",
+    "description": "Paste from clipboard"
+   },
+   {
+    "display": "@input.submit",
+    "description": "Submit input"
+   },
+   {
+    "display": "@input.newline",
+    "description": "Insert newline in input"
+   },
+   {
+    "display": "@input.move.left",
+    "description": "Move cursor left in input"
+   },
+   {
+    "display": "@input.move.right",
+    "description": "Move cursor right in input"
+   },
+   {
+    "display": "@input.move.up",
+    "description": "Move cursor up in input"
+   },
+   {
+    "display": "@input.move.down",
+    "description": "Move cursor down in input"
+   },
+   {
+    "display": "@input.select.left",
+    "description": "Select left in input"
+   },
+   {
+    "display": "@input.select.right",
+    "description": "Select right in input"
+   },
+   {
+    "display": "@input.select.up",
+    "description": "Select up in input"
+   },
+   {
+    "display": "@input.select.down",
+    "description": "Select down in input"
+   },
+   {
+    "display": "@input.line.home",
+    "description": "Move to start of line in input"
+   },
+   {
+    "display": "@input.line.end",
+    "description": "Move to end of line in input"
+   },
+   {
+    "display": "@input.select.line.home",
+    "description": "Select to start of line in input"
+   },
+   {
+    "display": "@input.select.line.end",
+    "description": "Select to end of line in input"
+   },
+   {
+    "display": "@input.visual.line.home",
+    "description": "Move to start of visual line in input"
+   },
+   {
+    "display": "@input.visual.line.end",
+    "description": "Move to end of visual line in input"
+   },
+   {
+    "display": "@input.select.visual.line.home",
+    "description": "Select to start of visual line in input"
+   },
+   {
+    "display": "@input.select.visual.line.end",
+    "description": "Select to end of visual line in input"
+   },
+   {
+    "display": "@input.buffer.home",
+    "description": "Move to start of buffer in input"
+   },
+   {
+    "display": "@input.buffer.end",
+    "description": "Move to end of buffer in input"
+   },
+   {
+    "display": "@input.select.buffer.home",
+    "description": "Select to start of buffer in input"
+   },
+   {
+    "display": "@input.select.buffer.end",
+    "description": "Select to end of buffer in input"
+   },
+   {
+    "display": "@input.delete.line",
+    "description": "Delete line in input"
+   },
+   {
+    "display": "@input.delete.to.line.end",
+    "description": "Delete to end of line in input"
+   },
+   {
+    "display": "@input.delete.to.line.start",
+    "description": "Delete to start of line in input"
+   },
+   {
+    "display": "@input.backspace",
+    "description": "Backspace in input"
+   },
+   {
+    "display": "@input.delete",
+    "description": "Delete character in input"
+   },
+   {
+    "display": "@input.undo",
+    "description": "Undo in input"
+   },
+   {
+    "display": "@input.redo",
+    "description": "Redo in input"
+   },
+   {
+    "display": "@input.word.forward",
+    "description": "Move word forward in input"
+   },
+   {
+    "display": "@input.word.backward",
+    "description": "Move word backward in input"
+   },
+   {
+    "display": "@input.select.word.forward",
+    "description": "Select word forward in input"
+   },
+   {
+    "display": "@input.select.word.backward",
+    "description": "Select word backward in input"
+   },
+   {
+    "display": "@input.delete.word.forward",
+    "description": "Delete word forward in input"
+   },
+   {
+    "display": "@input.delete.word.backward",
+    "description": "Delete word backward in input"
+   },
+   {
+    "display": "@input.select.all",
+    "description": "Select all in input"
+   },
+   {
+    "display": "@prompt.history.previous",
+    "description": "Previous history item"
+   },
+   {
+    "display": "@prompt.history.next",
+    "description": "Next history item"
+   },
+   {
+    "display": "@composer.subagent.up",
+    "description": "Previous subagent"
+   },
+   {
+    "display": "@composer.subagent.down",
+    "description": "Next subagent"
+   },
+   {
+    "display": "@composer.subagent.select",
+    "description": "Navigate to subagent"
+   },
+   {
+    "display": "@composer.subagent.interrupt",
+    "description": "Interrupt subagent"
+   },
+   {
+    "display": "@composer.shell.up",
+    "description": "Previous shell"
+   },
+   {
+    "display": "@composer.shell.down",
+    "description": "Next shell"
+   },
+   {
+    "display": "@composer.shell.select",
+    "description": "View shell output"
+   },
+   {
+    "display": "@composer.shell.kill",
+    "description": "Kill shell command"
+   },
+   {
+    "display": "@composer.terminal.up",
+    "description": "Previous terminal"
+   },
+   {
+    "display": "@composer.terminal.down",
+    "description": "Next terminal"
+   },
+   {
+    "display": "@composer.terminal.select",
+    "description": "Select terminal"
+   },
+   {
+    "display": "@dialog.select.prev",
+    "description": "Move to previous dialog item"
+   },
+   {
+    "display": "@dialog.select.next",
+    "description": "Move to next dialog item"
+   },
+   {
+    "display": "@dialog.select.page_up",
+    "description": "Move up one page in dialog"
+   },
+   {
+    "display": "@dialog.select.page_down",
+    "description": "Move down one page in dialog"
+   },
+   {
+    "display": "@dialog.select.home",
+    "description": "Move to first dialog item"
+   },
+   {
+    "display": "@dialog.select.end",
+    "description": "Move to last dialog item"
+   },
+   {
+    "display": "@dialog.select.submit",
+    "description": "Submit selected dialog item"
+   },
+   {
+    "display": "@dialog.prompt.submit",
+    "description": "Submit dialog prompt"
+   },
+   {
+    "display": "@dialog.integration.rename",
+    "description": "Rename integration account"
+   },
+   {
+    "display": "@dialog.integration.delete",
+    "description": "Delete integration account"
+   },
+   {
+    "display": "@dialog.worktree.generate",
+    "description": "Generate worktree name"
+   },
+   {
+    "display": "@dialog.move_session.new",
+    "description": "New worktree"
+   },
+   {
+    "display": "@dialog.move_session.move",
+    "description": "Move session to worktree"
+   },
+   {
+    "display": "@dialog.move_session.delete",
+    "description": "Delete worktree"
+   },
+   {
+    "display": "@dialog.move_session.refresh",
+    "description": "Refresh worktrees"
+   },
+   {
+    "display": "@prompt.autocomplete.prev",
+    "description": "Move to previous autocomplete item"
+   },
+   {
+    "display": "@prompt.autocomplete.next",
+    "description": "Move to next autocomplete item"
+   },
+   {
+    "display": "@prompt.autocomplete.hide",
+    "description": "Hide autocomplete"
+   },
+   {
+    "display": "@prompt.autocomplete.select",
+    "description": "Select autocomplete item"
+   },
+   {
+    "display": "@prompt.autocomplete.complete",
+    "description": "Complete autocomplete item"
+   },
+   {
+    "display": "@permission.prompt.fullscreen",
+    "description": "Toggle permission prompt fullscreen"
+   },
+   {
+    "display": "@plugins.toggle",
+    "description": "Toggle plugin"
+   },
+   {
+    "display": "@dialog.mcp.toggle",
+    "description": "Toggle MCP server"
+   },
+   {
+    "display": "@dialog.plugins.error",
+    "description": "View plugin error"
+   },
+   {
+    "display": "@dialog.plugins.update",
+    "description": "Update plugin from plugin dialog"
+   },
+   {
+    "display": "@dialog.plugins.check",
+    "description": "Check for plugin updates from plugin dialog"
+   },
+   {
+    "display": "@terminal.suspend",
+    "description": "Suspend terminal"
+   },
+   {
+    "display": "@terminal.title.toggle",
+    "description": "Toggle terminal title"
+   },
+   {
+    "display": "@plugins.list",
+    "description": "Open plugin manager dialog"
+   },
+   {
+    "display": "@which-key.toggle",
+    "description": "Toggle which-key panel"
+   },
+   {
+    "display": "@which-key.layout.toggle",
+    "description": "Switch which-key layout"
+   },
+   {
+    "display": "@which-key.pending.toggle",
+    "description": "Toggle which-key pending preview"
+   },
+   {
+    "display": "@which-key.group.previous",
+    "description": "Previous which-key group"
+   },
+   {
+    "display": "@which-key.group.next",
+    "description": "Next which-key group"
+   },
+   {
+    "display": "@which-key.scroll.up",
+    "description": "Scroll which-key up"
+   },
+   {
+    "display": "@which-key.scroll.down",
+    "description": "Scroll which-key down"
+   },
+   {
+    "display": "@which-key.page.up",
+    "description": "Page which-key up"
+   },
+   {
+    "display": "@which-key.page.down",
+    "description": "Page which-key down"
+   },
+   {
+    "display": "@which-key.home",
+    "description": "Jump to first which-key binding"
+   },
+   {
+    "display": "@which-key.end",
+    "description": "Jump to last which-key binding"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "mode": "command",
+   "query": "s",
+   "results": [
+    58,
+    71,
+    73,
+    74,
+    80,
+    111,
+    57,
+    81,
+    72,
+    15
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "se",
+   "results": [
+    73,
+    74,
+    61,
+    58,
+    15,
+    60,
+    57,
+    79,
+    90,
+    71
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "ses",
+   "results": [
+    73,
+    74,
+    61,
+    58,
+    60,
+    79,
+    90,
+    57,
+    81,
+    71
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "session",
+   "results": [
+    73,
+    74,
+    81,
+    61,
+    58,
+    60,
+    79,
+    90,
+    57,
+    59
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "model",
+   "results": [
+    115,
+    118,
+    116,
+    113,
+    119,
+    114,
+    117,
+    112,
+    127,
+    126
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "mod fav",
+   "results": [
+    118,
+    113,
+    119
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "prompt",
+   "results": [
+    146,
+    150,
+    145,
+    151,
+    152,
+    153,
+    154,
+    149,
+    43,
+    148
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "pr",
+   "results": [
+    150,
+    146,
+    145,
+    151,
+    152,
+    191,
+    153,
+    154,
+    149,
+    43
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "app",
+   "results": [
+    1,
+    3,
+    5,
+    2,
+    4,
+    8,
+    6,
+    7,
+    9,
+    150
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "x",
+   "results": [
+    1,
+    56,
+    198,
+    124,
+    202,
+    194,
+    192,
+    118,
+    237,
+    116
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "undo",
+   "results": [
+    182,
+    142,
+    83,
+    78,
+    194,
+    67,
+    232,
+    206,
+    117,
+    229
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "tab",
+   "results": [
+    69,
+    104,
+    108,
+    103,
+    105,
+    106,
+    109,
+    107,
+    102,
+    101
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "q",
+   "results": [
+    83,
+    84,
+    146,
+    82,
+    94,
+    93,
+    97,
+    98,
+    96,
+    95
+   ]
+  },
+  {
+   "mode": "command",
+   "query": "zzz",
+   "results": []
+  },
+  {
+   "mode": "reference",
+   "query": "s",
+   "results": [
+    81,
+    14,
+    60,
+    135,
+    57,
+    61,
+    142,
+    111,
+    72,
+    59
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "se",
+   "results": [
+    81,
+    60,
+    14,
+    142,
+    61,
+    59,
+    143,
+    135,
+    72,
+    57
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "ses",
+   "results": [
+    81,
+    60,
+    59,
+    143,
+    135,
+    57,
+    142,
+    72,
+    61,
+    134
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "session",
+   "results": [
+    81,
+    60,
+    59,
+    143,
+    135,
+    57,
+    142,
+    72,
+    61,
+    134
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "model",
+   "results": [
+    115,
+    116,
+    114,
+    118,
+    113,
+    112,
+    117,
+    119,
+    46,
+    217
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "mod fav",
+   "results": [
+    118,
+    113,
+    119
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "prompt",
+   "results": [
+    146,
+    153,
+    150,
+    154,
+    145,
+    149,
+    43,
+    151,
+    152,
+    148
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "pr",
+   "results": [
+    154,
+    150,
+    146,
+    153,
+    43,
+    145,
+    149,
+    122,
+    151,
+    152
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "app",
+   "results": [
+    1,
+    3,
+    5,
+    2,
+    4,
+    8,
+    6,
+    7,
+    9
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "x",
+   "results": []
+  },
+  {
+   "mode": "reference",
+   "query": "undo",
+   "results": [
+    182,
+    142,
+    83
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "tab",
+   "results": [
+    63,
+    69,
+    70,
+    103,
+    64,
+    102,
+    104,
+    106,
+    105,
+    101
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "q",
+   "results": [
+    83,
+    84,
+    146,
+    94,
+    95,
+    93,
+    98,
+    97,
+    96,
+    92
+   ]
+  },
+  {
+   "mode": "reference",
+   "query": "zzz",
+   "results": []
+  }
+ ]
+}
