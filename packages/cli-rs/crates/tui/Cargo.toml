@@ -19,6 +19,8 @@ opencode-service.workspace = true
 opencode-plugin.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
 indexmap.workspace = true
 log.workspace = true
 serde_json.workspace = true
@@ -26,5 +28,5 @@ tokio.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
-futures-util.workspace = true
 opencode-parity.workspace = true
+tempfile.workspace = true
