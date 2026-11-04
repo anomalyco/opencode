@@ -44,7 +44,8 @@ import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
-import { PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { PluginLinks, PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { Markdown } from "@opencode/session-ui/markdown"
 import { ThemeProvider, useTheme } from "@opencode/ui/theme/context"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
@@ -55,6 +56,8 @@ import { ui } from "../src/runtime/plugin/ui"
 export {
   bindPlugin,
   usePlugin,
+  CodeBlock,
+  CodeBlockAction,
   ComposerPill,
   Contract,
   createKeyed,
@@ -808,6 +811,80 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
+    status: (id: string) => hosts[0]?.state.status[id],
+    failure: (id: string) => hosts[0]?.state.failures[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and one message's production Markdown inside the session screen's `PluginLinks`, for a session
+ * whose directory is `/repo`. `show(text, streaming)` replaces the message as a stream does; `define` replaces the
+ * plugins, as plugin GUIs join and leave.
+ */
+export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "code-blocks"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const captured: Captured = {}
+  const [definitions, setDefinitions] = createSignal(input.definitions)
+  const [message, setMessage] = createStore({ text: "", streaming: false })
+
+  const value = { key: "fixture\na", id: "a", tab: "a", pending: false, directory: "/repo", visit: {} }
+
+  // SAFETY: PluginLinks passes the session through; the test's plugins read only `directory`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  function Message() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <PluginLinks session={session}>
+          <Markdown text={message.text} streaming={message.streaming} />
+        </PluginLinks>
+      </Show>
+    )
+  }
+
+  function Host() {
+    const apis = createHostApis()
+    captured.apis = apis
+
+    return (
+      <PluginHostProvider
+        definitions={definitions}
+        disabled={() => new Set<string>()}
+        apis={apis.apis}
+        whenMounted={apis.whenMounted}
+      >
+        <Message />
+      </PluginHostProvider>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <Host />
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    show: (text: string, streaming = false) => setMessage({ text, streaming }),
+    define: (next: readonly Entry[]) => setDefinitions(next),
     status: (id: string) => hosts[0]?.state.status[id],
     failure: (id: string) => hosts[0]?.state.failures[id],
     unmount: () => {

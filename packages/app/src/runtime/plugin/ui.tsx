@@ -1,6 +1,7 @@
 import { children, For, Show } from "solid-js"
 import type { Ui, UiMenuItem } from "@opencode/plugin/gui"
 import { Markdown } from "@opencode/session-ui/markdown"
+import { MarkdownProvider } from "@opencode/session-ui/context/markdown"
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
@@ -215,8 +216,13 @@ export const ui: Ui = {
     </Show>
   ),
   Markdown: (props) => <Markdown text={props.text} class={props.class} />,
-  // The timeline's code block: a fenced block in Markdown, highlighted by the same worker.
-  Code: (props) => <Markdown text={fence(props.content, props.language)} class={props.class} />,
+  // The timeline's code block: a fenced block in Markdown, highlighted by the same worker. It shows the code as it is,
+  // never a plugin's code block content, so a CodeBlock render can show its own source through it.
+  Code: (props) => (
+    <MarkdownProvider codeBlocks={false}>
+      <Markdown text={fence(props.content, props.language)} class={props.class} />
+    </MarkdownProvider>
+  ),
   // The settings screen's markup. Its stylesheet loads with that screen, where every `SettingsPage` renders, so the
   // startup chunk does not carry it.
   SettingsLayout: (props) => (

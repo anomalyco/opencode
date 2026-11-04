@@ -116,7 +116,7 @@
 
   /* A heading's own bottom margin sets the gap to its section, so a block's larger top margin can't push the heading away from it. */
   :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, [data-component]),
-  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > pre {
+  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > :is(pre, [data-slot="markdown-code-content"]) {
     margin-top: 0;
   }
 
@@ -324,9 +324,18 @@
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
   [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-actions"],
   [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"] {
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-code-content] > pre {
     display: none;
+  }
+
+  /* Plugin content in place of the code keeps the code block's spacing. */
+  [data-slot="markdown-code-content"] {
+    margin-top: 12px;
+    margin-bottom: 24px;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .highlights {
@@ -355,8 +364,23 @@
     }
   }
 
-  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
-  [data-slot="markdown-copy-button"]:focus-within {
+  /* Plugin actions sit before the 24px Copy button, revealed with it. */
+  [data-slot="markdown-code-actions"] {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 30px;
+    display: flex;
+    gap: 2px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"]:hover :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]),
+  :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]):focus-within {
     opacity: 1;
   }
 

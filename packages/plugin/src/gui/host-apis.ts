@@ -2254,7 +2254,8 @@ export interface Ui {
   /**
    * Markdown rendered as the timeline renders a message: headings, lists, tables, links, math and highlighted code
    * blocks with a copy button. On the session screen, links to local files open through the LinkHandler
-   * contributions, as the timeline's do. Rendering is asynchronous: the block fills in shortly after it mounts.
+   * contributions, and fenced code blocks show `CodeBlock` and `CodeBlockAction` contributions, as the timeline's do;
+   * inside a `CodeBlock` render they do not. Rendering is asynchronous: the block fills in shortly after it mounts.
    *
    * @param props - The Markdown source.
    *
@@ -2265,8 +2266,9 @@ export interface Ui {
    */
   Markdown(props: UiMarkdownProps): JSX.Element
   /**
-   * A read-only code block, highlighted as the timeline highlights code, with a copy button. Highlighting is
-   * asynchronous: the block fills in shortly after it mounts.
+   * A read-only code block, highlighted as the timeline highlights code, with a copy button. It always shows the code:
+   * `CodeBlock` and `CodeBlockAction` contributions do not apply, so a `CodeBlock` render can show its source through
+   * it. Highlighting is asynchronous: the block fills in shortly after it mounts.
    *
    * @param props - The code and its language.
    *
