@@ -1,5 +1,5 @@
 import type { ElectronAPI } from "./api-types"
-import { invoke, listen, send } from "./ipc-client"
+import { cancellable, invoke, listen, send } from "./ipc-client"
 
 type Mutable<Value> =
   Value extends ReadonlyArray<unknown>
@@ -22,7 +22,8 @@ const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object
 
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
-  reconnectService: () => invoke("AppReconnectService"),
+  reconnectService: (signal) => cancellable("AppReconnectService", undefined, signal),
+  onSidecarChanged: (cb) => listen("SidecarChanged", (event) => cb({ url: event.url })),
   readyDeepLinks: () => send("AppReadyDeepLinks"),
   acknowledgeDeepLinks: (attempt) => send("AppAcknowledgeDeepLinks", { attempt }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),

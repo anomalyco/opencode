@@ -106,9 +106,9 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     },
   })
 
-  // The plugin reports a new endpoint: requests use it at once, and a connected stream moves to it now. An endpoint
-  // the stream's own reconnect already moved to needs neither.
-  if (server.type === "plugin") {
+  // The plugin, or the desktop after another window's reconnect, reports a new endpoint: requests use it at once, and
+  // a connected stream moves to it now. An endpoint the stream's own reconnect already moved to needs neither.
+  if (server.type === "plugin" || server.type === "sidecar") {
     createEffect(
       on(
         () => `${server.http.url}\0${server.http.password ?? ""}`,
