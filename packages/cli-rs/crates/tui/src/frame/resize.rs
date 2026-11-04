@@ -30,22 +30,20 @@ pub struct Rules {
 /// The size of one pane boundary.
 pub struct PaneResize {
     rules: Rules,
-    /// The size the store holds (`options.value`), set by the owner.
-    value: Cell<u16>,
-    preferred: Cell<u16>,
-    requested: Cell<u16>,
+    /// The size the store holds (`options.value`); `None` is the default, which can depend on the room.
+    preferred: Cell<Option<u16>>,
+    requested: Cell<Option<u16>>,
     resizing: Cell<bool>,
     moved: Cell<bool>,
     last_click: Cell<Option<Instant>>,
 }
 
 impl PaneResize {
-    pub fn new(rules: Rules, value: u16) -> Rc<Self> {
+    pub fn new(rules: Rules) -> Rc<Self> {
         Rc::new(Self {
             rules,
-            value: Cell::new(value),
-            preferred: Cell::new(value),
-            requested: Cell::new(value),
+            preferred: Cell::new(None),
+            requested: Cell::new(None),
             resizing: Cell::new(false),
             moved: Cell::new(false),
             last_click: Cell::new(None),
@@ -53,21 +51,20 @@ impl PaneResize {
     }
 
     /// The stored size changed; it applies unless a resize is under way.
-    pub fn set_value(&self, value: u16) {
-        self.value.set(value);
+    pub fn set_value(&self, value: Option<u16>) {
         if !self.resizing.get() {
             self.requested.set(value);
             self.preferred.set(value);
         }
     }
 
-    pub fn value(&self) -> u16 {
-        self.value.get()
-    }
-
     /// `size`: the preferred size, clamped to the room there is now.
     pub fn size(&self, tui: &Tui) -> u16 {
-        (self.rules.clamp)(tui, i64::from(self.preferred.get()))
+        let preferred = self
+            .preferred
+            .get()
+            .unwrap_or_else(|| (self.rules.default)(tui));
+        (self.rules.clamp)(tui, i64::from(preferred))
     }
 
     pub fn resizing(&self) -> bool {
@@ -76,12 +73,16 @@ impl PaneResize {
 
     fn commit(&self, tui: &Tui, value: i64) {
         let next = (self.rules.clamp)(tui, value);
-        self.preferred.set(next);
-        if self.requested.get() == next {
+        self.preferred.set(Some(next));
+        if self
+            .requested
+            .get()
+            .unwrap_or_else(|| (self.rules.default)(tui))
+            == next
+        {
             return;
         }
-        self.requested.set(next);
-        self.value.set(next);
+        self.requested.set(Some(next));
         (self.rules.commit)(tui, next);
     }
 
@@ -105,8 +106,10 @@ impl PaneResize {
         }
         self.moved.set(true);
         self.last_click.set(None);
-        self.preferred
-            .set((self.rules.clamp)(tui, (self.rules.from_mouse)(tui, x)));
+        self.preferred.set(Some((self.rules.clamp)(
+            tui,
+            (self.rules.from_mouse)(tui, x),
+        )));
     }
 
     fn finish(&self, tui: &Tui, x: u16, now: Instant) {
