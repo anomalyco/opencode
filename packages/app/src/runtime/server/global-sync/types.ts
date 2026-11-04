@@ -8,7 +8,7 @@ import type {
   VcsInfo,
 } from "@/runtime/server/types"
 import type { ReferenceInfo } from "@opencode/client/promise"
-import type { CommandInfo, McpResource, McpServer } from "@opencode/client/promise"
+import type { CommandInfo, McpResource } from "@opencode/client/promise"
 import { ProjectState } from "../persistence"
 
 export type ProjectMeta = NonNullable<typeof ProjectState.Type.value>
@@ -31,9 +31,6 @@ export type State = {
   config: Config
   path: Path
   mcp_ready: boolean
-  mcp: {
-    [name: string]: McpServer["status"]
-  }
   mcp_resource: {
     [key: string]: McpResource
   }

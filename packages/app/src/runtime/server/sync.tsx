@@ -13,17 +13,14 @@ import {
 import { createChildStoreManager } from "./global-sync/child-store"
 import type { GlobalStore, ProjectMeta } from "./global-sync/types"
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { directoryKey, normalizeProjectInfo, updateProjectInfo } from "./global-sync/utils"
+import { normalizeProjectInfo, updateProjectInfo } from "./global-sync/utils"
 import { persisted } from "@/runtime/persistence/storage"
-import { toggleMcp } from "./global-sync/mcp"
 import { createConnectionSync } from "./server-sync/connection"
-import { usePlatform } from "@/runtime/platform/platform"
 import type { Data } from "@opencode/client/solid"
 import { createWorktreeInventory, withWorktreeInventory, worktreeInventoryViewKey } from "@/workspaces/inventory"
 
 function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   const language = useLanguage()
-  const platform = usePlatform()
   const owner = getOwner()
 
   if (!owner) throw new Error("ServerSync must be created within owner")
@@ -196,56 +193,6 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     worktrees,
-    mcp: {
-      toggle: async (directory: string, name: string) => {
-        const key = directoryKey(directory)
-        const status = children.child(key)[0].mcp[name]?.status
-
-        if (!status) return
-        await toggleMcp({
-          status,
-          connect: async () => {
-            await serverSDK.api.experimental.mcp.connect({ server: name, location: { directory: key } })
-          },
-          disconnect: async () => {
-            await serverSDK.api.experimental.mcp.disconnect({ server: name, location: { directory: key } })
-          },
-          authenticate: async () => {
-            const server = (await serverSDK.api.mcp.list({ location: { directory: key } })).data.find(
-              (item) => item.name === name,
-            )
-
-            if (!server?.integrationID) throw new Error(`MCP server ${name} has no authentication integration`)
-
-            const integration = await serverSDK.api.integration.get({
-              integrationID: server.integrationID,
-              location: { directory: key },
-            })
-
-            const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.form?.length)
-
-            if (!method || method.type !== "oauth")
-              throw new Error(`MCP server ${name} requires an interactive authentication form`)
-
-            const attempt = await serverSDK.api.integration.oauth.connect({
-              integrationID: server.integrationID,
-              methodID: method.id,
-              location: { directory: key },
-            })
-
-            platform.openExternal(attempt.data.url)
-          },
-          refresh: async () => {
-            data.location.mcp.server.invalidate({ directory: key })
-            data.location.mcp.resource.invalidate({ directory: key })
-            await Promise.all([
-              data.location.mcp.server.sync({ directory: key }),
-              data.location.mcp.resource.sync({ directory: key }),
-            ])
-          },
-        })
-      },
-    },
   }
 }
 

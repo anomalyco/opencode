@@ -138,11 +138,6 @@ export function createChildStoreManager(input: {
       get mcp_ready() {
         return input.data.location.mcp.server.list({ directory }) !== undefined
       },
-      get mcp() {
-        return Object.fromEntries(
-          (input.data.location.mcp.server.list({ directory }) ?? []).map((server) => [server.name, server.status]),
-        )
-      },
       get mcp_resource() {
         return Object.fromEntries(
           (input.data.location.mcp.resource.list({ directory }) ?? []).map((resource) => [
