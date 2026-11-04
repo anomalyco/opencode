@@ -4,7 +4,7 @@
 //! F.7 took this file from F.8 because its tests (`solid-compaction.test.ts`,
 //! `solid-pending-status.test.ts`) need admission; F.8 continues it.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::future::Future;
 
 use futures_util::FutureExt;
@@ -452,20 +452,17 @@ impl Data {
             let session = session.clone();
             move |state: &mut State| {
                 let token = state.token();
+                // Ordered, as the TS `Map`: overtaking enqueues keep their arrival order.
                 state
                     .pending_updates
-                    .insert(session, (token, HashMap::new()));
+                    .insert(session, (token, IndexMap::new()));
                 (state.deletion_epoch, token)
             }
         };
         self.sync_start(
             format!("session.pending:{}", session.0),
-            register.clone(),
-            move |data, begun| async move {
-                let (started, token) = match begun {
-                    Some(begun) => begun,
-                    None => data.write(register),
-                };
+            register,
+            move |data, (started, token)| async move {
                 let response = data
                     .client()
                     .session_inbox_list(

@@ -108,63 +108,67 @@ impl Data {
             .cloned()
             .unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
-        self.sync_run(sync_key(&owner, &location), move |data| async move {
-            if owner == GLOBAL {
-                let response = data
+        let key = sync_key(&owner, &location);
+        self.sync_start(
+            key,
+            |state| state.deletion_epoch,
+            move |data, started| async move {
+                if owner == GLOBAL {
+                    let response = data
+                        .client()
+                        .form_list(
+                            &FormListInput {
+                                location: location.query(),
+                            },
+                            &RequestOptions::default(),
+                        )
+                        .await
+                        .map_err(Error::new)?;
+                    let at = Location::from(&response.location);
+                    data.write(|state| {
+                        let forms = state.forms.entry(owner.clone()).or_default();
+                        forms.retain(|form| form.location.as_ref().is_some_and(|item| *item != at));
+                        forms.extend(
+                            response
+                                .data
+                                .into_iter()
+                                .filter(|form| form.session_id == GLOBAL)
+                                .map(|info| Form {
+                                    info,
+                                    location: Some(at.clone()),
+                                }),
+                        );
+                        state.log.forms(&owner);
+                    });
+                    return Ok(());
+                }
+                let list = data
                     .client()
-                    .form_list(
-                        &FormListInput {
-                            location: location.query(),
+                    .session_form_list(
+                        &SessionFormListInput {
+                            session_id: owner.clone(),
                         },
                         &RequestOptions::default(),
                     )
                     .await
-                    .map_err(Error::new)?;
-                let at = Location::from(&response.location);
+                    .map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
-                    let forms = state.forms.entry(owner.clone()).or_default();
-                    forms.retain(|form| form.location.as_ref().is_some_and(|item| *item != at));
-                    forms.extend(
-                        response
-                            .data
-                            .into_iter()
-                            .filter(|form| form.session_id == GLOBAL)
-                            .map(|info| Form {
-                                info,
-                                location: Some(at.clone()),
-                            }),
-                    );
+                    if state.deleted_since(&SessionID(owner.clone()), started) {
+                        return;
+                    }
+                    let forms = list
+                        .into_iter()
+                        .map(|info| Form {
+                            info,
+                            location: None,
+                        })
+                        .collect();
+                    state.forms.insert(owner.clone(), forms);
                     state.log.forms(&owner);
                 });
-                return Ok(());
-            }
-            let started = data.read(|state| state.deletion_epoch);
-            let list = data
-                .client()
-                .session_form_list(
-                    &SessionFormListInput {
-                        session_id: owner.clone(),
-                    },
-                    &RequestOptions::default(),
-                )
-                .await
-                .map_err(|error| evict_missing(&data, error))?;
-            data.write(|state| {
-                if state.deleted_since(&SessionID(owner.clone()), started) {
-                    return;
-                }
-                let forms = list
-                    .into_iter()
-                    .map(|info| Form {
-                        info,
-                        location: None,
-                    })
-                    .collect();
-                state.forms.insert(owner.clone(), forms);
-                state.log.forms(&owner);
-            });
-            Ok(())
-        })
+                Ok(())
+            },
+        )
     }
 
     pub fn form_invalidate(&self, owner: &str, location: Option<&Location>) {

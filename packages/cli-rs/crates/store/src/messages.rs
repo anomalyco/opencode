@@ -941,10 +941,10 @@ impl Data {
             .options
             .initial_message_limit
             .unwrap_or(MESSAGE_PAGE);
-        self.sync_run(
+        self.sync_start(
             format!("session.message:{}", session.0),
-            move |data| async move {
-                let started = data.read(|state| state.deletion_epoch);
+            |state| state.deletion_epoch,
+            move |data, started| async move {
                 let input = MessageListInput {
                     session_id: session.clone(),
                     limit: Some(limit),
