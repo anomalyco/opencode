@@ -128,6 +128,7 @@ import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from ".
 import { fn } from "./native.js"
 import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
+import { IntrinsicNames } from "./intrinsic-names.js"
 import type { NodeId, Source } from "./source.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
@@ -388,6 +389,8 @@ export class Interpreter<R> {
   readonly runner: Runner<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
+  /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
+  readonly intrinsics: IntrinsicNames
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
@@ -414,7 +417,9 @@ export class Interpreter<R> {
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
     this.globalScope = globalScope
-    for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
+    const intrinsics = globals(this)
+    this.intrinsics = new IntrinsicNames(intrinsics, this.builtins)
+    for (const [name, value] of [...intrinsics, ...(options.globals?.(this) ?? [])]) {
       globalScope.set(name, { mutable: false, value })
     }
   }
