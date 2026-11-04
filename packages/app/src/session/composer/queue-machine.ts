@@ -268,9 +268,9 @@ function synced(state: QueueState, items: readonly QueuedPrompt[]): QueueTransit
   const listed = new Set(items.map((item) => item.id))
   const gone = state.gone.filter((entry) => listed.has(entry.id))
 
-  const cleared = [...new Set(state.gone.map((entry) => entry.expiry))]
-    .filter((expiry) => !gone.some((entry) => entry.expiry === expiry))
-    .map((expiry): QueueEffect => ({ type: "timer.clear", expiry }))
+  const cleared = [...new Set(state.gone.map((entry) => entry.expiry))].flatMap((expiry): QueueEffect[] =>
+    gone.some((entry) => entry.expiry === expiry) ? [] : [{ type: "timer.clear", expiry }],
+  )
 
   const next = { ...state, items, gone }
 
@@ -467,6 +467,7 @@ function settle(
   // Nothing typed is lost: an edit that never reached the server returns to the composer, merged into what it holds
   // now, or into the draft an open edit stashed.
   const returned = active.type === "edit" && active.phase === "admitting"
+
   const restored =
     returned && hidden.state.status === "editing-while-mutating"
       ? {
@@ -477,6 +478,7 @@ function settle(
           },
         }
       : hidden.state
+
   const next = advance(restored, {})
 
   return changed(next.state, [
@@ -491,7 +493,9 @@ function settle(
 
 type Mutating = Extract<QueueState, { status: "mutating" | "editing-while-mutating" }>
 
-function hide(state: Mutating, ids: readonly string[]): { state: Mutating; effects: QueueEffect[] } {
+type MutatingTransition = { readonly state: Mutating; readonly effects: readonly QueueEffect[] }
+
+function hide(state: Mutating, ids: readonly string[]): MutatingTransition {
   const listed = ids.filter((id) => state.items.some((item) => item.id === id))
 
   if (!listed.length) return { state, effects: [] }

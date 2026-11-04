@@ -53,9 +53,7 @@ const restores = (effects: readonly QueueEffect[]) => effects.filter((effect) =>
 
 const rowIDs = (state: QueueState) => selectQueueRows(state).map((row) => row.id)
 
-const one = item("inb_1")
-const two = item("inb_2")
-const three = item("inb_3")
+const [one, two, three] = ["inb_1", "inb_2", "inb_3"].map((id) => item(id))
 
 describe("an edit always returns the draft it replaced", () => {
   test("when the server delivers the prompt being edited", () => {
