@@ -296,7 +296,7 @@ export const layer = Layer.effect(
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
       if (
         trigger.reason === "auto" &&
-        !due(context, calculateCeiling(context.model.limit, settings.buffer), trigger.estimate)
+        !due(context, calculateCeiling(autoLimit(context), settings.buffer), trigger.estimate)
       )
         return { status: "skipped" }
       const held = precomputed.get(context.session.id)
@@ -343,7 +343,7 @@ export const layer = Layer.effect(
       if (!settings.precompute || !settings.auto) return
       const context = yield* load
       if (context.model.compaction?.type === "native") return
-      const ceiling = calculateCeiling(context.model.limit, settings.buffer)
+      const ceiling = calculateCeiling(autoLimit(context), settings.buffer)
       if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
       if (due(context, ceiling, estimate)) return
@@ -1140,6 +1140,21 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
   if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+}
+
+/**
+ * The limits automatic compaction plans for: the model's, narrowed to the agent's own compaction window when it has
+ * one. A plugin sets that window, in tokens, as the agent's `request.settings.compactionWindow`, so agents that share a
+ * model can compact at different sizes. It never raises the model's window, and it leaves the summary request's
+ * size to the model's limits.
+ */
+const autoLimit = (context: SessionContext.Loaded): SessionContext.Loaded["model"]["limit"] => {
+  const window = context.agent.info.request?.settings?.["compactionWindow"]
+  const limit = context.model.limit
+  if (typeof window !== "number" || !Number.isInteger(window) || window <= 0) return limit
+  const current = inputWindow(limit)
+  if (current > 0 && current <= window) return limit
+  return { ...limit, context: window, input: window }
 }
 
 /**

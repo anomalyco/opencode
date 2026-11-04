@@ -649,6 +649,55 @@ const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateC
     return stored?.type === "compaction" && stored.status === "completed" ? stored.metadata?.recent : ""
   })
 
+it.effect("an agent's compaction window lowers the automatic ceiling for its sessions only", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_agent_window"))
+    const input = (tokens: number, window?: number) => {
+      const info = Agent.Info.default(Agent.defaultID)
+      return {
+        session,
+        model: resolved,
+        messages: [
+          Schema.decodeUnknownSync(SessionMessage.Assistant)({
+            id: SessionMessage.ID.make("msg_agent_window"),
+            type: "assistant",
+            agent: Agent.defaultID,
+            model: { id: "summary-model", providerID: "test" },
+            content: [{ type: "text", text: "Done" }],
+            tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, completed: 0 },
+          }),
+        ],
+        agent: {
+          id: Agent.defaultID,
+          info: {
+            ...info,
+            request: {
+              ...info.request,
+              settings: window === undefined ? {} : { compactionWindow: window },
+            },
+          },
+        },
+        initial: [],
+        tools: { definitions: [], execute: () => Effect.die("unused") },
+      }
+    }
+    const due = (context: SessionContext.Loaded) =>
+      compaction.compact({ reason: "auto", context }).pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+
+    // A 50k window keeps the usual reserve below it: 50k less 16k.
+    expect(yield* due(input(33_999, 50_000))).toBe(false)
+    expect(yield* due(input(34_000, 50_000))).toBe(true)
+    // Without a window the same context is far from the model's 200k ceiling.
+    expect(yield* due(input(34_000))).toBe(false)
+    // A window past the model's, or one that is not a whole positive count, leaves the model's.
+    expect(yield* due(input(169_999, 1_000_000))).toBe(false)
+    expect(yield* due(input(170_000, 1_000_000))).toBe(true)
+    expect(yield* due(input(34_000, -1))).toBe(false)
+  }),
+)
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
