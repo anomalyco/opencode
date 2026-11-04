@@ -149,7 +149,7 @@ describe("transitionLegacyMigration", () => {
   test("a transient failure while connected retries with backoff, then ends in done", () => {
     const steps = replayLegacy([
       hydrated(true),
-      { type: "session.reported", sessionID: "s1", idle: 5 },
+      { type: "sessions.reported", reports: [{ sessionID: "s1", idle: 5 }] },
       { type: "run.failed", attempt: 1 },
       { type: "run.succeeded", attempt: 2 },
     ])
@@ -205,16 +205,54 @@ describe("transitionLegacyMigration", () => {
 
   test("events that don't apply keep the same state", () => {
     const idle = transitionLegacyMigration(INITIAL_LEGACY_MIGRATION_STATE, hydrated(false)).state
-    const reported = transitionLegacyMigration(idle, { type: "session.reported", sessionID: "s1", idle: 5 }).state
+
+    const reported = transitionLegacyMigration(idle, {
+      type: "sessions.reported",
+      reports: [{ sessionID: "s1", idle: 5 }],
+    }).state
 
     expect(transitionLegacyMigration(INITIAL_LEGACY_MIGRATION_STATE, { type: "run.failed", attempt: 0 }).state).toBe(
       INITIAL_LEGACY_MIGRATION_STATE,
     )
     expect(transitionLegacyMigration(idle, hydrated(true)).state).toBe(idle)
     expect(transitionLegacyMigration(idle, { type: "connection.changed", connected: false }).state).toBe(idle)
-    expect(transitionLegacyMigration(reported, { type: "session.reported", sessionID: "s1", idle: 4 }).state).toBe(
-      reported,
-    )
+    expect(transitionLegacyMigration(idle, { type: "sessions.reported", reports: [] }).state).toBe(idle)
+    expect(
+      transitionLegacyMigration(reported, { type: "sessions.reported", reports: [{ sessionID: "s1", idle: 4 }] }).state,
+    ).toBe(reported)
+  })
+
+  test("a page of reports is recorded in one state change", () => {
+    const idle = transitionLegacyMigration(INITIAL_LEGACY_MIGRATION_STATE, hydrated(false)).state
+
+    const reported = transitionLegacyMigration(idle, {
+      type: "sessions.reported",
+      reports: [
+        { sessionID: "s1", idle: 5 },
+        { sessionID: "s2", idle: 7 },
+      ],
+    }).state
+
+    expect(reported).toMatchObject({
+      reported: new Map([
+        ["s1", 5],
+        ["s2", 7],
+      ]),
+    })
+    expect(
+      transitionLegacyMigration(reported, {
+        type: "sessions.reported",
+        reports: [
+          { sessionID: "s1", idle: 4 },
+          { sessionID: "s2", idle: 9 },
+        ],
+      }).state,
+    ).toMatchObject({
+      reported: new Map([
+        ["s1", 5],
+        ["s2", 9],
+      ]),
+    })
   })
 
   test("disposing cancels a pending run and ignores later results", () => {

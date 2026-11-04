@@ -113,6 +113,11 @@ export type LegacyCarry = {
   readonly started: number
 }
 
+export type LegacyViewReport = {
+  readonly sessionID: string
+  readonly idle: number
+}
+
 // The background carry-over of the list Desktop kept before unread state moved to the server. `reported` keeps the
 // watermarks it posted, so rows drawn from an older fetched copy of a session stay read after the list is deleted.
 // `migrating` covers the delay before a run and the run itself.
@@ -143,7 +148,7 @@ export type LegacyMigrationEvent =
       readonly connected: boolean
     }
   | { readonly type: "connection.changed"; readonly connected: boolean }
-  | { readonly type: "session.reported"; readonly sessionID: string; readonly idle: number }
+  | { readonly type: "sessions.reported"; readonly reports: readonly LegacyViewReport[] }
   | { readonly type: "run.succeeded"; readonly attempt: number }
   | { readonly type: "run.failed"; readonly attempt: number }
   | { readonly type: "disposed" }
@@ -185,11 +190,20 @@ export function transitionLegacyMigration(
 
   if (event.type === "hydrated") return { state, effects: [] }
 
-  // A report the server saved stays recorded even when the run that made it was cancelled or failed.
-  if (event.type === "session.reported") {
-    if (event.idle <= (state.reported.get(event.sessionID) ?? -Infinity)) return { state, effects: [] }
+  // A report the server saved stays recorded even when the run that made it was cancelled or failed. A run records
+  // each page's reports in one event, so unread readers re-run once per page rather than once per session.
+  if (event.type === "sessions.reported") {
+    const updates = event.reports.filter((report) => report.idle > (state.reported.get(report.sessionID) ?? -Infinity))
 
-    return { state: { ...state, reported: new Map(state.reported).set(event.sessionID, event.idle) }, effects: [] }
+    if (updates.length === 0) return { state, effects: [] }
+
+    const reported = new Map(state.reported)
+
+    updates.forEach((report) =>
+      reported.set(report.sessionID, Math.max(report.idle, reported.get(report.sessionID) ?? -Infinity)),
+    )
+
+    return { state: { ...state, reported }, effects: [] }
   }
 
   if (state.status === "done") return { state, effects: [] }

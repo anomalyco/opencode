@@ -22,6 +22,7 @@ import {
   transitionLegacyMigration,
   transitionViewReport,
   type LegacyMigrationEvent,
+  type LegacyViewReport,
   type ViewReportEvent,
   type ViewReportState,
 } from "@/shell/notifications/machine"
@@ -186,19 +187,30 @@ export function createServerNotificationState(input: {
       })
 
       const hidden = selectLegacyHiddenReports(untrack(legacyState), page.data)
+      const settled: PromiseSettledResult<LegacyViewReport>[] = []
 
       for (let index = 0; index < hidden.length; index += LEGACY_MIGRATION_CONCURRENCY) {
-        if (signal.aborted) return
+        if (signal.aborted || settled.some((result) => result.status === "rejected")) break
 
-        await Promise.all(
-          hidden.slice(index, index + LEGACY_MIGRATION_CONCURRENCY).map(async (report) => {
-            await input.sdk.api.session.view(report)
-            dispatchLegacy({ type: "session.reported", ...report })
-          }),
+        settled.push(
+          ...(await Promise.allSettled(
+            hidden
+              .slice(index, index + LEGACY_MIGRATION_CONCURRENCY)
+              .map((report) => input.sdk.api.session.view(report).then(() => report)),
+          )),
         )
       }
 
-      if (page.data.length === 0 || !page.cursor.next) return
+      dispatchLegacy({
+        type: "sessions.reported",
+        reports: settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+      })
+
+      const failure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected")
+
+      if (failure) throw failure.reason
+
+      if (signal.aborted || page.data.length === 0 || !page.cursor.next) return
       cursor = page.cursor.next
     }
   }
