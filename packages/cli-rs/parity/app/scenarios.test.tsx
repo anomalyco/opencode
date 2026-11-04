@@ -4,7 +4,7 @@
 import { test } from "bun:test"
 import { createAppFixture } from "../../../tui/test/fixture/app"
 import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
-import { applyMasks, type AppScenario, type Route, type Step } from "../lib/app"
+import { applyMasks, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
 import { readCells, writeFixture, type Fixture } from "../lib/cells"
 
 // Session lists group by local date; UTC keeps the recorded cells the same on every machine.
@@ -38,7 +38,7 @@ for (const file of files) {
 
 async function record(name: string, file: string) {
   const scenario: AppScenario = (await import(`${parity}${file}`)).default
-  const config = { ...scenario.config, animations: false }
+  const config = withNewDesigns({ ...scenario.config, animations: false })
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
   const log: Logged[] = []
