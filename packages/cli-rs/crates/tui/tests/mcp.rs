@@ -508,7 +508,7 @@ fn picking_a_skill_mentions_it_and_the_prompt_sends_it() {
     assert_eq!(prompt["text"], "@release-notes go");
     assert_eq!(
         prompt["skills"],
-        json!([{ "id": "release-notes", "mention": { "start": 0.0, "end": 14.0, "text": "@release-notes" } }])
+        json!([{ "id": "release-notes", "mention": { "start": 0, "end": 14, "text": "@release-notes" } }])
     );
 }
 
