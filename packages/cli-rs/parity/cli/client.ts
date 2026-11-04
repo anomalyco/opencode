@@ -32,10 +32,11 @@ export function command(side: Side, args: string[]) {
   return [process.env.OPENCODE_RS_BIN ?? path.join(rs, "target/debug/opencode-rs"), ...args]
 }
 
-// Builds the debug `opencode-rs` once per run, unless OPENCODE_RS_BIN names a binary.
+// Builds the debug `opencode-rs` (and the other debug binaries scenarios run) once per run, unless
+// OPENCODE_RS_BIN names a binary.
 export async function buildRust(sides: Side[]) {
   if (!sides.includes("rs") || process.env.OPENCODE_RS_BIN) return
-  const proc = Bun.spawn(["cargo", "build", "--quiet", "-p", "opencode-cli", "--bin", "opencode-rs"], {
+  const proc = Bun.spawn(["cargo", "build", "--quiet", "-p", "opencode-cli", "--bins"], {
     cwd: rs,
     stdout: "inherit",
     stderr: "inherit",
