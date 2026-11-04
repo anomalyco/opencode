@@ -1,9 +1,8 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
-import { Switch } from "@opencode/ui/switch"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, type Accessor } from "solid-js"
 import { renderSVG } from "@opencode/util/qr"
 import { usePlugin, type Live, type IpcClient } from "@opencode/plugin/gui"
 import type { Pairing } from "./contract"
@@ -33,6 +32,7 @@ export default function PairingPage(props: {
   pairing: Accessor<Live<Client>>
 }) {
   const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
   // The plugin's dialogs close with it, so disabling pairing also stops the dialog's code polling.
   const dialogs = ctx.dialogs
   const queryClient = useQueryClient()
@@ -140,74 +140,67 @@ export default function PairingPage(props: {
   }))
 
   return (
-    <>
-      <div class="settings-tab-header">
-        <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
-            <h2 class="settings-tab-title">{ctx.t("title")}</h2>
-            <span class="text-11-regular text-v2-text-text-muted">{ctx.t("description")}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-tab-body settings-tab-body--sectioned">
-        <section class="settings-section" aria-label={ctx.t("title")}>
-          <div data-component="settings-list">
-            <Row title={ctx.t("pair.title")} description={ctx.t("pair.description")}>
-              <Button
-                variant="neutral"
-                disabled={!main() || !props.server() || (change.isPending && change.variables?.enabled === false)}
-                onClick={pair}
-              >
-                {ctx.t("pair.open")}
-              </Button>
-            </Row>
-            <Show when={main()}>
-              <div data-action="settings-remote-access" class="border-b-[0.5px] border-v2-border-border-base">
-                <Row title={ctx.t("remote.title")} description={ctx.t("remote.description")}>
-                  <Switch
-                    hideLabel
-                    checked={change.isPending ? change.variables?.enabled === true : remote.data === true}
-                    disabled={!remote.isSuccess || change.isPending}
-                    onChange={(enabled) => change.mutate({ enabled })}
-                  >
-                    {ctx.t("remote.title")}
-                  </Switch>
-                </Row>
-              </div>
-              <div data-action="settings-keep-screen-active">
-                <Row title={ctx.t("screenActive.title")} description={ctx.t("screenActive.description")}>
-                  <Switch
-                    hideLabel
-                    checked={screenActive.isSuccess && screenActive.data}
-                    disabled={screenActive.isPending || !!screenActive.error || screenActivity.isPending}
-                    onChange={(enabled) => screenActivity.mutate(enabled)}
-                  >
-                    {ctx.t("screenActive.title")}
-                  </Switch>
-                </Row>
-              </div>
+    <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+      <ui.SettingsSection
+        footer={
+          <>
+            <Show when={main() && (remote.error || change.error)}>
+              <p class="text-text-danger-base" role="alert">
+                {ctx.t("remote.error")}
+              </p>
             </Show>
-          </div>
-          <Show when={main() && (remote.error || change.error)}>
-            <p class="text-text-danger-base" role="alert">
-              {ctx.t("remote.error")}
-            </p>
-          </Show>
-          <Show when={main() && (screenActive.error || screenActivity.error)}>
-            <p class="text-text-danger-base" role="alert">
-              {ctx.t("screenActive.error")}
-            </p>
-          </Show>
-          {/* Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on. */}
-          <Show when={props.pairing().status === "inactive" || !props.server()}>
-            <p class="text-text-danger-base" role="alert">
-              {ctx.t("pair.unavailable")}
-            </p>
-          </Show>
-        </section>
-      </div>
-    </>
+            <Show when={main() && (screenActive.error || screenActivity.error)}>
+              <p class="text-text-danger-base" role="alert">
+                {ctx.t("screenActive.error")}
+              </p>
+            </Show>
+            {/* Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on. */}
+            <Show when={props.pairing().status === "inactive" || !props.server()}>
+              <p class="text-text-danger-base" role="alert">
+                {ctx.t("pair.unavailable")}
+              </p>
+            </Show>
+          </>
+        }
+      >
+        <ui.SettingsRow title={ctx.t("pair.title")} description={ctx.t("pair.description")}>
+          <ui.Button
+            disabled={!main() || !props.server() || (change.isPending && change.variables?.enabled === false)}
+            onClick={pair}
+          >
+            {ctx.t("pair.open")}
+          </ui.Button>
+        </ui.SettingsRow>
+        <Show when={main()}>
+          <ui.SettingsRow
+            id="settings-remote-access"
+            title={ctx.t("remote.title")}
+            description={ctx.t("remote.description")}
+          >
+            <ui.Switch
+              label={ctx.t("remote.title")}
+              hideLabel
+              checked={change.isPending ? change.variables?.enabled === true : remote.data === true}
+              disabled={!remote.isSuccess || change.isPending}
+              onChange={(enabled) => change.mutate({ enabled })}
+            />
+          </ui.SettingsRow>
+          <ui.SettingsRow
+            id="settings-keep-screen-active"
+            title={ctx.t("screenActive.title")}
+            description={ctx.t("screenActive.description")}
+          >
+            <ui.Switch
+              label={ctx.t("screenActive.title")}
+              hideLabel
+              checked={screenActive.isSuccess && screenActive.data}
+              disabled={screenActive.isPending || !!screenActive.error || screenActivity.isPending}
+              onChange={(enabled) => screenActivity.mutate(enabled)}
+            />
+          </ui.SettingsRow>
+        </Show>
+      </ui.SettingsSection>
+    </ui.SettingsLayout>
   )
 }
 
@@ -400,17 +393,4 @@ function DialogPairing(props: {
 
 function countdown(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
-}
-
-// The host's settings row markup; its stylesheet is loaded with the settings screen.
-function Row(props: { title: string; description: string; children: JSX.Element }) {
-  return (
-    <div data-component="settings-row">
-      <div data-slot="settings-row-copy">
-        <div data-slot="settings-row-title">{props.title}</div>
-        <div data-slot="settings-row-description">{props.description}</div>
-      </div>
-      <div data-slot="settings-row-control">{props.children}</div>
-    </div>
-  )
 }
