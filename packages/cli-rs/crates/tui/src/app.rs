@@ -127,7 +127,10 @@ impl Tui {
         let view = routes::mount(self, &route);
         self.main.add(&view.root());
         view.sync(self, &opencode_store::Changes::everything());
-        view.focus(self);
+        // A remount under an open dialog (a theme change) must not take the dialog's focus.
+        if !self.dialogs.is_open() {
+            view.focus(self);
+        }
         *self.view.borrow_mut() = Some(view);
         crate::features::title::route_changed(self);
         self.app.request_redraw();
@@ -376,7 +379,10 @@ fn install_keys(tui: &Rc<Tui>) {
         commands,
         bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show"]),
         // `appGlobalBindingCommands` (`app.tsx:117`).
-        bindings(Some(GLOBAL_MODE), &["session.list", "session.new", "open.menu"]),
+        bindings(
+            Some(GLOBAL_MODE),
+            &["session.list", "session.new", "open.menu"],
+        ),
         exit,
     ];
     for layer in layers {
