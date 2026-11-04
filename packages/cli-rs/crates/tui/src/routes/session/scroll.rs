@@ -83,11 +83,9 @@ impl Drop for Inner {
     }
 }
 
-/// Unregisters `layers`. A command may drop the view while the keymap runs it, so they go afterwards;
-/// dropping a disposer does not unregister its layer.
+/// Unregisters `layers`. A command may drop the view while the keymap runs it, so they go afterwards.
 fn dispose(tui: &Tui, layers: Vec<Disposer>) {
-    tui.app
-        .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+    tui.app.defer(move |_| drop(layers));
 }
 
 impl Inner {

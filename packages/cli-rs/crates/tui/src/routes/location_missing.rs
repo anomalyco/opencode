@@ -108,10 +108,10 @@ impl Drop for LocationMissing {
 }
 
 /// Unregisters the `return` layer. A command may drop the view while the keymap runs it, so the layer goes
-/// afterwards; dropping a disposer does not unregister it.
+/// afterwards.
 fn dispose(tui: &Tui, layer: Option<Disposer>) {
     if let Some(layer) = layer {
-        tui.app.defer(move |_| layer.dispose());
+        tui.app.defer(move |_| drop(layer));
     }
 }
 

@@ -9,6 +9,7 @@ use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 
 use crate::app::Tui;
 use crate::routes::Route;
+use opentui::keymap::Disposer;
 
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
@@ -32,7 +33,7 @@ pub fn install(tui: &Rc<Tui>) {
         ..KeymapLayer::default()
     };
     // The layer lives as long as the keymap, which the TUI owns.
-    if let Err(error) = tui.keymap.layer(layer) {
+    if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
         log::error!("clear keymap layer: {error}");
     }
 }

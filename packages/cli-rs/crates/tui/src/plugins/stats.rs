@@ -126,7 +126,7 @@ impl Drop for Page {
     fn drop(&mut self) {
         // Escape navigates, which drops the page while the keymap runs its layer.
         if let Some(layer) = self.layer.borrow_mut().take() {
-            self.app.defer(move |_| layer.dispose());
+            self.app.defer(move |_| drop(layer));
         }
     }
 }

@@ -13,6 +13,7 @@ use std::rc::{Rc, Weak};
 use opencode_api::generated::V2Event;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::FadeInText;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
@@ -132,7 +133,7 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("update keymap layer: {error}");
         }
     }

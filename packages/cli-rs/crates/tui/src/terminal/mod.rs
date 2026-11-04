@@ -487,10 +487,7 @@ fn apply_layer(tui: &Tui) {
     {
         return;
     }
-    // Dropping the old disposer does not unregister it (O-32); dispose it explicitly.
-    if let Some((.., disposer)) = tui.terminals.layer.borrow_mut().take() {
-        disposer.dispose();
-    }
+    tui.terminals.layer.borrow_mut().take();
     if !available {
         *tui.terminals.layer.borrow_mut() = Some((available, shown, Disposer::noop()));
         return;

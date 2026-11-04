@@ -19,16 +19,14 @@ const Z_INDEX: i32 = 2600;
 pub struct Menu {
     app: App,
     overlay: View,
-    mode: Option<Disposer>,
-    layer: Option<Disposer>,
+    // The layer goes before the mode.
+    _layer: Option<Disposer>,
+    _mode: Disposer,
 }
 
 impl Drop for Menu {
     fn drop(&mut self) {
         self.overlay.detach();
-        for disposer in [self.layer.take(), self.mode.take()].into_iter().flatten() {
-            disposer.dispose();
-        }
         self.app.request_redraw();
     }
 }
@@ -129,8 +127,8 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
     *viewer.menu.borrow_mut() = Some(Menu {
         app: app.clone(),
         overlay,
-        mode: Some(mode),
-        layer,
+        _layer: layer,
+        _mode: mode,
     });
     app.request_redraw();
 }

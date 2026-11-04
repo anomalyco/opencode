@@ -21,6 +21,7 @@ use opencode_ui::select::{
     self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps,
 };
 use opencode_ui::theme::Theme;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use super::error_details;
@@ -60,7 +61,7 @@ pub fn install(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("mcp keymap layer: {error}");
         }
     }
@@ -154,7 +155,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             // The footer reads the selection through the handle, which exists only now.
             mcp.refresh();
             // The dialog owns the list; handlers hold weak references.
-            cx.on_close(opentui::keymap::Disposer::new(move || {
+            cx.on_close(Disposer::new(move || {
                 mcp.select.borrow_mut().take();
             }));
             view
