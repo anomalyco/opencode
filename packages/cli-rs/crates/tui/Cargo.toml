@@ -1,0 +1,18 @@
+[package]
+name = "opencode-tui"
+description = "The full-screen TUI (T.1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-ui.workspace = true
+opencode-store.workspace = true
+opencode-service.workspace = true
+opencode-plugin.workspace = true
+opencode-latex.workspace = true
+opencode-mermaid.workspace = true

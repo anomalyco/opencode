@@ -1,0 +1,12 @@
+[package]
+name = "opencode-api"
+description = "HTTP API client: generated types and methods, transports, events, and sockets."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

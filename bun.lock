@@ -170,6 +170,17 @@
         "vite-plugin-solid": "catalog:",
       },
     },
+    "packages/cli-rs": {
+      "name": "@opencode/cli-rs",
+      "version": "2.2.5",
+      "devDependencies": {
+        "@opencode/httpapi-codegen": "workspace:*",
+        "@opencode/protocol": "workspace:*",
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+      },
+    },
     "packages/client": {
       "name": "@opencode/client",
       "version": "2.2.5",
@@ -1918,6 +1929,8 @@
     "@opencode/changelog": ["@opencode/changelog@workspace:services/changelog"],
 
     "@opencode/cli": ["@opencode/cli@workspace:packages/cli"],
+
+    "@opencode/cli-rs": ["@opencode/cli-rs@workspace:packages/cli-rs"],
 
     "@opencode/client": ["@opencode/client@workspace:packages/client"],
 
