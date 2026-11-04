@@ -1,4 +1,4 @@
-//! Cell fixtures, per-cell comparison, and reports (H.1).
+//! Cell fixtures, per-cell comparison, and reports (H.1), and the P-APP recordings ([`app`], H.2).
 //!
 //! P-COMP: a TypeScript script under `parity/component/` renders a TUI component and writes
 //! `parity/fixtures/<name>.json` (see `parity/lib/component.tsx`). A Rust test renders the matching widget in a
@@ -11,6 +11,7 @@
 //! opencode_parity::assert_fixture(&app.render(), "U.3/alert");
 //! ```
 
+pub mod app;
 mod fixture;
 
 pub use fixture::Fixture;
