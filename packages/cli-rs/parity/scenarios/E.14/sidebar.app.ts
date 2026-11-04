@@ -41,11 +41,6 @@ const reply = {
   tokens: { input: 20000, output: 500, reasoning: 0, cache: { read: 4500, write: 0 } },
 }
 
-// The transcript's todo block is the todowrite tool view, E.7b's, which the Rust TUI does not draw yet.
-const reason = "the transcript's todowrite block is E.7b's (not ported yet)"
-const docked = [{ x: 0, y: 8, width: 96, height: 9, reason }]
-const wide = [{ x: 0, y: 8, width: 140, height: 9, reason }]
-
 export default defineApp({
   width: 140,
   height: 34,
@@ -76,12 +71,12 @@ export default defineApp({
     },
   ],
   steps: [
-    { checkpoint: "docked", until: "Getting started", masks: docked },
+    { checkpoint: "docked", until: "Getting started" },
     { click: [100, 9] },
-    { checkpoint: "folded", until: "(1 active, 2 errors)", masks: docked },
+    { checkpoint: "folded", until: "(1 active, 2 errors)" },
     { keys: ["ctrl+x", "b"] },
-    { checkpoint: "hidden", masks: wide },
+    { checkpoint: "hidden" },
     { keys: ["ctrl+x", "b"] },
-    { checkpoint: "shown", until: "Getting started", masks: docked },
+    { checkpoint: "shown", until: "Getting started" },
   ],
 })
