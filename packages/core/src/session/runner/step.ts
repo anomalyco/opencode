@@ -34,10 +34,11 @@ export type Outcome = Data.TaggedEnum<{
   Continue: {
     readonly error: SessionError.Error
     readonly decision: SessionRunnerRetry.Decision
+    readonly empty: boolean
   }
   RecoverFull: {}
   Compacted: {}
-  OutputLimit: { readonly needsContinuation: boolean }
+  OutputLimit: { readonly needsContinuation: boolean; readonly empty: boolean }
 }>
 export const Outcome = Data.taggedEnum<Outcome>()
 
@@ -278,7 +279,7 @@ export const make = Effect.gen(function* () {
           tools.declines.length === 0 &&
           !tools.interrupted
         )
-          return Outcome.Continue({ error: llmError, decision: retry })
+          return Outcome.Continue({ error: llmError, decision: retry, empty: record.empty })
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
@@ -289,7 +290,7 @@ export const make = Effect.gen(function* () {
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
         const needsContinuation = input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation
-        if (record.finish?.finish === "length") return Outcome.OutputLimit({ needsContinuation })
+        if (record.finish?.finish === "length") return Outcome.OutputLimit({ needsContinuation, empty: record.empty })
         if (record.finish?.finish === "stop" && record.empty) return Outcome.Empty()
         return Outcome.Completed({ needsContinuation })
       }),

@@ -6096,6 +6096,46 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
+  for (const recovery of ["output limit", "incomplete stream"] as const) {
+    scenario(`resets empty response recovery after nonempty ${recovery} output`, function* (s) {
+      const partial = [
+        LLMEvent.textStart({ id: "partial" }),
+        LLMEvent.textDelta({ id: "partial", text: "Progress" }),
+        LLMEvent.textEnd({ id: "partial" }),
+      ]
+      yield* s.llm.push(
+        TestLLM.stop(),
+        recovery === "output limit"
+          ? TestLLM.complete({ reason: { normalized: "length" } }, ...partial)
+          : TestLLM.failAfter(incompleteStream(), LLMEvent.stepStart({ index: 0 }), ...partial),
+        TestLLM.stop(),
+        TestLLM.text("Finished", "finished"),
+      )
+
+      const scheduled = yield* subscribeRetries(s)
+      const run = yield* s.runPrompt("Finish the task").pipe(Effect.forkChild)
+      if (recovery === "incomplete stream") {
+        yield* Queue.take(scheduled)
+        yield* TestClock.adjust("2400 millis")
+      }
+      yield* Fiber.join(run)
+
+      expect(s.requests).toHaveLength(4)
+      expect(userTexts(s.requests[1]).at(-1)).toBe(userTexts(s.requests[3]).at(-1))
+      expect((yield* s.messages).filter((message) => message.type === "synthetic")).toHaveLength(3)
+      expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({}, [Expected.text("Finished")]))
+    })
+  }
+
+  scenario("keeps the empty response bound across an empty output-limit response", function* (s) {
+    yield* s.llm.push(TestLLM.stop(), TestLLM.complete({ reason: { normalized: "length" } }), TestLLM.stop())
+
+    expect(yield* s.runPrompt("Finish the task").pipe(Effect.flip)).toMatchObject({
+      error: { type: "empty-response" },
+    })
+    expect(s.requests).toHaveLength(3)
+  })
+
   scenario("accepts text supplied only at text end without empty response recovery", function* (s) {
     yield* s.llm.push(
       TestLLM.complete(

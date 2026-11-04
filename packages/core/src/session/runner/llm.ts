@@ -341,6 +341,7 @@ const layer = Layer.effect(
               assistantMessageID,
             }),
           Continue: Effect.fnUntraced(function* (outcome) {
+            if (!outcome.empty) recoverEmpty = true
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
@@ -350,6 +351,7 @@ const layer = Layer.effect(
             assistantMessageID = SessionMessage.ID.create()
           }),
           OutputLimit: Effect.fn("SessionRunner.continueOutputLimit")(function* (outcome) {
+            if (!outcome.empty) recoverEmpty = true
             // The current response is included. User input or any other finish breaks the streak.
             const recent = yield* db
               .select({
