@@ -101,17 +101,8 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     draw();
     *hook.borrow_mut() = Some(Rc::downgrade(&draw));
 
-    // `maxHeight={20}` over content that sizes the box: a Rust scroll box takes no height from its
-    // content, so it gets the wrapped line count.
-    let width = cx
-        .dialogs
-        .size()
-        .width()
-        .min(u32::from(cx.width()).saturating_sub(2))
-        .saturating_sub(2 * opencode_ui::dialog::DIALOG_INSET);
-    let scroll = ScrollBox::new(app)
-        .scrollbars(false)
-        .height(wrapped_lines(&props.error, width as usize).clamp(1, 20) as u32);
+    let scroll = ScrollBox::new(app).scrollbars(false).max_height(20);
+    scroll.content_view().min_height(0);
     scroll.add(
         &Text::new(app, props.error.clone())
             .fg(theme.text.base)
@@ -178,6 +169,12 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
         },
     ));
     if let Some(source) = &props.source {
+        let width = cx
+            .dialogs
+            .size()
+            .width()
+            .min(u32::from(cx.width()).saturating_sub(2))
+            .saturating_sub(2 * opencode_ui::dialog::DIALOG_INSET);
         head.add(
             &Text::new(
                 app,
@@ -196,35 +193,6 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
         opencode_ui::dialog::DIALOG_INSET,
         1,
     )
-}
-
-/// The rows `text` takes when word-wrapped at `width` cells: greedy by words, a word longer than a
-/// row broken across rows.
-pub(crate) fn wrapped_lines(text: &str, width: usize) -> usize {
-    use unicode_width::UnicodeWidthStr;
-    let width = width.max(1);
-    text.split('\n')
-        .map(|line| {
-            let (mut rows, mut used) = (1, 0);
-            for word in line.split(' ') {
-                let size = word.width();
-                let needed = if used == 0 { size } else { used + 1 + size };
-                if needed <= width {
-                    used = needed;
-                    continue;
-                }
-                if used > 0 {
-                    rows += 1;
-                }
-                rows += size.saturating_sub(1) / width;
-                used = match size % width {
-                    0 if size > 0 => width,
-                    rest => rest,
-                };
-            }
-            rows
-        })
-        .sum()
 }
 
 /// `errorDetails`: the copied text and the investigation prompt.
@@ -257,21 +225,5 @@ pub fn details(props: &Props) -> Details {
     Details {
         text,
         prompt: prompt.join("\n\n"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::wrapped_lines;
-
-    #[test]
-    fn wrapped_lines_counts_word_wrapped_rows() {
-        assert_eq!(wrapped_lines("", 10), 1);
-        assert_eq!(wrapped_lines("short", 10), 1);
-        assert_eq!(wrapped_lines("aaaa bbbb cccc", 9), 2);
-        assert_eq!(wrapped_lines("a\nb\n", 10), 3);
-        assert_eq!(wrapped_lines("abcdefghijklmnopqrstuvwxy", 10), 3);
-        // "ab", then the 20-cell word on two rows of its own.
-        assert_eq!(wrapped_lines("ab abcdefghijklmnopqrst", 10), 3);
     }
 }
