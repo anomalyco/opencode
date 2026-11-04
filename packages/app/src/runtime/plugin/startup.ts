@@ -24,16 +24,19 @@ export function createStartupGate(input: {
   readonly servers: boolean
 }) {
   const bridge = input.bridge
+
   const initial = createStartupGateState({
     bridge: !!bridge,
     preload: !!bridge?.manager.initial,
     plugins: input.plugins,
     servers: input.servers,
   })
+
   const [state, setState] = createSignal(initial.state)
   // Replies and timers that land after the owner is gone change nothing.
   const lifetime = { disposed: false }
-  const timer: { current?: ReturnType<typeof setTimeout> } = {}
+  // The running phase timer; there is at most one.
+  const timers = new Set<ReturnType<typeof setTimeout>>()
   // Events a transition's own state change raises (a plugin settling as the gate opens) wait behind its effects.
   const queue: StartupGateEvent[] = []
 
@@ -74,10 +77,15 @@ export function createStartupGate(input: {
         },
       )
 
-    clearTimeout(timer.current)
+    stopTimers()
 
     if (effect.type === "timer.start")
-      timer.current = setTimeout(() => dispatch({ type: "timeout", timer: effect.timer }), timeouts[effect.timer])
+      timers.add(setTimeout(() => dispatch({ type: "timeout", timer: effect.timer }), timeouts[effect.timer]))
+  }
+
+  const stopTimers = () => {
+    timers.forEach(clearTimeout)
+    timers.clear()
   }
 
   if (bridge)
@@ -89,7 +97,7 @@ export function createStartupGate(input: {
 
   onCleanup(() => {
     lifetime.disposed = true
-    clearTimeout(timer.current)
+    stopTimers()
     queue.length = 0
   })
 
