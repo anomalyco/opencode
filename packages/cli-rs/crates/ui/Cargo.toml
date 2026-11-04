@@ -1,0 +1,14 @@
+[package]
+name = "opencode-ui"
+description = "UI kit on opentui: themes, keymap, dialogs, and content widgets."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true
+opencode-local.workspace = true

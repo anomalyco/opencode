@@ -1,0 +1,14 @@
+[package]
+name = "opencode-service"
+description = "Finding, probing, and starting the OpenCode server."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-api.workspace = true
+opencode-local.workspace = true

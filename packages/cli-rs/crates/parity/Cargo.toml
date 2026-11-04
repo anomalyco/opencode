@@ -1,0 +1,13 @@
+[package]
+name = "opencode-parity"
+description = "Cell fixtures, per-cell comparison, and reports (H.1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "opencode-plugin"
+description = "The Rust plugin API (P.1)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opentui.workspace = true
+opencode-ui.workspace = true

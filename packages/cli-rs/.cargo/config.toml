@@ -1,0 +1,4 @@
+# Native OpenTUI artifacts that match opentui-rust's bindings, copied by script/opentui-lib.sh.
+# A value set in the shell wins.
+[env]
+OPENTUI_LIB_DIR = { value = "/home/simon/.cache/opencode-rs/opentui/x86_64-linux", force = false }

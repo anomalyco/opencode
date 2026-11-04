@@ -1,0 +1,12 @@
+[package]
+name = "opencode-local"
+description = "Client-local files shared with the TypeScript client: paths, locks, config, and state."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

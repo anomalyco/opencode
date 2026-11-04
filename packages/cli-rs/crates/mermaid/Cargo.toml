@@ -1,0 +1,13 @@
+[package]
+name = "opencode-mermaid"
+description = "The Mermaid plugin (P.3)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-plugin.workspace = true

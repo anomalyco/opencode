@@ -1,0 +1,25 @@
+[package]
+name = "opencode-cli"
+description = "The opencode-rs binary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "opencode-rs"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+opencode-acp.workspace = true
+opencode-api.workspace = true
+opencode-drive.workspace = true
+opencode-local.workspace = true
+opencode-mini.workspace = true
+opencode-service.workspace = true
+opencode-store.workspace = true
+opencode-tui.workspace = true
+opencode-ui.workspace = true
