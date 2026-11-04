@@ -5,7 +5,7 @@
 import { defineApp } from "../../lib/app"
 
 const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }
-const behind = { masks: [placeholder], deviation: ["T17-home-prompt", "P01-read-only-prompt"] }
+const behind = { masks: [placeholder], deviation: ["T17-home-prompt"] }
 const clear = (text: string) => ({ keys: Array.from(text, () => "backspace") })
 
 export default defineApp({
@@ -25,7 +25,7 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
+      deviation: ["T17-home-prompt"],
     },
     { keys: ["f5", "f6", "f7", "f8", "f9", "f10"] },
     { checkpoint: "settings", until: "Search settings", ...behind },

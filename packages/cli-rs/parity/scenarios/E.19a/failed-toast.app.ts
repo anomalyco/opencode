@@ -10,14 +10,6 @@ const execution = (kind: string, seq: number, data: Record<string, unknown> = {}
   data: { sessionID: "ses_b", ...data },
 })
 
-const footer = {
-  x: 60,
-  y: 28,
-  width: 40,
-  height: 1,
-  reason: "the prompt footer hints are E.14's (P01-read-only-prompt)",
-}
-
 export default defineApp({
   config: { experimental: { "new-designs": true } },
   args: { sessionID: "ses_b" },
@@ -27,9 +19,9 @@ export default defineApp({
     { path: "/api/session/ses_b/inbox", json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "open", until: "Fix the parser", masks: [footer] },
+    { checkpoint: "open", until: "Fix the parser" },
     { event: execution("started", 1) },
     { event: execution("failed", 2, { error: { type: "unknown", message: "The provider returned an error." } }) },
-    { checkpoint: "failed", until: "Session failed", masks: [footer] },
+    { checkpoint: "failed", until: "Session failed" },
   ],
 })

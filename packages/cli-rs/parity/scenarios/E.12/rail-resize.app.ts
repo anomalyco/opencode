@@ -7,10 +7,6 @@ const messages = (text: string) => ({
   json: { data: [assistant("msg_2", text), user("msg_1", "Why?")], cursor: {} },
 })
 
-const masks = [
-  { x: 80, y: 28, width: 40, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
-]
-
 export default defineApp({
   width: 120,
   config: { experimental: { "new-designs": true }, tabs: { layout: "vertical" } },
@@ -25,10 +21,10 @@ export default defineApp({
   ],
   steps: [
     { event: { id: "evt_1", created: 3, type: "tui.session.select", location: here, data: { sessionID: "ses_b" } } },
-    { checkpoint: "rail", until: "The notes are written.", masks },
+    { checkpoint: "rail", until: "The notes are written." },
     { drag: [[41, 10], [30, 10]] },
-    { checkpoint: "resized", until: "The notes are written.", masks },
+    { checkpoint: "resized", until: "The notes are written." },
     { drag: [[30, 10], [8, 10]] },
-    { checkpoint: "compact", until: "The notes are written.", masks },
+    { checkpoint: "compact", until: "The notes are written." },
   ],
 })

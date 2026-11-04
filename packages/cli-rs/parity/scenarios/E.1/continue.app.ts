@@ -20,7 +20,7 @@ export default defineApp({
     {
       checkpoint: "continued",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
+      deviation: ["V01-plain-transcript"],
     },
   ],
 })

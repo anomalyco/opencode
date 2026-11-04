@@ -18,8 +18,6 @@ export default defineApp({
           reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
         },
       ],
-      // The prompt footer hints are E.14's.
-      deviation: ["P01-read-only-prompt"],
     },
   ],
 })

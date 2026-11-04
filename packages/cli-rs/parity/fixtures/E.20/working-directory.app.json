@@ -22,8 +22,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/working-directory/home"
     },
@@ -43,8 +42,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/working-directory/dialog"
     },
@@ -62,8 +60,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/working-directory/closed"
     }

@@ -144,8 +144,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "H.2/home-sessions/home"
     },
@@ -159,8 +158,7 @@
       "checkpoint": "list",
       "until": "Write docs",
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "H.2/home-sessions/list"
     },
@@ -173,8 +171,7 @@
       "checkpoint": "session",
       "until": "The parser drops the last token.",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "H.2/home-sessions/session"
     }

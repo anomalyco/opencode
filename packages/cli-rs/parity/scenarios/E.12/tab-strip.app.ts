@@ -11,12 +11,9 @@ const select = (id: string, sessionID: string) => ({
 const messages = (text: string) => ({
   json: { data: [assistant("msg_2", text), user("msg_1", "Why?")], cursor: {} },
 })
-// The prompt footer hints are E.14's (P01-read-only-prompt); the home prompt draws no placeholder (T17).
-const hints = "the prompt footer hints are E.14's (P01-read-only-prompt)"
-const masks = [{ x: 50, y: 28, width: 50, height: 1, reason: hints }]
+// The home prompt draws no placeholder (T17).
 const home = [
   { x: 16, y: 17, width: 72, height: 1, reason: "the home placeholder: random in TS, not drawn in Rust (T17-home-prompt)" },
-  { x: 50, y: 21, width: 50, height: 1, reason: hints },
 ]
 // Read by the prompt as soon as the session is the open one: idle at 5, never viewed.
 const unread = { ...session("ses_b", "Write the docs", { updated: 2 }), time: { created: 2, updated: 5, idle: 5 } }
@@ -34,15 +31,15 @@ export default defineApp({
     { method: "POST", path: "/api/session/:sessionID/view" },
   ],
   steps: [
-    { checkpoint: "one", until: "The parser drops the last token.", masks },
+    { checkpoint: "one", until: "The parser drops the last token." },
     select("evt_1", "ses_b"),
-    { checkpoint: "two", until: "The docs are written.", masks },
+    { checkpoint: "two", until: "The docs are written." },
     { keys: ["ctrl+x", "1"] },
-    { checkpoint: "unread", until: "The parser drops the last token.", masks },
+    { checkpoint: "unread", until: "The parser drops the last token." },
     { keys: ["ctrl+x", "w"] },
-    { checkpoint: "closed", until: "The docs are written.", masks },
+    { checkpoint: "closed", until: "The docs are written." },
     { keys: ["ctrl+shift+t"] },
-    { checkpoint: "reopened", until: "The parser drops the last token.", masks },
+    { checkpoint: "reopened", until: "The parser drops the last token." },
     { keys: ["ctrl+x", "n"] },
     { checkpoint: "new", until: "New session", masks: home },
   ],

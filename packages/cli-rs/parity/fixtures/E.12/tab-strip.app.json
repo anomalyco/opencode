@@ -161,15 +161,6 @@
     {
       "checkpoint": "one",
       "until": "The parser drops the last token.",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/tab-strip/one"
     },
     {
@@ -188,15 +179,6 @@
     {
       "checkpoint": "two",
       "until": "The docs are written.",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/tab-strip/two"
     },
     {
@@ -208,15 +190,6 @@
     {
       "checkpoint": "unread",
       "until": "The parser drops the last token.",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/tab-strip/unread"
     },
     {
@@ -228,15 +201,6 @@
     {
       "checkpoint": "closed",
       "until": "The docs are written.",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/tab-strip/closed"
     },
     {
@@ -247,15 +211,6 @@
     {
       "checkpoint": "reopened",
       "until": "The parser drops the last token.",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.12/tab-strip/reopened"
     },
     {
@@ -274,13 +229,6 @@
           "width": 72,
           "height": 1,
           "reason": "the home placeholder: random in TS, not drawn in Rust (T17-home-prompt)"
-        },
-        {
-          "x": 50,
-          "y": 21,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
         }
       ],
       "fixture": "E.12/tab-strip/new"

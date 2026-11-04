@@ -30,8 +30,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/reload/home"
     },
@@ -50,8 +49,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.20/reload/reloaded"
     }
