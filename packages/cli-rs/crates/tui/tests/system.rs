@@ -14,9 +14,13 @@ use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved, merge};
+use opencode_local::paths::Paths;
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_plugin::{Definition, Setup};
+use opencode_tui::app::Roots;
+use opencode_tui::dialogs::highlights::Highlight;
 use opencode_tui::dialogs::{pair, settings, status, theme_list};
+use opencode_tui::features::highlights;
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -550,4 +554,152 @@ fn pair_links_follow_the_server_urls() {
     // `Math.round(90 / 60)`.
     assert_eq!(value.minutes, 2);
     assert!(value.loopback);
+}
+
+// Highlights --------------------------------------------------------------------------------------------------
+
+fn release_highlights() -> Vec<Highlight> {
+    let item = |title: &str, body: &str| Highlight {
+        title: title.to_owned(),
+        body: body.to_owned(),
+    };
+    vec![
+        item(
+            "Session tabs",
+            "Open sessions side by side and switch with `ctrl+tab`.",
+        ),
+        item(
+            "Faster startup",
+            "The TUI connects to the background service before it draws the first frame.",
+        ),
+        item(
+            "Pair devices",
+            "Run `/pair` to open this session on your phone, or scan the code.",
+        ),
+    ]
+}
+
+#[test]
+fn highlights_match_typescript() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, info(json!({})));
+    let release = highlights::Release {
+        version: "2.0.27".to_owned(),
+        items: release_highlights(),
+    };
+    highlights::install_with(&tui, release, false);
+    tui.keymap.dispatch("opencode.highlights", None);
+    wait_for(&app, "What's new in 2.0.27");
+    assert_dialog(&app, "E.18b/highlights", "What's new");
+    app.press("enter");
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    let app = TestApp::new(80, 20);
+    let tui = mount(&app, info(json!({})));
+    let mut items = release_highlights();
+    items.extend(release_highlights().into_iter().map(|item| Highlight {
+        title: format!("{} again", item.title),
+        ..item
+    }));
+    opencode_tui::dialogs::highlights::show(&tui, "2.0.27", &items);
+    wait_for(&app, "What's new in 2.0.27");
+    app.press("down");
+    app.press("down");
+    assert_dialog(&app, "E.18b/highlights-scroll", "What's new");
+}
+
+/// A TUI over real roots in a temporary home, so the `highlights` storage and `prompt-history.jsonl` are real.
+fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> {
+    let vars = [
+        ("HOME", home.to_path_buf()),
+        ("XDG_CONFIG_HOME", home.join("config")),
+        ("XDG_STATE_HOME", home.join("state")),
+        ("XDG_DATA_HOME", home.join("data")),
+        ("XDG_CACHE_HOME", home.join("cache")),
+    ];
+    let paths = Paths::from_vars(|name| {
+        vars.iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| value.clone().into_os_string())
+    })
+    .unwrap();
+    let client = Client::with_transport(
+        "http://opencode.local",
+        Arc::new(Server {
+            answer: Box::new(|_, _, _| None),
+            log: Default::default(),
+        }),
+    )
+    .unwrap();
+    opencode_tui::mount(
+        app,
+        Deps {
+            client,
+            directory: DIRECTORY.into(),
+            config: Resolved::new(info(extra), |_| None),
+            roots: Some(Roots {
+                paths,
+                storage_channel: "test".into(),
+            }),
+            route: Route::Home,
+            continue_: false,
+            events: false,
+        },
+    )
+}
+
+#[test]
+fn highlights_open_once_after_an_update_into_an_idle_home() {
+    let home = tempfile::tempdir().unwrap();
+    let release = highlights::Release {
+        version: "2.0.27".to_owned(),
+        items: release_highlights(),
+    };
+
+    // A new install records the version silently.
+    let app = TestApp::new(80, 30);
+    let tui = mount_rooted(&app, home.path(), json!({}));
+    highlights::startup(&tui, &release, false);
+    let storage = tui.storage().unwrap();
+    app.wait_until(Duration::from_secs(5), || {
+        storage.load("highlights", &json!({})).unwrap() == json!({ "seen": "2.0.27" })
+    });
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    // After an update, a user with history sees them once.
+    let state = tui.state_dir().unwrap();
+    std::fs::write(state.join("prompt-history.jsonl"), "").unwrap();
+    let update = highlights::Release {
+        version: "2.0.28".to_owned(),
+        ..release.clone()
+    };
+    highlights::startup(&tui, &update, false);
+    wait_for(&app, "What's new in 2.0.28");
+    app.press("enter");
+    highlights::startup(&tui, &update, false);
+    app.wait_until(Duration::from_millis(300), || {
+        app.text().contains("What's new")
+    });
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    // `--continue`, an open dialog, or `highlights: false` keeps it closed.
+    let next = highlights::Release {
+        version: "2.0.29".to_owned(),
+        ..release.clone()
+    };
+    highlights::startup(&tui, &next, true);
+    status::show(&tui);
+    highlights::startup(&tui, &next, false);
+    tui.dialogs.clear();
+    let app = TestApp::new(80, 30);
+    let off = mount_rooted(&app, home.path(), json!({ "highlights": false }));
+    highlights::startup(&off, &next, false);
+    app.wait_until(Duration::from_millis(300), || {
+        app.text().contains("What's new")
+    });
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+    assert_eq!(
+        storage.load("highlights", &json!({})).unwrap(),
+        json!({ "seen": "2.0.28" })
+    );
 }

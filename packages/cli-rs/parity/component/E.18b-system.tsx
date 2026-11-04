@@ -11,6 +11,7 @@ import "../../../tui/src/plugin/context"
 import { PluginsDialog } from "../../../tui/src/feature-plugins/system/plugins"
 import { usePathFormatter } from "../../../tui/src/context/path-format"
 import { useThemes } from "../../../tui/src/context/theme"
+import { DialogHighlights } from "../../../tui/src/component/dialog-highlights"
 import { DialogPair } from "../../../tui/src/component/dialog-pair"
 import { DialogStatus } from "../../../tui/src/component/dialog-status"
 import { DialogThemeList } from "../../../tui/src/component/dialog-theme-list"
@@ -196,6 +197,24 @@ await render("E.18b/pair-narrow", pair, paired, { width: 80, height: 30 })
 pairFails = true
 await render("E.18b/pair-error", pair, (f) => f.includes("Could not load"), { width: 100, height: 40 })
 pairFails = false
+
+// Highlights: code spans stand out; a long list scrolls inside the band.
+const HIGHLIGHTS = [
+  { title: "Session tabs", body: "Open sessions side by side and switch with `ctrl+tab`." },
+  { title: "Faster startup", body: "The TUI connects to the background service before it draws the first frame." },
+  { title: "Pair devices", body: "Run `/pair` to open this session on your phone, or scan the code." },
+]
+const MORE = [...HIGHLIGHTS, ...HIGHLIGHTS.map((item) => ({ ...item, title: `${item.title} again` }))]
+const whatsNew = (f: string) => f.includes("What's new")
+await render("E.18b/highlights", () => <DialogHighlights version="2.0.27" items={HIGHLIGHTS} />, whatsNew)
+await render("E.18b/highlights-scroll", () => <DialogHighlights version="2.0.27" items={MORE} />, whatsNew, {
+  height: 20,
+  act: async (setup) => {
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    await Bun.sleep(50)
+  },
+})
 
 // Plugins: TUI rows first, then the server rows; built-ins show after ctrl+a.
 const plugins = () => <Plugins />

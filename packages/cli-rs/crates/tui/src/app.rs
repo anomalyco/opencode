@@ -426,6 +426,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     crate::dialogs::theme_list::install(&tui);
     crate::dialogs::status::install(&tui);
     crate::dialogs::pair::install(&tui);
+    crate::features::highlights::install(&tui, deps.continue_);
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
     crate::plugins::host::install(&tui);
