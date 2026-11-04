@@ -65,6 +65,8 @@ export type PtyCase = {
   // Compare the request log too.
   requests?: boolean
   tsOnly?: boolean
+  // As in P-CLI: writes files into the sandbox before the command runs.
+  setup?: (root: string, server: string | undefined) => Promise<void>
 }
 
 export function definePty(value: PtyCase) {
@@ -76,6 +78,7 @@ export async function runPty(side: Side, value: PtyCase) {
   const rows = value.rows ?? 30
   const box = await sandbox({ TERM: "xterm-256color", COLORTERM: "truecolor", ...value.env })
   const server = value.server ? await startFakeServer(value.server) : undefined
+  await value.setup?.(box.root, server?.url)
   const setup = await createTestRenderer({ width: cols, height: rows })
   const decoder = new TextDecoder()
   const output = { text: "" }

@@ -50,6 +50,9 @@ export type CliCase = {
   // P-FILE: files read back after the run into the record (`null` when missing), by path under the sandbox
   // root (`work/...` is the working directory, `home/.config/...` the XDG config).
   collect?: string[]
+  // Writes files into the sandbox before the command runs, such as a service registration that names the
+  // fake server (`root` is the sandbox root, `server` the fake server's URL).
+  setup?: (root: string, server: string | undefined) => Promise<void>
 }
 
 export function defineCli(value: CliCase) {
@@ -64,6 +67,7 @@ export async function runCli(side: Side, value: CliCase) {
     Object.entries(value.files ?? {}).map(([file, content]) => Bun.write(path.join(box.cwd, file), content)),
   )
   const server = value.server ? await startFakeServer(value.server) : undefined
+  await value.setup?.(box.root, server?.url)
   const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
