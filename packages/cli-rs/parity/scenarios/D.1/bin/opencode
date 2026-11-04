@@ -1,0 +1,4 @@
+#!/bin/sh
+# The TypeScript CLI from source, run the way P-CLI's TS side runs it (`parity/cli/client.ts`), as the
+# `OPENCODE_TS_BIN` that `opencode-rs` delegates to.
+exec bun --no-install --preload="$D1_PRELOAD" "$D1_CLI/src/index.ts" "$@"
