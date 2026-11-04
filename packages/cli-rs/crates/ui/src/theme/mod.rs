@@ -87,6 +87,18 @@ impl Deref for Theme {
     }
 }
 
+/// Equal when the surface and every color it can reach are, so a rebuild that resolves the same colors is not a
+/// change.
+impl PartialEq for Theme {
+    fn eq(&self, other: &Self) -> bool {
+        self.surface == other.surface
+            && (Rc::ptr_eq(&self.views, &other.views)
+                || (self.views.surfaces == other.views.surfaces
+                    && self.views.hue == other.views.hue
+                    && self.views.categorical == other.views.categorical))
+    }
+}
+
 impl std::fmt::Debug for Theme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Theme")

@@ -79,6 +79,10 @@ pub struct Tui {
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
+    /// The page theme the shell was last painted with.
+    painted: RefCell<Theme>,
+    /// A theme change arrived while a key sequence was pending; remount once it ends.
+    restyle: Cell<bool>,
     main: View,
     status: Status,
     seen: Cell<u64>,
@@ -180,10 +184,35 @@ impl Tui {
             }
         }
         let theme = self.page();
+        if *self.painted.borrow() == theme {
+            return;
+        }
+        *self.painted.borrow_mut() = theme.clone();
         self.app.set_theme(app_theme(&theme));
         self.dialogs.set_theme(theme.clone());
         self.toasts.set_theme(theme);
+        // The route view takes its colors when it mounts, so it remounts. TS restyles in place and keeps
+        // a half-typed sequence such as `<leader>l`; the new view's focus would clear it here, so wait.
+        if self.keymap.keymap().has_pending_sequence() {
+            self.restyle.set(true);
+            return;
+        }
+        self.restyle_route();
+    }
+
+    /// Remounts the route view in the current theme, keeping the prompt focused if it was.
+    fn restyle_route(&self) {
+        self.restyle.set(false);
+        let prompt = self
+            .textarea
+            .borrow()
+            .as_ref()
+            .is_some_and(|textarea| is_focused(&self.app, textarea));
         self.navigate(self.route());
+        let textarea = self.textarea.borrow().clone();
+        if let Some(textarea) = textarea.filter(|_| prompt && !self.dialogs.is_open()) {
+            self.app.focus(&textarea);
+        }
     }
 }
 
@@ -241,7 +270,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     shell.add(status.root());
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
-    let dialogs = Dialogs::new(app, keymap.clone(), page);
+    let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
     let local_files = deps
         .roots
         .as_ref()
@@ -281,6 +310,8 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
+        painted: RefCell::new(page),
+        restyle: Cell::new(false),
         main,
         status,
         seen: Cell::new(0),
@@ -443,6 +474,20 @@ fn install_theme(tui: &Rc<Tui>) {
         tui.theme.borrow_mut().terminal_mode(mode);
         tui.theme_changed();
     });
+    let weak = tui.weak();
+    let pending = tui.keymap.keymap().on_pending_sequence(move |sequence| {
+        let Some(tui) = weak.upgrade() else { return };
+        if sequence.is_empty() && tui.restyle.take() {
+            // After the key that ended the sequence, and any dialog its command opened.
+            let weak = tui.weak();
+            tui.app.defer(move |_| {
+                if let Some(tui) = weak.upgrade() {
+                    tui.restyle_route();
+                }
+            });
+        }
+    });
+    tui.layers.borrow_mut().push(pending);
     // Custom themes are read from disk off the UI thread, then applied.
     let Some(files) = &tui.files else {
         tui.theme_changed();
