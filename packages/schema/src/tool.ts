@@ -16,6 +16,11 @@ export const Freeform = Schema.Union([
 ]).annotate({ identifier: "LLM.Freeform" })
 export type Freeform = typeof Freeform.Type
 
+export const FreeformFormat = Schema.Literals(Freeform.members.map((member) => member.fields.type.literal)).annotate({
+  identifier: "Tool.FreeformFormat",
+})
+export type FreeformFormat = typeof FreeformFormat.Type
+
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type
 

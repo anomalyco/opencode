@@ -58,7 +58,8 @@ describe("SessionModelRequest HTTP hooks", () => {
           execute: () => Effect.die("unused tool execution"),
         }
         const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
-        for (const supported of [undefined, [], ["text", "lark"], ["regex"]]) {
+        const cases: Array<typeof model.capabilities.freeform> = [undefined, [], ["text", "lark"], ["regex"]]
+        for (const supported of cases) {
           const prepared = yield* requests.primary({
             session,
             agent: Agent.ID.make("build"),
