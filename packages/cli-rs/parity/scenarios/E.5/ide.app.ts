@@ -3,7 +3,7 @@
 // lines at the cursor. The recording also keeps what the TUI sent the server.
 import { defineApp, session, user } from "../../lib/app"
 
-const deviation = ["V01-plain-transcript", "P01-read-only-prompt"]
+const deviation = ["V01-plain-transcript"]
 const file = "/tmp/opencode/packages/tui/src/parser.ts"
 
 export default defineApp({

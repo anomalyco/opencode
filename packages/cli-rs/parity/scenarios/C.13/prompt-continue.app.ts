@@ -17,7 +17,5 @@ export default defineApp({
     { path: "/api/session/dummy/message", json: { data: [], cursor: {} } },
     { path: "/api/session/dummy/inbox", json: { data: [] } },
   ],
-  steps: [
-    { checkpoint: "sent", until: "Fix the parser", deviation: ["P01-read-only-prompt", "C01-startup-prompt-cells"] },
-  ],
+  steps: [{ checkpoint: "sent", until: "Fix the parser", deviation: ["C01-startup-prompt-cells"] }],
 })

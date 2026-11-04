@@ -3,7 +3,7 @@
 // line 3, and an `index.*` file shows with its directory.
 import { defineApp, session, user } from "../../lib/app"
 
-const deviation = ["V01-plain-transcript", "P01-read-only-prompt"]
+const deviation = ["V01-plain-transcript"]
 const contents = "const a = 1\nconst b = 2\nconst c = 3\n"
 
 export default defineApp({
