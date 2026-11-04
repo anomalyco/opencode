@@ -128,10 +128,12 @@ fn app(width: u16, height: u16) -> (TestApp, Theme) {
 }
 
 /// `TextPart`: the text, trimmed, in a column indented by 3.
-fn markdown_app(name: &str) -> TestApp {
+fn markdown_app(text: &str, conceal: bool) -> TestApp {
     let (app, theme) = app(60, 24);
     let syntax = code::syntax_theme(&theme);
-    let text = markdown::view(&app, &theme, &syntax).set_markdown(corpus(name).trim());
+    let renderers = markdown::CodeBlockRenderers::default();
+    let text =
+        markdown::view(&app, &theme, &syntax, &renderers, conceal, false).set_markdown(text.trim());
     app.root().add(
         &View::new(&app)
             .padding_edge(Edge::Left, 3)
@@ -144,7 +146,7 @@ fn markdown_app(name: &str) -> TestApp {
 #[test]
 fn markdown_prose_matches_typescript() {
     assert_parity(
-        &markdown_app("prose").render(),
+        &markdown_app(&corpus("prose"), true).render(),
         "U.4a/markdown-prose",
         &[
             // The italic color, and the colors of the link's ` (url)`, on the paragraph's two rows.
@@ -158,10 +160,68 @@ fn markdown_prose_matches_typescript() {
 #[test]
 fn markdown_fences_match_typescript() {
     assert_parity(
-        &markdown_app("fences").render(),
+        &markdown_app(&corpus("fences"), true).render(),
         "U.4a/markdown-fences",
         &[(2..=3, Allow::Highlight, H06)],
     );
+}
+
+/// U.4c: `session.markdown = "raw"`, markers shown.
+#[test]
+fn raw_markdown_matches_typescript() {
+    assert_parity(
+        &markdown_app(&corpus("prose"), false).render(),
+        "U.4c/markdown-raw",
+        &[
+            // The italic color, and the colors of the link's brackets and URL.
+            (2..=3, Allow::Highlight, V03),
+            // The `###` heading's color.
+            (15..=15, Allow::Highlight, V03),
+        ],
+    );
+}
+
+/// U.4c: grid tables with one column of cell padding.
+#[test]
+fn markdown_table_matches_typescript() {
+    let corpus: serde_json::Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/U.4c/corpus.json")).unwrap();
+    assert_parity(
+        &markdown_app(corpus["table"].as_str().unwrap(), true).render(),
+        "U.4c/markdown-table",
+        &[],
+    );
+}
+
+/// U.4c: a registered code-block renderer draws its fences, and streamed text ends as one parse of the whole text.
+#[test]
+fn markdown_renders_fences_and_streams() {
+    let text = "Before.\n\n```mermaid\ngraph TD\n```\n\nAfter **all**.";
+    let (app, theme) = app(40, 8);
+    let syntax = code::syntax_theme(&theme);
+    let mut renderers = markdown::CodeBlockRenderers::default();
+    renderers.register(
+        "mermaid",
+        std::rc::Rc::new(|block: &opentui::widget::CodeBlock<'_>| {
+            Some(Text::new(block.app, format!("diagram: {}", block.code.trim())).as_any())
+        }),
+    );
+    let streamed = markdown::view(&app, &theme, &syntax, &renderers, true, true);
+    app.root().add(&streamed);
+    for chunk in text.as_bytes().chunks(7) {
+        streamed.append(std::str::from_utf8(chunk).unwrap());
+        app.render();
+    }
+    streamed.streaming(false);
+    let frame = app.render().text();
+    assert!(frame.contains("diagram: graph TD"), "{frame}");
+    assert!(!frame.contains("```"), "{frame}");
+
+    let (whole, _) = self::app(40, 8);
+    whole
+        .root()
+        .add(&markdown::view(&whole, &theme, &syntax, &renderers, true, false).set_markdown(text));
+    assert_eq!(frame, whole.render().text());
 }
 
 #[test]
