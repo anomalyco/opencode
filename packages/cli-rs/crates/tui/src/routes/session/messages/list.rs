@@ -4,8 +4,8 @@
 //!
 //! A row is one TS `SessionRow`: a message, an assistant part (text, reasoning, tool), an assistant
 //! footer, or a turn's token usage. Each row owns its widgets and updates them in place; a sync
-//! updates only the rows whose message changed. Grouping (E.8), queued inputs (E.10b), and the
-//! revert banner (E.6b) are not here yet.
+//! updates only the rows whose message changed. Groups (E.8) are rows too, folded by
+//! `grouping::project`. Queued inputs (E.10b) and the revert banner (E.6b) are not here yet.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -31,6 +31,7 @@ use opentui::widget::ScrollEdge;
 
 use super::{assistant, footer, reasoning, user};
 use crate::app::Tui;
+use crate::routes::session::grouping;
 
 /// Rows mounted when a session opens (`TRANSCRIPT_TAIL_ROWS`).
 pub const TAIL_ROWS: usize = 40;
@@ -43,6 +44,7 @@ struct Inner {
     root: View,
     scroll: ScrollBox,
     hint: Text,
+    hint_row: View,
     tui: Weak<Tui>,
     this: Weak<Inner>,
     theme: Theme,
@@ -54,9 +56,12 @@ struct Inner {
     turn_tokens: Option<TurnTokens>,
     new_designs: bool,
     hide_thinking: Cell<bool>,
+    groups: Rc<grouping::Settings>,
     session: RefCell<Option<SessionID>>,
     location: RefCell<Option<Location>>,
     specs: RefCell<Vec<Spec>>,
+    /// Each row's mount cost (`rowWeight`).
+    weights: RefCell<Vec<usize>>,
     rows: RefCell<HashMap<RowKey, Row>>,
     /// The keys of the scroll box's children, in order.
     mounted: RefCell<Vec<RowKey>>,
@@ -117,6 +122,7 @@ impl Transcript {
             root,
             scroll,
             hint,
+            hint_row: status.clone(),
             tui: tui.weak(),
             this: this.clone(),
             thinking_syntax: thinking_syntax(&syntax, theme.text.muted),
@@ -136,9 +142,11 @@ impl Transcript {
             hide_thinking: Cell::new(
                 session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
             ),
+            groups: grouping::Settings::new(&tui.settings.info()),
             session: RefCell::default(),
             location: RefCell::default(),
             specs: RefCell::default(),
+            weights: RefCell::default(),
             rows: RefCell::default(),
             mounted: RefCell::default(),
             start: RefCell::new(Start::Tail),
@@ -174,6 +182,105 @@ impl Transcript {
     pub fn reveal_older(&self, tui: &Tui) -> bool {
         self.0.reveal_older(tui)
     }
+
+    pub fn scroll(&self) -> &ScrollBox {
+        &self.0.scroll
+    }
+
+    /// The row under the transcript that holds the history hint.
+    pub fn status(&self) -> &View {
+        &self.0.hint_row
+    }
+
+    pub fn hint(&self) -> &Text {
+        &self.0.hint
+    }
+
+    pub fn session(&self) -> Option<SessionID> {
+        self.0.session.borrow().clone()
+    }
+
+    pub fn groups(&self) -> &Rc<grouping::Settings> {
+        &self.0.groups
+    }
+
+    /// Re-renders every row, after a grouping setting changed.
+    pub fn refresh(&self, tui: &Tui) {
+        self.0.render(tui, |_| true);
+    }
+
+    /// Pins or follows the window after the view moved (`updateAwayFromBottom`).
+    pub fn follow(&self, tui: &Tui, down: bool) {
+        self.0.follow(tui, down);
+    }
+
+    /// Mounts every loaded row (`ensureAllRows`).
+    pub fn mount_all(&self, tui: &Tui) {
+        if *self.0.start.borrow() == Start::Top {
+            return;
+        }
+        *self.0.start.borrow_mut() = Start::Top;
+        self.0.render(tui, |_| false);
+    }
+
+    /// Mounts the tail again and follows the bottom (`toBottom`).
+    pub fn to_tail(&self, tui: &Tui) {
+        *self.0.start.borrow_mut() = Start::Tail;
+        self.0.render(tui, |_| false);
+        self.0.scroll.sticky(true);
+        self.0.scroll.scroll_to_bottom();
+    }
+
+    /// Whether every loaded row is mounted.
+    pub fn all_mounted(&self) -> bool {
+        self.0.window_start(&self.0.specs.borrow()) == 0
+    }
+
+    /// Mounted rows with their message and content y, top to bottom (`anchors.messagePositions`
+    /// before the per-message dedupe). Footers and token usage do not anchor.
+    pub fn anchors(&self) -> Vec<(String, f64)> {
+        let mut out = Vec::new();
+        let rows = self.0.rows.borrow();
+        for key in self.0.mounted.borrow().iter() {
+            let row = &rows[key];
+            match (key, &row.body) {
+                (_, Body::Group(group)) => group.anchors(&mut out),
+                (RowKey::Message(id) | RowKey::Part(id, _), _) => {
+                    out.push((id.clone(), row.wrapper.rect().screen_y))
+                }
+                _ => {}
+            }
+        }
+        let origin = self.0.scroll.content_view().rect().screen_y;
+        out.iter_mut().for_each(|(_, y)| *y -= origin);
+        out.sort_by(|a, b| a.1.total_cmp(&b.1));
+        out
+    }
+
+    /// Loads every older page in one publication (`session.first`), then mounts the head.
+    pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
+        let Some(session) = self.session() else { return };
+        let data = tui.data.clone();
+        let weak = self.0.this.clone();
+        *self.0.start.borrow_mut() = Start::Top;
+        tui.app.spawn(
+            async move {
+                data.message_load_more(
+                    &session,
+                    LoadMore {
+                        all: true,
+                        ..LoadMore::default()
+                    },
+                )
+                .await
+            },
+            move |_, result| {
+                let Some(inner) = weak.upgrade() else { return };
+                let Some(tui) = inner.tui.upgrade() else { return };
+                done(&tui, result.map_err(|error| error.to_string()));
+            },
+        );
+    }
 }
 
 impl Inner {
@@ -197,6 +304,20 @@ impl Inner {
     }
 
     fn install(&self, tui: &Tui) {
+        // A group header click re-renders the rows; a config change of the grouping settings too.
+        let weak = self.this.clone();
+        *self.groups.refresh.borrow_mut() = Some(Rc::new(move || {
+            let Some(inner) = weak.upgrade() else { return };
+            let Some(tui) = inner.tui.upgrade() else { return };
+            inner.render(&tui, |_| true);
+        }));
+        let weak = self.this.clone();
+        tui.settings.on_change(move |tui| {
+            let Some(inner) = weak.upgrade() else { return };
+            if inner.groups.read(&tui.settings.info()) {
+                inner.render(tui, |_| true);
+            }
+        });
         // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
         self.scroll.content_view().on_resize(move |cx, rect| {
@@ -291,7 +412,11 @@ impl Inner {
                 }
                 None => messages,
             };
-            let specs = reduce(messages, self.turn_tokens.is_some());
+            let specs = grouping::project(
+                reduce(messages, self.turn_tokens.is_some()),
+                messages,
+                self.groups.verbosity.get(),
+            );
             let catalogs = self
                 .location
                 .borrow()
@@ -314,6 +439,7 @@ impl Inner {
                 renderers: &self.renderers,
                 conceal: self.conceal,
                 hide_thinking: self.hide_thinking.get(),
+                groups: &self.groups,
                 tps: self.tps,
                 verbose_tokens: self.turn_tokens == Some(TurnTokens::Verbose),
                 new_designs: self.new_designs,
@@ -331,6 +457,10 @@ impl Inner {
                 messages,
                 legacy: legacy(messages),
             };
+            *self.weights.borrow_mut() = specs
+                .iter()
+                .map(|spec| self.groups.weight(spec, cx.hide_thinking))
+                .collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
         });
@@ -368,7 +498,7 @@ impl Inner {
             let row = rows
                 .entry(key.clone())
                 .or_insert_with(|| Row::new(cx, spec));
-            if fresh || changed(spec.message()) {
+            if fresh || spec.messages().into_iter().any(&changed) {
                 row.update(cx, spec);
             }
         }
@@ -385,7 +515,11 @@ impl Inner {
     }
 
     fn window_start(&self, specs: &[Spec]) -> usize {
-        window_start(&self.start.borrow(), specs)
+        let weights = self.weights.borrow();
+        if weights.len() != specs.len() {
+            return window_start(&self.start.borrow(), specs, &vec![1; specs.len()]);
+        }
+        window_start(&self.start.borrow(), specs, &weights)
     }
 
     /// `revealOlderRows`: near the top, mount [`BACKFILL_CHUNK`] more rows, or load an older page.
@@ -398,7 +532,7 @@ impl Inner {
             let specs = self.specs.borrow();
             let start = self.window_start(&specs);
             if start > 0 {
-                let next = start.saturating_sub(BACKFILL_CHUNK);
+                let next = grouping::rows_before(&self.weights.borrow(), start, BACKFILL_CHUNK);
                 Some(if next == 0 {
                     Start::Top
                 } else {
@@ -485,8 +619,8 @@ impl Inner {
 }
 
 /// The first mounted row: the tail, or earlier while the reader is away from the bottom.
-fn window_start(start: &Start, specs: &[Spec]) -> usize {
-    let tail = specs.len().saturating_sub(TAIL_ROWS);
+fn window_start(start: &Start, specs: &[Spec], weights: &[usize]) -> usize {
+    let tail = grouping::rows_before(weights, specs.len(), TAIL_ROWS);
     match start {
         Start::Tail => tail,
         Start::Top => 0,
@@ -509,6 +643,7 @@ pub struct Context<'a> {
     pub conceal: bool,
     /// `session.thinking` is `hide`.
     pub hide_thinking: bool,
+    pub groups: &'a Rc<grouping::Settings>,
     /// `session.tps`.
     pub tps: bool,
     /// `debug.turn_tokens` is `verbose`.
@@ -626,6 +761,7 @@ pub enum Spec {
         messages: Vec<String>,
         previous: Option<footer::CacheUsage>,
     },
+    Group(grouping::Group),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -634,6 +770,7 @@ pub enum RowKey {
     Part(String, Part),
     Footer(String),
     TurnUsage(String),
+    Group(String),
 }
 
 impl Spec {
@@ -645,14 +782,21 @@ impl Spec {
             Self::TurnUsage { messages, .. } => {
                 RowKey::TurnUsage(messages.first().cloned().unwrap_or_default())
             }
+            Self::Group(group) => RowKey::Group(group.id(0).unwrap_or_default()),
         }
     }
 
-    /// The message whose change re-renders the row: a turn's usage follows its last step.
-    fn message(&self) -> &str {
+    /// The messages whose change re-renders the row: a turn's usage follows its last step, and a
+    /// group every row in it.
+    fn messages(&self) -> Vec<&str> {
         match self {
-            Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } => id,
-            Self::TurnUsage { messages, .. } => messages.last().map_or("", String::as_str),
+            Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } => vec![id],
+            Self::TurnUsage { messages, .. } => messages.last().map(String::as_str).into_iter().collect(),
+            Self::Group(group) => group
+                .entries()
+                .into_iter()
+                .flat_map(|spec| spec.messages())
+                .collect(),
         }
     }
 }
@@ -777,13 +921,15 @@ pub fn legacy(messages: &[SessionMessageInfo]) -> bool {
         .any(|message| matches!(message, SessionMessageInfo::Idle(_)))
 }
 
-/// A row's wrapper (`SessionRowView`: one blank line above) and its content.
-struct Row {
-    wrapper: View,
+/// A row's wrapper (`SessionRowView`: one blank line above) and its content. Groups mount their
+/// children as rows too, without the blank line.
+pub(crate) struct Row {
+    pub(crate) wrapper: View,
     body: Body,
 }
 
 enum Body {
+    Group(grouping::GroupView),
     User(user::User),
     Text(assistant::TextPart),
     Reasoning(reasoning::Reasoning),
@@ -794,7 +940,7 @@ enum Body {
 }
 
 impl Row {
-    fn new(cx: &Context<'_>, spec: &Spec) -> Self {
+    pub(crate) fn new(cx: &Context<'_>, spec: &Spec) -> Self {
         let wrapper = View::new(cx.app)
             .column()
             .shrink(0.0)
@@ -811,8 +957,10 @@ impl Row {
             },
             Spec::Footer(_) => Body::Footer(footer::Footer::new(cx)),
             Spec::TurnUsage { .. } => Body::Usage(footer::TurnUsage::new(cx)),
+            Spec::Group(_) => Body::Group(grouping::GroupView::new(cx, cx.groups, 0)),
         };
         let root = match &body {
+            Body::Group(view) => view.root(),
             Body::User(view) => view.root(),
             Body::Text(view) => view.root(),
             Body::Reasoning(view) => view.root(),
@@ -825,8 +973,9 @@ impl Row {
         Self { wrapper, body }
     }
 
-    fn update(&self, cx: &Context<'_>, spec: &Spec) {
+    pub(crate) fn update(&self, cx: &Context<'_>, spec: &Spec) {
         match (&self.body, spec) {
+            (Body::Group(view), Spec::Group(group)) => view.update(cx, group, group.completed),
             (Body::User(view), Spec::Message(id)) => {
                 if let Some(SessionMessageInfo::User(message)) = cx.message(id) {
                     view.update(cx, message);
@@ -968,15 +1117,20 @@ mod tests {
         let specs: Vec<Spec> = (0..100)
             .map(|index| Spec::Message(format!("msg_{index:03}")))
             .collect();
-        assert_eq!(window_start(&Start::Tail, &specs), 100 - TAIL_ROWS);
-        assert_eq!(window_start(&Start::Top, &specs), 0);
+        let weights = vec![1; 100];
+        assert_eq!(window_start(&Start::Tail, &specs, &weights), 100 - TAIL_ROWS);
+        assert_eq!(window_start(&Start::Top, &specs, &weights), 0);
         let pinned = Start::Row(RowKey::Message("msg_010".into()));
-        assert_eq!(window_start(&pinned, &specs), 10);
+        assert_eq!(window_start(&pinned, &specs, &weights), 10);
         // A pinned row inside the tail still mounts the whole tail; a vanished one falls back.
         let late = Start::Row(RowKey::Message("msg_090".into()));
-        assert_eq!(window_start(&late, &specs), 100 - TAIL_ROWS);
+        assert_eq!(window_start(&late, &specs, &weights), 100 - TAIL_ROWS);
         let gone = Start::Row(RowKey::Message("msg_x".into()));
-        assert_eq!(window_start(&gone, &specs), 100 - TAIL_ROWS);
-        assert_eq!(window_start(&Start::Tail, &specs[..5]), 0);
+        assert_eq!(window_start(&gone, &specs, &weights), 100 - TAIL_ROWS);
+        assert_eq!(window_start(&Start::Tail, &specs[..5], &weights[..5]), 0);
+        // An open group costs its children: fewer rows fill the tail.
+        let mut heavy = weights.clone();
+        heavy[95] = 10;
+        assert_eq!(window_start(&Start::Tail, &specs, &heavy), 100 - TAIL_ROWS + 9);
     }
 }

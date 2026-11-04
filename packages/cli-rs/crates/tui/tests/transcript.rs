@@ -249,7 +249,8 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
         .unwrap();
     h.app.click(8, row as u16);
     let expanded = h.wait_for("The loop stops early.");
-    assert!(expanded.contains("- Thought: "), "{expanded}");
+    // Open, the group header drops the title (`group-view.tsx:186`).
+    assert!(expanded.contains("- Thought · 1.5s"), "{expanded}");
 
     // `session.toggle.thinking` shows every block open.
     let shown = Info {
@@ -317,7 +318,11 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     ));
     let screen = h.wait_for("Build ·");
     assert!(screen.contains("Build · provider/model · 9.0s"), "{screen}");
-    assert!(screen.contains("+ Thought: 8.0s"), "{screen}");
+    // The group's duration counts finished parts only, so this part adds none.
+    assert!(
+        screen.lines().any(|line| line.trim() == "+ Thought"),
+        "{screen}"
+    );
     assert!(screen.contains("The plan has two steps."), "{screen}");
 }
 
