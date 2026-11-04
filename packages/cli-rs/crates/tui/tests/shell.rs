@@ -144,6 +144,35 @@ fn home_lists_sessions_and_enter_opens_the_transcript() {
 }
 
 #[test]
+fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, Route::Home);
+    wait_for(&app, "Fix the parser");
+
+    // The terminal reports a light background between the leader and its second key.
+    app.press("ctrl+x");
+    app.event(Event::ThemeMode(opentui::theme::ThemeMode::Light));
+    app.press("l");
+    assert!(
+        tui.dialogs.is_open(),
+        "the session list did not open:\n{}",
+        app.text()
+    );
+    wait_for(&app, "Sessions");
+    app.press("escape");
+    assert!(!tui.dialogs.is_open());
+
+    // A focused prompt stays focused across a theme change.
+    let prompt = tui.textarea.borrow().clone().unwrap();
+    app.app().focus(&prompt);
+    app.type_text("draft");
+    wait_for(&app, "draft");
+    app.event(Event::ThemeMode(opentui::theme::ThemeMode::Dark));
+    app.type_text(" kept");
+    wait_for(&app, "draft kept");
+}
+
+#[test]
 fn session_flag_opens_the_session_directly() {
     let app = TestApp::new(80, 20);
     let _tui = mount(
