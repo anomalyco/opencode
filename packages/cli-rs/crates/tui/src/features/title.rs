@@ -84,13 +84,9 @@ pub fn clear(tui: &Tui) {
     }
 }
 
+/// `terminal.title` as the last settings write left it, so `terminal.title.toggle` (E.20) takes effect.
 fn enabled(tui: &Tui) -> bool {
-    tui.config
-        .info
-        .terminal
-        .as_ref()
-        .and_then(|terminal| terminal.title)
-        .unwrap_or(true)
+    crate::features::system_commands::title_enabled(&tui.settings.info())
 }
 
 /// "OpenCode" without a title or with a fallback title; otherwise "OC | " and the title cut to 40 characters.
