@@ -165,7 +165,11 @@ fn load(tui: &Tui, empty: &Text, prompt: &Textarea) {
             match result {
                 Ok(response) if response.data.is_empty() => {
                     empty.set_text("No sessions yet");
-                    tui.app.focus(&prompt);
+                    // Only while this home is mounted: a replaced one must not take the focus.
+                    let mounted = tui.textarea.borrow().as_ref().map(Widget::id);
+                    if mounted == Some(prompt.id()) {
+                        tui.app.focus(&prompt);
+                    }
                 }
                 Ok(response) => {
                     for session in response.data {
