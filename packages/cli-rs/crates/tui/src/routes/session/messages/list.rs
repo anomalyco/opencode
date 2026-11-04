@@ -5,7 +5,8 @@
 //! A row is one TS `SessionRow`: a message, an assistant part (text, reasoning, tool), an assistant
 //! footer, or a turn's token usage. Each row owns its widgets and updates them in place; a sync
 //! updates only the rows whose message changed. Groups (E.8) are rows too, folded by
-//! `grouping::project`. Queued inputs (E.10b) and the revert banner (E.6b) are not here yet.
+//! `grouping::project`. Queued inputs (E.10b) are not here yet. The background hint and the
+//! revert banner (E.6b) follow the rows.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -15,11 +16,11 @@ use std::time::Duration;
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionID, SessionMessageAssistant,
     SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
-    SessionMessageID, SessionMessageInfo,
+    SessionInboxInfo, SessionMessageID, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
-use opencode_store::{Changes, LoadMore, MessageExt};
+use opencode_store::{Changes, LoadMore, MessageExt, State};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::{Theme, ThemeMode};
@@ -29,7 +30,9 @@ use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::ScrollEdge;
 
-use super::{assistant, footer, reasoning, user};
+use super::{
+    assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user,
+};
 use crate::app::Tui;
 use crate::routes::session::grouping;
 
@@ -46,6 +49,9 @@ struct Inner {
     scroll: ScrollBox,
     hint: Text,
     hint_row: View,
+    background: background::Hint,
+    revert: revert::Banner,
+    limits: errors::LimitWatch,
     tui: Weak<Tui>,
     this: Weak<Inner>,
     theme: Theme,
@@ -56,6 +62,7 @@ struct Inner {
     tps: bool,
     turn_tokens: Option<TurnTokens>,
     new_designs: bool,
+    image_preview: bool,
     hide_thinking: Cell<bool>,
     groups: Rc<grouping::Settings>,
     session: RefCell<Option<SessionID>>,
@@ -117,13 +124,21 @@ impl Transcript {
             .min_height(0)
             .child(&scroll)
             .child(&status);
+        let background = background::Hint::new(app, &theme);
+        let revert = revert::Banner::new(tui, &theme);
+        scroll.add(background.root());
+        scroll.add(revert.root());
         let session = tui.config.info.session.clone().unwrap_or_default();
+        let image_preview = session.image_preview.unwrap_or(false);
         let syntax = opencode_ui::code::syntax_theme(&theme);
         let inner = Rc::new_cyclic(|this| Inner {
             root,
             scroll,
             hint,
             hint_row: status.clone(),
+            background,
+            revert,
+            limits: errors::LimitWatch::default(),
             tui: tui.weak(),
             this: this.clone(),
             thinking_syntax: thinking_syntax(&syntax, theme.text.muted),
@@ -140,6 +155,7 @@ impl Transcript {
                 .and_then(|debug| debug.turn_tokens)
                 .filter(|tokens| *tokens != TurnTokens::Enabled(false)),
             new_designs: tui.config.info.experiment("new-designs"),
+            image_preview,
             hide_thinking: Cell::new(
                 session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
             ),
@@ -169,10 +185,11 @@ impl Transcript {
         let catalogs = location
             .as_ref()
             .is_some_and(|location| changes.location(location));
-        if !changes.any_message(session) && !changes.session(session) && !catalogs {
+        let pending = changes.pending(session);
+        if !changes.any_message(session) && !changes.session(session) && !catalogs && !pending {
             return;
         }
-        let force = changes.messages(session) || changes.session(session) || catalogs;
+        let force = changes.messages(session) || changes.session(session) || catalogs || pending;
         self.0.render(tui, |message| {
             force || changes.message(session, &SessionMessageID(message.to_owned()))
         });
@@ -304,6 +321,8 @@ impl Inner {
         for catalog in [Catalog::Agent, Catalog::Model] {
             drop(tui.data.catalog_sync(catalog, Some(&location)));
         }
+        // Queued compactions are pending inbox items (`createSessionRows` syncs them on connect).
+        drop(tui.data.pending_sync(&session));
         *self.location.borrow_mut() = Some(location.clone());
         Some(location)
     }
@@ -402,8 +421,15 @@ impl Inner {
         };
         let (width, _) = tui.app.size();
         let mode = tui.theme.borrow().mode();
-        tui.data.read(|state| {
+        // The keymap's conditions read the store, so shortcuts are looked up before it is locked.
+        let keys = Keys {
+            background: tui.keymap.shortcut("session.background"),
+            redo: tui.keymap.shortcut("session.redo"),
+            model_list: tui.keymap.shortcut("model.list"),
+        };
+        let stops = tui.data.read(|state| {
             let messages = state.messages(&session);
+            let all = messages;
             let info = state.session(&session);
             let revert = info
                 .and_then(|info| info.revert.as_ref())
@@ -419,17 +445,29 @@ impl Inner {
                 }
                 None => messages,
             };
-            let specs = grouping::project(
+            let mut specs = grouping::project(
                 reduce(messages, self.turn_tokens.is_some()),
                 messages,
                 self.groups.verbosity.get(),
             );
+            // Compactions waiting in the inbox go last (`createSessionRows`).
+            specs.extend(state.pending(&session).iter().filter_map(|item| match item {
+                SessionInboxInfo::Compaction(compaction) => {
+                    Some(Spec::CompactionQueued(compaction.id.0.clone()))
+                }
+                _ => None,
+            }));
             let catalogs = self
                 .location
                 .borrow()
                 .as_ref()
                 .and_then(|location| state.location(Some(location)));
             let cx = Context {
+                tui,
+                state,
+                keys: &keys,
+                directory: info.map(|info| info.location.directory.as_str()),
+                image_preview: self.image_preview,
                 agents: catalogs
                     .and_then(|data| data.agent.as_deref())
                     .unwrap_or_default()
@@ -470,7 +508,25 @@ impl Inner {
                 .collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
+            self.background.update(
+                messages,
+                keys.background.clone(),
+                errors::now(),
+            );
+            let revert = info.and_then(|info| info.revert.as_ref()).map(|revert| {
+                (
+                    revert.message_id.as_str(),
+                    revert.files.as_deref().unwrap_or_default(),
+                )
+            });
+            self.revert
+                .update(tui, &session, revert, all, keys.redo.clone());
+            self.limits
+                .check(messages, &|id| state.has_input(&session, id))
         });
+        for stop in stops {
+            stop.run(tui);
+        }
     }
 
     fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
@@ -638,8 +694,21 @@ fn window_start(start: &Start, specs: &[Spec], weights: &[usize]) -> usize {
     }
 }
 
+/// Shortcuts rows show, read before the store is locked.
+pub struct Keys {
+    pub background: Option<String>,
+    pub redo: Option<String>,
+    pub model_list: Option<String>,
+}
+
 /// What rows read while they render.
 pub struct Context<'a> {
+    /// Never call into the keymap or `tui.data.read` from a row: the store is locked while rows
+    /// render, and its mutex is not reentrant.
+    pub tui: &'a Tui,
+    /// The store, locked while rows render.
+    pub state: &'a State,
+    pub keys: &'a Keys,
     pub app: &'a App,
     pub theme: &'a Theme,
     pub syntax: &'a SyntaxTheme,
@@ -656,6 +725,10 @@ pub struct Context<'a> {
     /// `debug.turn_tokens` is `verbose`.
     pub verbose_tokens: bool,
     pub new_designs: bool,
+    /// `session.image_preview`.
+    pub image_preview: bool,
+    /// The session's directory.
+    pub directory: Option<&'a str>,
     /// `animations` (spinners move).
     pub animations: bool,
     pub mode: ThemeMode,
@@ -673,6 +746,11 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
+    /// The session view's content width (`ctx.width`): the terminal less the route's padding.
+    pub fn content_width(&self) -> usize {
+        usize::from(self.width).saturating_sub(4)
+    }
+
     pub fn message(&self, id: &str) -> Option<&SessionMessageInfo> {
         self.index.get(id).map(|&index| &self.messages[index])
     }
@@ -769,6 +847,8 @@ pub enum Spec {
         previous: Option<footer::CacheUsage>,
     },
     Group(grouping::Group),
+    /// A compaction waiting in the inbox, by inbox ID.
+    CompactionQueued(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -778,6 +858,7 @@ pub enum RowKey {
     Footer(String),
     TurnUsage(String),
     Group(String),
+    CompactionQueued(String),
 }
 
 impl Spec {
@@ -790,6 +871,7 @@ impl Spec {
                 RowKey::TurnUsage(messages.first().cloned().unwrap_or_default())
             }
             Self::Group(group) => RowKey::Group(group.id(0).unwrap_or_default()),
+            Self::CompactionQueued(id) => RowKey::CompactionQueued(id.clone()),
         }
     }
 
@@ -797,7 +879,10 @@ impl Spec {
     /// group every row in it.
     fn messages(&self) -> Vec<&str> {
         match self {
-            Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } => vec![id],
+            Self::Message(id)
+            | Self::Footer(id)
+            | Self::Part { message: id, .. }
+            | Self::CompactionQueued(id) => vec![id],
             Self::TurnUsage { messages, .. } => {
                 messages.last().map(String::as_str).into_iter().collect()
             }
@@ -836,7 +921,7 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
     // An execution failure that repeats the error of the turn's last step or compaction is
     // already on screen.
     let mut shown_error: Option<(String, String)> = None;
-    for message in messages {
+    for message in compaction::running_last(messages) {
         let assistant = match message {
             SessionMessageInfo::Assistant(assistant) => assistant,
             SessionMessageInfo::Idle(idle) => {
@@ -945,7 +1030,11 @@ enum Body {
     Tool(assistant::Tool),
     Footer(footer::Footer),
     Usage(footer::TurnUsage),
-    Notice(assistant::Notice),
+    Notice(skill::Notice),
+    Shell(shell::Shell),
+    Compaction(compaction::Compaction),
+    Queued(compaction::Queued),
+    Error(errors::ExecutionError),
 }
 
 impl Row {
@@ -957,8 +1046,14 @@ impl Row {
         let body = match spec {
             Spec::Message(id) => match cx.message(id) {
                 Some(SessionMessageInfo::User(_)) => Body::User(user::User::new(cx)),
-                _ => Body::Notice(assistant::Notice::new(cx)),
+                Some(SessionMessageInfo::Shell(_)) => Body::Shell(shell::Shell::new(cx)),
+                Some(SessionMessageInfo::Compaction(_)) => {
+                    Body::Compaction(compaction::Compaction::new(cx))
+                }
+                Some(SessionMessageInfo::Idle(_)) => Body::Error(errors::ExecutionError::new(cx)),
+                _ => Body::Notice(skill::Notice::new(cx)),
             },
+            Spec::CompactionQueued(_) => Body::Queued(compaction::Queued::new(cx)),
             Spec::Part { part, .. } => match part {
                 Part::Text(_) => Body::Text(assistant::TextPart::new(cx)),
                 Part::Reasoning(_) => Body::Reasoning(reasoning::Reasoning::new(cx)),
@@ -977,6 +1072,10 @@ impl Row {
             Body::Footer(view) => view.root(),
             Body::Usage(view) => view.root(),
             Body::Notice(view) => view.root(),
+            Body::Shell(view) => view.root(),
+            Body::Compaction(view) => view.root(),
+            Body::Queued(view) => view.root(),
+            Body::Error(view) => view.root(),
         };
         wrapper.add(root);
         Self { wrapper, body }
@@ -993,6 +1092,21 @@ impl Row {
             (Body::Notice(view), Spec::Message(id)) => {
                 if let Some(message) = cx.message(id) {
                     view.update(cx, message);
+                }
+            }
+            (Body::Shell(view), Spec::Message(id)) => {
+                if let Some(SessionMessageInfo::Shell(message)) = cx.message(id) {
+                    view.update(cx, message);
+                }
+            }
+            (Body::Compaction(view), Spec::Message(id)) => {
+                if let Some(SessionMessageInfo::Compaction(message)) = cx.message(id) {
+                    view.update(cx, message);
+                }
+            }
+            (Body::Error(view), Spec::Message(id)) => {
+                if let Some(message) = cx.message(id) {
+                    view.update(message);
                 }
             }
             (Body::Text(view), Spec::Part { message, part }) => {

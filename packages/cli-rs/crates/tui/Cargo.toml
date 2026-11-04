@@ -19,6 +19,7 @@ opencode-service.workspace = true
 opencode-plugin.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
+base64.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
