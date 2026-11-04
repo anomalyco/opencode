@@ -1186,6 +1186,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "unicode-width",
+ "uuid",
 ]
 
 [[package]]
