@@ -569,7 +569,8 @@ function createMemoryStorage() {
   }
 }
 
-// Keep previews off the user's server and persistent storage, including in the in-app lab.
+// Standalone story-server fixtures only: web persistence does not honor the storage override.
+// Callers use *.standalone.stories.tsx so the in-app lab never mounts these providers.
 export function DialogStoryRuntime(props: ParentProps<DialogStoryRuntimeOptions>) {
   const servers = () => props.servers ?? [STORY_SERVER]
 

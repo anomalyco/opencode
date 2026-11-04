@@ -58,12 +58,14 @@ const themeIcon = `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="
 
 const gridIcon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg>`
 
+// Standalone stories mount fixture runtimes that must not access the live app's storage.
 // Vite needs the patterns as literals in each call.
 const modules = import.meta.glob<StoryModule>([
   "../**/*.stories.tsx",
   "../../../ui/src/**/*.stories.tsx",
   "../../../session-ui/src/**/*.stories.tsx",
   "../../../gui-plugins/src/**/*.stories.tsx",
+  "!../**/*.standalone.stories.tsx",
 ])
 
 // Each file's text, for the order its states were written in.
@@ -73,6 +75,7 @@ const sources = import.meta.glob<string>(
     "../../../ui/src/**/*.stories.tsx",
     "../../../session-ui/src/**/*.stories.tsx",
     "../../../gui-plugins/src/**/*.stories.tsx",
+    "!../**/*.standalone.stories.tsx",
   ],
   { query: "?raw", import: "default" },
 )
