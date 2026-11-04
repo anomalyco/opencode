@@ -1,0 +1,872 @@
+{
+  "scenario": "E.15b/turn",
+  "width": 140,
+  "height": 40,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "experimental": {
+      "new-designs": true
+    },
+    "animations": false
+  },
+  "args": {
+    "sessionID": "ses_d"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_d",
+      "json": {
+        "data": {
+          "id": "ses_d",
+          "title": "Review the parser",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_d/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_2",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "The parser changes are ready."
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 2,
+              "completed": 3
+            }
+          },
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Show me the diff",
+            "time": {
+              "created": 1
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_d/inbox",
+      "json": {
+        "data": []
+      }
+    },
+    {
+      "path": "/api/session/ses_d/diff",
+      "json": {
+        "data": [
+          {
+            "file": "src/parser.ts",
+            "patch": "diff --git a/src/parser.ts b/src/parser.ts\nindex 4285115..c2cd747 100644\n--- a/src/parser.ts\n+++ b/src/parser.ts\n@@ -1 +1 @@\n-export const parse = (text: string) => text.split(' ')\n+export const parse = (text: string) => text.trim().split(' ')\n",
+            "additions": 1,
+            "deletions": 1,
+            "status": "modified"
+          },
+          {
+            "file": "src/tree.ts",
+            "patch": "diff --git a/src/tree.ts b/src/tree.ts\nnew file mode 100644\nindex 0000000..e5c05c9\n--- /dev/null\n+++ b/src/tree.ts\n@@ -0,0 +1 @@\n+export type Tree = { children: Tree[] }\n",
+            "additions": 1,
+            "deletions": 0,
+            "status": "added"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/vcs/base",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": {
+          "name": "main",
+          "ref": "main",
+          "source": "default"
+        }
+      }
+    },
+    {
+      "path": "/api/vcs/diff",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": [
+          {
+            "file": "README.md",
+            "patch": "diff --git a/README.md b/README.md\nindex 5db345c..3dc9dd5 100644\n--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n # Parser\n \n-Parses the token stream.\n+Parses the token stream into a tree.\n",
+            "additions": 1,
+            "deletions": 1,
+            "status": "modified"
+          },
+          {
+            "file": "src/lexer.ts",
+            "patch": "diff --git a/src/lexer.ts b/src/lexer.ts\nnew file mode 100644\nindex 0000000..2f4e80d\n--- /dev/null\n+++ b/src/lexer.ts\n@@ -0,0 +1 @@\n+export const lex = (text: string) => [...text]\n",
+            "additions": 1,
+            "deletions": 0,
+            "status": "added"
+          }
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "session",
+      "until": "The parser changes are ready.",
+      "fixture": "E.15b/turn/session"
+    },
+    {
+      "type": "/diff"
+    },
+    {
+      "keys": [
+        "enter"
+      ]
+    },
+    {
+      "checkpoint": "panel",
+      "until": "vs main",
+      "fixture": "E.15b/turn/panel"
+    },
+    {
+      "keys": [
+        "d"
+      ]
+    },
+    {
+      "checkpoint": "sources",
+      "until": "Latest session turn",
+      "fixture": "E.15b/turn/sources"
+    },
+    {
+      "keys": [
+        "down",
+        "down",
+        "down",
+        "enter"
+      ]
+    },
+    {
+      "checkpoint": "turn",
+      "until": "src/tree.ts",
+      "fixture": "E.15b/turn/turn"
+    },
+    {
+      "keys": [
+        "m"
+      ]
+    },
+    {
+      "checkpoint": "reviewed",
+      "until": "1/2",
+      "fixture": "E.15b/turn/reviewed"
+    },
+    {
+      "event": {
+        "id": "evt_1",
+        "created": 3001,
+        "type": "session.execution.started",
+        "durable": {
+          "aggregateID": "ses_d",
+          "seq": 1,
+          "version": 1
+        },
+        "data": {
+          "sessionID": "ses_d"
+        }
+      }
+    },
+    {
+      "checkpoint": "running",
+      "until": "1/2",
+      "fixture": "E.15b/turn/running"
+    },
+    {
+      "event": {
+        "id": "evt_2",
+        "created": 3002,
+        "type": "session.execution.succeeded",
+        "durable": {
+          "aggregateID": "ses_d",
+          "seq": 2,
+          "version": 1
+        },
+        "data": {
+          "sessionID": "ses_d"
+        }
+      }
+    },
+    {
+      "checkpoint": "refetched",
+      "until": "0/2",
+      "fixture": "E.15b/turn/refetched"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_d/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_d"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_d",
+            "title": "Review the parser",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d/diff",
+        "query": {
+          "context": [
+            "12"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "file": "src/parser.ts",
+              "patch": "diff --git a/src/parser.ts b/src/parser.ts\nindex 4285115..c2cd747 100644\n--- a/src/parser.ts\n+++ b/src/parser.ts\n@@ -1 +1 @@\n-export const parse = (text: string) => text.split(' ')\n+export const parse = (text: string) => text.trim().split(' ')\n",
+              "additions": 1,
+              "deletions": 1,
+              "status": "modified"
+            },
+            {
+              "file": "src/tree.ts",
+              "patch": "diff --git a/src/tree.ts b/src/tree.ts\nnew file mode 100644\nindex 0000000..e5c05c9\n--- /dev/null\n+++ b/src/tree.ts\n@@ -0,0 +1 @@\n+export type Tree = { children: Tree[] }\n",
+              "additions": 1,
+              "deletions": 0,
+              "status": "added"
+            }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_2",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The parser changes are ready."
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 2,
+                "completed": 3
+              }
+            },
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Show me the diff",
+              "time": {
+                "created": 1
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_d/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs/base",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "name": "main",
+            "ref": "main",
+            "source": "default"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs/diff",
+        "query": {
+          "base": [
+            "main"
+          ],
+          "context": [
+            "12"
+          ],
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ],
+          "mode": [
+            "branch"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": [
+            {
+              "file": "README.md",
+              "patch": "diff --git a/README.md b/README.md\nindex 5db345c..3dc9dd5 100644\n--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n # Parser\n \n-Parses the token stream.\n+Parses the token stream into a tree.\n",
+              "additions": 1,
+              "deletions": 1,
+              "status": "modified"
+            },
+            {
+              "file": "src/lexer.ts",
+              "patch": "diff --git a/src/lexer.ts b/src/lexer.ts\nnew file mode 100644\nindex 0000000..2f4e80d\n--- /dev/null\n+++ b/src/lexer.ts\n@@ -0,0 +1 @@\n+export const lex = (text: string) => [...text]\n",
+              "additions": 1,
+              "deletions": 0,
+              "status": "added"
+            }
+          ]
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_d"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
