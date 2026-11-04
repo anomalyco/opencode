@@ -1,0 +1,6 @@
+# The TUI preloads (packages/tui/bunfig.toml): Solid JSX for OpenTUI, plus the test preload's frame-read
+# workaround. Scripts and tests under parity/ run with parity/ as the working directory.
+preload = ["@opentui/solid/preload", "../../tui/test/preload.ts"]
+
+[test]
+preload = ["@opentui/solid/preload", "../../tui/test/preload.ts"]

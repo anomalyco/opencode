@@ -16,8 +16,11 @@
   "devDependencies": {
     "@opencode/httpapi-codegen": "workspace:*",
     "@opencode/protocol": "workspace:*",
+    "@opentui/core": "catalog:",
+    "@opentui/solid": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native": "catalog:"
+    "@typescript/native": "catalog:",
+    "solid-js": "catalog:"
   }
 }
