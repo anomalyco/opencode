@@ -5,18 +5,16 @@ import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
 
 describe("sessionExportFilename", () => {
-  test("caps long titles within the filesystem limit", () => {
-    const filename = sessionExportFilename({ id: "ses_123", title: "a".repeat(300) })
-    expect(Buffer.byteLength(filename)).toBeLessThanOrEqual(255)
-    expect(filename.endsWith(".json")).toBe(true)
-  })
-
   test.each([
     [{ id: "ses_123", title: "Clone PR in worktree from fork" }, "clone-pr-in-worktree-from-fork.json"],
     [{ id: "ses_123", slug: "my-session-slug" }, "my-session-slug.json"],
     [{ id: "ses_123" }, "ses_123.json"],
   ])("names %o as %s", (session, filename) => {
     expect(sessionExportFilename(session)).toBe(filename)
+  })
+
+  test("shortens long titles to fit the filename limit", () => {
+    expect(sessionExportFilename({ id: "ses_123", title: "a".repeat(300) })).toBe(`${"a".repeat(250)}.json`)
   })
 })
 
