@@ -1,7 +1,6 @@
 export * as LocationActivity from "./location-activity.js"
 
 import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
-import type { Document } from "@opencode/schema/config"
 import { Bus } from "./bus.js"
 import { Config } from "./config.js"
 import { Job } from "./job.js"
@@ -41,11 +40,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           const context = yield* locations.contextEffectOption(ref)
           if (Option.isNone(context)) return timeToLive
           const entries = yield* Context.get(context.value, Config.Service).entries()
-          const configured = entries.findLast(
-            (entry): entry is Document =>
-              entry.type === "document" && entry.info.experimental?.location_idle_timeout !== undefined,
-          )
-          return configured?.info.experimental?.location_idle_timeout ?? timeToLive
+          return Config.latestField(entries, "location_idle_timeout") ?? timeToLive
         }).pipe(
           Effect.scoped,
           Effect.orElseSucceed(() => timeToLive),

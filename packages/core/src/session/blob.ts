@@ -256,7 +256,7 @@ type AssistantPart = SessionMessage.Assistant["content"][number]
 export const enabled = Effect.gen(function* () {
   const config = yield* Effect.serviceOption(Config.Service)
   if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.media_blob === true
+  return Config.latestField(yield* config.value.entries(), "media_blob") === true
 })
 
 /**

@@ -27,14 +27,16 @@ const it = testEffect(
   AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
 )
 
-const setup = (experimental: ConfigExperimental.Info | undefined) =>
+const setupEntries = (entries: Entry[]) =>
   Effect.gen(function* () {
     yield* registerToolPlugin(TodoTool.Plugin, { event: { subscribe: () => Stream.never } }).pipe(
-      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
+      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed(entries) })),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
     return yield* Tool.Service
   })
+
+const setup = (experimental: ConfigExperimental.Info | undefined) => setupEntries([document(experimental)])
 
 const names = (registry: Tool.Interface) =>
   toolDefinitions(registry).pipe(Effect.map((definitions) => definitions.map((definition) => definition.name)))
@@ -44,6 +46,17 @@ describe("TodoTool", () => {
     Effect.gen(function* () {
       expect(yield* names(yield* setup(undefined))).not.toContain(TodoTool.name)
       expect(yield* names(yield* setup(new ConfigExperimental.Info({ todo: false })))).not.toContain(TodoTool.name)
+    }),
+  )
+
+  it.effect("keeps a global experimental.todo enabled when a project sets another experimental field", () =>
+    Effect.gen(function* () {
+      const registry = yield* setupEntries([
+        document(new ConfigExperimental.Info({ todo: true, subagent_depth: 5 })),
+        document(new ConfigExperimental.Info({ subagent_depth: 8 })),
+      ])
+
+      expect(yield* names(registry)).toContain(TodoTool.name)
     }),
   )
 

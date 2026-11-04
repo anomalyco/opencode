@@ -61,7 +61,7 @@ export const Plugin = {
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    const enabled = () => Config.latest(loaded.entries, "experimental")?.artifacts === true
+    const enabled = () => Config.latestField(loaded.entries, "artifacts") === true
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
 
     yield* ctx.tool
