@@ -63,14 +63,49 @@ fn routes() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([agent]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([model]))),
-        MemoryRoute::json("POST", "/api/session", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
-        MemoryRoute::json("GET", "/api/session/ses_new", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
-        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session("ses_a", DIRECTORY) })),
-        MemoryRoute::json("GET", "/api/session/ses_gone", 200, &json!({ "data": session("ses_gone", GONE) })),
-        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
-        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json(
+            "POST",
+            "/api/session",
+            200,
+            &json!({ "data": session("ses_new", DIRECTORY) }),
+        ),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/ses_new",
+            200,
+            &json!({ "data": session("ses_new", DIRECTORY) }),
+        ),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/ses_a",
+            200,
+            &json!({ "data": session("ses_a", DIRECTORY) }),
+        ),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/ses_gone",
+            200,
+            &json!({ "data": session("ses_gone", GONE) }),
+        ),
+        MemoryRoute::json(
+            "GET",
+            "/api/session",
+            200,
+            &json!({ "data": [], "cursor": {} }),
+        ),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/:id/message",
+            200,
+            &json!({ "data": [], "cursor": {} }),
+        ),
         MemoryRoute::json("GET", "/api/session/:id/inbox", 200, &json!({ "data": [] })),
-        MemoryRoute::json("GET", "/api/session/:id/permission", 200, &json!({ "data": [] })),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/:id/permission",
+            200,
+            &json!({ "data": [] }),
+        ),
     ]
 }
 
@@ -170,8 +205,15 @@ fn leaving_a_missing_location_session_gives_enter_back_to_the_prompt() {
     h.tui.navigate(Route::Home);
     h.app.advance(Duration::from_millis(1));
     let commands = h.commands();
-    for leaked in ["session.toggle.thinking", "session.verbosity.cycle", "session.first"] {
-        assert!(!commands.contains(&leaked.to_owned()), "{leaked} outlived its session");
+    for leaked in [
+        "session.toggle.thinking",
+        "session.verbosity.cycle",
+        "session.first",
+    ] {
+        assert!(
+            !commands.contains(&leaked.to_owned()),
+            "{leaked} outlived its session"
+        );
     }
     h.app.type_text("hello");
     h.app.press("return");
@@ -207,7 +249,9 @@ fn a_reconnect_reads_permissions_again() {
     h.app.advance(Duration::from_millis(50));
     // Asked while the stream was down: only the read after the reconnect can see it.
     h.server.permissions.lock().unwrap().push(permission());
-    h.server.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
+    h.server
+        .memory
+        .emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
     h.wait_for("the permission prompt", |screen| {
         screen.contains("Permission required")
     });
