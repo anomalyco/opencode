@@ -174,6 +174,25 @@ describe("goal plugin", () => {
     }),
   )
 
+  it.live("accepts a verdict whose reason escapes a character JSON does not allow escaping", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      // Reviewers quote commands in backticks and sometimes escape them, which strict JSON rejects.
+      const verdicts = reviewer('{"verdict":"done","reason":"\\`bun test\\` reports 4 pass, and C:\\\\tmp exists."}')
+      yield* serve(verdicts.respond)
+
+      yield* sessions.command({ sessionID: session.id, command: "goal", text: "Make the tests pass" })
+      yield* sessions.wait(session.id)
+
+      expect(verdicts.asked()).toBe(1)
+      expect(yield* goal(session.id)).toMatchObject({
+        status: "complete",
+        reason: "`bun test` reports 4 pass, and C:\\tmp exists.",
+      })
+    }),
+  )
+
   it.live("waits for a background subagent instead of judging", () =>
     Effect.gen(function* () {
       const session = yield* project()

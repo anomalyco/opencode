@@ -462,12 +462,20 @@ function describe(goal: State) {
   return [`${status}: ${goal.objective}`, goal.reason].filter(Boolean).join("\n")
 }
 
-// Reviewers sometimes wrap the JSON in a code fence or add a sentence around it.
+// Reviewers sometimes wrap the JSON in a code fence or add a sentence around it, and some escape characters JSON
+// does not allow escaping, such as a backtick quoting a command in the reason.
 function parseVerdict(text: string): Verdict | undefined {
   const start = text.indexOf("{")
   const end = text.lastIndexOf("}")
   if (start === -1 || end < start) return undefined
-  return Option.getOrUndefined(decodeVerdict(text.slice(start, end + 1)))
+  const json = text.slice(start, end + 1)
+  return Option.getOrUndefined(
+    Option.orElse(decodeVerdict(json), () =>
+      decodeVerdict(
+        json.replace(/\\([\s\S])/g, (escape, char: string) => ('"\\/bfnrtu'.includes(char) ? escape : char)),
+      ),
+    ),
+  )
 }
 
 // `/goal "Ship the release"` and `/goal Ship the release` set the same objective.
