@@ -497,6 +497,14 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
   })
 
+  test("requests access_type=offline on the authorization request", async () => {
+    const { server } = authorizationServer({})
+    const { url } = await Effect.runPromise(Effect.scoped(start(server, { client_id: "client" }))).finally(() =>
+      server.stop(true),
+    )
+    expect(url.searchParams.get("access_type")).toBe("offline")
+  })
+
   test("requests offline_access without forcing a consent prompt", async () => {
     const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
     const { url } = await Effect.runPromise(
