@@ -70,6 +70,10 @@ impl Transport for Fixture {
                 ] }),
             ),
             ("GET", "/api/config") => (200, json!([])),
+            ("GET", "/api/location") => (
+                200,
+                json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": directory } }),
+            ),
             ("GET", path) if path.starts_with("/api/") && !path.starts_with("/api/session") => {
                 (200, json!({ "location": location, "data": [] }))
             }
@@ -140,6 +144,15 @@ struct Setup {
 impl Setup {
     /// The TUI on `ses_b`, started from `/project`, with `state` files written first.
     fn new(state: &[(&str, &str)]) -> Self {
+        Self::at(
+            Route::Session {
+                id: SessionID("ses_b".into()),
+            },
+            state,
+        )
+    }
+
+    fn at(route: Route, state: &[(&str, &str)]) -> Self {
         let home = tempfile::tempdir().unwrap();
         let paths = paths(home.path());
         std::fs::create_dir_all(&paths.state).unwrap();
@@ -163,9 +176,7 @@ impl Setup {
                     paths,
                     storage_channel: "latest".into(),
                 }),
-                route: Route::Session {
-                    id: SessionID("ses_b".into()),
-                },
+                route,
                 continue_: false,
                 events: false,
             },
@@ -256,6 +267,32 @@ fn a_session_in_another_location_keeps_its_own_agent() {
         "the submit switched the agent: {:?}",
         setup.writes("/agent")
     );
+}
+
+/// carbon-3: home's `/cd` moves the model and agent state to the new directory, as the prompt's own
+/// catalog moves.
+#[test]
+fn cd_on_home_moves_the_agents_to_the_new_directory() {
+    let setup = Setup::at(Route::Home, &[]);
+    setup.wait("the home catalog", || {
+        setup
+            .tui
+            .local
+            .agents()
+            .iter()
+            .any(|agent| agent.id.0 == "plan")
+    });
+    setup.app.type_text("/cd /project-b");
+    setup.app.press("escape");
+    setup.app.press("return");
+    setup.wait("the new directory's agents", || {
+        setup
+            .tui
+            .local
+            .agents()
+            .iter()
+            .any(|agent| agent.id.0 == "reviewer")
+    });
 }
 
 /// carbon-3: once the session reports the agent and model a submit committed, the drafts give way, so a
