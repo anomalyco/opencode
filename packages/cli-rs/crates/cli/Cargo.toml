@@ -17,6 +17,8 @@ workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["string"] }
 clap_complete.workspace = true
+log.workspace = true
+tokio.workspace = true
 url.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
