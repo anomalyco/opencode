@@ -7,7 +7,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::LazyLock;
 
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState,
@@ -22,7 +21,9 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{edit, generic, glob, grep, read, shell, write};
 use crate::dialogs::open::truncate_file_path;
+use crate::routes::session::messages::images::{Images, tool_images};
 use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::shell::strip_ansi;
 use crate::routes::session::permission;
 
 /// `INLINE_TOOL_ICON_WIDTH`.
@@ -31,7 +32,10 @@ pub const ICON_WIDTH: u16 = 2;
 /// A tool call's row: created once per call, updated whenever its message changes.
 pub struct Tool {
     root: View,
+    body: View,
     view: RefCell<Option<(&'static str, Body)>>,
+    /// `ToolImages`: the call's image results under its row.
+    images: Images,
 }
 
 enum Body {
@@ -46,9 +50,18 @@ enum Body {
 
 impl Tool {
     pub fn new(cx: &Context<'_>) -> Self {
+        let body = View::new(cx.app).column().shrink(0.0);
+        let images = Images::new(cx, 3);
+        let root = View::new(cx.app)
+            .column()
+            .shrink(0.0)
+            .child(&body)
+            .child(images.root());
         Self {
-            root: View::new(cx.app).column().shrink(0.0),
+            root,
+            body,
             view: RefCell::default(),
+            images,
         }
     }
 
@@ -65,7 +78,7 @@ impl Tool {
         let display = display(&part.name);
         let mut view = self.view.borrow_mut();
         if view.as_ref().is_none_or(|(current, _)| *current != display) {
-            self.root.clear();
+            self.body.clear();
             let body = match display {
                 "shell" => Body::Shell(shell::Shell::new(cx)),
                 "glob" => Body::Glob(glob::Glob::new(cx)),
@@ -75,7 +88,7 @@ impl Tool {
                 "edit" => Body::Edit(edit::Edit::new(cx)),
                 _ => Body::Generic(generic::Generic::new(cx)),
             };
-            self.root.add(match &body {
+            self.body.add(match &body {
                 Body::Shell(view) => view.root(),
                 Body::Glob(view) => view.root(),
                 Body::Read(view) => view.root(),
@@ -96,6 +109,7 @@ impl Tool {
             Body::Edit(view) => view.update(cx, &props),
             Body::Generic(view) => view.update(cx, &props),
         }
+        self.images.update(cx, tool_images(part));
     }
 }
 
@@ -203,9 +217,9 @@ pub fn format_path(cx: &Context<'_>, input: Option<&str>) -> String {
     )
 }
 
-/// The width tool rows lay out in (`ctx.width`: the terminal less the transcript's padding).
+/// The width tool rows lay out in (`ctx.width`).
 pub fn content_width(cx: &Context<'_>) -> i64 {
-    i64::from(cx.width) - 4
+    cx.content_width() as i64
 }
 
 /// A number as JavaScript prints it.
@@ -228,22 +242,6 @@ pub fn finite(value: Option<&Value>) -> Option<f64> {
     value
         .and_then(opencode_ui::tool_info::finite_number)
         .filter(|number| *number != 0.0)
-}
-
-/// `strip-ansi`, with `ansi-regex`'s pattern.
-pub fn strip_ansi(text: &str) -> String {
-    static PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
-        let pattern = concat!(
-            r"[\x1B\x{9B}][\[\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*",
-            r"|[a-zA-Z\d]+(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?(?:\x07|\x1B\x5C|\x{9C}))",
-            r"|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))",
-        );
-        regex::Regex::new(pattern).expect("ansi pattern")
-    });
-    if !text.contains(['\x1b', '\u{9b}']) {
-        return text.to_owned();
-    }
-    PATTERN.replace_all(text, "").into_owned()
 }
 
 /// What an [`InlineTool`] shows.

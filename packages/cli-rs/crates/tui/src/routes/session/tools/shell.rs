@@ -1,5 +1,5 @@
 //! The shell tool (E.7a): `Shell` and `ShellDisplay` (`routes/session/index.tsx:2980-3154`), with
-//! `collapseShellOutput` (`util/collapse-tool-output.ts`).
+//! `collapseShellOutput`, which `messages::shell` ports for shell messages.
 //!
 //! A V2 shell names its shell in the metadata, and its output comes from `GET /api/shell/{id}/output`:
 //! every second while the store lists the shell as running, once more when it exits, and on expand.
@@ -13,13 +13,13 @@ use opencode_api::generated::{LocationQueryInput, ShellID, ShellOutputInput};
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
-use unicode_width::UnicodeWidthChar;
 
 use super::dispatch::{
-    Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge, strip_ansi,
+    Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge,
 };
 use crate::app::Tui;
 use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::shell::{collapse_shell_output, strip_ansi};
 
 /// `SHELL_DISPLAY_LIMIT`: the most output kept, in characters, and read per request.
 const LIMIT: usize = 1024 * 1024;
@@ -459,206 +459,5 @@ impl Inner {
             return format!("[earlier output omitted]\n{text}");
         }
         text
-    }
-}
-
-/// A collapsed command and output.
-#[derive(Debug, PartialEq)]
-pub struct Collapsed {
-    pub input: String,
-    pub output: String,
-    pub overflow: bool,
-}
-
-/// `collapseToolOutput`: the first `max_lines` lines and `max_chars` characters.
-fn collapse_tool_output(output: &str, max_lines: usize, max_chars: usize) -> (String, bool) {
-    let lines: Vec<&str> = output.split('\n').collect();
-    if lines.len() <= max_lines && output.chars().count() <= max_chars {
-        return (output.to_owned(), false);
-    }
-    let mut visible: Vec<String> = lines
-        .iter()
-        .take(max_lines)
-        .map(|line| (*line).to_owned())
-        .collect();
-    if lines.len() > max_lines
-        && let Some(last) = visible.last_mut()
-    {
-        last.push('…');
-    }
-    let preview = visible.join("\n");
-    if preview.chars().count() > max_chars {
-        let kept: String = preview.chars().take(max_chars.saturating_sub(1)).collect();
-        return (format!("{kept}…"), true);
-    }
-    (preview, true)
-}
-
-/// `collapseShellOutput`: the command in at most two lines, then the output's tail in what is left.
-pub fn collapse_shell_output(
-    input: &str,
-    output: &str,
-    max_lines: usize,
-    max_chars: usize,
-) -> Collapsed {
-    if input.is_empty() {
-        let (_, overflow) = collapse_tool_output(output, max_lines, max_chars);
-        return Collapsed {
-            input: String::new(),
-            output: if overflow {
-                collapse_tail(output, max_lines, max_chars)
-            } else {
-                output.to_owned()
-            },
-            overflow,
-        };
-    }
-    let command_lines = max_lines.min(2);
-    let line_chars = (max_chars / max_lines.max(1)).max(1);
-    let (command, command_overflow, used) =
-        collapse_shell_command(input, command_lines, line_chars);
-    if output.is_empty() {
-        return Collapsed {
-            input: command,
-            output: String::new(),
-            overflow: command_overflow,
-        };
-    }
-    let lines = max_lines.saturating_sub(used + 1).max(1);
-    let chars = (max_chars as i64 - command.chars().count() as i64 - 2).max(1) as usize;
-    let (_, overflow) = collapse_tool_output(output, lines, chars);
-    Collapsed {
-        input: command,
-        output: if overflow {
-            collapse_tail(output, lines, chars)
-        } else {
-            output.to_owned()
-        },
-        overflow: command_overflow || overflow,
-    }
-}
-
-/// `collapseShellCommand`: the command wrapped at `line_width` cells, cut after `max_lines` lines.
-/// Returns the text, whether it was cut, and the lines it takes.
-fn collapse_shell_command(
-    input: &str,
-    max_lines: usize,
-    line_width: usize,
-) -> (String, bool, usize) {
-    let mut visible: Vec<char> = Vec::new();
-    let mut lines = 1;
-    let mut width = 0;
-    let mut overflow = false;
-    for character in input.chars() {
-        if character == '\n' {
-            if lines >= max_lines {
-                overflow = true;
-                break;
-            }
-            visible.push(character);
-            lines += 1;
-            width = 0;
-            continue;
-        }
-        let next = character.width().unwrap_or(0);
-        if width + next > line_width {
-            if lines >= max_lines {
-                overflow = true;
-                break;
-            }
-            lines += 1;
-            width = 0;
-        }
-        visible.push(character);
-        width += next;
-    }
-    if !overflow {
-        return (input.to_owned(), false, lines);
-    }
-    if width >= line_width {
-        visible.pop();
-    }
-    let mut text: String = visible.into_iter().collect();
-    text.push('…');
-    (text, true, lines)
-}
-
-/// `collapseTail`: the last lines, under a count of the earlier ones.
-fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
-    let lines: Vec<&str> = output.split('\n').collect();
-    if lines.len() <= max_lines && output.chars().count() <= max_chars {
-        return output.to_owned();
-    }
-    let count = lines
-        .len()
-        .saturating_sub(max_lines.saturating_sub(1))
-        .max(1);
-    let label = format!(
-        "({count} earlier {})",
-        if count == 1 { "line" } else { "lines" }
-    );
-    if max_lines <= 1 {
-        return label;
-    }
-    let preview: Vec<char> = lines[lines.len().saturating_sub(max_lines - 1)..]
-        .join("\n")
-        .chars()
-        .collect();
-    let available = max_chars as i64 - label.chars().count() as i64 - 1;
-    if available <= 0 {
-        return label;
-    }
-    let tail: String = preview[preview.len().saturating_sub(available as usize)..]
-        .iter()
-        .collect();
-    format!("{label}\n{tail}")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn short_commands_and_output_stay_whole() {
-        assert_eq!(
-            collapse_shell_output("$ ls", "a\nb", 10, 200),
-            Collapsed {
-                input: "$ ls".into(),
-                output: "a\nb".into(),
-                overflow: false
-            }
-        );
-    }
-
-    #[test]
-    fn long_output_keeps_its_tail_under_a_count() {
-        let output: Vec<String> = (1..=20).map(|line| format!("line {line}")).collect();
-        let collapsed = collapse_shell_output("$ seq", &output.join("\n"), 10, 200);
-        // The command takes one line and a gap, which leaves 8 lines: a count and the last 7.
-        assert!(collapsed.overflow);
-        assert_eq!(
-            collapsed.output,
-            "(13 earlier lines)\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20"
-        );
-    }
-
-    #[test]
-    fn a_long_command_is_cut_after_two_lines() {
-        let command = format!("$ {}", "x".repeat(50));
-        let (text, overflow, lines) = collapse_shell_command(&command, 2, 20);
-        assert!(overflow);
-        assert_eq!(lines, 2);
-        assert_eq!(text, format!("$ {}…", "x".repeat(37)));
-        assert_eq!(
-            collapse_shell_command("a\nb\nc", 2, 20),
-            ("a\nb…".into(), true, 2)
-        );
-    }
-
-    #[test]
-    fn output_alone_collapses_to_its_tail() {
-        let collapsed = collapse_shell_output("", "1\n2\n3\n4", 2, 100);
-        assert_eq!(collapsed.output, "(3 earlier lines)\n4");
-        assert_eq!(collapse_tail("abcdefghij", 3, 5), "(1 earlier line)");
     }
 }
