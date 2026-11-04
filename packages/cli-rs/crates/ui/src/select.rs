@@ -1401,17 +1401,20 @@ pub mod fuzzy {
             keys,
             |keys, _, _| score(keys),
             threshold,
+            usize::MAX,
         )
     }
 
-    /// [`go`] whose `score` also gets the target's index and fuzzysort's own normalized score for it, the
-    /// `objResults.score` a TS `scoreFn` reads: the best key, with a bonus for matching several.
+    /// [`go`] whose `score` also gets fuzzysort's own normalized score for the target, the `objResults.score` a
+    /// TS `scoreFn` reads (the best key, with a bonus for matching several), and the target's index. At most
+    /// `limit` results are kept, as fuzzysort's `limit` keeps them, ties included.
     pub fn go_scored<T, const N: usize>(
         search: &str,
         targets: &[T],
         keys: impl Fn(&T) -> [Option<&str>; N],
         score: impl Fn(&[f64; N], f64, usize) -> f64,
         threshold: f64,
+        limit: usize,
     ) -> Vec<usize> {
         if search.is_empty() {
             return Vec::new();
@@ -1484,7 +1487,12 @@ pub mod fuzzy {
             if total < threshold {
                 continue;
             }
-            heap.add((total, index));
+            if heap.len < limit {
+                heap.add((total, index));
+            } else if total > heap.items[0].0 {
+                heap.items[0] = (total, index);
+                heap.sift();
+            }
         }
         let mut out = vec![0; heap.items.len()];
         for slot in (0..out.len()).rev() {
