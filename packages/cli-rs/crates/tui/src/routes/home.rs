@@ -115,8 +115,13 @@ impl RouteView for Home {
     fn sync(&self, tui: &Tui, changes: &Changes) {
         self.prompt.sync(tui, changes);
         self.slot.sync(tui, changes);
-        // The last form closed: the prompt takes the keys back.
-        if self.forms.sync(tui) && !tui.dialogs.is_open() {
+        // The last form closed: the prompt takes the keys back, after any open dialog.
+        if !self.forms.sync(tui, changes) {
+            return;
+        }
+        if tui.dialogs.is_open() {
+            tui.dialogs.refocus(self.prompt.textarea());
+        } else {
             self.prompt.focus(tui);
         }
     }
