@@ -97,9 +97,9 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
   const deltaBatchInterval = 100
   type ToolPhase =
-    | { readonly status: "input" }
+    | { readonly status: "streaming-input" }
     | { readonly status: "input-ended"; readonly input: InputExcerpt }
-    | { readonly status: "malformed"; readonly input: InputExcerpt }
+    | { readonly status: "malformed-input"; readonly input: InputExcerpt }
     | { readonly status: "called"; readonly progress?: Tool.Metadata }
     | { readonly status: "settled"; readonly called: boolean }
   type ToolState = {
@@ -262,7 +262,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       const tool = tools.get(id)
       if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${id}`))
       // Keep a bounded excerpt for recovery errors; the full argument text is persisted below.
-      if (tool.phase.status === "input") tool.phase = { status: "input-ended", input: inputExcerpt(value) }
+      if (tool.phase.status === "streaming-input") tool.phase = { status: "input-ended", input: inputExcerpt(value) }
       yield* bus.publish(SessionEvent.Tool.Input.Ended, {
         sessionID: input.sessionID,
         assistantMessageID,
@@ -295,7 +295,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const tool: ToolState = {
       name: event.name,
       providerExecuted: event.providerExecuted === true,
-      phase: { status: "input" },
+      phase: { status: "streaming-input" },
     }
     tools.set(event.id, tool)
     yield* toolInput.start(event.id)
@@ -317,7 +317,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-    if (tool.phase.status !== "input") return yield* Effect.die(new Error(`Duplicate tool input end: ${event.id}`))
+    if (tool.phase.status !== "streaming-input")
+      return yield* Effect.die(new Error(`Duplicate tool input end: ${event.id}`))
     yield* toolInput.end(event.id, undefined, value)
   })
 
@@ -331,9 +332,9 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       return yield* Effect.die(new Error(`Malformed tool input after call settlement: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-    if (tool.phase.status === "input") yield* endToolInput(event, event.raw)
+    if (tool.phase.status === "streaming-input") yield* endToolInput(event, event.raw)
     // The parser's final raw input may differ from streamed deltas; use it for the recovery excerpt.
-    tool.phase = { status: "malformed", input: inputExcerpt(event.raw) }
+    tool.phase = { status: "malformed-input", input: inputExcerpt(event.raw) }
   })
 
   const failToolInput = (
@@ -346,7 +347,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     yield* flushFragments()
     // The finish reason distinguishes invalid JSON from arguments cut off by the output limit.
     for (const [id, tool] of tools) {
-      if (tool.phase.status !== "malformed") continue
+      if (tool.phase.status !== "malformed-input") continue
       yield* failToolInput(id, tool.phase.input, "malformed")
     }
   })
@@ -387,7 +388,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const failIncompleteTools = Effect.fn("SessionRunner.failIncompleteTools")(function* () {
     for (const [id, tool] of tools) {
       if (tool.phase.status === "called" || tool.phase.status === "settled") continue
-      yield* failToolInput(id, tool.phase.status === "input" ? undefined : tool.phase.input, "incomplete")
+      yield* failToolInput(id, tool.phase.status === "streaming-input" ? undefined : tool.phase.input, "incomplete")
     }
   })
 
@@ -468,7 +469,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         if (!tool) return yield* Effect.die(new Error(`Tool input delta before start: ${event.id}`))
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (tool.phase.status !== "input")
+        if (tool.phase.status !== "streaming-input")
           return yield* Effect.die(new Error(`Tool input delta after end: ${event.id}`))
         yield* toolInput.append(event.id, event.text)
         return
@@ -483,10 +484,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "tool-call": {
         outputStarted = true
         const tool = tools.get(event.id) ?? (yield* startToolInput(event))
-        if (tool.phase.status === "input") yield* endToolInput(event)
+        if (tool.phase.status === "streaming-input") yield* endToolInput(event)
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (tool.phase.status === "malformed")
+        if (tool.phase.status === "malformed-input")
           return yield* Effect.die(new Error(`Tool call after malformed input: ${event.id}`))
         if (tool.phase.status !== "input-ended") return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
         tool.phase = { status: "called" }
