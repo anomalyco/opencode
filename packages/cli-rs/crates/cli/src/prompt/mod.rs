@@ -18,11 +18,9 @@
 //! [`is_interactive`] first, as `requireInteractive` does. Unlike Clack, which waits forever, a
 //! prompt whose input ends is cancelled.
 
-// What no command uses yet: `note`, the box-drawing symbols, the spinner's options and `message`, and builder
-// options (`output`, `max_items`, `placeholder`, `default_value`, `mask`, `cursor_at`, ...) that C.8 and C.9
-// may need. The builder types and `limit_options` are not re-exported until a caller names them. The wizard
-// (C.15) draws Effect CLI's prompts and uses only `with_keys`, `Keys`, `Press`, and `stdout_size`.
-#![allow(dead_code)]
+// A few options only `opencode-prompt-demo` uses (P-CLI compares them with Clack) carry their own
+// `dead_code` allowance. The wizard (C.15) draws Effect CLI's prompts and uses only `with_keys`, `Keys`,
+// `Press`, and `stdout_size`.
 
 mod autocomplete;
 mod confirm;
@@ -141,11 +139,13 @@ impl Output {
     }
 }
 
+#[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
 /// A boxed note with a title, its lines dim.
 pub fn note(message: &str, title: &str) {
     note_with(message, title, dim);
 }
 
+#[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
 /// [`note`] with each line styled by `format`.
 pub fn note_with(message: &str, title: &str, format: impl Fn(&str) -> String) {
     // Clack measures in UTF-16 units of the text without escape sequences.

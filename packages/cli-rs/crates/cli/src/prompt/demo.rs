@@ -2,7 +2,7 @@
 //! P-PTY and P-CLI can compare them with `@clack/prompts`.
 
 // The demo drives a subset of the kit; the CLI uses the rest.
-#[allow(unused_imports)]
+#[allow(unused_imports, dead_code)]
 #[path = "mod.rs"]
 mod prompt;
 

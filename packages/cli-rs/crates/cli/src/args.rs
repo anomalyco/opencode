@@ -100,7 +100,6 @@ pub struct PermissionFlags {
     pub dangerously_skip_permissions: bool,
 }
 
-#[allow(dead_code, reason = "read by the handlers of later steps")]
 impl PermissionFlags {
     /// `--yolo` and `--dangerously-skip-permissions` are hidden spellings of `--auto`.
     pub fn auto(&self) -> bool {
@@ -608,7 +607,6 @@ pub struct RunArgs {
     pub server: ServerFlags,
 }
 
-#[allow(dead_code, reason = "read by the handlers of later steps")]
 impl RunArgs {
     /// `None` without `-w`; `Some(None)` for `-w` without a name.
     pub fn worktree(&self) -> Option<Option<&str>> {

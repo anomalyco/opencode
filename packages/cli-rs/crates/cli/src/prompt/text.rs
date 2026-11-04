@@ -15,7 +15,6 @@ pub struct Text<'a> {
     default_value: Option<String>,
     initial_value: Option<String>,
     validate: Option<Validate<'a, str>>,
-    output: Output,
 }
 
 pub fn text(message: impl Into<String>) -> Text<'static> {
@@ -25,7 +24,6 @@ pub fn text(message: impl Into<String>) -> Text<'static> {
         default_value: None,
         initial_value: None,
         validate: None,
-        output: Output::Stdout,
     }
 }
 
@@ -36,6 +34,7 @@ impl<'a> Text<'a> {
         self
     }
 
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// The answer when the input is empty on submit.
     pub fn default_value(mut self, value: impl Into<String>) -> Self {
         self.default_value = Some(value.into());
@@ -60,19 +59,13 @@ impl<'a> Text<'a> {
         }
     }
 
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
-        self
-    }
-
     pub fn prompt(self) -> Result<String, Cancelled> {
         let initial = self.initial_value.clone();
-        let output = self.output;
         let mut prompt = TextPrompt {
             options: self,
             value: None,
         };
-        core::run(&mut prompt, output, initial.as_deref())?;
+        core::run(&mut prompt, Output::Stdout, initial.as_deref())?;
         Ok(prompt.value.unwrap_or_default())
     }
 }
@@ -171,26 +164,17 @@ pub fn with_cursor(base: &Base) -> String {
 /// Hidden input shown as one mask character per character.
 pub struct Password<'a> {
     message: String,
-    mask: Option<String>,
     validate: Option<Validate<'a, str>>,
-    output: Output,
 }
 
 pub fn password(message: impl Into<String>) -> Password<'static> {
     Password {
         message: message.into(),
-        mask: None,
         validate: None,
-        output: Output::Stdout,
     }
 }
 
 impl<'a> Password<'a> {
-    pub fn mask(mut self, mask: impl Into<String>) -> Self {
-        self.mask = Some(mask.into());
-        self
-    }
-
     pub fn validate<'b>(self, validate: impl Fn(&str) -> Option<String> + 'b) -> Password<'b>
     where
         'a: 'b,
@@ -201,18 +185,12 @@ impl<'a> Password<'a> {
         }
     }
 
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
-        self
-    }
-
     pub fn prompt(self) -> Result<String, Cancelled> {
-        let output = self.output;
         let mut prompt = PasswordPrompt {
             options: self,
             value: String::new(),
         };
-        core::run(&mut prompt, output, None)?;
+        core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
 }
@@ -225,7 +203,7 @@ struct PasswordPrompt<'a> {
 impl PasswordPrompt<'_> {
     /// `userInput.replaceAll(/./g, mask)`: line terminators stay as they are.
     fn masked(&self, base: &Base) -> String {
-        let mask = self.options.mask.as_deref().unwrap_or(S_PASSWORD_MASK());
+        let mask = S_PASSWORD_MASK();
         base.user_input
             .chars()
             .map(|char| {
@@ -246,7 +224,6 @@ impl PasswordPrompt<'_> {
         if base.cursor >= base.user_input.chars().count() {
             return format!("{masked}{}", inverse(&hidden("_")));
         }
-        // Clack slices the masked text at the input's cursor, also for a mask longer than one character.
         let chars: Vec<char> = masked.chars().collect();
         let cursor = base.cursor;
         let before: String = chars[..cursor].iter().collect();
