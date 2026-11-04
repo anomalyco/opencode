@@ -175,31 +175,80 @@ impl Theme {
     /// reference into the theme: a token field (on any surface) or a step of [`Theme::hues`] or
     /// [`Theme::categorical`]. A copy, a literal token, or a foreign color has no source.
     pub fn source(&self, color: &Color) -> Option<HueSource<'_>> {
-        self.position(color).map(|(hue, position)| HueSource {
+        self.identity(color).flatten().map(|(hue, position)| HueSource {
             hue: &self.views.hue[hue].0,
             step: STEPS[position],
         })
     }
 
-    /// `color` moved `amount` steps toward 900 on its hue, clamped. Without a [`Theme::source`] it is unchanged.
+    /// `color` moved `amount` steps toward 900 on its hue, clamped. See [`Theme::decrease`].
     pub fn increase(&self, color: &Color, amount: i32) -> Color {
         self.shift(color, amount)
     }
 
-    /// `color` moved `amount` steps toward 100 on its hue, clamped. Without a [`Theme::source`] it is unchanged.
+    /// `color` moved `amount` steps toward 100 on its hue, clamped. A reference into the theme shifts by its
+    /// [`Theme::source`]. A copy shifts by value: by the tokens of that value on this surface, else on the
+    /// others, else by the hue steps of that value, when they all move it alike. Otherwise it is unchanged.
     pub fn decrease(&self, color: &Color, amount: i32) -> Color {
         self.shift(color, -amount)
     }
 
     fn shift(&self, color: &Color, amount: i32) -> Color {
-        let Some((hue, position)) = self.position(color) else {
+        let shifted = |tone: Option<(usize, usize)>| {
+            tone.map_or(*color, |(hue, position)| {
+                let position = (position as i32 + amount).clamp(0, STEPS.len() as i32 - 1) as usize;
+                self.views.hue[hue].1.0[position]
+            })
+        };
+        if let Some(tone) = self.identity(color) {
+            return shifted(tone);
+        }
+        // `Color` is `Copy`, so callers copy tokens without noticing; TypeScript keeps the token object.
+        let tiers = self.tones(color);
+        let Some(tier) = tiers.iter().find(|tier| !tier.is_empty()) else {
             return *color;
         };
-        let position = (position as i32 + amount).clamp(0, STEPS.len() as i32 - 1) as usize;
-        self.views.hue[hue].1.0[position]
+        let first = shifted(tier[0]);
+        if tier.iter().all(|tone| shifted(*tone) == first) {
+            return first;
+        }
+        *color
     }
 
-    fn position(&self, color: &Color) -> Option<(usize, usize)> {
+    /// The tones of the tokens with this value on this surface and on the others, then the hue steps with it.
+    fn tones(&self, color: &Color) -> [Vec<Option<(usize, usize)>>; 3] {
+        let mut tiers: [Vec<_>; 3] = Default::default();
+        for (surface, tokens) in self.views.surfaces.iter().enumerate() {
+            let tier = &mut tiers[usize::from(surface != self.surface)];
+            let mut count = 0;
+            tokens.visit_ref(&mut |_, token| {
+                if token == color {
+                    tier.push(self.views.tones[surface][count].1);
+                }
+                count += 1;
+            });
+        }
+        let named = self.views.hue.iter().map(|(_, scale)| scale).enumerate();
+        let categorical = self
+            .views
+            .categorical
+            .iter()
+            .zip(&self.views.categorical_hues)
+            .map(|(scale, hue)| (*hue, scale));
+        tiers[2] = named
+            .chain(categorical)
+            .flat_map(|(hue, scale)| {
+                (0..STEPS.len())
+                    .filter(|step| scale.0[*step] == *color)
+                    .map(move |step| Some((hue, step)))
+            })
+            .collect();
+        tiers
+    }
+
+    /// The tone of the token or step `color` points at: `Some(None)` for a token not read from a hue, `None` for a
+    /// color outside the theme.
+    fn identity(&self, color: &Color) -> Option<Option<(usize, usize)>> {
         for (surface, tokens) in self.views.surfaces.iter().enumerate() {
             let mut index = None;
             let mut count = 0;
@@ -210,7 +259,7 @@ impl Theme {
                 count += 1;
             });
             if let Some(index) = index {
-                return self.views.tones[surface][index].1;
+                return Some(self.views.tones[surface][index].1);
             }
         }
         let step = |scale: &Scale| scale.0.iter().position(|step| std::ptr::eq(step, color));
@@ -230,6 +279,7 @@ impl Theme {
                 .into_iter()
                 .find_map(|(scale, hue)| Some((*hue, step(scale)?)))
         })
+        .map(Some)
     }
 }
 
