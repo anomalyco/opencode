@@ -1746,8 +1746,9 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   await openFileLauncher(panel)
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  // The empty panel's own New tab stays beside the one the file browser replaced, so the added one is the last.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(tab("Review")).toHaveAttribute("aria-selected", "true")
   await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
@@ -1762,7 +1763,7 @@ test("Review from a new tab keeps the file browser and preview open", async ({ p
 
   // Choosing Review also leaves a single-click file preview open beside it.
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(tab("New tab")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("New tab").last()).toHaveAttribute("aria-selected", "true")
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await expect(tab("README.md")).toHaveCount(1)

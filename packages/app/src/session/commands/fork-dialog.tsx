@@ -5,6 +5,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogTitle, DialogTitleGroup } from "@opencode/ui/dialog"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSessionFork } from "@/session/fork"
@@ -125,7 +126,7 @@ export function ForkDialog(props: { messages: ForkableMessage[]; onSelect: (mess
         <div class="fork-dialog-section">
           <DialogTitleGroup description={language.t("dialog.fork.description")} />
         </div>
-        <div class="search-list-scroll" data-scrollable ref={(el) => (resultsRef = el)}>
+        <MenuScroll class="min-h-0 flex-1" viewportClass="search-list-scroll" viewportRef={(el) => (resultsRef = el)}>
           <Show
             when={list.flat().length > 0}
             fallback={
@@ -163,7 +164,7 @@ export function ForkDialog(props: { messages: ForkableMessage[]; onSelect: (mess
               </For>
             </div>
           </Show>
-        </div>
+        </MenuScroll>
       </DialogBody>
     </Dialog>
   )

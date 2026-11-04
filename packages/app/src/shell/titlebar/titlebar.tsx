@@ -18,6 +18,7 @@ import { applyPath, backPath, forwardPath, type HistoryLocation } from "./histor
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
+import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -66,6 +67,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+
   const openSettings = useSettingsDialog()
   const dialog = useDialog()
   const navigate = useNavigate()
@@ -199,7 +201,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
         height:
           platform.platform === "web"
             ? bottom()
-              ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
+              ? "calc(28px + max(8px, var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))))"
               : mobileTop()
                 ? `calc(28px + ${mobileTopClearance} + env(safe-area-inset-top, 0px))`
                 : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
@@ -209,7 +211,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
           : mobileTop()
             ? `calc(${mobileTopClearance} + env(safe-area-inset-top, 0px))`
             : "env(safe-area-inset-top, 0px)",
-        "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
+        // A docked composer touch bar below takes over the safe area.
+        "padding-bottom": bottom()
+          ? "var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))"
+          : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -228,6 +233,17 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const tabs = useTabs()
             const tabsStore = tabs.store
+
+            createEffect(() => {
+              if (
+                settings.appearance.tabLayout() === "vertical" &&
+                settings.general.sidebarOrganize() === "projects" &&
+                !mobile()
+              )
+                return
+
+              if (tabs.preview()) tabs.keepPreview()
+            })
             const tabsStoreActions = tabs
 
             const preparing = createMemo(() => {
@@ -243,9 +259,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 if (route.type !== "session") return undefined
 
                 if (preparing()) return undefined
-                const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
+                const ctx = global.serverCtx(route.server)
 
-                return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
+                return ctx ? { route, ctx } : undefined
               },
               async ({ route, ctx }) => {
                 const info = await ctx.sdk.api.session
@@ -277,8 +293,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               if (route.type !== "session") return
 
               if (preparing()) return
-              const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
-              const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
+              const cached = global.serverCtx(route.server)?.data.session.get(route.sessionId)
 
               if (cached) return cached
               const resolved = resolvedSession()
@@ -294,12 +309,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               }
 
               if (route.type === "session") {
-                const main = tabsStore.find(
-                  (item) =>
-                    item.type === "session" &&
-                    item.server === route.server &&
-                    (item.sessionId === route.sessionId || item.routeSessionId === route.sessionId),
-                )
+                const main = tabs.sessionTab(route.server, route.sessionId)
 
                 if (main) return main
                 const s = session()
@@ -308,9 +318,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   const resolved = resolvedSession()
                   const parentID = resolved?.info.id === s.id ? resolved.rootID : s.parentID
 
-                  const parent = tabsStore.find(
-                    (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
-                  )
+                  const parent = tabs.sessionTab(route.server, parentID)
 
                   if (parent) return parent
                 }
@@ -336,7 +344,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   tabs.rememberSessionRoute(tab, route.sessionId, current?.parentID)
                 }
 
-                tabs.remember(tab)
+                if (tab !== tabs.preview()) tabs.remember(tab)
 
                 return
               }
@@ -423,7 +431,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
 
-                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+                  const projects = conn ? global.serverCtx(ServerConnection.key(conn))?.projects : undefined
 
                   const project =
                     projects?.list().find((item) => item.worktree === selection.directory) ??
@@ -442,6 +450,27 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
+            const verticalTabStrip = (highlightActive?: () => boolean, onNavigate?: () => void) => (
+              <TitlebarTabStrip
+                orientation="vertical"
+                highlightActive={highlightActive?.()}
+                tabs={tabsStore}
+                currentTab={currentTab()}
+                onNavigate={(tab, el) => {
+                  onNavigate?.()
+                  tabs.select(tab)
+                  el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                }}
+                onClose={(tab) => {
+                  const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+
+                  if (index !== -1) tabsStoreActions.closeTab(index)
+                }}
+                onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
+                onReorder={(keys) => tabsStoreActions.reorder(keys)}
+              />
+            )
 
             const homeButton = (vertical = false) => (
               <Show
@@ -574,6 +603,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   keybind: "mod+w",
                   hidden: true,
                   onSelect: () => {
+                    if (current === tabs.preview()) {
+                      tabs.closePreview()
+
+                      return
+                    }
+
                     tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
                   },
                 },
@@ -616,9 +651,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               const value = session()
 
               if (!tab || !value) return
-              const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
 
-              return conn ? global.ensureServerCtx(conn).projects.forSession(value) : undefined
+              return global.serverCtx(tab.server)?.projects.forSession(value)
             })
 
             const currentTitle = () => {
@@ -647,7 +681,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows() && !mobileTop(),
-                  "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
+                  "pb-[max(0px,calc(8px-var(--shell-safe-area-bottom,var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))))]":
+                    bottom(),
                   "pl-2.5": macTrafficLights(),
                   // The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows.
                   "ps-[calc(var(--sidebar-inset-start)-2px)]": windows() && !!props.verticalTabs,
@@ -739,6 +774,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                                 if (index !== -1) tabsStoreActions.closeTab(index)
                               }}
+                              onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                               onReorder={(keys) => tabsStoreActions.reorder(keys)}
                             />
                           </div>
@@ -814,6 +850,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                             if (index !== -1) tabsStoreActions.closeTab(index)
                           }}
+                          onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
                         />
                         <RecentlyClosedTabsMenu
@@ -883,21 +920,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <Show
                                 when={settings.appearance.tabLayout() === "inbox"}
                                 fallback={
-                                  <TitlebarTabStrip
-                                    orientation="vertical"
-                                    tabs={tabsStore}
-                                    currentTab={currentTab()}
-                                    onNavigate={(tab, el) => {
-                                      tabs.select(tab)
-                                      el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                                    }}
-                                    onClose={(tab) => {
-                                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-
-                                      if (index !== -1) tabsStoreActions.closeTab(index)
-                                    }}
-                                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                                  />
+                                  <Show
+                                    when={settings.general.sidebarOrganize() === "projects"}
+                                    fallback={verticalTabStrip()}
+                                  >
+                                    <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
+                                  </Show>
                                 }
                               >
                                 <SidebarInbox />

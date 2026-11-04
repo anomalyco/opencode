@@ -4,6 +4,7 @@ import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useMutation } from "@tanstack/solid-query"
@@ -46,6 +47,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
 
   const visibleWorktrees = () => {
     const query = state.search.trim().toLowerCase()
+
     const matches = query
       ? otherWorktrees().filter((item) => getFilename(item.directory).toLowerCase().includes(query))
       : otherWorktrees()
@@ -157,8 +159,11 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                     "keydown",
                     (event) => {
                       if (!searchInput || event.target === searchInput) return
+
                       if (event.ctrlKey || event.metaKey || event.altKey) return
+
                       if (event.key.length !== 1 && event.key !== "Backspace") return
+
                       if (event.key === " " && !state.search) return
                       event.stopPropagation()
                       searchInput.focus({ preventScroll: true })
@@ -166,64 +171,66 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                     { capture: true },
                   )
                 }
-                class="max-h-[66.667dvh] w-[200px] overflow-y-auto"
+                class="max-h-[66.667dvh] w-[200px] !p-0"
               >
-                <Menu.Item onSelect={() => move.mutate({ source: "worktree" })} disabled={move.isPending}>
-                  <Icon name="plus" />
-                  <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
-                </Menu.Item>
-                <Show when={worktrees.loading || otherWorktrees().length > 0}>
-                  <Menu.Separator class="h-[0.5px]" />
-                </Show>
-                <Show when={worktrees.loading && otherWorktrees().length === 0}>
-                  <Menu.Item disabled>{language.t("common.loading")}</Menu.Item>
-                </Show>
-                <Show when={searchable()}>
-                  <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
-                    <Icon name="magnifying-glass" size="small" class="shrink-0" />
-                    <input
-                      // Worktrees load after the menu opens, so focus the field once it mounts.
-                      ref={(element) => {
-                        searchInput = element
-                        requestAnimationFrame(() =>
-                          requestAnimationFrame(() => element.focus({ preventScroll: true })),
-                        )
-                      }}
-                      value={state.search}
-                      placeholder={language.t("session.new.workspace.search.placeholder")}
-                      aria-label={language.t("session.new.workspace.search.placeholder")}
-                      class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                      onInput={(event) => setState("search", event.currentTarget.value)}
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Escape" ||
-                          event.key === "ArrowDown" ||
-                          event.key === "ArrowUp" ||
-                          event.key === "Enter"
-                        )
-                          return
-                        event.stopPropagation()
-                      }}
-                    />
-                  </div>
-                </Show>
-                <Show when={state.search.trim() && visibleWorktrees().length === 0}>
-                  <div class="px-3 py-4 text-center text-[13px] font-[440] leading-5 text-v2-text-text-muted">
-                    {language.t("session.new.workspace.search.empty")}
-                  </div>
-                </Show>
-                <For each={visibleWorktrees()}>
-                  {(worktree) => (
-                    <Menu.Item
-                      title={worktree.directory}
-                      onSelect={() => move.mutate({ source: "worktree", directory: worktree.directory })}
-                      disabled={move.isPending}
-                    >
-                      <Icon name="outline-worktree" />
-                      <span class="min-w-0 flex-1 truncate">{getFilename(worktree.directory)}</span>
-                    </Menu.Item>
-                  )}
-                </For>
+                <MenuScroll viewportClass="p-0.5">
+                  <Menu.Item onSelect={() => move.mutate({ source: "worktree" })} disabled={move.isPending}>
+                    <Icon name="plus" />
+                    <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
+                  </Menu.Item>
+                  <Show when={worktrees.loading || otherWorktrees().length > 0}>
+                    <Menu.Separator class="h-[0.5px]" />
+                  </Show>
+                  <Show when={worktrees.loading && otherWorktrees().length === 0}>
+                    <Menu.Item disabled>{language.t("common.loading")}</Menu.Item>
+                  </Show>
+                  <Show when={searchable()}>
+                    <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
+                      <Icon name="magnifying-glass" size="small" class="shrink-0" />
+                      <input
+                        // Worktrees load after the menu opens, so focus the field once it mounts.
+                        ref={(element) => {
+                          searchInput = element
+                          requestAnimationFrame(() =>
+                            requestAnimationFrame(() => element.focus({ preventScroll: true })),
+                          )
+                        }}
+                        value={state.search}
+                        placeholder={language.t("session.new.workspace.search.placeholder")}
+                        aria-label={language.t("session.new.workspace.search.placeholder")}
+                        class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                        onInput={(event) => setState("search", event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key === "Escape" ||
+                            event.key === "ArrowDown" ||
+                            event.key === "ArrowUp" ||
+                            event.key === "Enter"
+                          )
+                            return
+                          event.stopPropagation()
+                        }}
+                      />
+                    </div>
+                  </Show>
+                  <Show when={state.search.trim() && visibleWorktrees().length === 0}>
+                    <div class="px-3 py-4 text-center text-[13px] font-[440] leading-5 text-v2-text-text-muted">
+                      {language.t("session.new.workspace.search.empty")}
+                    </div>
+                  </Show>
+                  <For each={visibleWorktrees()}>
+                    {(worktree) => (
+                      <Menu.Item
+                        title={worktree.directory}
+                        onSelect={() => move.mutate({ source: "worktree", directory: worktree.directory })}
+                        disabled={move.isPending}
+                      >
+                        <Icon name="outline-worktree" />
+                        <span class="min-w-0 flex-1 truncate">{getFilename(worktree.directory)}</span>
+                      </Menu.Item>
+                    )}
+                  </For>
+                </MenuScroll>
               </Menu.Content>
             </Menu.Portal>
           </Menu>

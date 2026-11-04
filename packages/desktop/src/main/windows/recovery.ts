@@ -13,7 +13,15 @@ export const windowRecovery = Effect.gen(function* () {
   const logging = yield* DesktopLogging.Service
   const createUnresponsiveSampler = yield* unresponsiveSampler
 
-  function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void) {
+  function wireWindowRecovery(
+    win: BrowserWindow,
+    name: string,
+    options: {
+      readonly relaunch: () => void
+      /** Shows a window that is still hidden; the dialog is modal to it. */
+      readonly reveal: () => void
+    },
+  ) {
     let showing = false
     const sampler = createUnresponsiveSampler(win, name)
 
@@ -33,7 +41,7 @@ export const windowRecovery = Effect.gen(function* () {
 
       if (action === "relaunch") {
         sampler.stopAndFlush()
-        relaunch()
+        options.relaunch()
 
         return false
       }
@@ -51,6 +59,8 @@ export const windowRecovery = Effect.gen(function* () {
       showing = true
 
       try {
+        options.reveal()
+
         while (!win.isDestroyed()) {
           const actions: { id: RecoveryAction; label: string }[] = wait
             ? [

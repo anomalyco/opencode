@@ -21,7 +21,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { LifetimeContext, liveAccessor, PluginContext, type Entry } from "@opencode/plugin/gui/host"
+import { LifetimeContext, liveAccessor, PluginContext, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import type { BuiltinCatalog, BuiltinContext } from "@opencode/plugin/gui/builtin"
 import { Predicate } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -51,7 +51,15 @@ import {
 } from "@opencode/plugin/gui"
 import { OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
+import {
+  createPluginDialogState,
+  transitionPluginDialog,
+  type PluginDialogEffect,
+  type PluginDialogEvent,
+} from "./dialog-machine"
 import { PluginAlertDialog, PluginConfirmDialog, PluginPromptDialog, PluginSelectDialog } from "./dialogs"
+import { selectDisabled, selectHostReady, selectInstalled, selectMainFailed, selectServersReady } from "./machine"
+import { createStartupGate } from "./startup"
 import { createSessionStore, whenLoaded } from "./stores"
 
 type Contribution = { key: string; registry: string; plugin: string; value: Accessor<unknown> }
@@ -134,7 +142,14 @@ export function usePluginHost() {
 
 type HostInput = {
   definitions: Accessor<readonly Entry[]>
-  disabled: Accessor<ReadonlySet<string> | undefined>
+  /** The plugins that stay off. Omitted with a bridge, whose plugin manager holds the user's settings. */
+  disabled?: Accessor<ReadonlySet<string>>
+  /** Main's side of a desktop window: its plugin manager lists the plugins and their enable settings. */
+  bridge?: Bridge
+  /** The ids of the plugins that ship with the app, which always run. */
+  builtins?: ReadonlySet<string>
+  /** Startup also waits for the servers plugins contribute (`PluginServersProvider`). */
+  servers?: boolean
   apis: HostApiFactories
   /**
    * Runs `run` once the app interface has mounted, behind the HostApis writes made before it, or now when it has.
@@ -147,8 +162,8 @@ type HostInput = {
   plugin?: (id: string) => PluginInput | undefined
   /** How many times an Ipc became available. Reactive. */
   generation?: (token: Ipc) => number
-  /** A plugin's main entry failed. Reactive. */
-  failed?: (id: string) => boolean
+  /** Main did not answer the window's subscribe to an Ipc. Reactive. */
+  ipcFailed?: (token: Ipc) => boolean
 }
 
 export function PluginHostProvider(props: ParentProps<HostInput>) {
@@ -180,6 +195,26 @@ function createHost(input: HostInput) {
 
   const all = input.definitions
 
+  // The definitions the host starts with (the built-ins) hold the gate; plugins that join later never do.
+  const startup = createStartupGate({
+    bridge: input.bridge,
+    plugins: untrack(all).flatMap((definition) => (definition.windowEntry ? [definition.id] : [])),
+    servers: input.servers ?? false,
+  })
+
+  // Undefined while startup waits for the enable settings: nothing activates before then.
+  const disabled = createMemo(
+    () =>
+      input.disabled?.() ??
+      selectDisabled(
+        startup.state(),
+        all().map((definition) => definition.id),
+        input.builtins ?? new Set<string>(),
+      ),
+    undefined,
+    { equals: (a, b) => a === b || (!!a && !!b && a.size === b.size && [...a].every((id) => b.has(id))) },
+  )
+
   const providerOf = (id: string) => {
     const current = providers.get(id)
 
@@ -201,9 +236,9 @@ function createHost(input: HostInput) {
 
     if (!plugin) return inactive.disabled
 
-    if (main ? input.disabled()?.has(plugin) : state.status[plugin] === "disabled") return inactive.disabled
+    if (main ? disabled()?.has(plugin) : state.status[plugin] === "disabled") return inactive.disabled
 
-    if (main ? input.failed?.(plugin) : state.status[plugin] === "failed") return inactive.failed
+    if (main ? selectMainFailed(startup.state(), plugin) : state.status[plugin] === "failed") return inactive.failed
 
     // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
     if (!main && state.status[plugin] === "active") return inactive.disabled
@@ -304,62 +339,82 @@ function createHost(input: HostInput) {
         ended?: () => void,
       ): DialogHandle => {
         const id = `plugin:${plugin}:${sequence.value++}`
-        const waiting = { cancel: () => {} }
         // This open alone: once it aborts, a deferred open neither mounts nor replaces another dialog.
         const opening = new AbortController()
+        const edge = { state: createPluginDialogState(), cancel: () => {}, release: () => {} }
+        // Events an effect raises synchronously (the interface already mounted, the stack closing) wait behind it.
+        const queue: PluginDialogEvent[] = []
 
-        // Each handle names its own dialog, so it never closes one another plugin or instance opened. Closing a
-        // dialog that still waits for the app interface, or for its deferred open, cancels it.
-        const close = () => {
-          abort(opening)
-          waiting.cancel()
-          dialog.close(id)
-          ended?.()
+        const dispatch = (event: PluginDialogEvent) => {
+          queue.push(event)
+
+          if (queue.length === 1) drain()
         }
 
-        const handle = { close }
+        const drain = () => {
+          const event = queue[0]
 
-        if (context.signal.aborted) {
-          ended?.()
+          if (!event) return
 
-          return handle
+          const next = transitionPluginDialog(edge.state, event)
+
+          edge.state = next.state
+          next.effects.forEach(run)
+          queue.shift()
+          drain()
         }
 
-        // Closes this dialog, not whichever is on top, when the plugin or the scope that opened it goes away.
-        const release = register(close)
+        // Each handle names its own dialog, so it never closes one another plugin or instance opened.
+        const handle = { close: () => dispatch({ type: "close" }) }
 
-        // A dialog opened before the app interface mounts, as during setup, shows after its first render: never behind
-        // the startup screen, and never before a route that focuses itself as it mounts.
-        waiting.cancel = input.whenMounted(
-          () =>
-            void dialog[options?.replace ? "show" : "push"](
-              () => {
-                // The dialog's root disposes when it closes or another dialog replaces it.
-                onCleanup(() => void release())
+        const run = (effect: PluginDialogEffect) => {
+          // Closes this dialog, not whichever is on top, when the plugin or the scope that opened it goes away.
+          if (effect.type === "register") return void (edge.release = register(handle.close))
 
-                return (
-                  <ErrorBoundary
-                    fallback={(error) => {
-                      onMount(() => {
-                        dialog.close(id)
-                        fail(plugin, error, "render")
-                      })
+          // A dialog opened before the app interface mounts, as during setup, shows after its first render: never
+          // behind the startup screen, and never before a route that focuses itself as it mounts.
+          if (effect.type === "wait") return void (edge.cancel = input.whenMounted(() => dispatch({ type: "mounted" })))
 
-                      return null
-                    }}
-                  >
-                    <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
-                  </ErrorBoundary>
-                )
-              },
-              // Escape, a click outside, a replacing dialog, or an open the stack dropped.
-              ended,
-              id,
-              // The stack mounts in a later transition. Its handle, its owner or the plugin ending before then keeps
-              // it closed.
-              AbortSignal.any([opening.signal, context.signal]),
-            ),
-        )
+          if (effect.type === "cancel") return edge.cancel()
+
+          if (effect.type === "release") return void edge.release()
+
+          if (effect.type === "abort") return abort(opening)
+
+          if (effect.type === "close") return dialog.close(id)
+
+          if (effect.type === "ended") return ended?.()
+
+          void dialog[options?.replace ? "show" : "push"](
+            () => {
+              // The dialog's root disposes when it closes, another dialog replaces it, or the stack goes away.
+              onCleanup(() => dispatch({ type: "dismissed" }))
+
+              return (
+                <ErrorBoundary
+                  fallback={(error) => {
+                    onMount(() => {
+                      handle.close()
+                      fail(plugin, error, "render")
+                    })
+
+                    return null
+                  }}
+                >
+                  <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
+                </ErrorBoundary>
+              )
+            },
+            // Escape, a click outside, a replacing dialog, or an open the stack dropped.
+            () => dispatch({ type: "dismissed" }),
+            id,
+            // The stack mounts in a later transition. Its handle, its owner or the plugin ending before then keeps
+            // it closed.
+            AbortSignal.any([opening.signal, context.signal]),
+          )
+        }
+
+        dispatch({ type: "open", aborted: context.signal.aborted })
 
         return handle
       }
@@ -397,7 +452,7 @@ function createHost(input: HostInput) {
 
     // A disabled plugin, e.g. one reloaded from settings, stays disabled: marking it loading would make the
     // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
-    if (!load || input.disabled()?.has(definition.id) !== false) return
+    if (!load || disabled()?.has(definition.id) !== false) return
 
     setState("status", definition.id, "loading")
 
@@ -546,7 +601,12 @@ function createHost(input: HostInput) {
 
       const client = input.ipc(token)
 
-      if (!client) return absent(token.id, true)
+      if (!client) {
+        const reason = absent(token.id, true)
+
+        // A provider that may still start, but whose subscribe failed, is not coming until main provides it again.
+        return reason === pending && input.ipcFailed?.(token) ? inactive.failed : reason
+      }
 
       const generation = input.generation?.(token) ?? 1
       const cached = clients.get(token.id)
@@ -875,25 +935,6 @@ function createHost(input: HostInput) {
   const replaced = new Map<string, Entry>()
   const latest = (definition: Entry) => replaced.get(definition.id) ?? definition
 
-  // The definitions the host starts with: the built-ins. Definitions that join later (plugins) never hold the gate.
-  const initial = new Set(untrack(all))
-
-  // The startup gate: once every entry settled it stays open, so enabling or reloading a plugin later
-  // never unmounts the app.
-  const ready = createMemo<boolean>(
-    (settled) =>
-      settled ||
-      (!!input.disabled() &&
-        [...initial].every((definition) => {
-          if (!definition.windowEntry) return true
-
-          const status = state.status[definition.id]
-
-          return status === "active" || status === "failed" || status === "disabled"
-        })),
-    false,
-  )
-
   // The definition object each id was last listed with; a new object for a listed id replaces it.
   const listed = new Map<string, Entry>()
 
@@ -910,10 +951,10 @@ function createHost(input: HostInput) {
 
   // Publish every disabled status before starting enabled entries.
   createMemo(() => {
-    const disabled = input.disabled()
+    const off = disabled()
     const definitions = all()
 
-    if (!disabled) return
+    if (!off) return
 
     untrack(() =>
       batch(() => {
@@ -930,7 +971,7 @@ function createHost(input: HostInput) {
           if (before && before !== definition) forget(definition.id)
         })
         definitions
-          .filter((definition) => disabled.has(definition.id))
+          .filter((definition) => off.has(definition.id))
           .forEach((definition) => {
             deactivate(definition.id)
             setState("status", definition.id, "disabled")
@@ -938,7 +979,7 @@ function createHost(input: HostInput) {
             setState("failures", definition.id, undefined)
           })
         definitions
-          .filter((definition) => !disabled.has(definition.id))
+          .filter((definition) => !off.has(definition.id))
           .forEach((definition) => {
             // A failed plugin waits for Reload or a new revision, as in main.
             if (instances.has(definition.id)) return
@@ -951,6 +992,20 @@ function createHost(input: HostInput) {
     )
   })
 
+  // Tells the startup gate as each plugin it waits for settles.
+  createRenderEffect(() => {
+    const gate = startup.state()
+
+    if (gate.status !== "activating") return
+
+    gate.pending.forEach((id) => {
+      const status = state.status[id]
+
+      if (status === "active" || status === "failed" || status === "disabled")
+        startup.dispatch({ type: "plugin.settled", id })
+    })
+  })
+
   onCleanup(() => {
     lifetime.disposed = true
     loads.clear()
@@ -959,7 +1014,16 @@ function createHost(input: HostInput) {
 
   return {
     state,
-    ready,
+    /** The app interface renders. Once open it stays open, so enabling or reloading a plugin never unmounts it. */
+    ready: createMemo(() => selectHostReady(startup.state())),
+    /** The contributed servers are known too, which the desktop app waits for. */
+    serversReady: createMemo(() => selectServersReady(startup.state())),
+    /** The plugins main lists; empty on the web and until main answers. */
+    installed: createMemo(() => selectInstalled(startup.state())),
+    /** A plugin's main entry cannot answer. Reactive. */
+    mainFailed: (id: string) => selectMainFailed(startup.state(), id),
+    /** Reports what the startup gate waits for. */
+    gate: startup.dispatch,
     list,
     items,
     links,

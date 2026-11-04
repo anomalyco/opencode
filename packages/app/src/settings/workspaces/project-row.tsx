@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
@@ -20,7 +20,7 @@ export function SettingsProjectRow(props: {
   onMount?: (button: HTMLButtonElement) => void
 }) {
   const language = useLanguage()
-  const global = useGlobal()
+  const context = useServer().ctx
 
   const [store, setStore] = createStore<{
     menu: boolean
@@ -61,7 +61,6 @@ export function SettingsProjectRow(props: {
     }
 
     setStore("editor", "saving", true)
-    const context = global.ensureServerCtx(props.server)
     const value = name === getFilename(props.project.worktree) ? "" : name
 
     const saved = await (props.project.id && props.project.id !== "global"

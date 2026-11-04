@@ -131,25 +131,8 @@ export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefi
   }
 }
 
-export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({
-  maxTokens: Schema.optional(Schema.Number),
-  temperature: Schema.optional(Schema.Number),
-  topP: Schema.optional(Schema.Number),
-  topK: Schema.optional(Schema.Number),
-  frequencyPenalty: Schema.optional(Schema.Number),
-  presencePenalty: Schema.optional(Schema.Number),
-  seed: Schema.optional(Schema.Number),
-  stop: Schema.optional(Schema.Array(Schema.String)),
-}) {}
-
-export namespace GenerationOptions {
-  export type Input = GenerationOptions | ConstructorParameters<typeof GenerationOptions>[0]
-
-  /** Normalize generation option input into the canonical `GenerationOptions` class. */
-  export const make = (input: Input = {}) => (input instanceof GenerationOptions ? input : new GenerationOptions(input))
-}
-
-export type GenerationOptionsFields = {
+/** Portable sampling knobs, set at the top level of text requests, model defaults and route defaults. */
+export interface GenerationOptionsFields {
   readonly maxTokens?: number
   readonly temperature?: number
   readonly topP?: number
@@ -160,44 +143,27 @@ export type GenerationOptionsFields = {
   readonly stop?: ReadonlyArray<string>
 }
 
-export type GenerationOptionsInput = GenerationOptions | GenerationOptionsFields
+/** The keys of `GenerationOptionsFields`, for splitting a flat record into portable knobs and provider options. */
+export const GENERATION_KEYS: ReadonlySet<string> = new Set([
+  "maxTokens",
+  "temperature",
+  "topP",
+  "topK",
+  "frequencyPenalty",
+  "presencePenalty",
+  "seed",
+  "stop",
+] satisfies ReadonlyArray<keyof GenerationOptionsFields>)
 
-const latestGeneration = <Key extends keyof GenerationOptionsFields>(
-  items: ReadonlyArray<GenerationOptionsInput | undefined>,
-  key: Key,
-) => items.findLast((item) => item?.[key] !== undefined)?.[key]
-
-export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptionsInput | undefined>) => {
-  const result = new GenerationOptions({
-    maxTokens: latestGeneration(items, "maxTokens"),
-    temperature: latestGeneration(items, "temperature"),
-    topP: latestGeneration(items, "topP"),
-    topK: latestGeneration(items, "topK"),
-    frequencyPenalty: latestGeneration(items, "frequencyPenalty"),
-    presencePenalty: latestGeneration(items, "presencePenalty"),
-    seed: latestGeneration(items, "seed"),
-    stop: latestGeneration(items, "stop"),
-  })
-  return Object.values(result).some((value) => value !== undefined) ? result : undefined
-}
+/** Pick the generation knobs out of each item; later items win per knob. */
+export const mergeGeneration = (...items: ReadonlyArray<GenerationOptionsFields | undefined>) =>
+  Object.fromEntries(
+    [...GENERATION_KEYS].map((key) => [key, last(items.map((item) => item?.[key as keyof GenerationOptionsFields]))]),
+  ) as GenerationOptionsFields
 
 /** Request defaults a selected model applies under each request. */
-export interface LanguageModelDefaults extends TransportOptions {
-  readonly generation?: GenerationOptions
+export interface LanguageModelDefaults extends TransportOptions, GenerationOptionsFields {
   readonly providerOptions?: ProviderOptions
-}
-
-export namespace LanguageModelDefaults {
-  export interface Input extends TransportOptions {
-    readonly generation?: GenerationOptions.Input
-    readonly providerOptions?: ProviderOptions
-  }
-
-  /** Normalize selected-model request defaults without applying precedence. */
-  export const make = (input: Input): LanguageModelDefaults => ({
-    ...input,
-    generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
-  })
 }
 
 /** Provider-defined string enum: known values for autocomplete, any string accepted. */
@@ -285,7 +251,7 @@ export class LanguageModel<
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      defaults: input.defaults === undefined ? undefined : LanguageModelDefaults.make(input.defaults),
+      defaults: input.defaults,
       compatibility:
         input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
     })
@@ -336,11 +302,10 @@ export namespace LanguageModel {
 
   export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
     ConstructorInput<Compact>,
-    "id" | "provider" | "defaults" | "compatibility"
+    "id" | "provider" | "compatibility"
   > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly defaults?: LanguageModelDefaults.Input
     readonly compatibility?: LanguageModelCompatibility.Input
   }
 }

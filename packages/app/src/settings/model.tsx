@@ -125,6 +125,7 @@ const generalSchema = Persistence.struct({
   }),
   showCustomAgents: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
+  newMessagesDivider: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   // The "New icons" design experiment, off until it ships.
@@ -133,6 +134,7 @@ const generalSchema = Persistence.struct({
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
+  sidebarOrganize: Schema.Literals(["projects", "list"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -301,11 +303,13 @@ export const defaultSettings: Settings = {
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     showTurnDiffs: false,
+    newMessagesDivider: true,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
     newIcons: false,
     foldUserMessages: false,
     newQuestionUI: false,
+    sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
@@ -401,6 +405,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowTurnDiffs(value: boolean) {
           setStore("general", "showTurnDiffs", value)
         },
+        newMessagesDivider: withFallback(
+          () => store.general?.newMessagesDivider,
+          defaultSettings.general.newMessagesDivider,
+        ),
+        setNewMessagesDivider(value: boolean) {
+          setStore("general", "newMessagesDivider", value)
+        },
         backgroundActivity: withFallback(
           () => store.general?.backgroundActivity,
           defaultSettings.general.backgroundActivity,
@@ -423,6 +434,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
           setStore("general", "newQuestionUI", value)
+        },
+        sidebarOrganize: withFallback(() => store.general?.sidebarOrganize, defaultSettings.general.sidebarOrganize),
+        setSidebarOrganize(value: "projects" | "list") {
+          setStore("general", "sidebarOrganize", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

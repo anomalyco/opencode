@@ -55,6 +55,25 @@ story("bounds the cheap suffix and reveals only ready measured rows", async ({ p
   })
 })
 
+story("reveals at the end when Markdown never reports ready", async ({ page }) => {
+  // A block that never set data-markdown-ready kept every reveal check waiting, and the timeline stayed invisible.
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 100, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await expect(content).toHaveCSS("visibility", "hidden")
+  await expect(content).toHaveCSS("visibility", "visible")
+  const reveal = await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))
+  expect(reveal.pendingMarkdown).toBeGreaterThan(0)
+  expect(reveal.rows).toContain(99)
+  const viewport = root.locator("[data-scrollable]")
+  await expect
+    .poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+})
+
 story("treats the reachable end as the end under page zoom", async ({ page }) => {
   // At 110% the browser stops scrolling more than a pixel short of scrollHeight - clientHeight. A mount that waited
   // for that distance to close stayed blank, or froze the renderer in a microtask loop, and scrolling back down to

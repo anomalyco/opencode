@@ -32,7 +32,9 @@ it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
         tools: [{ name: "lookup", description: "Look up a city", inputSchema: { type: "object", properties: {} } }],
         toolChoice: "required",
         providerOptions: { thinking: { tokenBudget: 128 } },
-        generation: { maxTokens: 2048, topP: 0.9, topK: 10 },
+        maxTokens: 2048,
+        topP: 0.9,
+        topK: 10,
       }),
     )
     expect(prepared.body).toMatchObject({
@@ -69,7 +71,7 @@ it.effect("Cohere compatibility omits unsupported OpenAI fields", () =>
         model: cohere.chat("command-a-reasoning-08-2025"),
         prompt: "Hello",
         providerOptions: { reasoningEffort: "high" },
-        generation: { maxTokens: 64 },
+        maxTokens: 64,
       }),
     )
     expect(prepared.body).toMatchObject({ reasoning_effort: "high", max_tokens: 64, stream: true })
@@ -231,7 +233,7 @@ it.effect("Cohere fits thinking budgets under the output limit", () =>
         model: cohere.model("command-a-reasoning-08-2025"),
         prompt: "Hi",
         providerOptions: { thinking: { tokenBudget: 31_999 } },
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       }),
     )
     expect(prepared.body.thinking).toEqual({ type: "enabled", token_budget: 2048 })

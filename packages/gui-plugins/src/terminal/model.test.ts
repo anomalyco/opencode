@@ -51,16 +51,26 @@ function fakeServer(options: { capabilities?: { persistentPty?: boolean } } = {}
       session: { get: (id: string) => ({ id, location: { directory: state.directory } }) },
     },
     client: {
-      server: { info: async () => ({ capabilities: state.capabilities }) },
+      server: {
+        // Answers with the support the server had when asked, however late the answer arrives.
+        info: async () => {
+          const capabilities = state.capabilities
+          await state.info
+
+          return { capabilities }
+        },
+      },
       experimental: {
         persistentPty: {
+          // Answers with the terminals the server had when asked, or with the error it has when it answers.
           list: async (input: { sessionID: string }) => {
             calls.list += 1
+            const listed = [...(terminals.get(input.sessionID) ?? [])]
             await state.list
 
             if (state.listError) throw state.listError
 
-            return [...(terminals.get(input.sessionID) ?? [])]
+            return listed
           },
           create: async (input: { sessionID: string; title: string; cwd?: string }) => {
             calls.create.push(input)
@@ -126,6 +136,7 @@ type FakeState = {
   updateError?: Error
   update?: Promise<void>
   list?: Promise<void>
+  info?: Promise<void>
 }
 
 type EventData = { sessionID: string; terminal?: PersistentPtyInfo }
@@ -199,13 +210,15 @@ describe("terminal model", () => {
     await flush()
 
     // An empty list before the first answer would let the transient strip drop restored terminal tabs.
-    expect(terminal.ready()).toBe(false)
+    expect(terminal.view()).toEqual({ type: "loading" })
     expect(terminal.all()).toEqual([])
+    expect(terminal.tabs(["pty_restored"])).toEqual(["pty_restored"])
 
     list.resolve()
     await flush()
 
-    expect(terminal.ready()).toBe(true)
+    expect(terminal.view().type).toBe("ready")
+    expect(terminal.tabs(["pty_restored"])).toEqual(["pty_1"])
     expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
   })
 
@@ -267,7 +280,7 @@ describe("terminal model", () => {
 
     expect(model.available(server.ref)).toBe(false)
     expect(server.calls.list).toBe(0)
-    expect(terminal.ready()).toBe(false)
+    expect(terminal.view()).toEqual({ type: "unsupported" })
 
     // Servers that predate the capability omit it and still offer terminals.
     server.state.capabilities = undefined
@@ -290,12 +303,91 @@ describe("terminal model", () => {
     await flush()
 
     expect(model.available(server.ref)).toBe(false)
-    expect(terminal.ready()).toBe(true)
+    expect(terminal.view()).toEqual({ type: "unsupported" })
     expect(terminal.all()).toEqual([])
 
     server.state.listError = undefined
     server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
     server.emit("server.connected")
+    await flush()
+
+    expect(model.available(server.ref)).toBe(true)
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+  })
+
+  test("shows a list that fails with an error other than 503 as failed until the user retries", async () => {
+    const server = fakeServer()
+    server.state.listError = new Error("boom")
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
+    const { model, session } = setup(server)
+
+    const terminal = model.load(session)
+    await flush()
+
+    // It used to stay loading, with the restored tabs hidden, until a terminal event or a reconnect.
+    expect(terminal.view()).toEqual({ type: "failed", error: "boom" })
+    expect(terminal.tabs(["pty_restored"])).toEqual(["pty_restored"])
+    expect(model.available(server.ref)).toBe(true)
+
+    // Reading the session again doesn't retry by itself.
+    const calls = server.calls.list
+    model.load(session)
+    await flush()
+
+    expect(server.calls.list).toBe(calls)
+
+    server.state.listError = undefined
+    await terminal.retry()
+
+    expect(terminal.view().type).toBe("ready")
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+  })
+
+  test("a late 503 from an older list leaves the newer list and the server's support alone", async () => {
+    const server = fakeServer()
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
+    const { model, session } = setup(server)
+    const terminal = model.load(session)
+    await flush()
+
+    const slow = Promise.withResolvers<void>()
+    server.state.list = slow.promise
+    server.emit("persistent-pty.added")
+    server.state.list = undefined
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1"), info("pty_2", "Terminal 2")])
+    server.emit("persistent-pty.added")
+    await flush()
+
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1", "pty_2"])
+
+    server.state.listError = new ServiceUnavailableError({
+      message: "opencode-pty is not available",
+      service: "opencode-pty",
+    })
+    slow.resolve()
+    await flush()
+
+    expect(model.available(server.ref)).toBe(true)
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1", "pty_2"])
+  })
+
+  test("a late support answer from before a reconnect leaves the newer answer alone", async () => {
+    const server = fakeServer({ capabilities: { persistentPty: false } })
+    const slow = Promise.withResolvers<void>()
+    server.state.info = slow.promise
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
+    const { model, session } = setup(server)
+    const terminal = model.load(session)
+
+    server.state.info = undefined
+    server.state.capabilities = undefined
+    server.emit("server.connected")
+    await flush()
+
+    expect(model.available(server.ref)).toBe(true)
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+
+    slow.resolve()
     await flush()
 
     expect(model.available(server.ref)).toBe(true)
