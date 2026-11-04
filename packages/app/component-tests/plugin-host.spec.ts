@@ -1,11 +1,24 @@
 import type { Component, Owner } from "solid-js"
 import type { PluginInfo } from "@opencode/client/promise"
-import type { Context, Contract, DialogHandle, Dialogs, Live, SessionRef, SessionScreen } from "@opencode/plugin/gui"
+import type {
+  CodeBlockProps,
+  Context,
+  Contract,
+  DialogHandle,
+  Dialogs,
+  Live,
+  SessionRef,
+  SessionScreen,
+} from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
+import type { mountCodeBlocks } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
+
+/** What the code block cases drive from the page. */
+type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
 
 /** What the scoped-registration case keeps from inside its plugin. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
@@ -1817,4 +1830,147 @@ story("a composer pill with a menu opens the plugin's content under the host's h
   // The content renders again on the next open.
   await pill.click()
   await expect(page.getByTestId("goal-pause")).toBeVisible()
+})
+
+story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until, CodeBlock, CodeBlockAction } = await import(fixture)
+
+    const host: CodeBlocksHost = mountCodeBlocks({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) => {
+              ctx.add(CodeBlock, {
+                languages: ["chart"],
+                render: (props: CodeBlockProps) => {
+                  const chart = document.createElement("div")
+                  chart.dataset.testid = "chart"
+                  chart.textContent = `${props.language} ${props.code} in ${props.session?.directory}`
+
+                  return chart
+                },
+              })
+              ctx.add(CodeBlock, {
+                languages: ["broken"],
+                render: () => {
+                  throw new Error("chart failed")
+                },
+              })
+              // Declines, so the block keeps its code.
+              ctx.add(CodeBlock, { languages: ["quiet"], render: () => undefined })
+              ctx.add(CodeBlockAction, {
+                id: "run",
+                languages: ["sh"],
+                icon: "terminal",
+                title: "Run in terminal",
+                run: (input: CodeBlockProps) =>
+                  void (document.body.dataset.ran = `${input.code} in ${input.session?.directory}`),
+              })
+            },
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.status("acme") === "active")
+    // The closing fence has not arrived yet.
+    host.show("```chart\nA,B", true)
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  const blocks = root.locator('[data-component="markdown-code"]')
+  await expect(blocks.locator("pre code")).toHaveText("A,B")
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+
+  // The closing fence arrives while the message still streams.
+  await host.evaluate((host) => host.show("```chart\nA,B\n```\n\nMore", true))
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) =>
+    host.show(
+      [
+        "```chart\nA,B\n```",
+        "```broken\nx\n```",
+        "```quiet\ny\n```",
+        "```sh\necho hi\n```",
+        "```ts\nconst a = 1\n```",
+      ].join("\n\n"),
+    ),
+  )
+
+  await expect(blocks).toHaveCount(5)
+  await expect(root.getByTestId("chart")).toHaveText("chart A,B in /repo")
+  await expect(blocks.nth(0).locator("pre")).toBeHidden()
+
+  // A render that throws or declines keeps the code; the failure is the plugin's, which keeps running.
+  for (const index of [1, 2]) {
+    await expect(blocks.nth(index).locator("pre")).toBeVisible()
+    await expect(blocks.nth(index).locator('[data-slot="markdown-code-content"]')).toHaveCount(0)
+  }
+
+  expect(await host.evaluate((host) => ({ failure: host.failure("acme"), status: host.status("acme") }))).toEqual({
+    failure: { phase: "render", error: expect.stringContaining("chart failed") },
+    status: "active",
+  })
+
+  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
+  const shell = blocks.nth(3)
+  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await shell.hover()
+  await shell.getByRole("button", { name: "Run in terminal" }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")
+  await expect(blocks.nth(4).locator("pre code")).toHaveText("const a = 1")
+  await expect(
+    blocks.nth(4).locator('[data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'),
+  ).toHaveCount(0)
+})
+
+story("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {
+  const host = await page.evaluateHandle(async (fixture) => {
+    const { mountCodeBlocks, until } = await import(fixture)
+    const host: CodeBlocksHost = mountCodeBlocks({ definitions: [] })
+    host.show("```chart\nA,B\n```")
+    await until(() => !!document.querySelector('[data-testid="code-blocks"] [data-markdown-ready] pre code'))
+
+    return host
+  }, fixture)
+
+  const root = page.getByTestId("code-blocks")
+  await expect(root.locator("pre code")).toHaveText("A,B")
+
+  await host.evaluate(async (host, fixture) => {
+    const { CodeBlock } = await import(fixture)
+
+    host.define([
+      {
+        id: "acme",
+        windowEntry: async () => ({
+          default: (ctx: Context) =>
+            void ctx.add(CodeBlock, {
+              languages: ["chart"],
+              render: () => {
+                const chart = document.createElement("div")
+                chart.dataset.testid = "chart"
+                chart.textContent = "drawn"
+
+                return chart
+              },
+            }),
+        }),
+      },
+    ])
+  }, fixture)
+
+  await expect(root.getByTestId("chart")).toHaveText("drawn")
+  await expect(root.locator("pre")).toBeHidden()
+
+  await host.evaluate((host) => host.define([]))
+  await expect(root.getByTestId("chart")).toHaveCount(0)
+  await expect(root.locator("pre code")).toHaveText("A,B")
 })

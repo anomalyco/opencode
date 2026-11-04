@@ -3,31 +3,48 @@ import {
   createMemo,
   ErrorBoundary,
   For,
+  getOwner,
   onCleanup,
   onMount,
+  runWithOwner,
   Show,
   untrack,
+  type Component,
   type JSX,
   type ParentProps,
 } from "solid-js"
-import { Portal } from "solid-js/web"
-import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
+import { Portal, render } from "solid-js/web"
+import {
+  MarkdownProvider,
+  useMarkdown,
+  type MarkdownCodeAction,
+  type MarkdownCodeBlock,
+  type MarkdownCodeBlocks,
+} from "@opencode/session-ui/context/markdown"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { DesktopTheme } from "@opencode/ui/theme/types"
-import { Style, Theme, type MountedSession } from "@opencode/plugin/gui"
+import {
+  CodeBlock,
+  CodeBlockAction,
+  Style,
+  Theme,
+  type CodeBlockProps,
+  type MountedSession,
+} from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
-import { usePluginHost } from "./host"
+import { usePluginHost, type Item } from "./host"
 import { createLinkCheck } from "./link-check"
 
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
- * error and renders nothing, and the rest of the window keeps working. Contributions never render on timeline rows;
- * the session header slot is per timeline.
+ * error and renders nothing, then runs `failed`, and the rest of the window keeps working. Contributions render on
+ * timeline rows only as code block content, for a block whose language a plugin claimed, once it is complete; the
+ * session header slot is per timeline.
  */
-export function Contribution(props: { plugin: string; children: () => JSX.Element }) {
+export function Contribution(props: { plugin: string; failed?: () => void; children: () => JSX.Element }) {
   const host = usePluginHost()
 
   return (
@@ -35,7 +52,10 @@ export function Contribution(props: { plugin: string; children: () => JSX.Elemen
       {(context) => (
         <ErrorBoundary
           fallback={(error) => {
-            onMount(() => host.fail(props.plugin, error, "render"))
+            onMount(() => {
+              host.fail(props.plugin, error, "render")
+              props.failed?.()
+            })
 
             return null
           }}
@@ -127,8 +147,9 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 }
 
 /**
- * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading. A turn's
- * sources chip opens its turn through the Sources plugin's handler.
+ * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading, and hands
+ * fenced code blocks to plugin CodeBlock and CodeBlockAction contributions. A turn's sources chip opens its turn
+ * through the Sources plugin's handler.
  */
 export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
   const host = usePluginHost()
@@ -140,12 +161,21 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
     (href) => host.links.exists({ href, session: props.session }),
   )
 
-  return (
+  const Links = (inner: ParentProps<{ codeBlocks: MarkdownCodeBlocks | false }>) => (
     <MarkdownProvider
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
       localFileExists={localFileExists}
+      codeBlocks={inner.codeBlocks}
     >
+      {inner.children}
+    </MarkdownProvider>
+  )
+
+  const codeBlocks = createCodeBlocks(() => props.session, Links)
+
+  return (
+    <Links codeBlocks={codeBlocks}>
       <SourcesProvider
         enabled={sourcesExperiment.enabled}
         icons={sourcesExperiment.icons}
@@ -153,6 +183,116 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
       >
         {props.children}
       </SourcesProvider>
-    </MarkdownProvider>
+    </Links>
   )
+}
+
+/**
+ * The `CodeBlock` renderers and `CodeBlockAction` buttons for the session's Markdown, by language. Markdown asks only
+ * for complete blocks of a listed language. Content renders inside `Provider` with code block content off, under the
+ * plugin's error isolation: a render that throws or declines shows the code again.
+ */
+function createCodeBlocks(
+  session: () => MountedSession,
+  Provider: Component<ParentProps<{ codeBlocks: false }>>,
+): MarkdownCodeBlocks {
+  const host = usePluginHost()
+  const owner = getOwner()
+  const wrapped = new WeakMap<Item<CodeBlockAction>, MarkdownCodeAction>()
+
+  // The renderer each language goes to and the action buttons; a new value only when one of them changes, so markdown
+  // decorates its blocks again only then.
+  const current = createMemo(
+    () => {
+      const renderers = new Map<string, Item<CodeBlock>>()
+      host.items(CodeBlock).forEach((item) =>
+        item.value.languages.forEach((language) => {
+          const key = language.toLowerCase()
+
+          if (!renderers.has(key)) renderers.set(key, item)
+        }),
+      )
+      const actions = host.items(CodeBlockAction).toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0))
+
+      return {
+        renderers,
+        items: actions,
+        render: new Set(renderers.keys()),
+        actions: new Set(actions.flatMap((item) => item.value.languages.map((language) => language.toLowerCase()))),
+      }
+    },
+    undefined,
+    {
+      equals: (a, b) =>
+        a.items.length === b.items.length &&
+        a.items.every((item, index) => item === b.items[index]) &&
+        a.renderers.size === b.renderers.size &&
+        [...a.renderers].every(([language, item]) => b.renderers.get(language) === item),
+    },
+  )
+
+  const input = (block: MarkdownCodeBlock): CodeBlockProps => ({
+    code: block.code,
+    language: block.language,
+    get session() {
+      return session()
+    },
+  })
+
+  const action = (item: Item<CodeBlockAction>) => {
+    const known = wrapped.get(item)
+
+    if (known) return known
+
+    // Getters, so a title read from the locale follows it.
+    const next: MarkdownCodeAction = {
+      get icon() {
+        return item.value.icon
+      },
+      get title() {
+        return item.value.title
+      },
+      run: (block) =>
+        void Promise.try(() => item.value.run(input(block))).catch((cause: unknown) =>
+          console.error(`[plugin] ${item.plugin}`, cause),
+        ),
+    }
+
+    wrapped.set(item, next)
+
+    return next
+  }
+
+  return {
+    current,
+    render(target, block, fallback) {
+      const item = untrack(current).renderers.get(block.language)
+
+      if (!item) return
+
+      return runWithOwner(owner, () =>
+        render(
+          () => (
+            <Provider codeBlocks={false}>
+              <Contribution plugin={item.plugin} failed={fallback}>
+                {() => {
+                  const view = item.value.render(input(block))
+
+                  // Declined: markdown shows the code again once this render returns.
+                  if (view === undefined || view === null) queueMicrotask(fallback)
+
+                  return view
+                }}
+              </Contribution>
+            </Provider>
+          ),
+          target,
+        ),
+      )
+    },
+    actions: (language) =>
+      current()
+        .items.filter((item) => item.value.languages.some((name) => name.toLowerCase() === language))
+        .map(action),
+  }
 }

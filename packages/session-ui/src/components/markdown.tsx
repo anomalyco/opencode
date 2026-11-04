@@ -7,6 +7,7 @@ import {
   createResource,
   createSignal,
   createUniqueId,
+  For,
   onCleanup,
   type Setter,
   splitProps,
@@ -40,6 +41,9 @@ import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
   useMarkdown,
+  type MarkdownCodeBlock,
+  type MarkdownCodeBlockMatch,
+  type MarkdownCodeBlocks,
   type OpenMarkdownLocalFile,
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
@@ -204,20 +208,26 @@ function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
   host.removeAttribute("data-copied")
 }
 
-function disposeCopyButton(host: HTMLElement) {
+// The Solid roots a code block holds besides its Copy button: plugin content and action buttons.
+const codeHostDisposers = new WeakMap<HTMLElement, () => void>()
+
+const codeHostSelector =
+  '[data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'
+
+function disposeCodeHost(host: HTMLElement) {
   copyButtonState.get(host)?.dispose()
   copyButtonState.delete(host)
+  codeHostDisposers.get(host)?.()
+  codeHostDisposers.delete(host)
 }
 
-function disposeCopyButtons(root: Element) {
+function disposeCodeHosts(root: Element) {
   const hosts = [
-    ...(root instanceof HTMLElement && root.getAttribute("data-slot") === "markdown-copy-button" ? [root] : []),
-    ...Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
-      (el): el is HTMLElement => el instanceof HTMLElement,
-    ),
+    ...(root instanceof HTMLElement && root.matches(codeHostSelector) ? [root] : []),
+    ...Array.from(root.querySelectorAll(codeHostSelector)).filter((el): el is HTMLElement => el instanceof HTMLElement),
   ]
 
-  hosts.forEach(disposeCopyButton)
+  hosts.forEach(disposeCodeHost)
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -299,6 +309,130 @@ function clearMermaid(wrapper: HTMLElement) {
   delete wrapper.dataset.mermaidPending
   delete wrapper.dataset.mermaidReady
   wrapper.querySelector('[data-component="markdown-mermaid"]')?.remove()
+}
+
+type CodePlugins = { blocks: MarkdownCodeBlocks; match: MarkdownCodeBlockMatch }
+
+type CodeMount = { match: MarkdownCodeBlockMatch; source: string; content?: HTMLElement }
+
+const codeMounts = new WeakMap<HTMLElement, CodeMount>()
+
+// Content for a block's language replaces its code only once the closing fence arrived, so it never receives half a
+// block; until then, and when the content declines or fails, the block shows its code (or the built-in diagram).
+// Blocks of other languages take the plain path.
+function decorateCode(wrapper: HTMLElement, code: HTMLElement, complete: boolean, plugins: CodePlugins | undefined) {
+  const previous = codeMounts.get(wrapper)
+
+  if (!plugins && !previous) return decorateMermaid(wrapper, code, complete)
+
+  const language = codeLanguage(wrapper.dataset.language)
+  const claimed = !!plugins?.match.render.has(language)
+  const acted = complete && !!plugins?.match.actions.has(language)
+
+  if (!previous && !acted && !(claimed && complete))
+    return claimed ? clearMermaid(wrapper) : decorateMermaid(wrapper, code, complete)
+
+  const source = (code.textContent ?? "").replace(/\n$/, "")
+
+  if (previous?.match === plugins?.match && previous?.source === source) return
+
+  if (previous) clearCodeMount(wrapper, previous)
+
+  if (!plugins || (!claimed && !acted)) return decorateMermaid(wrapper, code, complete)
+
+  if (!complete) return clearMermaid(wrapper)
+
+  const block = { code: source, language }
+  const mount: CodeMount = { match: plugins.match, source }
+  codeMounts.set(wrapper, mount)
+
+  if (acted)
+    wrapper.insertBefore(
+      createCodeActions(plugins.blocks, block),
+      wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]'),
+    )
+
+  if (!claimed) return decorateMermaid(wrapper, code, complete)
+
+  clearMermaid(wrapper)
+  const content = document.createElement("div")
+  content.dataset.slot = "markdown-code-content"
+  mount.content = content
+  wrapper.dataset.codeContent = ""
+  wrapper.appendChild(content)
+
+  const dispose = plugins.blocks.render(content, block, () => {
+    if (mount.content === content) showCode(wrapper, code, mount)
+  })
+
+  // The content already failed while it rendered.
+  if (mount.content !== content) return dispose?.()
+
+  if (!dispose) return showCode(wrapper, code, mount)
+
+  codeHostDisposers.set(content, dispose)
+}
+
+// Matches the language the worker's parser puts in a block's class, so streamed and completed blocks agree.
+function codeLanguage(language: string | undefined) {
+  return (language ?? "").toLowerCase().replace(/[^\w#+.-]/g, "")
+}
+
+function showCode(wrapper: HTMLElement, code: HTMLElement, mount: CodeMount) {
+  const content = mount.content
+  mount.content = undefined
+  delete wrapper.dataset.codeContent
+
+  if (content) {
+    disposeCodeHost(content)
+    content.remove()
+  }
+
+  decorateMermaid(wrapper, code, true)
+}
+
+function clearCodeMount(wrapper: HTMLElement, mount: CodeMount) {
+  codeMounts.delete(wrapper)
+  mount.content = undefined
+  delete wrapper.dataset.codeContent
+  wrapper
+    .querySelectorAll<HTMLElement>(
+      ':scope > [data-slot="markdown-code-actions"], :scope > [data-slot="markdown-code-content"]',
+    )
+    .forEach((host) => {
+      disposeCodeHost(host)
+      host.remove()
+    })
+}
+
+function createCodeActions(blocks: MarkdownCodeBlocks, block: MarkdownCodeBlock) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "markdown-code-actions")
+
+  codeHostDisposers.set(
+    host,
+    render(
+      () => (
+        <For each={blocks.actions(block.language)}>
+          {(action) => (
+            <Tooltip placement="top" value={action.title}>
+              <IconButton
+                type="button"
+                size="normal"
+                variant="ghost-muted"
+                aria-label={action.title}
+                icon={<Icon name={action.icon} />}
+                onClick={() => action.run(block)}
+              />
+            </Tooltip>
+          )}
+        </For>
+      ),
+      host,
+    ),
+  )
+
+  return host
 }
 
 function markCodeLinks(root: HTMLDivElement) {
@@ -563,7 +697,7 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
       clearTimeout(timeout)
     }
 
-    disposeCopyButtons(root)
+    disposeCodeHosts(root)
   }
 }
 
@@ -653,6 +787,8 @@ export function Markdown(
   let renderedBlocks: RenderedBlock[] = []
   let lastRender: { base: string | undefined; blocks: Block[]; rendered: RenderedBlock[] } | undefined
   let appliedLabels: CopyLabels | undefined
+  // The code block languages the blocks were decorated for; false before the first run.
+  let decoratedMatch: MarkdownCodeBlockMatch | undefined | false = false
   let streamed = false
 
   const [projection] = createResource(
@@ -856,10 +992,20 @@ export function Markdown(
     }
 
     delete container.dataset.markdownReady
+    const codeBlocks = markdown?.codeBlocks
+    const match = codeBlocks?.current()
+
+    const plugins =
+      codeBlocks && match && (match.render.size > 0 || match.actions.size > 0)
+        ? { blocks: codeBlocks, match }
+        : undefined
+
+    const redecorate = decoratedMatch !== false && decoratedMatch !== match
+    decoratedMatch = match
 
     if (content.length === 0) {
       renderedBlocks = []
-      disposeCopyButtons(container)
+      disposeCodeHosts(container)
       disposeRenderedMarkdown(container)
       container.innerHTML = ""
       images?.update(container)
@@ -889,12 +1035,20 @@ export function Markdown(
       const check =
         renderedBlocks[index] === block && current instanceof HTMLDivElement
           ? inlineCodeChecks.get(current)?.pending
-          : updateBlock(container, index, block, labels, sessionLinks, lifetime.signal, localFileExists)
+          : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
 
       return check ? [check] : []
     })
 
     renderedBlocks = content
+
+    // Blocks kept from earlier runs follow a plugin that starts or stops handling their language.
+    if (redecorate)
+      container.querySelectorAll<HTMLElement>('[data-component="markdown-code"]').forEach((wrapper) => {
+        const code = wrapper.querySelector<HTMLElement>(":scope > pre > code")
+
+        if (code) decorateCode(wrapper, code, wrapper.parentElement?.dataset.markdownComplete !== "false", plugins)
+      })
 
     if (sessionLinks) markSessionLinks(container, sessionLinks)
 
@@ -902,7 +1056,7 @@ export function Markdown(
       const child = container.lastElementChild
 
       if (!child) break
-      disposeCopyButtons(child)
+      disposeCodeHosts(child)
       disposeRenderedMarkdown(child)
       child.remove()
     }
@@ -1041,6 +1195,7 @@ function updateBlock(
   index: number,
   block: RenderedBlock,
   labels: CopyLabels,
+  plugins: CodePlugins | undefined,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
   localFileExists?: MarkdownLocalFileExists,
@@ -1048,7 +1203,7 @@ function updateBlock(
   const current = container.children[index]
 
   if (block.mode === "code") {
-    updateCodeBlock(container, current, block, labels)
+    updateCodeBlock(container, current, block, labels, plugins)
 
     return
   }
@@ -1079,7 +1234,7 @@ function updateBlock(
   // Keep live renderers in control of their DOM, including after completion.
   const source = rendered || block.mode === "live" ? document.createElement("div") : next
 
-  if (source === next) disposeCopyButtons(next)
+  if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
   const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)
@@ -1117,7 +1272,7 @@ function updateBlock(
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
       wrapper.appendChild(createCopyButton(labels))
-      decorateMermaid(wrapper, code, true)
+      decorateCode(wrapper, code, true, plugins)
     })
   }
 
@@ -1129,7 +1284,7 @@ function updateBlock(
     return pending
   }
 
-  disposeCopyButtons(current)
+  disposeCodeHosts(current)
   disposeRenderedMarkdown(current)
   current.replaceWith(next)
 
@@ -1141,6 +1296,7 @@ function updateCodeBlock(
   current: Element | undefined,
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
+  plugins: CodePlugins | undefined,
 ) {
   const existing =
     current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && renderedCodeTokens.has(current)
@@ -1189,7 +1345,7 @@ function updateCodeBlock(
       raw: block.raw,
     })
 
-    if (wrapper instanceof HTMLElement) decorateMermaid(wrapper, code, block.complete)
+    if (wrapper instanceof HTMLElement) decorateCode(wrapper, code, block.complete, plugins)
 
     return
   }
@@ -1205,7 +1361,7 @@ function updateCodeBlock(
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
   wrapper.appendChild(createCopyButton(labels))
-  decorateMermaid(wrapper, codeElement, block.complete)
+  decorateCode(wrapper, codeElement, block.complete, plugins)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,
@@ -1216,7 +1372,7 @@ function updateCodeBlock(
   })
 
   if (current) {
-    disposeCopyButtons(current)
+    disposeCodeHosts(current)
     disposeRenderedMarkdown(current)
     current.replaceWith(next)
 
