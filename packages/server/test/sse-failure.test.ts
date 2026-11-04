@@ -15,7 +15,7 @@ import { schemaErrorLayer } from "../src/middleware/schema-error"
 const LogApi = HttpApi.make("log").add(
   HttpApiGroup.make("server.session").add(ClientApi.groups["server.session"].endpoints["session.log"]),
 )
-const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1), persist: true }
+const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
 const handler = HttpRouter.toWebHandler(
   HttpApiBuilder.layer(LogApi).pipe(

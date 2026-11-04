@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -111,38 +112,6 @@ it.live("authenticates API requests behind the frontend transform while allowing
     yield* Effect.promise(() => readUntil(reader, "installation.updated"))
     yield* Effect.promise(() => reader.cancel())
 
-    const sessionID = Session.ID.create()
-    const created = yield* Effect.promise(() =>
-      fetch(new URL("/api/session", HttpServer.formatAddress(server.address)), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Basic ${btoa("opencode:secret")}`,
-        },
-        body: JSON.stringify({ id: sessionID, title: "Log compression" }),
-      }),
-    )
-    expect(created.status).toBe(200)
-    yield* Effect.promise(() => created.arrayBuffer())
-    const log = yield* Effect.promise(() =>
-      fetch(
-        new URL(`/api/experimental/session/${sessionID}/log?follow=true`, HttpServer.formatAddress(server.address)),
-        {
-          headers: {
-            "accept-encoding": "gzip",
-            authorization: `Basic ${btoa("opencode:secret")}`,
-          },
-        },
-      ),
-    )
-    expect(log.status).toBe(200)
-    expect(log.headers.get("content-encoding")).toBeNull()
-    const logBody = log.body
-    if (!logBody) return yield* Effect.die(new Error("Log response has no body"))
-    const logReader = logBody.getReader()
-    yield* Effect.promise(() => readUntil(logReader, "log.synced"))
-    yield* Effect.promise(() => logReader.cancel())
-
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {
         headers: {
@@ -199,6 +168,79 @@ it.live("authenticates API requests behind the frontend transform while allowing
     )
   }),
 )
+
+for (const persist of [false, true]) {
+  it.effect(`session log keeps SSE uncompressed and heartbeats followers (persist: ${persist})`, () =>
+    Effect.gen(function* () {
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        database: { path: ":memory:" },
+        fs: { filewatcher: false },
+        config: { project: false },
+        ...(persist ? { events: { persist } } : {}),
+      })
+      const request = (path: string, method = "GET", body?: object) =>
+        Effect.promise(() =>
+          fetch(new URL(`/api/${path}`, HttpServer.formatAddress(server.address)), {
+            method,
+            headers: {
+              authorization: `Basic ${btoa("opencode:secret")}`,
+              "accept-encoding": "gzip",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          }),
+        )
+      const id = Session.ID.create()
+      const missing = yield* request(`experimental/session/${id}/log?follow=true`)
+      expect(missing.status).toBe(404)
+      expect(missing.headers.get("content-type")).not.toContain("text/event-stream")
+      yield* Effect.promise(() => missing.arrayBuffer())
+      const created = yield* request("session", "POST", { id, title: "Log test" })
+      expect(created.status).toBe(200)
+      yield* Effect.promise(() => created.arrayBuffer())
+      const replay = yield* request(`experimental/session/${id}/log?follow=false`)
+      const text = yield* Effect.promise(() => replay.text())
+      expect(text).toContain('"type":"log.synced"')
+      expect(text).toContain(`"persist":${persist}`)
+      expect(text.includes('"type":"session.created"')).toBe(persist)
+      expect(text).not.toContain(": heartbeat")
+
+      const response = yield* request(`experimental/session/${id}/log?after=0&follow=true`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-encoding")).toBeNull()
+      expect(response.headers.get("cache-control")).toBe("no-cache, no-transform")
+      expect(response.headers.get("x-accel-buffering")).toBe("no")
+      const body = response.body
+      if (!body) return yield* Effect.die("Missing SSE body")
+      const reader = yield* Effect.acquireRelease(
+        Effect.sync(() => body.getReader()),
+        (reader) => Effect.promise(() => reader.cancel()),
+      )
+      const synced = yield* Effect.promise(() => readUntil(reader, "log.synced"))
+      expect(synced).toContain(`"persist":${persist}`)
+      expect(synced).not.toContain(": heartbeat")
+      const next = yield* Effect.promise(() => reader.read()).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+      expect(next.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("14 seconds")
+      expect(next.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("1 second")
+      expect(new TextDecoder().decode((yield* Fiber.join(next)).value)).toBe(": heartbeat\n\n")
+      const again = yield* Effect.promise(() => reader.read()).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("15 seconds")
+      expect(new TextDecoder().decode((yield* Fiber.join(again)).value)).toBe(": heartbeat\n\n")
+      if (!persist) return
+      const updated = yield* request(`session/${id}`, "PATCH", { title: "After heartbeat" })
+      expect(updated.status).toBe(204)
+      yield* Effect.promise(() => updated.arrayBuffer())
+      const event = yield* Effect.promise(() => readUntil(reader, "session.renamed"))
+      expect(event).toContain('"seq":1')
+    }),
+  )
+}
 
 it.live("pairing links sign in browsers with a cookie and API clients with a token", () =>
   Effect.gen(function* () {
@@ -266,7 +308,8 @@ async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expect
   while (true) {
     const next = await reader.read()
     if (next.done) throw new Error(`Event stream ended before ${expected}`)
-    if (new TextDecoder().decode(next.value).includes(expected)) return
+    const text = new TextDecoder().decode(next.value)
+    if (text.includes(expected)) return text
   }
 }
 

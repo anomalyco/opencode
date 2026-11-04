@@ -296,6 +296,13 @@ describe("Bus", () => {
       expect(
         yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
       ).toEqual([{ aggregate_id: aggregateID, seq: 0, owner_id: null }])
+      expect(yield* bus.log({ aggregateID, follow: true }).pipe(Stream.take(1), Stream.runCollect)).toEqual([
+        { type: "log.synced", aggregateID, seq: Event.Seq.make(0), persist: false },
+      ])
+      yield* bus.publish(SyncMessage, { id: aggregateID, text: "next" })
+      expect(yield* Stream.runCollect(bus.log({ aggregateID, after: 0 }))).toEqual([
+        { type: "log.synced", aggregateID, seq: Event.Seq.make(1), persist: false },
+      ])
     }),
   )
 

@@ -18,33 +18,19 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
-const layer = (persist: boolean) =>
+const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      Bus.node.replace(Bus.configured({ persist })),
+      Bus.node.replace(Bus.configured({ persist: true })),
       Project.node.replace(globalProjectNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
-  )
-const it = testEffect(layer(true))
-const withoutPersistence = testEffect(layer(false))
+  ),
+)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("Session.log", () => {
-  withoutPersistence.effect("reports disabled persistence despite an advancing aggregate watermark", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const created = yield* session.create({ location })
-      const first = yield* session.log({ sessionID: created.id, follow: true }).pipe(Stream.take(1), Stream.runCollect)
-      expect(first).toEqual([{ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(0), persist: false }])
-
-      yield* session.rename({ sessionID: created.id, title: "not retained" })
-      const resumed = yield* Stream.runCollect(session.log({ sessionID: created.id, after: 0 }))
-      expect(resumed).toEqual([{ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1), persist: false }])
-    }),
-  )
-
   it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
