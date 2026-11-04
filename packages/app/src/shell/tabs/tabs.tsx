@@ -83,6 +83,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
+    const [pins, setPins, , pinsReady] = persisted(Persist.window("tabs.pinned"), TabStorage.Pinned, {})
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
     const navigate = useNavigate()
@@ -121,6 +122,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       }
 
       void closedReady.promise?.then(apply)
+    }
+
+    const writePin = (key: string, pinned: boolean) => {
+      const apply = () => setPins(key, pinned)
+
+      if (pinsReady()) {
+        apply()
+
+        return
+      }
+
+      void pinsReady.promise?.then(apply)
     }
 
     const removeDraftPersisted = (draftID: string) => {
@@ -503,6 +516,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const key of removed) removeInfo(key)
 
+        for (const key of removed) if (pins[key]) writePin(key, false)
+
         if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
@@ -568,6 +583,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         for (const key of removed) memory.remove(key)
 
         for (const key of removed) removeInfo(key)
+
+        for (const key of removed) if (pins[key]) writePin(key, false)
       },
       rememberSessionInfo(tab: SessionTab, session: SessionInfo, prompted: boolean) {
         const key = tabKey(tab)
@@ -590,6 +607,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         setInfo(key, next)
       },
       select: navigateTab,
+      pinned(key: string) {
+        return pins[key] === true
+      },
+      togglePin(key: string) {
+        writePin(key, !pins[key])
+      },
       remember(tab: Tab) {
         const key = tabKey(tab)
 
@@ -674,6 +697,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, closed, ready, infoReady, recentReady, closedReady, regionsReady }
+    return {
+      ...actions,
+      store,
+      info,
+      closed,
+      pins,
+      ready,
+      pinsReady,
+      infoReady,
+      recentReady,
+      closedReady,
+      regionsReady,
+    }
   },
 })

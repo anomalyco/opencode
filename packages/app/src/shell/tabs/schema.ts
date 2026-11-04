@@ -47,6 +47,9 @@ export const Info = Persistence.struct({
 
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
 
+/** Pinned tabs, keyed by `tabKey`, so a pinned tab keeps its place across reloads. */
+export const Pinned = Persistence.record(Schema.Boolean)
+
 // The side region keeps the name it was stored under before plugins.
 export const Regions = Schema.Record(
   Schema.String,
