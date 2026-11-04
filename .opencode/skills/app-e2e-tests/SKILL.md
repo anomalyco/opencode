@@ -54,7 +54,7 @@ All paths below are relative to `packages/app` unless they start with `packages/
 - **Real-time waits cost their full length on every run and retry** (`settings-wsl.spec.ts:268-276` waits out a 10 s health check). Prefer `page.clock`:
   - install it before the `goto` or `reload` whose timers you need (`timeline-stream.spec.ts:1700`);
   - keep fast-forwards under the client's 45 s event-stream idle timeout (`packages/client/src/solid/connection.ts:35`).
-- **Leave benchmark pacing out of regression tests.** The `sendAll` delays and `messageDelay` exist for benchmarks (`timeline.ts:306`, `mock-server.ts:82`). Hold message pages with `beforeMessagesResponse` instead.
+- **Leave pacing out of regression tests.** The `sendAll` delays (`timeline.ts:326`) pace workloads; tests wait for the resulting UI state. Hold message pages with `beforeMessagesResponse` instead.
 
 ## Wait for state, not time: races CI found
 
