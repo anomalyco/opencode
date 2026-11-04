@@ -54,7 +54,7 @@ impl State {
             .collect()
     }
 
-    pub(crate) fn on_form_created(&mut self, form: &FormInfo1, location: &Location) {
+    pub(crate) fn on_form_created(&mut self, form: &FormInfo, location: &Location) {
         let forms = self.forms.entry(form.session_id.clone()).or_default();
         if forms.iter().any(|item| item.info.id == form.id) {
             return;

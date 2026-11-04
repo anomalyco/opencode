@@ -8,7 +8,7 @@
 //! port reads the part as JSON the same way, and a rule that would throw returns `None`.
 
 use opencode_api::generated::types::{
-    SessionMessageAssistantTool, SessionMessageAssistantToolState,
+    SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
 };
 use opencode_api::query::js_string;
 use serde_json::{Map, Value};
@@ -177,27 +177,32 @@ pub fn tool_display_metadata(state: &SessionMessageAssistantToolState) -> Map<St
 }
 
 /// The tool's content items, empty until it finishes.
-pub fn tool_display_content(state: &SessionMessageAssistantToolState) -> &[Value] {
+pub fn tool_display_content(
+    state: &SessionMessageAssistantToolState,
+) -> std::borrow::Cow<'_, [ToolContent]> {
     match state {
         SessionMessageAssistantToolState::Streaming(_)
-        | SessionMessageAssistantToolState::Running(_) => &[],
-        SessionMessageAssistantToolState::Completed(state) => &state.content,
+        | SessionMessageAssistantToolState::Running(_) => Default::default(),
+        SessionMessageAssistantToolState::Completed(state) => state.content.as_slice().into(),
         SessionMessageAssistantToolState::Error(state) => {
-            state.content.as_deref().unwrap_or_default()
+            state.content.as_deref().unwrap_or_default().into()
         }
+        // A state this client does not know may still carry content items.
         SessionMessageAssistantToolState::Unknown(state) => state
             .get("content")
-            .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or_default(),
+            .and_then(|content| serde_json::from_value::<Vec<ToolContent>>(content.clone()).ok())
+            .unwrap_or_default()
+            .into(),
     }
 }
 
 /// The user-facing text of a tool's content items.
-pub fn tool_output_text(name: &str, content: &[Value]) -> String {
-    fn text_of(item: &Value) -> Option<Option<&str>> {
-        (item.get("type").and_then(Value::as_str) == Some("text"))
-            .then(|| item.get("text").and_then(Value::as_str))
+pub fn tool_output_text(name: &str, content: &[ToolContent]) -> String {
+    fn text_of(item: &ToolContent) -> Option<Option<&str>> {
+        match item {
+            ToolContent::Text(text) => Some(Some(text.text.as_str())),
+            _ => None,
+        }
     }
     let name = canonical_tool_name(name);
     // V2 shell content appends model-only status after the user-visible command output.
@@ -362,7 +367,7 @@ impl<'a> Frame<'a> {
             input: normalize_input(name, state.get("input")),
             meta: normalize_metadata(name, tool_display_metadata(&part.state)),
             status,
-            output: tool_output_text(name, tool_display_content(&part.state)),
+            output: tool_output_text(name, &tool_display_content(&part.state)),
         }
     }
 
