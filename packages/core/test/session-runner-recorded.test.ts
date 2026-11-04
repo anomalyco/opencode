@@ -115,7 +115,8 @@ const execution = (llmClient: Layer.Layer<LLMClientService>) =>
     Effect.gen(function* () {
       const sessionRunner = yield* SessionRunner.Service
       const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
-        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }).pipe(Effect.asVoid),
+        drain: (sessionID, force) =>
+          sessionRunner.drain({ sessionID, entry: { type: "boundary", force, stepped: false } }).pipe(Effect.asVoid),
       })
       return SessionExecution.Service.of({
         active: coordinator.active,

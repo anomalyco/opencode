@@ -18,12 +18,20 @@ export type RunError =
   | Instructions.InitializationBlocked
   | FileSystem.DirectoryNotFoundError
 
-export type Continuation = { readonly step: number }
+/** Where a drain starts: a turn boundary, or a step continuation carried across a Location hand-off. */
+export type Entry =
+  | {
+      readonly type: "boundary"
+      readonly force: boolean
+      /** A step already ran, so reaching idle still runs the idle hook. */
+      readonly stepped: boolean
+    }
+  | { readonly type: "carried"; readonly step: number }
 
 export type DrainResult = Data.TaggedEnum<{
   Complete: {}
-  Moved: { readonly continuation?: Continuation; readonly stepped?: true }
-  Reloaded: { readonly force: boolean; readonly continuation?: Continuation; readonly stepped?: true }
+  Moved: { readonly entry: Entry }
+  Reloaded: { readonly entry: Entry }
 }>
 export const DrainResult = Data.taggedEnum<DrainResult>()
 
@@ -32,12 +40,9 @@ export interface Interface {
   /** Drains eligible durable work, returning transient state when execution must continue at a new Location. */
   readonly drain: (input: {
     readonly sessionID: SessionSchema.ID
-    readonly force: boolean
-    readonly continuation?: Continuation
+    readonly entry: Entry
     /** "steer" settles the active intent without promoting queued next-turn work. */
     readonly promotable?: Promotable
-    /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
-    readonly stepped?: boolean
   }) => Effect.Effect<DrainResult, RunError>
 }
 

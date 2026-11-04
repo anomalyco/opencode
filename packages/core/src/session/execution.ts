@@ -83,16 +83,12 @@ export const layer = Layer.effect(
     })
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      force: boolean,
-      continuation?: SessionRunner.Continuation,
-      promotable: SessionInbox.Promotable = "input",
-      stepped = false,
+      entry: SessionRunner.Entry,
+      promotable: SessionInbox.Promotable,
     ): Effect.fn.Return<void, SessionRunner.RunError> {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-      const result = yield* SessionRunner.Service.use((runner) =>
-        runner.drain({ sessionID, force, continuation, promotable, stepped }),
-      ).pipe(
+      const result = yield* SessionRunner.Service.use((runner) => runner.drain({ sessionID, entry, promotable })).pipe(
         instances.provide(session),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
@@ -102,8 +98,8 @@ export const layer = Layer.effect(
       )
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
-        Moved: (result) => drain(sessionID, false, result.continuation, promotable, result.stepped),
-        Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
+        Moved: (result) => drain(sessionID, result.entry, promotable),
+        Reloaded: (result) => drain(sessionID, result.entry, promotable),
       })
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -112,7 +108,8 @@ export const layer = Layer.effect(
           sessionID,
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
-      drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
+      drain: (sessionID, force, promotable) =>
+        drain(sessionID, { type: "boundary", force, stepped: false }, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(

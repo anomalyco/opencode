@@ -1138,12 +1138,12 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedInbox(database, sessionID, ["steer", "queue"])
 
       const draining = yield* Deferred.make<void>()
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ entry: SessionRunner.Entry; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
         Effect.suspend(() => {
-          drains.push({ force: input.force, promotable: input.promotable })
+          drains.push({ entry: input.entry, promotable: input.promotable })
           if (drains.length > 1) return Effect.void
           return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
         }),
@@ -1157,8 +1157,8 @@ describe("SessionExecution interrupt continuation", () => {
 
       // The successor drain is steer-scoped: queued next-turn work stays parked.
       expect(drains).toEqual([
-        { force: true, promotable: "input" },
-        { force: false, promotable: "steer" },
+        { entry: { type: "boundary", force: true, stepped: false }, promotable: "input" },
+        { entry: { type: "boundary", force: false, stepped: false }, promotable: "steer" },
       ])
     }),
   )
@@ -1199,18 +1199,18 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedSessions(database, [sessionID])
       yield* seedInbox(database, sessionID, ["steer"])
 
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ entry: SessionRunner.Entry; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
-        Effect.sync(() => void drains.push({ force: input.force, promotable: input.promotable })),
+        Effect.sync(() => void drains.push({ entry: input.entry, promotable: input.promotable })),
       )
       const execution = Context.get(context, SessionExecution.Service)
 
       yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
-      expect(drains).toEqual([{ force: false, promotable: "steer" }])
+      expect(drains).toEqual([{ entry: { type: "boundary", force: false, stepped: false }, promotable: "steer" }])
     }),
   )
 
@@ -1222,12 +1222,12 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedInbox(database, sessionID, [{ delivery: "queue", type: "compaction" }])
 
       const draining = yield* Deferred.make<void>()
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ entry: SessionRunner.Entry; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
         Effect.suspend(() => {
-          drains.push({ force: input.force, promotable: input.promotable })
+          drains.push({ entry: input.entry, promotable: input.promotable })
           if (drains.length > 1) return Effect.void
           return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
         }),
@@ -1241,8 +1241,8 @@ describe("SessionExecution interrupt continuation", () => {
 
       // Control work is housekeeping, not next-turn input: continue runs it.
       expect(drains).toEqual([
-        { force: true, promotable: "input" },
-        { force: false, promotable: "steer" },
+        { entry: { type: "boundary", force: true, stepped: false }, promotable: "input" },
+        { entry: { type: "boundary", force: false, stepped: false }, promotable: "steer" },
       ])
     }),
   )
@@ -1254,11 +1254,11 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedSessions(database, [sessionID])
       yield* seedInbox(database, sessionID, ["queue", { delivery: "queue", type: "compaction" }])
 
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ entry: SessionRunner.Entry; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
-        Effect.sync(() => void drains.push({ force: input.force, promotable: input.promotable })),
+        Effect.sync(() => void drains.push({ entry: input.entry, promotable: input.promotable })),
       )
       const execution = Context.get(context, SessionExecution.Service)
 
