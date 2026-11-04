@@ -181,18 +181,18 @@ async function homeProjects(page: Page, projects: unknown[]) {
   return { server, rows: page.locator('[data-component="home-project-row"] [data-slot="home-row-label"]') }
 }
 
-test("Home lists the used server projects by recent activity, hides them, and lists them again once used", async ({
+test("Home lists server history by recent activity, hides projects, and lists them again once used", async ({
   page,
 }) => {
   // `recent` was first resolved under another ID, so one directory has two projects.
   const listed = [entry("unused", 4), entry("recent", 3), entry("older", 2), entry("oldest", 1)]
   listed.push(entry("recent", 0, "proj_recent_before_git"))
   const view = await homeProjects(page, listed)
-  await seed(page, { usedProjects: { local: ["proj_recent_before_git", "proj_older", "proj_oldest"] } })
+  await seed(page, { usedProjects: { local: [] } })
   await page.goto("/")
-  await expect(view.rows).toHaveText(["recent", "older", "oldest"])
+  await expect(view.rows).toHaveText(["unused", "recent", "older", "oldest"])
 
-  // Activity moves a project up and an archived project leaves; a project this client never used stays out.
+  // Server history includes projects from other clients; archived projects leave the list.
   const active = { ...listed[3]!, time: { ...listed[3]!.time, active: T0 + 5 } }
   const archived = { ...listed[2]!, time: { ...listed[2]!.time, archived: T0 + 6 } }
   const fresh = entry("fresh", 7)
@@ -207,12 +207,12 @@ test("Home lists the used server projects by recent activity, hides them, and li
       }),
     ),
   )
-  await expect(view.rows).toHaveText(["oldest", "recent"])
+  await expect(view.rows).toHaveText(["fresh", "oldest", "unused", "recent"])
 
   const recent = page.locator('[data-component="home-project-row"]').filter({ hasText: "recent" })
   await recent.locator("..").getByRole("button", { name: "More options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Close", exact: true }).click()
-  await expect(view.rows).toHaveText(["oldest"])
+  await expect(view.rows).toHaveText(["fresh", "oldest", "unused"])
 
   // Closing a project moves it out of the added list, but it remains discoverable in the server inventory.
   await page
@@ -229,7 +229,7 @@ test("Home lists the used server projects by recent activity, hides them, and li
   await options.filter({ hasText: "C:/OpenCode/recent" }).click()
   await expect(newSessionLocation(page)).toContainText("recent")
   await page.getByRole("button", { name: "Home", exact: true }).click()
-  await expect(view.rows).toHaveText(["oldest", "recent"])
+  await expect(view.rows).toHaveText(["fresh", "oldest", "unused", "recent"])
 })
 
 test("Home migrates the directories an older build listed to the server's current projects", async ({ page }) => {
@@ -250,7 +250,7 @@ test("Home migrates the directories an older build listed to the server's curren
     },
   })
   await page.goto("/")
-  await expect(view.rows).toHaveText(["api", "web"])
+  await expect(view.rows).toHaveText(["api", "web", "docs"])
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")))
     .toMatchObject({ usedProjectIDs: { local: ["proj_api", "proj_web"] }, projects: {} })

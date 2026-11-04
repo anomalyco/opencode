@@ -21,8 +21,8 @@ export function createHomeController() {
 
   const focusedServerCtx = useServerCtx(focusedServer)
   const focusedSync = () => focusedServerCtx()?.sync
-  // Home lists the server's projects this client has used.
-  const projects = createMemo(() => focusedServerCtx()?.projects.used() ?? [])
+  // Include server history created by other clients, respecting this client's explicit hides.
+  const projects = createMemo(() => focusedServerCtx()?.projects.visible() ?? [])
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
 
   const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
@@ -58,7 +58,7 @@ export function createHomeController() {
 
     if (!ctx.sync.project.ready()) return
 
-    if (ctx.projects.used().some((project) => pathKey(project.worktree) === pathKey(directory))) return
+    if (ctx.projects.visible().some((project) => pathKey(project.worktree) === pathKey(directory))) return
     setSelection({ server: current.server })
   })
 
@@ -101,7 +101,7 @@ export function createHomeController() {
       list: projects,
       selected: selectedProject,
       newSession: newSessionProject,
-      forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.used(),
+      forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.visible(),
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
 
@@ -110,7 +110,7 @@ export function createHomeController() {
         if (
           !global
             .ensureServerCtx(conn)
-            .projects.used()
+            .projects.visible()
             .some((project) => project.worktree === directory)
         )
           return

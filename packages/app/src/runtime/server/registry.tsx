@@ -47,7 +47,7 @@ function loopbackOrigin(url: string) {
   return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
 }
 
-// Project data comes from the server; this keeps which projects this client has used and the last one.
+// Project data comes from the server; this keeps local usage, explicit hides and the last used project.
 export function createServerProjects(input: {
   scope: () => ServerScope
   store: Store<StoredState>
@@ -60,7 +60,13 @@ export function createServerProjects(input: {
     const next = [...new Set([...current, ...projectIDs])]
 
     if (next.length !== current.length) input.setStore("usedProjectIDs", input.scope(), next)
+    input.setStore(
+      "hiddenProjectIDs",
+      input.scope(),
+      hidden().filter((id) => !projectIDs.includes(id)),
+    )
   }
+  const hidden = () => input.store.hiddenProjectIDs[input.scope()] ?? []
 
   return {
     last() {
@@ -73,8 +79,10 @@ export function createServerProjects(input: {
       })
     },
     used,
+    hidden,
     use,
     hide(projectIDs: string[]) {
+      input.setStore("hiddenProjectIDs", input.scope(), [...new Set([...hidden(), ...projectIDs])])
       input.setStore(
         "usedProjectIDs",
         input.scope(),
@@ -235,7 +243,15 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
         previousKey: "server.v3",
       },
       ServerState,
-      { list: [], hidden: {}, lastProjectID: {}, usedProjectIDs: {}, hostnames: {}, projects: {} },
+      {
+        list: [],
+        hidden: {},
+        lastProjectID: {},
+        usedProjectIDs: {},
+        hiddenProjectIDs: {},
+        hostnames: {},
+        projects: {},
+      },
     )
 
     const language = useLanguage()
