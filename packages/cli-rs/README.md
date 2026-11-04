@@ -32,6 +32,41 @@ bun run --cwd packages/cli-rs live [directory]
 `opencode service status` and the password from `opencode service get password`, and uses the `dev`
 TUI storage channel, as the root `dev:live` does.
 
+## Try it
+
+Build the release binary once, then run it in a project directory. With no flags it finds the
+running background service, as `opencode` does, or starts one.
+
+```sh
+bun run --cwd packages/cli-rs cargo build --release --bin opencode-rs
+cd ~/src/my-project
+~/src/opencode/packages/cli-rs/target/release/opencode-rs        # home
+~/src/opencode/packages/cli-rs/target/release/opencode-rs -c     # continue the last session here
+```
+
+`opencode-rs` reads the same `cli.json` (keybinds, theme, session settings) as the TypeScript TUI.
+Main keys, with the default leader `ctrl+x`:
+
+| Key | Action |
+| --- | --- |
+| `enter` | Send the prompt (on home it creates a session) |
+| `esc` | Interrupt a running reply; close a dialog; reject a permission |
+| `<leader>l` | Session list |
+| `<leader>m` | Models |
+| `ctrl+p` | Command palette |
+| `<leader>n` | New session |
+| `pageup`, `pagedown` | Scroll the transcript |
+| `ctrl+g` or `home`, `ctrl+alt+g` or `end` | First and last message |
+| `ctrl+c` | Clear the prompt, or quit when it is empty |
+
+Known gaps:
+
+- The event stream can panic on non-ASCII text that is split across chunks. Live updates then stop
+  until a restart, and the panic text corrupts the screen until the next full repaint.
+- The first prompt in a new session can show a spurious "Session not found" toast.
+- Session actions, tabs and panes, system commands, and plugins are not done yet.
+- The release binary keeps line-table debug info (about 180 MB). `strip` brings it to about 40 MB.
+
 ## Layout
 
 | Crate | Contents |
