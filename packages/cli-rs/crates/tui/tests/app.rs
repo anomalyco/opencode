@@ -104,6 +104,7 @@ fn run(recording: &Recording) -> (bool, String) {
         match step {
             Step::Keys { keys } => keys.iter().for_each(|key| app.press(key)),
             Step::Type { text } => app.type_text(text),
+            Step::Click { click } => app.click(click[0], click[1]),
             Step::Event { event } => memory.emit(event),
             Step::Checkpoint(checkpoint) => {
                 let capture = settle(&app, &memory, checkpoint.until.as_deref());

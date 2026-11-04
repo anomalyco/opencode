@@ -76,6 +76,10 @@ pub enum Step {
         #[serde(rename = "type")]
         text: String,
     },
+    /// A left press and release at `[x, y]`.
+    Click {
+        click: [u16; 2],
+    },
     Event {
         event: Value,
     },
