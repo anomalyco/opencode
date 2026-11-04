@@ -80,8 +80,10 @@ type Attached = {
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
-  layout: Omit<Layout, "narrow" | "settings" | "project" | "draft" | "command" | "stored"> & {
+  layout: Omit<Layout, "narrow" | "settings" | "project" | "draft" | "command" | "stored" | "side"> & {
     stored(plugin: string, session: SessionRef): readonly string[]
+    /** `width` and `resize` take the panel's host key, `${plugin}:${panel id}`. */
+    side: Layout["side"]
   }
   settings: (page?: string) => void
   project: (server: string, title: string) => void
@@ -411,6 +413,8 @@ export function createHostApis() {
         opened: (session) => current()?.layout.side.opened(session) ?? false,
         toggle: (session) => write((value) => value.layout.side.toggle(session)),
         menu: () => current()?.layout.side.menu() ?? [],
+        width: (panel) => current()?.layout.side.width(`${plugin}:${panel}`),
+        resize: (panel, width) => write((value) => value.layout.side.resize(`${plugin}:${panel}`, width)),
       },
       sidebar: { opened: () => current()?.layout.sidebar.opened() ?? true },
       scroll: {
@@ -1097,6 +1101,8 @@ export function createPluginAttachment(apis: HostApis) {
         opened: sideOpened,
         toggle: (session) => tabs.setRegion(shellTab(session), "side", !sideOpened(session)),
         menu,
+        width: layout.panelWidth.get,
+        resize: layout.panelWidth.set,
       },
       // Open is the stored preference's default, which holds until a session screen shows the preference.
       sidebar: { opened: () => sidebar()?.opened() ?? true },
