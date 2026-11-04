@@ -7,7 +7,7 @@ story("separates model capabilities in the Simplified Chinese flyout", async ({ 
   await page.mouse.move(0, 0)
   await dialog.locator('[data-option-key="openai:gpt-5.6-sol"]').hover()
   const flyout = page.locator('[data-slot="model-dialog-flyout"]')
-  await expect(flyout.getByText("Text、Image和Tools", { exact: true })).toBeVisible()
+  await expect(flyout.getByText("Text、Image、Tools", { exact: true })).toBeVisible()
 })
 
 story("opens a neighbouring tooltip without the open delay", async ({ mount, page }) => {

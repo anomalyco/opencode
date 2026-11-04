@@ -36,8 +36,9 @@ export function ModelDetails(props: {
 
   const label = (type: Input) => language.t(`model.details.input.${type}`)
 
+  // Narrow conjunction separates labels in Chinese and preserves the comma-only English list.
   const summary = () =>
-    new Intl.ListFormat(language.intl(), { style: "short", type: "conjunction" }).format([
+    new Intl.ListFormat(language.intl(), { style: "narrow", type: "conjunction" }).format([
       ...input().map(label),
       ...(props.model.capabilities.toolcall ? [language.t("model.details.tools")] : []),
     ])
