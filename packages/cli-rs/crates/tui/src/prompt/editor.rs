@@ -101,6 +101,13 @@ pub struct Inner {
     dismissed: RefCell<Option<String>>,
     /// The editor context follows this session's directory.
     followed: Cell<bool>,
+    /// The footer row: the location, then the `prompt.footer` slots (E.14).
+    footer_row: View,
+    location_box: View,
+    footer_slots: RefCell<(
+        Option<opencode_plugin::SlotInput>,
+        Vec<opencode_plugin::SlotMount<Tui>>,
+    )>,
     /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
     /// The running indicator: the spinner, one cell in from the footer's edge.
@@ -141,6 +148,9 @@ impl Prompt {
             if let Some(complete) = self.inner.autocomplete.get() {
                 complete.sync();
             }
+        }
+        for slot in &self.inner.footer_slots.borrow().1 {
+            slot.sync(tui, changes);
         }
         let Some(session) = &self.inner.session else {
             return;
@@ -269,7 +279,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .truncate(true)
         .wrap(WrapMode::None)
         .shrink(1.0);
-    let left = View::new(app)
+    let location_box = View::new(app)
         .row()
         .grow(1.0)
         .shrink(1.0)
@@ -277,19 +287,20 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .gap(1)
         .child(&running)
         .child(&footer);
-    let status = View::new(app)
+    // `prompt/index.tsx:1900-1983`: the location inside `prompt.footer.status`, then `prompt.footer.file`, both
+    // inside `prompt.footer`, whose plugins append their hints.
+    let footer_row = View::new(app)
         .row()
+        .width(Length::percent(100.0))
         .shrink(0.0)
         .justify(Justify::SpaceBetween)
-        .gap(2)
-        .child(&left)
-        .child(&editor_file);
+        .gap(2);
     let root = View::new(app)
         .column()
         .shrink(0.0)
         .child(&frame)
         .child(&bottom)
-        .child(&status);
+        .child(&footer_row);
 
     let inner = Rc::new_cyclic(|this| Inner {
         tui: tui.weak(),
@@ -304,6 +315,9 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         editor_file,
         dismissed: RefCell::new(None),
         followed: Cell::new(false),
+        footer_row,
+        location_box,
+        footer_slots: RefCell::default(),
         hovered: Cell::new(false),
         running,
         spinner,
@@ -667,7 +681,59 @@ impl Inner {
             theme.text.muted
         };
         self.editor_file.set_text(vec![file.fg(color)]);
+        self.mount_footer(tui);
         self.app.request_redraw();
+    }
+
+    /// Mounts the `prompt.footer` slots again when their input changed (E.14).
+    fn mount_footer(&self, tui: &Tui) {
+        let input = opencode_plugin::SlotInput {
+            session_id: self.session.as_ref().map(|session| session.0.clone()),
+            prompt: Some(opencode_plugin::slot::PromptFooter {
+                shell: self.mode.get() == Mode::Shell,
+                show_details: self.interrupt.get() == 0 || self.app.size().0 >= 80,
+            }),
+            ..opencode_plugin::SlotInput::default()
+        };
+        let mut slots = self.footer_slots.borrow_mut();
+        if slots.0.as_ref() == Some(&input) {
+            return;
+        }
+        self.location_box.detach();
+        self.editor_file.detach();
+        self.footer_row.clear();
+        let row = &self.footer_row;
+        let mut mounts = Vec::new();
+        let footer = crate::plugins::host::slot(
+            tui,
+            row,
+            opencode_plugin::slot::PROMPT_FOOTER,
+            &input,
+            |row| {
+                let status = crate::plugins::host::slot(
+                    tui,
+                    row,
+                    opencode_plugin::slot::PROMPT_FOOTER_STATUS,
+                    &input,
+                    |row| {
+                        row.add(&self.location_box);
+                    },
+                );
+                let file = crate::plugins::host::slot(
+                    tui,
+                    row,
+                    opencode_plugin::slot::PROMPT_FOOTER_FILE,
+                    &input,
+                    |row| {
+                        row.add(&self.editor_file);
+                    },
+                );
+                mounts.push(status);
+                mounts.push(file);
+            },
+        );
+        mounts.push(footer);
+        *slots = (Some(input), mounts);
     }
 
     /// `session.interrupt`: Escape leaves shell mode, else arms, and a second Escape interrupts.
