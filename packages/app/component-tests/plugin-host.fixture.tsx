@@ -1,5 +1,6 @@
 import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { DialogProvider } from "@opencode/ui/context/dialog"
+import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
 import {
   Panel,
@@ -43,7 +44,8 @@ import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
-import { PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { PluginLinks, PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { Markdown } from "@opencode/session-ui/markdown"
 import { ThemeProvider, useTheme } from "@opencode/ui/theme/context"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
@@ -54,6 +56,8 @@ import { ui } from "../src/runtime/plugin/ui"
 export {
   bindPlugin,
   usePlugin,
+  CodeBlock,
+  CodeBlockAction,
   ComposerPill,
   Contract,
   createKeyed,
@@ -545,8 +549,9 @@ export function mountPanelWidths(input: { definitions: readonly Entry[]; active:
 
 /**
  * Mounts the real host and HostApis, and the parts of the session screen that render plugin content for the routed
- * session: the side region (`createRegion`, `RegionContent`) with every panel's tabs stored, and the
- * `session.panel.end` slot, whose input the screen builds this way. `route(id)` routes a session the way the screen
+ * session: the side region (`createRegion`, `RegionContent`) with every panel's tabs stored, the
+ * `session.panel.end` slot, whose input the screen builds this way, and the `session.location.menu` slot inside a
+ * "Project menu" the way the session header's project menu holds it. `route(id)` routes a session the way the screen
  * does: a new session object each time, delivered through the same reactive inputs, while the one screen object
  * `ctx.screen` returns follows the route. Its composer records which session each attachment reached.
  */
@@ -627,6 +632,24 @@ export function mountSessionRegion(input: {
             screen,
           }}
         />
+        <Menu modal={false}>
+          {/* Without text, so the cases that read the region's text see only the plugins'. */}
+          <Menu.Trigger aria-label="Project menu" style={{ width: "16px", height: "16px" }} />
+          <Menu.Portal>
+            <Menu.Content>
+              <PluginSlot
+                at="session.location.menu"
+                input={{
+                  get session() {
+                    return view()
+                  },
+                  screen,
+                  shown: true,
+                }}
+              />
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
         <RegionContent
           pane={region.pane("side")}
           view={view()}
@@ -788,6 +811,80 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
+    status: (id: string) => hosts[0]?.state.status[id],
+    failure: (id: string) => hosts[0]?.state.failures[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and one message's production Markdown inside the session screen's `PluginLinks`, for a session
+ * whose directory is `/repo`. `show(text, streaming)` replaces the message as a stream does; `define` replaces the
+ * plugins, as plugin GUIs join and leave.
+ */
+export function mountCodeBlocks(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "code-blocks"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const captured: Captured = {}
+  const [definitions, setDefinitions] = createSignal(input.definitions)
+  const [message, setMessage] = createStore({ text: "", streaming: false })
+
+  const value = { key: "fixture\na", id: "a", tab: "a", pending: false, directory: "/repo", visit: {} }
+
+  // SAFETY: PluginLinks passes the session through; the test's plugins read only `directory`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  function Message() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <PluginLinks session={session}>
+          <Markdown text={message.text} streaming={message.streaming} />
+        </PluginLinks>
+      </Show>
+    )
+  }
+
+  function Host() {
+    const apis = createHostApis()
+    captured.apis = apis
+
+    return (
+      <PluginHostProvider
+        definitions={definitions}
+        disabled={() => new Set<string>()}
+        apis={apis.apis}
+        whenMounted={apis.whenMounted}
+      >
+        <Message />
+      </PluginHostProvider>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <Host />
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    show: (text: string, streaming = false) => setMessage({ text, streaming }),
+    define: (next: readonly Entry[]) => setDefinitions(next),
     status: (id: string) => hosts[0]?.state.status[id],
     failure: (id: string) => hosts[0]?.state.failures[id],
     unmount: () => {

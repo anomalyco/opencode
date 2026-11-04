@@ -1,7 +1,7 @@
 // Type-level contract of the registries, checked by `bun typecheck`. Nothing imports this file. Each `@ts-expect-error`
 // fails the typecheck if its line stops being an error.
 import { Plugin } from "./index.js"
-import { MenuItem, Theme, TitlebarItem } from "./index.js"
+import { CodeBlock, CodeBlockAction, MenuItem, Theme, TitlebarItem } from "./index.js"
 
 const Fixture = Plugin.define({})
 
@@ -32,6 +32,21 @@ export const menus: Plugin.Setup<typeof Fixture> = (ctx) => {
 
   // A pill without `run` only shows its label.
   ctx.add(TitlebarItem, { id: "status", label: "Ready" })
+}
+
+export const codeBlocks: Plugin.Setup<typeof Fixture> = (ctx) => {
+  // A render may decline a block, which keeps its code.
+  ctx.add(CodeBlock, { languages: ["csv"], render: (props) => (props.code ? props.language : undefined) })
+  ctx.add(CodeBlockAction, {
+    id: "run",
+    languages: ["sh"],
+    icon: "terminal",
+    title: "Run",
+    run: async (input) => void input.session?.directory,
+  })
+
+  // @ts-expect-error an action needs an icon
+  ctx.add(CodeBlockAction, { id: "run", languages: ["sh"], title: "Run", run() {} })
 }
 
 const palette = {
