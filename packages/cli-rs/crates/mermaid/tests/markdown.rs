@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use opencode_mermaid::{Palette, Renderer};
+use opencode_mermaid::{Palette, Rendered, Renderer, render, widget};
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::theme::{Catalog, ThemeMode};
 use opencode_ui::{code, markdown};
@@ -55,6 +55,30 @@ fn streaming_fence_keeps_its_last_diagram() {
     assert_eq!(
         renderer.render(&block(sequence, Some(&good)), &palette),
         None
+    );
+}
+
+/// A diagram wider than the view scrolls sideways under a left drag, as TS `StaticDiagramRenderable` does.
+#[test]
+fn dragging_scrolls_a_wide_diagram() {
+    let app = TestApp::new(30, 6);
+    let theme = Catalog::default()
+        .load("opencode", ThemeMode::Dark)
+        .unwrap()
+        .theme;
+    let source = "flowchart LR\n  A[Alpha] --> B[Bravo] --> C[Charlie]";
+    // Laid out for a wide terminal, so it stays horizontal in the narrow view.
+    let Rendered::Diagram(diagram) = render(source, 120, &Palette::from_theme(&theme)) else {
+        panic!("a diagram");
+    };
+    app.root().add(&widget(&app, &diagram));
+    let before = app.render().text();
+    assert!(before.contains("Alpha"), "{before}");
+    app.drag((20, 1), (5, 1));
+    let after = app.render().text();
+    assert!(
+        !after.contains("Alpha") && after.contains("Charlie"),
+        "{after}"
     );
 }
 
