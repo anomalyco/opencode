@@ -148,6 +148,9 @@ const BACKGROUND_TOOL_HINT_DELAY = 3_000
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 
+/** The box holding the session.transcript.start slot, first in the transcript scroll. */
+const TRANSCRIPT_START = "session-transcript-start"
+
 export function Session(props: {
   scrollRef?: (scroll: ScrollBoxRenderable | undefined) => void
   verticalTabsWidth: number
@@ -420,7 +423,10 @@ export function Session(props: {
   const pinAbove = () => {
     if (!scroll || scroll.isDestroyed) return
     if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
-    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
+    // The transcript-start slot stays on top while older rows load beneath it, so it never anchors.
+    const node = scroll
+      .getChildren()
+      .find((node) => node.id !== TRANSCRIPT_START && node.height > 0 && node.y + node.height > scroll.viewport.y)
     if (node) afterLayout(scroll.anchor(node))
   }
 
@@ -1529,7 +1535,10 @@ export function Session(props: {
           paddingRight={plugins.layout().inset ?? (dimensions().width < 44 ? 1 : 2)}
         >
           <Show when={session()}>
-            <Slot path="session.header" input={{ sessionID: route.sessionID }} />
+            {/* Keeps its full height; the transcript below takes what is left. */}
+            <box flexShrink={0}>
+              <Slot path="session.header" input={{ sessionID: route.sessionID }} />
+            </box>
             <box flexGrow={1} minHeight={0} position="relative">
               <scrollbox
                 ref={(r) => {
@@ -1559,7 +1568,10 @@ export function Session(props: {
                   updateAwayFromBottom()
                 }}
               >
-                <Slot path="session.transcript.start" input={{ sessionID: route.sessionID }} />
+                {/* Pinned above every row, so the history scroll anchor skips it (pinAbove). */}
+                <box id={TRANSCRIPT_START} flexShrink={0}>
+                  <Slot path="session.transcript.start" input={{ sessionID: route.sessionID }} />
+                </box>
                 <For each={visibleRows()}>
                   {(row, index) => (
                     <SessionRowView

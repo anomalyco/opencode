@@ -169,7 +169,10 @@ export function PluginTool(props: ParentProps<{ readonly input: SlotMap["session
     <Show keyed when={claim()} fallback={props.children}>
       {(item) => (
         <PluginBoundary id={item.plugin} where={`tool ${props.input.tool}`}>
-          {createComponent(item.render, mergeProps(() => props.input))}
+          {createComponent(
+            item.render,
+            mergeProps(() => props.input),
+          )}
         </PluginBoundary>
       )}
     </Show>

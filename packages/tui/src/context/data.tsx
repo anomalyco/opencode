@@ -104,11 +104,11 @@ function createGoals(input: {
     const current = turn(sessionID)
     // A server without the goal plugin answers with an error, and the session shows no goal.
     void input.fetch(sessionID).then(
-        (goal) => {
-          if (turns.get(sessionID) === current) set(sessionID, goal)
-        },
-        () => undefined,
-      )
+      (goal) => {
+        if (turns.get(sessionID) === current) set(sessionID, goal)
+      },
+      () => undefined,
+    )
   }
   onCleanup(
     input.on(`rpc.${Goal.Definition.id}.changed`, (event) => {

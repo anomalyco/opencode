@@ -65,11 +65,7 @@ function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Ses
   context.ui.dialog.show(() => <GoalDialog context={context} sessionID={sessionID} goal={goal} />)
 }
 
-function GoalDialog(props: {
-  context: Plugin.Context
-  sessionID: string
-  goal: Accessor<SessionGoal | undefined>
-}) {
+function GoalDialog(props: { context: Plugin.Context; sessionID: string; goal: Accessor<SessionGoal | undefined> }) {
   const theme = useTheme().surface("dialog")
   const goal = props.goal
   const run = (text: "pause" | "resume" | "clear") => {
