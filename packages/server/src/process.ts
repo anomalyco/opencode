@@ -15,6 +15,7 @@ import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } fro
 import { NetAddress } from "effect/net"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
+import { BasePath } from "./base-path"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
@@ -54,6 +55,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
 ) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
+  const basePath = BasePath.normalize(options.basePath)
+  if (basePath === undefined) return yield* Effect.fail(BasePath.invalid(options.basePath))
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
@@ -63,7 +66,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     const address = bound.server.address()
     if (address === null || typeof address === "string") return []
     const host = address.family === "IPv6" ? `[${address.address}]` : address.address
-    return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
+    return ServerInfo.connectionURLs(`http://${host}:${address.port}${basePath}`, hostname)
   }
   const urls = () => [...localURLs(), ...(remoteURLs?.() ?? [])]
   const application = yield* Ref.make(Option.none<App>())
@@ -71,7 +74,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      (transform ? transform(app) : app).pipe(
+      BasePath.mount(basePath, transform ? transform(app) : app).pipe(
         HttpMiddleware.compression(),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
@@ -100,6 +103,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       createRoutes(
         {
           ...options,
+          basePath,
           password,
         },
         urls,
