@@ -4,6 +4,7 @@
 
 use std::cell::Cell;
 
+use opencode_store::Changes;
 use opencode_store::forms::GLOBAL;
 use opentui::prelude::*;
 
@@ -42,8 +43,9 @@ impl HomeForms {
 
     /// Shows the first global form of the default location. Returns true when a form closed, so the home gives its
     /// prompt the keys back.
-    pub fn sync(&self, tui: &Tui) -> bool {
-        if !self.read.replace(true) {
+    pub fn sync(&self, tui: &Tui, changes: &Changes) -> bool {
+        // A full sync (a reconnect) reads again: the store invalidated what it read before.
+        if !self.read.replace(true) || changes.all {
             quiet(tui, tui.data.form_sync(GLOBAL, None));
         }
         let form = tui.data.read(|state| {
