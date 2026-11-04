@@ -1,0 +1,1733 @@
+{
+  "builtins": [
+    {
+      "name": "help",
+      "aliases": [
+        "h"
+      ],
+      "type": "Boolean",
+      "choices": [],
+      "description": "Show help information",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false,
+      "default": false
+    },
+    {
+      "name": "version",
+      "aliases": [
+        "v"
+      ],
+      "type": "Boolean",
+      "choices": [],
+      "description": "Show version information",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false,
+      "default": false
+    },
+    {
+      "name": "wizard",
+      "aliases": [],
+      "type": "Boolean",
+      "choices": [],
+      "description": "Start wizard mode for a command",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false,
+      "default": false
+    },
+    {
+      "name": "completions",
+      "aliases": [],
+      "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+      "choices": [
+        "bash",
+        "zsh",
+        "fish",
+        "powershell",
+        "sh",
+        "pwsh"
+      ],
+      "description": "Print shell completion script",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false
+    },
+    {
+      "name": "log-level",
+      "aliases": [],
+      "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+      "choices": [
+        "all",
+        "trace",
+        "debug",
+        "info",
+        "warn",
+        "warning",
+        "error",
+        "fatal",
+        "none"
+      ],
+      "description": "Sets the minimum log level",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false
+    },
+    {
+      "name": "print-logs",
+      "aliases": [],
+      "type": "Boolean",
+      "choices": [],
+      "description": "Print logs to stderr (server logs require --standalone)",
+      "hidden": false,
+      "optional": true,
+      "repeated": false,
+      "optionalValue": false,
+      "default": false
+    }
+  ],
+  "root": {
+    "name": "opencode",
+    "aliases": [],
+    "description": "OpenCode command line interface",
+    "globalFlags": [],
+    "arguments": [
+      {
+        "name": "directory",
+        "type": "String",
+        "choices": [],
+        "description": "Directory to start OpenCode in",
+        "optional": true,
+        "variadic": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "standalone",
+        "aliases": [],
+        "type": "Boolean",
+        "choices": [],
+        "description": "Run with a private server instead of the background service",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false,
+        "default": false
+      },
+      {
+        "name": "server",
+        "aliases": [],
+        "type": "String",
+        "choices": [],
+        "description": "Connect to a server URL instead of the background service",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false
+      },
+      {
+        "name": "auto",
+        "aliases": [],
+        "type": "Boolean",
+        "choices": [],
+        "description": "Auto-approve permissions that are not explicitly denied",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false,
+        "default": false
+      },
+      {
+        "name": "yolo",
+        "aliases": [],
+        "type": "Boolean",
+        "choices": [],
+        "description": "",
+        "hidden": true,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false,
+        "default": false
+      },
+      {
+        "name": "dangerously-skip-permissions",
+        "aliases": [],
+        "type": "Boolean",
+        "choices": [],
+        "description": "",
+        "hidden": true,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false,
+        "default": false
+      },
+      {
+        "name": "continue",
+        "aliases": [
+          "c"
+        ],
+        "type": "Boolean",
+        "choices": [],
+        "description": "Continue the last session",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false,
+        "default": false
+      },
+      {
+        "name": "session",
+        "aliases": [
+          "s"
+        ],
+        "type": "String",
+        "choices": [],
+        "description": "Session ID to continue, or to create if it does not exist",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false
+      },
+      {
+        "name": "prompt",
+        "aliases": [],
+        "type": "String",
+        "choices": [],
+        "description": "Prompt to use",
+        "hidden": false,
+        "optional": true,
+        "repeated": false,
+        "optionalValue": false
+      }
+    ],
+    "commands": [
+      {
+        "name": "upgrade",
+        "aliases": [
+          "update"
+        ],
+        "description": "Upgrade OpenCode to the latest or a specific version",
+        "globalFlags": [],
+        "arguments": [
+          {
+            "name": "target",
+            "type": "String",
+            "choices": [],
+            "description": "Version to upgrade to (with or without a leading v)",
+            "optional": true,
+            "variadic": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "method",
+            "aliases": [
+              "m"
+            ],
+            "type": "Choice",
+            "choices": [
+              "curl",
+              "npm",
+              "pnpm",
+              "bun",
+              "yarn",
+              "vp",
+              "brew",
+              "winget"
+            ],
+            "description": "Installation method to use",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "uninstall",
+        "aliases": [],
+        "description": "Uninstall OpenCode, keeping session data, configuration, and state",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "dry-run",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show what would be removed without removing",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "force",
+            "aliases": [
+              "f"
+            ],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Skip confirmation prompts",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "acp",
+        "aliases": [],
+        "description": "Start an Agent Client Protocol server",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "login",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Run auth login instead of starting the server",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "api",
+        "aliases": [],
+        "description": "Make a request to the running server",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [
+          {
+            "name": "operation | method path",
+            "type": "String",
+            "choices": [],
+            "description": "OpenAPI operation ID, or an HTTP method followed by a path",
+            "optional": false,
+            "variadic": true,
+            "min": 1,
+            "max": 2
+          }
+        ],
+        "flags": [
+          {
+            "name": "data",
+            "aliases": [
+              "d"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Request body",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "header",
+            "aliases": [
+              "H"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Request header in name:value form",
+            "hidden": false,
+            "optional": true,
+            "repeated": true,
+            "max": 100,
+            "optionalValue": false
+          },
+          {
+            "name": "param",
+            "aliases": [],
+            "type": "KeyValuePair",
+            "choices": [],
+            "description": "OpenAPI path or query parameter",
+            "hidden": false,
+            "optional": true,
+            "repeated": true,
+            "min": 1,
+            "optionalValue": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "debug",
+        "aliases": [],
+        "description": "Debugging and troubleshooting tools",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "agents",
+            "aliases": [],
+            "description": "List all agents",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "config",
+            "aliases": [],
+            "description": "List configuration sources",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "heap-dump",
+            "aliases": [],
+            "description": "Write a heap snapshot of the running server and print its path",
+            "globalFlags": [
+              "server"
+            ],
+            "arguments": [],
+            "flags": [
+              {
+                "name": "directory",
+                "aliases": [],
+                "type": "String",
+                "choices": [],
+                "description": "Directory to write the snapshot into instead of the server's log directory",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "paths",
+            "aliases": [],
+            "description": "Show global paths (data, config, cache, state)",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "name",
+                "type": "Choice",
+                "choices": [
+                  "db",
+                  "home",
+                  "data",
+                  "config",
+                  "cache",
+                  "state",
+                  "tmp",
+                  "bin",
+                  "log",
+                  "repos"
+                ],
+                "description": "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "auth",
+        "aliases": [],
+        "description": "manage integrations and credentials",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "list",
+            "aliases": [],
+            "description": "list integrations and credentials",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [
+              {
+                "name": "format",
+                "aliases": [],
+                "type": "Choice",
+                "choices": [
+                  "default",
+                  "json"
+                ],
+                "description": "Output format",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false,
+                "default": "default"
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "login",
+            "aliases": [],
+            "description": "connect an integration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Integration ID, name, or well-known provider URL",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "method",
+                "aliases": [],
+                "type": "String",
+                "choices": [],
+                "description": "Authentication method ID",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false
+              },
+              {
+                "name": "answer",
+                "aliases": [],
+                "type": "String",
+                "choices": [],
+                "description": "Provider form answer (key=value; repeat for multiple fields)",
+                "hidden": false,
+                "optional": true,
+                "repeated": true,
+                "max": 100,
+                "optionalValue": false
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "logout",
+            "aliases": [],
+            "description": "log out of a saved account",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Integration ID or name",
+                "optional": true,
+                "variadic": false
+              },
+              {
+                "name": "credential",
+                "type": "String",
+                "choices": [],
+                "description": "Credential ID or label (opens an account picker when omitted)",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "export",
+            "aliases": [],
+            "description": "print stored credentials, including secrets, as JSON",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Integration ID or name (exports every integration when omitted)",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "import",
+            "aliases": [],
+            "description": "import credentials exported by auth export",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "file",
+                "type": "String",
+                "choices": [],
+                "description": "JSON file to import (reads stdin when omitted)",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "switch",
+            "aliases": [],
+            "description": "switch the active account for an integration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Integration ID or name",
+                "optional": true,
+                "variadic": false
+              },
+              {
+                "name": "credential",
+                "type": "String",
+                "choices": [],
+                "description": "Credential ID or label (opens an account picker when omitted)",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "mcp",
+        "aliases": [],
+        "description": "Manage MCP (Model Context Protocol) servers",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "list",
+            "aliases": [],
+            "description": "List configured MCP servers and their status",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "add",
+            "aliases": [],
+            "description": "Add an MCP server to your configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "name",
+                "type": "String",
+                "choices": [],
+                "description": "Name of the MCP server",
+                "optional": false,
+                "variadic": false
+              },
+              {
+                "name": "command",
+                "type": "String",
+                "choices": [],
+                "description": "Command and arguments for a local server, passed after --",
+                "optional": false,
+                "variadic": true,
+                "min": 0
+              }
+            ],
+            "flags": [
+              {
+                "name": "url",
+                "aliases": [],
+                "type": "String",
+                "choices": [],
+                "description": "URL for a remote MCP server",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false
+              },
+              {
+                "name": "header",
+                "aliases": [],
+                "type": "KeyValuePair",
+                "choices": [],
+                "description": "HTTP header for a remote server, as name=value",
+                "hidden": false,
+                "optional": true,
+                "repeated": true,
+                "min": 1,
+                "optionalValue": false
+              },
+              {
+                "name": "env",
+                "aliases": [],
+                "type": "KeyValuePair",
+                "choices": [],
+                "description": "Environment variable for a local server, as name=value",
+                "hidden": false,
+                "optional": true,
+                "repeated": true,
+                "min": 1,
+                "optionalValue": false
+              },
+              {
+                "name": "global",
+                "aliases": [],
+                "type": "Boolean",
+                "choices": [],
+                "description": "Write to the global config instead of the project config",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false,
+                "default": false
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "auth",
+            "aliases": [],
+            "description": "Authenticate with an OAuth-capable remote MCP server",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [
+              {
+                "name": "name",
+                "type": "String",
+                "choices": [],
+                "description": "Name of the MCP server",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "logout",
+            "aliases": [],
+            "description": "Remove stored OAuth credentials for an MCP server",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [
+              {
+                "name": "name",
+                "type": "String",
+                "choices": [],
+                "description": "Name of the MCP server",
+                "optional": false,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "plugin",
+        "aliases": [],
+        "description": "Manage plugins",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "list",
+            "aliases": [],
+            "description": "List plugins",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [],
+            "flags": [
+              {
+                "name": "builtin",
+                "aliases": [],
+                "type": "Boolean",
+                "choices": [],
+                "description": "Include built-in server plugins",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false,
+                "default": false
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "add",
+            "aliases": [],
+            "description": "Install a plugin and add it to the global configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "package",
+                "type": "String",
+                "choices": [],
+                "description": "npm registry or Git package specifier",
+                "optional": false,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "check",
+            "aliases": [],
+            "description": "Check package plugins for updates",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Configured package target",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "update",
+            "aliases": [],
+            "description": "Update package plugins",
+            "globalFlags": [
+              "standalone",
+              "server"
+            ],
+            "arguments": [
+              {
+                "name": "target",
+                "type": "String",
+                "choices": [],
+                "description": "Configured package target; omit to update all outdated plugins",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "remove",
+            "aliases": [],
+            "description": "Remove a plugin from global configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "package",
+                "type": "String",
+                "choices": [],
+                "description": "configured package specifier",
+                "optional": false,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "models",
+        "aliases": [],
+        "description": "List all available models",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [],
+        "commands": []
+      },
+      {
+        "name": "stats",
+        "aliases": [],
+        "description": "Show shareable usage statistics",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "days",
+            "aliases": [],
+            "type": "Int",
+            "choices": [],
+            "description": "Show the last N days; 0 means today",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "year",
+            "aliases": [],
+            "type": "Int",
+            "choices": [],
+            "description": "Show a calendar year",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "all",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show lifetime statistics",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "project",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Filter by project ID, or use \".\" for the current project",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "models",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show model usage",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "tools",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show tool reliability",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "cost",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show cost and token details",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "full",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show every detailed section",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "limit",
+            "aliases": [],
+            "type": "Int",
+            "choices": [],
+            "description": "Number of rows in detailed sections",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": 5
+          },
+          {
+            "name": "json",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Output statistics as JSON",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "mini",
+        "aliases": [],
+        "description": "Start the minimal interactive interface",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "continue",
+            "aliases": [
+              "c"
+            ],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Continue the last session",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "session",
+            "aliases": [
+              "s"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Session ID to continue, or to create if it does not exist",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "fork",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Fork the session when continuing",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "replay",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Restore session history on resume and resize (disable with --no-replay)",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "replay-limit",
+            "aliases": [],
+            "type": "Int",
+            "choices": [],
+            "description": "Limit replay to the newest N messages (default: 200)",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "model",
+            "aliases": [
+              "m"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Model to use in the format provider/model",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "agent",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Agent to use",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "prompt",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Prompt to use",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "demo",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "",
+            "hidden": true,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "run",
+        "aliases": [],
+        "description": "Run OpenCode with a message",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [
+          {
+            "name": "message",
+            "type": "String",
+            "choices": [],
+            "description": "Message to send",
+            "optional": false,
+            "variadic": true,
+            "min": 0
+          }
+        ],
+        "flags": [
+          {
+            "name": "continue",
+            "aliases": [
+              "c"
+            ],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Continue the last session",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "session",
+            "aliases": [
+              "s"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Session ID to continue, or to create if it does not exist",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "fork",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Fork the session before continuing",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "worktree",
+            "aliases": [
+              "w"
+            ],
+            "type": "name",
+            "choices": [],
+            "description": "Start a new session in a new git worktree, optionally with this name",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": true
+          },
+          {
+            "name": "model",
+            "aliases": [
+              "m"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "Model to use in the format provider/model#variant",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "agent",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Agent to use",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "format",
+            "aliases": [],
+            "type": "Choice",
+            "choices": [
+              "default",
+              "json"
+            ],
+            "description": "Output format",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": "default"
+          },
+          {
+            "name": "file",
+            "aliases": [
+              "f"
+            ],
+            "type": "String",
+            "choices": [],
+            "description": "File to attach to the message",
+            "hidden": false,
+            "optional": true,
+            "repeated": true,
+            "max": 100,
+            "optionalValue": false
+          },
+          {
+            "name": "title",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Session title",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "archived",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Create the session archived so it stays out of session lists (useful for scripted or CI runs)",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "thinking",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Show thinking blocks",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "auto",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Auto-approve permissions that are not explicitly denied",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "yolo",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "",
+            "hidden": true,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "dangerously-skip-permissions",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "",
+            "hidden": true,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "session",
+        "aliases": [],
+        "description": "Manage sessions",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "list",
+            "aliases": [],
+            "description": "List top-level sessions in the current project, newest first",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [
+              {
+                "name": "max-count",
+                "aliases": [
+                  "n"
+                ],
+                "type": "Int",
+                "choices": [],
+                "description": "Limit to N most recent sessions (default: 100)",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false
+              },
+              {
+                "name": "format",
+                "aliases": [],
+                "type": "Choice",
+                "choices": [
+                  "table",
+                  "json"
+                ],
+                "description": "Output format",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false,
+                "default": "table"
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "delete",
+            "aliases": [],
+            "description": "Delete a session and its child sessions",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "sessionID",
+                "type": "String",
+                "choices": [],
+                "description": "Session ID to delete",
+                "optional": false,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "export",
+            "aliases": [],
+            "description": "Export session data as JSON",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "session",
+                "type": "String",
+                "choices": [],
+                "description": "Session ID to export",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "sanitize",
+                "aliases": [],
+                "type": "Boolean",
+                "choices": [],
+                "description": "Redact sensitive transcript and file data",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false,
+                "default": false
+              }
+            ],
+            "commands": []
+          },
+          {
+            "name": "import",
+            "aliases": [],
+            "description": "Import session data from a JSON file or URL",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "file",
+                "type": "String",
+                "choices": [],
+                "description": "JSON file or URL to import",
+                "optional": false,
+                "variadic": false
+              }
+            ],
+            "flags": [
+              {
+                "name": "directory",
+                "aliases": [],
+                "type": "String",
+                "choices": [],
+                "description": "Directory in which to import the session",
+                "hidden": false,
+                "optional": true,
+                "repeated": false,
+                "optionalValue": false
+              }
+            ],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "service",
+        "aliases": [],
+        "description": "Manage the background server",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [],
+        "commands": [
+          {
+            "name": "start",
+            "aliases": [],
+            "description": "Start the background server",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "restart",
+            "aliases": [],
+            "description": "Restart the background server",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "status",
+            "aliases": [],
+            "description": "Show background server status",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "stop",
+            "aliases": [],
+            "description": "Stop the background server",
+            "globalFlags": [],
+            "arguments": [],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "get",
+            "aliases": [],
+            "description": "Get service configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "key",
+                "type": "String",
+                "choices": [],
+                "description": "Service setting or env",
+                "optional": true,
+                "variadic": false
+              },
+              {
+                "name": "name",
+                "type": "String",
+                "choices": [],
+                "description": "Environment variable name",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "set",
+            "aliases": [],
+            "description": "Set service configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "key",
+                "type": "String",
+                "choices": [],
+                "description": "Service setting or env",
+                "optional": false,
+                "variadic": false
+              },
+              {
+                "name": "value",
+                "type": "String",
+                "choices": [],
+                "description": "Setting value or environment variable name",
+                "optional": false,
+                "variadic": false
+              },
+              {
+                "name": "env-value",
+                "type": "String",
+                "choices": [],
+                "description": "Environment variable value",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          },
+          {
+            "name": "unset",
+            "aliases": [],
+            "description": "Unset service configuration",
+            "globalFlags": [],
+            "arguments": [
+              {
+                "name": "key",
+                "type": "String",
+                "choices": [],
+                "description": "Service setting or env",
+                "optional": false,
+                "variadic": false
+              },
+              {
+                "name": "name",
+                "type": "String",
+                "choices": [],
+                "description": "Environment variable name",
+                "optional": true,
+                "variadic": false
+              }
+            ],
+            "flags": [],
+            "commands": []
+          }
+        ]
+      },
+      {
+        "name": "reload",
+        "aliases": [],
+        "description": "Reload configuration",
+        "globalFlags": [
+          "standalone",
+          "server"
+        ],
+        "arguments": [],
+        "flags": [],
+        "commands": []
+      },
+      {
+        "name": "pair",
+        "aliases": [],
+        "description": "Print one-time links to connect a browser or app",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "url",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Use an external HTTP(S) server URL in pairing links",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "remote",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "yes",
+            "aliases": [
+              "y"
+            ],
+            "type": "Boolean",
+            "choices": [],
+            "description": "Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      },
+      {
+        "name": "serve",
+        "aliases": [],
+        "description": "Start the v2 API and web server",
+        "globalFlags": [],
+        "arguments": [],
+        "flags": [
+          {
+            "name": "hostname",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "port",
+            "aliases": [],
+            "type": "Int",
+            "choices": [],
+            "description": "",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false
+          },
+          {
+            "name": "cors",
+            "aliases": [],
+            "type": "String",
+            "choices": [],
+            "description": "Additional allowed CORS origin (repeat for multiple origins)",
+            "hidden": false,
+            "optional": true,
+            "repeated": true,
+            "min": 0,
+            "optionalValue": false
+          },
+          {
+            "name": "service",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          },
+          {
+            "name": "stdio",
+            "aliases": [],
+            "type": "Boolean",
+            "choices": [],
+            "description": "",
+            "hidden": false,
+            "optional": true,
+            "repeated": false,
+            "optionalValue": false,
+            "default": false
+          }
+        ],
+        "commands": []
+      }
+    ]
+  }
+}
