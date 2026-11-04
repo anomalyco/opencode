@@ -238,8 +238,7 @@ export function Session(props: {
     ),
   )
   const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
-  // The transcript's media, without reverted and queued messages, which it hides. An item showing the same file keeps
-  // its object, so the strips that read the gallery keep their tiles as messages arrive.
+  // The transcript's media without the reverted and queued messages it hides. Kept items keep their strips' tiles.
   const gallery = createMemo<readonly MediaItem[]>((previous) => {
     if (!richMedia()) return []
     const boundary = session()?.revert?.messageID
@@ -2143,6 +2142,7 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
         <Show when={props.message.type === "skill"} fallback={<SessionNoticeMessageV2 message={props.message} />}>
           <SessionSkillMessage message={props.message as Extract<SessionMessageInfo, { type: "skill" }>} />
         </Show>
+        <SessionMedia match={(item) => item.id === `${props.message.id}:generated`} />
       </Match>
       <Match when={props.message.type === "compaction"}>
         <CompactionMessage message={props.message as Extract<SessionMessageInfo, { type: "compaction" }>} />
@@ -2301,7 +2301,6 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const { navigate } = useRoute()
-  const richMedia = useRichMedia()
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
@@ -2339,19 +2338,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <>
-          <InlineToolRow
-            icon={source() === "goal" ? "◎" : "◈"}
-            color={theme.text.muted}
-            pending="Notice"
-            complete={true}
-          >
-            {text()}
-          </InlineToolRow>
-          <Show when={richMedia() && source() === "experimental_image_generate"}>
-            <SessionMedia match={(item) => item.id === `${props.message.id}:generated`} />
-          </Show>
-        </>
+        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
+          {text()}
+        </InlineToolRow>
       }
     >
       <box
@@ -2889,16 +2878,12 @@ function ToolImages(props: { tools: readonly ToolRef[] }) {
   )
 }
 
-/**
- * The transcript's media tiles for the gallery items `match` selects. A tile opens the viewer over the whole session's
- * gallery at that item.
- */
+// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item.
 function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
   const ctx = use()
   const media = useMedia()
   const gallery = () => ctx.media?.() ?? []
   const items = createMemo(() => gallery().filter(props.match))
-  const height = createMemo(() => Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4))))
   const paddingLeft = () => props.paddingLeft ?? 3
 
   return (
@@ -2908,14 +2893,8 @@ function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?
           items={items()}
           // The left border of a user message takes one more cell.
           width={ctx.width - paddingLeft() - 3}
-          height={height()}
-          onOpen={(index) => {
-            const id = items()[index]?.id
-            media.openViewer(
-              gallery(),
-              gallery().findIndex((item) => item.id === id),
-            )
-          }}
+          height={Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4)))}
+          onOpen={(index) => media.openViewer(gallery(), gallery().indexOf(items()[index]!))}
         />
       </box>
     </Show>

@@ -1,11 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { ImageRenderable, VideoRenderable, type Renderable } from "@opentui/core"
+import { ImageRenderable, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import path from "node:path"
 import { createSignal, Show, type JSX } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
-import { MediaProvider, useMedia, type MediaContext } from "../../../src/context/media"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Keymap } from "../../../src/context/keymap"
 import { TuiTerminalEnvironmentProvider } from "../../../src/context/runtime"
@@ -13,8 +12,8 @@ import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { DiffViewerImage, diffMediaKind, isDiffImageFile } from "../../../src/feature-plugins/system/diff-viewer-image"
 import { diffImageFixture } from "../../fixture/diff-image"
-import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
-import { videoFixture } from "../../fixture/media"
+import { renderMedia, videoFixture } from "../../fixture/media"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -25,117 +24,63 @@ test("recognizes only supported image file extensions", () => {
   for (const file of ["assets/preview.svg", "preview.avif", "image.png.ts", "png", "image.png/file"]) {
     expect(isDiffImageFile(file)).toBe(false)
   }
+  for (const [file, richMedia, kind] of [
+    ["clip.mp4", true, "video"],
+    ["clip.MOV", true, "video"],
+    ["clip.m4v", true, "video"],
+    ["clip.mp4", false, undefined],
+    ["preview.png", false, "image"],
+    ["preview.png", true, "image"],
+    ["clip.webm", true, undefined],
+  ] as const)
+    expect(diffMediaKind(file, richMedia)).toBe(kind)
 })
 
-test("previews videos only with the rich media experiment", () => {
-  for (const file of ["clip.mp4", "clip.MOV", "clip.m4v"]) {
-    expect(diffMediaKind(file, true)).toBe("video")
-    expect(diffMediaKind(file, false)).toBeUndefined()
-  }
-  for (const richMedia of [true, false]) {
-    expect(diffMediaKind("preview.png", richMedia)).toBe("image")
-    expect(diffMediaKind("clip.webm", richMedia)).toBeUndefined()
-    expect(diffMediaKind("clip.mp4.ts", richMedia)).toBeUndefined()
-  }
+test("a local server's working-tree video plays in place as a silent tile that opens the viewer", async () => {
+  const directory = path.dirname(path.dirname(videoFixture))
+  const reads: string[] = []
+  await using setup = await renderVideo({ file: "media/video-only.mp4", directory, localServer: true, reads })
+  await setup.until(() => setup.frame().includes("▶ 0:02"))
+  const video = setup.videos()[0]!
+  expect(setup.videos()).toHaveLength(1)
+  expect(video.source).toBe(videoFixture)
+  expect(video.audio).toBe(false)
+  expect(video.paused).toBe(true)
+
+  await setup.app.mockMouse.moveTo(video.x + 2, video.y + 1)
+  await setup.until(() => video.playing)
+  await setup.app.mockMouse.click(video.x + 2, video.y + 1)
+  expect(setup.media().viewer()?.items).toMatchObject([
+    { kind: "video", mime: "video/mp4", uri: `file://${videoFixture}`, location: { directory } },
+  ])
+  expect(reads).toEqual([])
 })
 
-test("plays a working-tree video in place from a local server and opens the viewer", async () => {
-  await using temporary = await tmpdir()
-  await Bun.write(path.join(temporary.path, "assets", "clip.mov"), Bun.file(videoFixture))
-  let loads = 0
-  const app = await renderImage(
-    () => (
-      <TuiTerminalEnvironmentProvider value={{ platform: "linux", localServer: true }}>
-        <MediaProvider directory={path.join(temporary.path, "media")}>
-          <Probe />
-          <DiffViewerImage
-            file="assets/clip.mov"
-            location={{ directory: temporary.path }}
-            load={async () => {
-              loads++
-              return new Uint8Array()
-            }}
-          />
-        </MediaProvider>
-      </TuiTerminalEnvironmentProvider>
-    ),
-    undefined,
-    true,
-  )
-  // Playback follows the wall clock, so poll with short sleeps between frames.
-  const until = async (condition: () => boolean) => {
-    const deadline = Date.now() + 5_000
-    while (!condition() && Date.now() < deadline) {
-      await Bun.sleep(5)
-      await app.renderOnce()
-    }
-    expect(condition()).toBe(true)
-  }
-  const player = () => descendants(app.renderer.root).find((node) => node instanceof VideoRenderable)
-  try {
-    await until(() => app.captureCharFrame().includes("▶ 0:02"))
-    const video = player() as VideoRenderable
-    expect(video.source).toBe(path.join(temporary.path, "assets", "clip.mov"))
-    expect(loads).toBe(0)
-    expect(video.audio).toBe(false)
-    expect(video.paused).toBe(true)
-    expect(app.captureCharFrame()).toContain("Click to open")
+test("a remote Windows server's working-tree video shows a placeholder and is read only by the viewer", async () => {
+  const reads: string[] = []
+  await using setup = await renderVideo({
+    file: "assets/my clip#1.mp4",
+    directory: "C:\\repo",
+    localServer: false,
+    reads,
+  })
+  await setup.until(() => setup.frame().includes("Click to load"))
+  expect(setup.frame()).toContain("video · my clip#1.mp4")
+  expect(setup.videos()).toEqual([])
 
-    await app.mockMouse.moveTo(video.x + 2, video.y + 1)
-    await until(() => video.playing)
-
-    await app.mockMouse.click(video.x + 2, video.y + 1)
-    expect(media!.viewer()?.index).toBe(0)
-    expect(media!.viewer()?.items).toMatchObject([
-      { kind: "video", mime: "video/quicktime", name: "clip.mov", location: { directory: temporary.path } },
-    ])
-    await until(() => video.paused)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("defers reading a remote working-tree video until the viewer opens it", async () => {
-  await using temporary = await tmpdir()
-  let loads = 0
-  const app = await renderImage(
-    () => (
-      <MediaProvider directory={path.join(temporary.path, "media")}>
-        <Probe />
-        <DiffViewerImage
-          file="assets/my clip#1.mp4"
-          location={{ directory: "C:\\repo" }}
-          load={async () => {
-            loads++
-            return new Uint8Array()
-          }}
-        />
-      </MediaProvider>
-    ),
-    undefined,
-    true,
-  )
-  try {
-    await app.renderOnce()
-    const frame = app.captureCharFrame()
-    expect(frame).toContain("video · my clip#1.mp4")
-    expect(frame).toContain("Loads when opened")
-    expect(descendants(app.renderer.root).some((node) => node instanceof VideoRenderable)).toBe(false)
-
-    const [line, column] = position(frame, "Click to open")
-    await app.mockMouse.click(column, line)
-    expect(media!.viewer()?.items).toMatchObject([
-      {
-        kind: "video",
-        mime: "video/mp4",
-        uri: "file:///C:/repo/assets/my%20clip%231.mp4",
-        location: { directory: "C:\\repo" },
-      },
-    ])
-    expect(loads).toBe(0)
-  } finally {
-    app.renderer.destroy()
-  }
+  const lines = setup.frame().split("\n")
+  const y = lines.findIndex((line) => line.includes("Click to load"))
+  await setup.app.mockMouse.click(lines[y]!.indexOf("Click to load") + 1, y)
+  expect(setup.media().viewer()?.items).toMatchObject([
+    {
+      kind: "video",
+      mime: "video/mp4",
+      uri: "file:///C:/repo/assets/my%20clip%231.mp4",
+      name: "my clip#1.mp4",
+      location: { directory: "C:\\repo" },
+    },
+  ])
+  expect(reads).toEqual([])
 })
 
 test.each([
@@ -259,15 +204,33 @@ test.each(["fetch", "decode"])("recovers from a %s error when the file changes",
   }
 })
 
+// `reads` records the files the card loads itself; a video leaves loading to the viewer.
+function renderVideo(input: { file: string; directory: string; localServer: boolean; reads: string[] }) {
+  return renderMedia(
+    () => (
+      <TuiTerminalEnvironmentProvider value={{ platform: "linux", localServer: input.localServer }}>
+        <DiffViewerImage
+          file={input.file}
+          location={{ directory: input.directory }}
+          load={async (file) => {
+            input.reads.push(file)
+            return diffImageFixture
+          }}
+        />
+      </TuiTerminalEnvironmentProvider>
+    ),
+    true,
+  )
+}
+
 function renderImage(
   component: () => JSX.Element,
   options = { width: 80, height: 24, mode: "dark" as "dark" | "light" },
-  richMedia = false,
 ) {
   return testRender(
     () => (
       <TestTuiContexts>
-        <ConfigProvider config={createTuiResolvedConfig({ experimental: { "rich-media": richMedia } })}>
+        <ConfigProvider config={createTuiResolvedConfig()}>
           <Keymap.Provider>
             <ThemeProvider mode={options.mode} source={emptyThemeSource}>
               <ToastProvider>
@@ -285,20 +248,4 @@ function renderImage(
 function findImage(root: Renderable): ImageRenderable | undefined {
   if (root instanceof ImageRenderable) return root
   return root.getChildren().map(findImage).find(Boolean)
-}
-
-let media: MediaContext | undefined
-function Probe() {
-  media = useMedia()
-  return null
-}
-
-function descendants(node: Renderable): Renderable[] {
-  return node.getChildren().flatMap((child) => [child, ...descendants(child as Renderable)])
-}
-
-function position(frame: string, text: string) {
-  const lines = frame.split("\n")
-  const line = lines.findIndex((row) => row.includes(text))
-  return [line, lines[line]!.indexOf(text)] as const
 }

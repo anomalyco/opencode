@@ -1,60 +1,141 @@
-import type { BoxRenderable, MouseEvent, RGBA, VideoRenderable } from "@opentui/core"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import type { BoxRenderable, MouseEvent, VideoMetadata, VideoRenderable } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js"
+import { useMedia, type MediaPlayback } from "../../context/media"
 import { useTheme } from "../../context/theme"
-import { formatDuration } from "./tile"
+import { formatDuration, isMediaClick } from "./tile"
+
+export type Transport = ReturnType<typeof createTransport>
+
+/** Playback state and controls for one `<video>`, which spreads `events`. `start` applies each time it opens. */
+export function createTransport(start: MediaPlayback) {
+  const [player, setPlayer] = createSignal<VideoRenderable>()
+  const [metadata, setMetadata] = createSignal<VideoMetadata>()
+  const [time, setTime] = createSignal(start.time ?? 0)
+  const [playing, setPlaying] = createSignal(false)
+  const [tier, setTier] = createSignal(0)
+  return {
+    player,
+    metadata,
+    time,
+    playing,
+    /** OpenTUI's quality tier on Kitty: 0 is full size; higher tiers shrink frames to keep up. */
+    tier,
+    seek(target: number) {
+      const video = player()
+      if (!video) return
+      video.seek(Math.max(0, Math.min(video.duration, target)))
+      setTime(video.currentTime)
+    },
+    /** Pauses a playing video, or plays it, from the start once it has reached the end. */
+    toggle() {
+      const video = player()
+      if (!video) return
+      if (video.playing) return video.pause()
+      if (video.ended || video.currentTime >= video.duration) video.seek(0)
+      video.play()
+    },
+    events: {
+      ref: setPlayer,
+      // The metadata comes last, so what tracks it sees the start time and state applied.
+      onReady(value: VideoMetadata) {
+        const video = player()!
+        if (start.time) video.seek(Math.min(value.duration, start.time))
+        if (start.playing === false) video.pause()
+        else video.play()
+        setTime(video.currentTime)
+        setMetadata(value)
+      },
+      onPlay: () => setPlaying(true),
+      onPause: () => setPlaying(false),
+      onEnd: () => setPlaying(player()?.playing ?? false),
+      onTimeUpdate(value: number) {
+        setTime(value)
+        setTier(player()?.qualityTier ?? 0)
+      },
+    },
+  }
+}
+
+/** The play button, the elapsed time (with `total`, also the duration) and the seek bar of a transport row. */
+export function TransportControls(props: { transport: Transport; total?: boolean; preview?: boolean }) {
+  const theme = useTheme()
+  const time = () => formatTimecode(props.transport.time())
+  return (
+    <>
+      <Toggle id="media-play" on={props.transport.playing()} run={props.transport.toggle}>
+        {props.transport.playing() ? "⏸" : "▶"}
+      </Toggle>
+      <text fg={theme.text.muted} wrapMode="none" flexShrink={0} selectable={false}>
+        {props.total ? `${time()} / ${formatDuration(props.transport.metadata()?.duration ?? 0)}` : time()}
+      </text>
+      <SeekBar transport={props.transport} preview={props.preview} />
+    </>
+  )
+}
+
+/** A clickable control, highlighted while `on`. */
+export function Toggle(props: { id?: string; on: boolean; run: () => void; children: JSX.Element }) {
+  const theme = useTheme()
+  const renderer = useRenderer()
+  return (
+    <text
+      id={props.id}
+      fg={props.on ? theme.text.formfield.selected : theme.text.muted}
+      wrapMode="none"
+      flexShrink={0}
+      selectable={false}
+      onMouseUp={(event: MouseEvent) => isMediaClick(renderer, event) && props.run()}
+    >
+      {props.children}
+    </text>
+  )
+}
 
 /** A paused seek decodes on the JS thread, so scrubbing and the hover preview seek at most this often. */
 const SCRUB_INTERVAL_MS = 30
 
 /**
- * A one-row slider over a video's duration: the elapsed part fills up to the playhead, a click seeks, and a drag
- * scrubs. With `preview`, hovering shows that file's frame at the pointer and its timecode above the bar.
+ * A one-row slider over the video: the elapsed part fills up to the playhead, a click seeks, and a drag scrubs with
+ * playback paused. With `preview`, hovering shows the frame at the pointer and its timecode above the bar.
  */
-export function SeekBar(props: {
-  duration: number
-  time: number
-  /** A local video file for the hover preview. */
-  preview?: string
-  /** The source width over its height, to size the preview. */
-  aspect?: number
-  cellAspect?: number
-  /** A press on the bar starts scrubbing; `onSeekEnd` follows on release with the final time. */
-  onSeekStart?: () => void
-  onSeek: (time: number) => void
-  onSeekEnd?: () => void
-}) {
+function SeekBar(props: { transport: Transport; preview?: boolean }) {
   const theme = useTheme()
   const [width, setWidth] = createSignal(0)
   const [hover, setHover] = createSignal<number>()
   const [scrubbing, setScrubbing] = createSignal(false)
+  const duration = () => props.transport.metadata()?.duration ?? 0
+  const seek = createThrottle(props.transport.seek)
   let bar: BoxRenderable | undefined
-  let last = 0
-  const seek = createThrottle(SCRUB_INTERVAL_MS, (time: number) => props.onSeek(time))
+  let resume = false
 
   const column = (event: MouseEvent) => Math.max(0, Math.min(width() - 1, event.x - (bar?.x ?? 0)))
-  const timeAt = (value: number) => (width() > 1 ? (value / (width() - 1)) * props.duration : 0)
-  const track = (event: MouseEvent) => {
-    if (!scrubbing()) setHover(event.y === bar?.y ? column(event) : undefined)
+  const timeAt = (value: number) => (width() > 1 ? (value / (width() - 1)) * duration() : 0)
+  const track = (event: MouseEvent) => !scrubbing() && setHover(event.y === bar?.y ? column(event) : undefined)
+  const scrub = (event: MouseEvent) => {
+    event.stopPropagation()
+    setHover(column(event))
+    seek.push(timeAt(column(event)))
   }
-  const head = () =>
-    props.duration > 0 && width() > 0
-      ? Math.round((Math.max(0, Math.min(props.duration, props.time)) / props.duration) * (width() - 1))
-      : 0
-
-  const cells = createMemo(() => {
-    const filled = theme.text.formfield.selected
-    const track = theme.text.formfield.base
-    const pointer = theme.text.formfield.hovered
-    const playhead = scrubbing() ? theme.text.formfield.pressed : theme.text.formfield.focused
+  // A few colour runs, not a span per cell, since this changes with every time update.
+  const runs = createMemo(() => {
+    if (width() < 1) return []
+    const head =
+      duration() > 0 ? Math.round((Math.min(duration(), props.transport.time()) / duration()) * (width() - 1)) : 0
     const marker = scrubbing() ? undefined : hover()
-    return runs(
-      Array.from({ length: width() }, (_, index): [string, RGBA] => {
-        if (index === head()) return ["●", playhead]
-        if (index === marker) return ["│", pointer]
-        if (index < head()) return ["━", filled]
-        return ["─", track]
-      }),
-    )
+    const formfield = theme.text.formfield
+    const segments = [
+      { cell: "━", fg: formfield.selected, from: 0, to: head },
+      { cell: "●", fg: scrubbing() ? formfield.pressed : formfield.focused, from: head, to: head + 1 },
+      { cell: "─", fg: formfield.base, from: head + 1, to: width() },
+    ]
+    // The hover marker takes one cell of the fill or the track.
+    return segments.flatMap((segment) => {
+      const run = (from: number, to: number) => ({ text: segment.cell.repeat(to - from), fg: segment.fg })
+      if (marker === undefined || marker === head || marker < segment.from || marker >= segment.to)
+        return [run(segment.from, segment.to)]
+      return [run(segment.from, marker), { text: "│", fg: formfield.hovered }, run(marker + 1, segment.to)]
+    })
   })
 
   return (
@@ -68,47 +149,38 @@ export function SeekBar(props: {
         setWidth(this.width)
       }}
       onMouseDown={(event: MouseEvent) => {
-        if (event.button !== 0 || props.duration <= 0) return
-        event.stopPropagation()
+        const video = props.transport.player()
+        if (event.button !== 0 || !video || duration() <= 0) return
+        resume = video.playing
+        video.pause()
         setScrubbing(true)
-        props.onSeekStart?.()
-        last = column(event)
-        setHover(last)
-        seek.now(timeAt(last))
+        seek.cancel()
+        scrub(event)
       }}
-      onMouseDrag={(event: MouseEvent) => {
-        if (!scrubbing()) return
-        event.stopPropagation()
-        last = column(event)
-        setHover(last)
-        seek.push(timeAt(last))
-      }}
+      onMouseDrag={(event: MouseEvent) => scrubbing() && scrub(event)}
       onMouseUp={(event: MouseEvent) => {
         if (!scrubbing()) return
         event.stopPropagation()
         setScrubbing(false)
         seek.cancel()
-        props.onSeek(timeAt(last))
-        props.onSeekEnd?.()
+        props.transport.seek(timeAt(hover() ?? 0))
+        if (resume) props.transport.player()?.play()
         if (event.y !== bar?.y) setHover(undefined)
       }}
       onMouseMove={track}
       onMouseOver={track}
-      onMouseOut={() => {
-        if (!scrubbing()) setHover(undefined)
-      }}
+      onMouseOut={() => !scrubbing() && setHover(undefined)}
     >
       <text wrapMode="none" selectable={false}>
-        <For each={cells()}>{(run) => <span style={{ fg: run.fg }}>{run.text}</span>}</For>
+        <Index each={runs()}>{(run) => <span style={{ fg: run().fg }}>{run().text}</span>}</Index>
       </text>
-      <Show when={props.preview && props.duration > 0 && hover() !== undefined}>
+      <Show when={props.preview && props.transport.player()?.source && duration() > 0 && hover() !== undefined}>
         <SeekPreview
-          source={props.preview!}
+          source={props.transport.player()!.source!}
           time={timeAt(hover()!)}
           column={hover()!}
           barWidth={width()}
-          aspect={props.aspect ?? 16 / 9}
-          cellAspect={props.cellAspect ?? 2}
+          aspect={(props.transport.metadata()?.width ?? 16) / (props.transport.metadata()?.height || 9)}
         />
       </Show>
     </box>
@@ -116,26 +188,16 @@ export function SeekBar(props: {
 }
 
 /** The frame and timecode at the hovered time, in a second silent, paused player of the same file. */
-function SeekPreview(props: {
-  source: string
-  time: number
-  column: number
-  barWidth: number
-  aspect: number
-  cellAspect: number
-}) {
+function SeekPreview(props: { source: string; time: number; column: number; barWidth: number; aspect: number }) {
+  const media = useMedia()
   const theme = useTheme()
-  const [player, setPlayer] = createSignal<VideoRenderable>()
+  let player: VideoRenderable | undefined
   const [ready, setReady] = createSignal(false)
   const [failed, setFailed] = createSignal(false)
   const width = () => Math.max(12, Math.min(28, props.barWidth))
-  const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * props.cellAspect))))
-  const seek = createThrottle(SCRUB_INTERVAL_MS, (time: number) => player()?.seek(time))
-
-  createEffect(() => {
-    const time = props.time
-    if (ready()) seek.push(time)
-  })
+  const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * media.cellAspect()))))
+  const seek = createThrottle((time) => player?.seek(time))
+  createEffect(() => ready() && seek.push(props.time))
 
   return (
     <box
@@ -146,46 +208,28 @@ function SeekPreview(props: {
       width={width()}
       zIndex={10}
       flexDirection="column"
+      alignItems="center"
       border
       borderColor={theme.border.base}
       backgroundColor={theme.background.raised.base}
     >
-      <Show
-        when={!failed()}
-        fallback={
-          <box height={height()} alignItems="center" justifyContent="center">
-            <text fg={theme.text.muted}>no preview</text>
-          </box>
-        }
-      >
+      <Show when={!failed()} fallback={<text fg={theme.text.muted}>no preview</text>}>
         <video
-          ref={setPlayer}
+          ref={(element: VideoRenderable) => (player = element)}
           audio={false}
           source={props.source}
           fit="fit"
           width="100%"
           height={height()}
-          onReady={() => {
-            player()?.seek(props.time)
-            setReady(true)
-          }}
+          onReady={() => setReady(true)}
           onError={() => setFailed(true)}
         />
       </Show>
-      <box flexDirection="row" justifyContent="center">
-        <text fg={theme.text.base} wrapMode="none" selectable={false}>
-          {formatTimecode(props.time)}
-        </text>
-      </box>
+      <text fg={theme.text.base} wrapMode="none" selectable={false}>
+        {formatTimecode(props.time)}
+      </text>
     </box>
   )
-}
-
-/** Pauses a playing video, or plays it, from the start once it has reached the end. */
-export function togglePlayback(video: VideoRenderable) {
-  if (video.playing) return video.pause()
-  if (video.ended || video.currentTime >= video.duration) video.seek(0)
-  video.play()
 }
 
 /** Elapsed time as `m:ss`, counting only whole seconds that have passed. */
@@ -193,57 +237,28 @@ export function formatTimecode(seconds: number) {
   return formatDuration(Math.floor(Math.max(0, seconds)))
 }
 
-/**
- * Calls `run` with the latest value at most once per `interval` milliseconds, leading and trailing. `now` runs
- * immediately and restarts the interval; `cancel` drops a pending call.
- */
-function createThrottle<T>(interval: number, run: (value: T) => void) {
+/** Calls `run` with the latest value at most once per SCRUB_INTERVAL_MS, leading and trailing. */
+function createThrottle(run: (time: number) => void) {
   let timer: ReturnType<typeof setTimeout> | undefined
-  let pending: { value: T } | undefined
-  let last = -Infinity
-
-  function flush() {
+  let pending: number | undefined
+  const flush = () => {
     timer = undefined
-    if (!pending) return
-    const value = pending.value
+    if (pending === undefined) return
+    run(pending)
     pending = undefined
-    last = Date.now()
-    run(value)
+    timer = setTimeout(flush, SCRUB_INTERVAL_MS)
   }
-
-  function cancel() {
+  const cancel = () => {
     clearTimeout(timer)
     timer = undefined
     pending = undefined
   }
-
   onCleanup(cancel)
-
   return {
-    push(value: T) {
-      pending = { value }
-      if (timer) return
-      const wait = last + interval - Date.now()
-      if (wait <= 0) return flush()
-      timer = setTimeout(flush, wait)
-    },
-    now(value: T) {
-      cancel()
-      pending = { value }
-      flush()
+    push(time: number) {
+      pending = time
+      if (!timer) flush()
     },
     cancel,
   }
-}
-
-function runs(cells: readonly [string, RGBA][]) {
-  return cells.reduce<{ text: string; fg: RGBA }[]>((result, [text, fg]) => {
-    const previous = result.at(-1)
-    if (previous && previous.fg === fg) {
-      previous.text += text
-      return result
-    }
-    result.push({ text, fg })
-    return result
-  }, [])
 }

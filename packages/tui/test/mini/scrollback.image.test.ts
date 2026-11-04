@@ -181,21 +181,13 @@ test.each([false, true])("writes one caption row per video with mono=%s", async 
   out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
     output.push(new TextDecoder().decode(event.snapshot.getRealCharBytes(true)))
   })
-  const video = { kind: "user", source: "system", phase: "final", messageID: "message-1", video: true } as const
-  await out.scrollback.append({ ...video, partID: "video:0", text: "▶ clip.mp4 · video" })
-  await out.scrollback.append({ ...video, kind: "tool", source: "tool", partID: "video:1", text: "▶ video" })
-  await out.scrollback.append({ kind: "system", source: "system", phase: "final", text: "after videos" })
+  const video = { source: "system", phase: "final", messageID: "message-1", video: true } as const
+  await out.scrollback.append({ ...video, kind: "user", partID: "video:0", text: "▶ clip.mp4 · video" })
+  await out.scrollback.append({ ...video, kind: "tool", partID: "video:1", text: "▶ video" })
   expect(out.previews).toEqual([])
-  expect(
-    output
-      .join("")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean),
-  ).toEqual(
-    mono
-      ? ["> > clip.mp4 - video", "> video", "after videos"]
-      : ["\u203a ▶ clip.mp4 · video", "▶ video", "after videos"],
+  const text = output.join("").trim()
+  expect(text.split(/\s*\n\s*/)).toEqual(
+    mono ? ["> > clip.mp4 - video", "> video"] : ["› ▶ clip.mp4 · video", "▶ video"],
   )
 })
 

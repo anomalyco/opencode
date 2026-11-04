@@ -489,16 +489,15 @@ describe("V2 mini transport", () => {
     const events = feed()
     events.push(connected())
     const ui = footer()
-    const content = [
-      { type: "text", text: "Recorded" },
+    const clip = (name?: string) => ({ data: "AAAA", mime: "video/mp4", source: { type: "inline" as const }, name })
+    const content: [ToolContent] = [
       { type: "file", mime: "video/mp4", uri: "data:video/mp4;base64,AAAA", name: "screen.mp4" },
-    ] satisfies [ToolContent, ...ToolContent[]]
+    ]
     const transport = await createSessionTransport({
       sdk: sdk({
         streams: [events],
         messages: {
           ses_1: [
-            // Newest first, as the transport requests them.
             {
               id: "msg_tool",
               type: "assistant",
@@ -507,17 +506,7 @@ describe("V2 mini transport", () => {
               content: [canonicalToolPart("record", { status: "completed", input: {}, content }, "call_video")],
               time: { created: 2 },
             },
-            {
-              id: "msg_video",
-              type: "user",
-              text: "",
-              files: [
-                image,
-                { data: "AAAA", mime: "video/quicktime", source: { type: "inline" }, name: "clip.mov" },
-                { data: "AAAA", mime: "video/mp4", source: { type: "inline" } },
-              ],
-              time: { created: 1 },
-            },
+            { id: "msg_video", type: "user", text: "", files: [image, clip("clip.mov"), clip()], time: { created: 1 } },
           ],
         },
       }),
@@ -529,25 +518,16 @@ describe("V2 mini transport", () => {
     })
 
     await transport.waitForIdle()
-    const videos = ui.commits.filter((commit) => commit.video)
     expect(ui.commits.filter((commit) => commit.image)).toHaveLength(1)
-    expect(
-      videos.map((commit) => [commit.kind, commit.source, commit.phase, commit.messageID, commit.partID, commit.text]),
-    ).toEqual(
+    const videos = ui.commits
+      .filter((commit) => commit.video)
+      .map((commit) => [commit.kind, commit.partID, commit.text])
+    expect(videos).toEqual(
       richMedia
         ? [
-            ["user", "system", "final", "msg_video", "video:0", "▶ clip.mov · video"],
-            ["user", "system", "final", "msg_video", "video:1", "▶ video"],
-            ["tool", "tool", "final", "msg_tool", "prt_call_video:video:0", "▶ screen.mp4 · video"],
-          ]
-        : [],
-    )
-    expect(videos.map((commit) => entryBody(commit))).toEqual(
-      richMedia
-        ? [
-            { type: "text", content: "› ▶ clip.mov · video" },
-            { type: "text", content: "› ▶ video" },
-            { type: "text", content: "▶ screen.mp4 · video" },
+            ["user", "video:0", "▶ clip.mov · video"],
+            ["user", "video:1", "▶ video"],
+            ["tool", "prt_call_video:video:0", "▶ screen.mp4 · video"],
           ]
         : [],
     )

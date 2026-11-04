@@ -16,14 +16,8 @@ export type LocalAttachment =
   | Readonly<{ type: "text"; mime: "image/svg+xml"; content: string }>
   | Readonly<{ type: "binary"; mime: string; content: Uint8Array }>
 
-/** `video` also accepts MP4, MOV, and M4V files, which `<video>` can play. */
-export type LocalAttachmentOptions = Readonly<{ video?: boolean }>
-
-export function readLocalAttachment(
-  file: string,
-  maxBytes = MAX_LOCAL_ATTACHMENT_BYTES,
-  options: LocalAttachmentOptions = {},
-) {
+// `video` also accepts MP4, MOV, and M4V files.
+export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMENT_BYTES, video = false) {
   return readLocalAttachmentWith(
     {
       readText: async (value, limit) => (await readFileBounded(value, limit)).toString("utf8"),
@@ -32,80 +26,67 @@ export function readLocalAttachment(
     },
     file,
     maxBytes,
-    options,
+    video,
   )
 }
 
-export async function resolvePastedAttachments(text: string, platform: string, options: LocalAttachmentOptions = {}) {
-  return (await resolvePastedFiles(text, platform, options)).attachments
-}
-
-/**
- * {@link resolvePastedAttachments}, and with `video`, the pasted video that takes an otherwise attachable paste over
- * the shared byte budget, so its paste falls back to text.
- */
-export async function resolvePastedFiles(text: string, platform: string, options: LocalAttachmentOptions = {}) {
+export async function resolvePastedAttachments(text: string, platform: string, video = false) {
   const pastedContent = text.trim()
   const filepath = normalizePastedFilepath(pastedContent, platform)
-  if (/^(https?):\/\//.test(filepath)) return {}
+  if (/^(https?):\/\//.test(filepath)) return undefined
 
-  const attachment = await readLocalAttachment(filepath, MAX_LOCAL_ATTACHMENT_BYTES, options)
+  const attachment = await readLocalAttachment(filepath, MAX_LOCAL_ATTACHMENT_BYTES, video)
   const attachments = attachment ? [{ filepath, attachment }] : []
   if (!attachment) {
-    if (options.video && (await oversizedVideo(filepath, MAX_LOCAL_ATTACHMENT_BYTES))) return { oversized: filepath }
     const filepaths = parsePastedFilepaths(pastedContent, platform)
-    if (filepaths.length <= 1) return {}
+    if (filepaths.length <= 1) return undefined
     let remaining = MAX_LOCAL_ATTACHMENT_BYTES
-    for (const [index, candidate] of filepaths.entries()) {
-      const next = await readLocalAttachment(candidate, remaining, options)
-      if (!next) {
-        if (!options.video || !(await oversizedVideo(candidate, remaining))) return {}
-        const rest = await Promise.all(filepaths.slice(index + 1).map(attachable))
-        return rest.every(Boolean) ? { oversized: candidate } : {}
-      }
+    for (const candidate of filepaths) {
+      const next = await readLocalAttachment(candidate, remaining, video)
+      if (!next) return undefined
       remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
       attachments.push({ filepath: candidate, attachment: next })
     }
   }
 
-  return {
-    attachments: attachments.map((item) => {
-      const filename = path.basename(item.filepath)
-      if (item.attachment.type === "text") {
-        return { type: "text" as const, content: item.attachment.content, filename }
-      }
-      return {
-        type: "file" as const,
-        uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
-        filename,
-        path: path.resolve(item.filepath),
-      }
-    }),
+  return attachments.map((item) => {
+    const filename = path.basename(item.filepath)
+    if (item.attachment.type === "text") {
+      return { type: "text" as const, content: item.attachment.content, filename }
+    }
+    return {
+      type: "file" as const,
+      uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
+      filename,
+      path: path.resolve(item.filepath),
+    }
+  })
+}
+
+/** The video that takes a paste of otherwise attachable files over the attachment limit, so the paste stays text. */
+export async function oversizedPastedVideo(text: string, platform: string) {
+  const pasted = text.trim()
+  for (const files of [[normalizePastedFilepath(pasted, platform)], parsePastedFilepaths(pasted, platform)]) {
+    const sizes = await Promise.all(
+      files.map(async (file) => {
+        if (!mimeTypes[path.extname(file).toLowerCase()]) return undefined
+        const info = await stat(file).catch(() => undefined)
+        return info?.isFile() ? info.size : undefined
+      }),
+    )
+    if (files.length === 0 || sizes.includes(undefined)) continue
+    let total = 0
+    const file = files.find((_, index) => (total += sizes[index]!) > MAX_LOCAL_ATTACHMENT_BYTES)
+    return file && mimeTypes[path.extname(file).toLowerCase()]!.startsWith("video/") ? file : undefined
   }
 }
 
-async function oversizedVideo(file: string, budget: number) {
-  if (!mimeTypes[path.extname(file).toLowerCase()]?.startsWith("video/")) return false
-  const info = await stat(file).catch(() => undefined)
-  return info?.isFile() === true && info.size > budget
-}
-
-// An existing file of a type a paste can attach, whatever its size.
-async function attachable(file: string) {
-  if (!mimeTypes[path.extname(file).toLowerCase()]) return false
-  const info = await stat(file).catch(() => undefined)
-  return info?.isFile() === true
-}
-
-/**
- * The files of a prompt to send, with each attachment history or the stash kept as its local file (a `file://` uri and
- * a `path`) read again. `unreadable` names the files that no longer exist or are over the limit; they are left out.
- */
+// Reads again the files history or the stash kept as local paths. `unreadable` names the ones left out.
 export async function readKeptAttachments<T extends { uri: string; path?: string }>(files: readonly T[]) {
   const read = await Promise.all(
     files.map(async (file) => {
       if (!file.path || !file.uri.startsWith("file:")) return file
-      const attachment = await readLocalAttachment(file.path, MAX_LOCAL_ATTACHMENT_BYTES, { video: true })
+      const attachment = await readLocalAttachment(file.path, MAX_LOCAL_ATTACHMENT_BYTES, true)
       if (attachment?.type !== "binary") return path.basename(file.path)
       return { ...file, uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}` }
     }),
@@ -114,11 +95,6 @@ export async function readKeptAttachments<T extends { uri: string; path?: string
     files: read.filter((file) => typeof file !== "string"),
     unreadable: read.filter((file) => typeof file === "string"),
   }
-}
-
-/** The file extension for an attachment mime type, such as `.mov` for `video/quicktime`. */
-export function attachmentExtension(mime: string) {
-  return Object.keys(mimeTypes).find((extension) => mimeTypes[extension] === mime)
 }
 
 // Keep the captured bytes: a local server may not have the terminal's access to the source file.
@@ -237,11 +213,11 @@ export async function readLocalAttachmentWith(
   files: LocalFiles,
   path: string,
   maxBytes = MAX_LOCAL_ATTACHMENT_BYTES,
-  options: LocalAttachmentOptions = {},
+  video = false,
 ): Promise<LocalAttachment | undefined> {
   const mime = await files.mime(path).catch(() => undefined)
   if (!mime) return undefined
-  if (!mime.startsWith("image/") && mime !== "application/pdf" && !(options.video && mime.startsWith("video/")))
+  if (!mime.startsWith("image/") && mime !== "application/pdf" && !(video && mime.startsWith("video/")))
     return undefined
   if (mime === "image/svg+xml") {
     const content = await files.readText(path, maxBytes).catch(() => undefined)

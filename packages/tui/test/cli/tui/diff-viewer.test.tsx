@@ -1663,13 +1663,13 @@ test("image previews use the diff session's filesystem location", async () => {
   }
 })
 
-test("rich media defers reading a remote working-tree video until it is opened", async () => {
+test("rich media previews a working-tree video from the diff session's location without reading it", async () => {
   const viewer = await renderDiffViewer([{ file: "assets/clip.mp4", status: "modified", additions: 0, deletions: 0 }], {
     richMedia: true,
     height: 30,
   })
   try {
-    await viewer.app.waitForFrame((frame) => frame.includes("Loads when opened"))
+    await viewer.app.waitForFrame((frame) => frame.includes("Click to load"))
     const frame = viewer.app.captureCharFrame()
     expect(frame).toContain("Video")
     expect(frame).toContain("video · clip.mp4")
@@ -2008,7 +2008,7 @@ async function renderDiffViewer(
     info: {
       keybinds: options.keybinds,
       diffs: { source: options.source, single: options.single },
-      ...(options.richMedia ? { experimental: { "rich-media": true } } : {}),
+      experimental: { "rich-media": options.richMedia === true },
     },
   }
   const writes: Info[] = []

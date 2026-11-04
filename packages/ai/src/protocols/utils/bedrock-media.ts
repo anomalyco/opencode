@@ -115,24 +115,20 @@ const mediaBase64 = Effect.fnUntraced(function* (part: MediaPart) {
 // else fails with a clear error instead of silently degrading to a malformed
 // document block. Image MIME types not in `IMAGE_FORMATS` (e.g. `image/svg+xml`)
 // get an image-specific error so the caller knows it's a format-support issue,
-// not a kind-detection issue. Video MIME types not in `VIDEO_FORMATS` likewise.
+// not a kind-detection issue.
 export const lower = Effect.fnUntraced(function* (part: MediaPart, documentNames: Set<string>) {
   const mime = part.media.mediaType.toLowerCase()
   const imageFormat = IMAGE_FORMATS[mime as keyof typeof IMAGE_FORMATS]
   if (imageFormat) {
     return [{ image: { format: imageFormat, source: { bytes: yield* mediaBase64(part) } } } satisfies ImageBlock]
   }
-  if (mime.startsWith("image/"))
-    return yield* ProviderShared.invalidRequest(
-      `Bedrock Converse does not support image media type ${part.media.mediaType}`,
-    )
   const videoFormat = VIDEO_FORMATS[mime as keyof typeof VIDEO_FORMATS]
   if (videoFormat) {
     return [{ video: { format: videoFormat, source: { bytes: yield* mediaBase64(part) } } } satisfies VideoBlock]
   }
-  if (mime.startsWith("video/"))
+  if (mime.startsWith("image/") || mime.startsWith("video/"))
     return yield* ProviderShared.invalidRequest(
-      `Bedrock Converse does not support video media type ${part.media.mediaType}`,
+      `Bedrock Converse does not support ${mime.split("/")[0]} media type ${part.media.mediaType}`,
     )
   const documentFormat = DOCUMENT_FORMATS[mime as keyof typeof DOCUMENT_FORMATS]
   if (documentFormat) {

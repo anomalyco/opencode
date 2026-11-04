@@ -2,19 +2,11 @@ import { mediaHashFromUri, type LocationRef } from "@opencode/client"
 import { mkdir, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { mediaMime, type MediaItem } from "./model"
-
-type MediaFiles = ReturnType<typeof createMediaFiles>
-
-const VIDEO_EXTENSIONS: Record<string, string> = {
-  "video/mp4": ".mp4",
-  "video/quicktime": ".mov",
-  "video/x-m4v": ".m4v",
-}
+import { MEDIA_EXTENSIONS, mediaMime, type MediaItem } from "./model"
 
 /**
  * Content-addressed files under `directory`, named `<sha256><extension>`. Each is written once to a temporary name and
- * renamed into place, so a reader never opens a partial file; concurrent writes of the same content share one write.
+ * renamed into place, so a reader never opens a partial file; concurrent writes of the same file share one write.
  */
 export function createMediaFiles(directory: string) {
   const inflight = new Map<string, Promise<string>>()
@@ -23,21 +15,15 @@ export function createMediaFiles(directory: string) {
     const file = path.join(directory, hash + extension)
     const pending =
       inflight.get(file) ??
-      Bun.file(file)
-        .exists()
-        .then(async (exists) => {
-          if (exists) return file
-          const content = await bytes()
-          const temporary = `${file}.${crypto.randomUUID()}.tmp`
-          await mkdir(directory, { recursive: true })
-          await Bun.write(temporary, content)
-          await rename(temporary, file).catch(async (error) => {
-            await rm(temporary, { force: true })
-            throw error
-          })
-          return file
-        })
-        .finally(() => inflight.delete(file))
+      (async () => {
+        if (await Bun.file(file).exists()) return file
+        const content = await bytes()
+        const temporary = `${file}.${crypto.randomUUID()}.tmp`
+        await mkdir(directory, { recursive: true })
+        await Bun.write(temporary, content)
+        await rename(temporary, file).catch((error) => rm(temporary, { force: true }).then(() => Promise.reject(error)))
+        return file
+      })().finally(() => inflight.delete(file))
     inflight.set(file, pending)
     return pending
   }
@@ -50,45 +36,37 @@ export function createMediaFiles(directory: string) {
 }
 
 export type MediaSources = Readonly<{
-  files: MediaFiles
+  files: ReturnType<typeof createMediaFiles>
   /** The server runs on this machine, so `file://` uris name local files. */
   localServer: boolean
   media?: Readonly<{ read: (uri: string) => Promise<Uint8Array> }>
   readFile?: (input: { path: string; location: LocationRef }) => Promise<Uint8Array>
 }>
 
-/**
- * A local path `<video>` can open: the item's own file when this machine can read it, otherwise its bytes copied
- * into the media files. Rejects when nothing can supply the bytes.
- */
+/** A local path `<video>` can open: the item's own file, or its bytes copied into the media files. */
 export async function resolveVideoFile(item: MediaItem, sources: MediaSources) {
   const local = await localFile(item, sources.localServer)
   if (local) return local
-  const extension =
-    VIDEO_EXTENSIONS[item.mime.toLowerCase()] ??
-    VIDEO_EXTENSIONS[mediaMime(item.path ?? item.name ?? "") ?? ""] ??
-    ".mp4"
+  const find = (mime?: string) => Object.keys(MEDIA_EXTENSIONS).find((key) => MEDIA_EXTENSIONS[key] === mime)
+  const extension = find(item.mime.toLowerCase()) ?? find(mediaMime(item.path ?? item.name ?? "")) ?? ".mp4"
   const hash = mediaHashFromUri(item.uri)
-  if (hash) {
-    const media = sources.media
-    if (!media) throw new Error(`No client to read ${item.uri}`)
-    return sources.files.ensure(hash, extension, () => media.read(item.uri))
-  }
-  if (item.uri.startsWith("data:")) return sources.files.write(decodeDataUri(item.uri), extension)
-  return sources.files.write(await readServerFile(item, sources), extension)
+  if (hash) return sources.files.ensure(hash, extension, () => readMedia(item, sources))
+  if (!item.uri.startsWith("data:")) return sources.files.write(await readServerFile(item, sources), extension)
+  const comma = item.uri.indexOf(",")
+  if (!item.uri.slice(0, comma).endsWith(";base64")) throw new Error("Only base64 data URIs hold video")
+  return sources.files.write(Buffer.from(item.uri.slice(comma + 1), "base64"), extension)
 }
 
 /**
- * What `<image>` can load for the item: its own file when this machine can read it, a data URI, or the bytes of a
- * media ref or server file. Rejects other URLs, which `<image>` would fetch or read on this machine.
+ * What `<image>` can load: its own file, a data URI, or the bytes of a media ref or server file. Rejects other URLs,
+ * which `<image>` would fetch or read on this machine.
  */
 export async function resolveImageSource(item: MediaItem, sources: MediaSources): Promise<string | Uint8Array> {
   const local = await localFile(item, sources.localServer)
   if (local) return local
   if (item.uri.startsWith("data:")) return item.uri
-  if (!mediaHashFromUri(item.uri)) return readServerFile(item, sources)
-  if (!sources.media) throw new Error(`No client to read ${item.uri}`)
-  return sources.media.read(item.uri)
+  if (mediaHashFromUri(item.uri)) return readMedia(item, sources)
+  return readServerFile(item, sources)
 }
 
 // A draft's path may be gone while its uri still holds the bytes.
@@ -97,6 +75,11 @@ async function localFile(item: MediaItem, localServer: boolean) {
   if (!localServer || !item.uri.startsWith("file:")) return undefined
   const file = fileURLToPath(item.uri)
   return (await Bun.file(file).exists()) ? file : undefined
+}
+
+function readMedia(item: MediaItem, sources: MediaSources) {
+  if (!sources.media) throw new Error(`No client to read ${item.uri}`)
+  return sources.media.read(item.uri)
 }
 
 // The server's paths follow its own OS, which need not be this machine's.
@@ -112,10 +95,4 @@ async function readServerFile(item: MediaItem, sources: MediaSources) {
   if (!relative || relative === ".." || relative.startsWith("../") || flavor.isAbsolute(relative))
     throw new Error(`${item.uri} lies outside ${location.directory}`)
   return sources.readFile({ path: relative, location })
-}
-
-function decodeDataUri(uri: string) {
-  const comma = uri.indexOf(",")
-  if (!uri.slice(0, comma).endsWith(";base64")) throw new Error("Only base64 data URIs hold video")
-  return Buffer.from(uri.slice(comma + 1), "base64")
 }

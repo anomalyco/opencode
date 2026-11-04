@@ -1,6 +1,6 @@
 import type { CliRenderer, MouseEvent, VideoRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
-import { createEffect, createSignal, createUniqueId, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createSignal, createUniqueId, Match, onCleanup, Show, Switch } from "solid-js"
 import { useMedia } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { isPlayableVideo, type MediaItem } from "./model"
@@ -15,21 +15,8 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
   const theme = useTheme()
   const renderer = useRenderer()
   const key = createUniqueId()
-  const playable = () => isPlayableVideo(props.item)
   let hovered = false
-
-  onCleanup(() => {
-    if (media.activeTile() === key) media.setActiveTile(undefined)
-  })
-
-  const [failed, setFailed] = createSignal(false)
-  createEffect(
-    on(
-      () => props.item,
-      () => setFailed(false),
-      { defer: true },
-    ),
-  )
+  onCleanup(() => media.activeTile() === key && media.setActiveTile(undefined))
 
   return (
     <box
@@ -40,14 +27,12 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
       backgroundColor={theme.background.raised.base}
       onMouseOver={() => {
         hovered = true
-        if (playable()) media.setActiveTile(key)
+        if (isPlayableVideo(props.item)) media.setActiveTile(key)
       }}
       onMouseOut={() => {
         hovered = false
         // Moving between the tile's own children fires out and then over; only leaving the tile releases it.
-        queueMicrotask(() => {
-          if (!hovered && media.activeTile() === key) media.setActiveTile(undefined)
-        })
+        queueMicrotask(() => !hovered && media.activeTile() === key && media.setActiveTile(undefined))
       }}
       onMouseUp={(event: MouseEvent) => {
         if (!isMediaClick(renderer, event)) return
@@ -55,50 +40,46 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
         props.onOpen?.()
       }}
     >
-      <Switch
-        fallback={
-          <box width="100%" height="100%" alignItems="center" justifyContent="center">
-            <text fg={theme.text.muted} wrapMode="none" truncate selectable={false}>
-              {props.item.name ? `${props.item.kind} · ${props.item.name}` : props.item.kind}
-            </text>
-          </box>
-        }
-      >
-        <Match when={!failed() && props.item.kind === "image"}>
-          <TileImage item={props.item} onFail={() => setFailed(true)} />
+      <Switch fallback={<TileLabel item={props.item} />}>
+        <Match when={props.item.kind === "image"}>
+          <TileImage item={props.item} />
         </Match>
-        <Match when={!failed() && playable()}>
-          <TileVideo item={props.item} active={media.activeTile() === key} onFail={() => setFailed(true)} />
+        <Match when={isPlayableVideo(props.item)}>
+          <TileVideo item={props.item} active={media.activeTile() === key} />
         </Match>
       </Switch>
     </box>
   )
 }
 
-function TileImage(props: { item: MediaItem; onFail: () => void }) {
-  const source = createImageSource(() => props.item)
-  createEffect(() => {
-    if (source.failed()) props.onFail()
-  })
+function TileLabel(props: { item: MediaItem }) {
+  const theme = useTheme()
   return (
-    <image source={source.source()} fit="cover" protocol="auto" width="100%" height="100%" onError={source.onError} />
+    <box width="100%" height="100%" alignItems="center" justifyContent="center">
+      <text fg={theme.text.muted} wrapMode="none" truncate selectable={false}>
+        {props.item.name ? `${props.item.kind} · ${props.item.name}` : props.item.kind}
+      </text>
+    </box>
   )
 }
 
-function TileVideo(props: { item: MediaItem; active: boolean; onFail: () => void }) {
+function TileImage(props: { item: MediaItem }) {
+  const source = createImageSource(() => props.item)
+  return (
+    <Show when={!source.failed()} fallback={<TileLabel item={props.item} />}>
+      <image source={source.source()} fit="cover" protocol="auto" width="100%" height="100%" onError={source.onError} />
+    </Show>
+  )
+}
+
+function TileVideo(props: { item: MediaItem; active: boolean }) {
   const media = useMedia()
   const theme = useTheme()
   const file = createVideoFile(() => props.item)
   const [video, setVideo] = createSignal<VideoRenderable>()
   const [duration, setDuration] = createSignal<number>()
-  const badge = () => {
-    const seconds = duration()
-    return seconds === undefined ? "▶" : `▶ ${formatDuration(seconds)}`
-  }
-
-  createEffect(() => {
-    if (file().failed) props.onFail()
-  })
+  // The file that failed to open, so a new file for a changed item gets its own try. While loading, the tile is empty.
+  const [broken, setBroken] = createSignal<string>()
 
   // Seeking before the player is ready does nothing; the duration arrives with readiness and seeks it to the poster.
   createEffect(() => {
@@ -112,31 +93,36 @@ function TileVideo(props: { item: MediaItem; active: boolean; onFail: () => void
   })
 
   return (
-    <Show when={file().path}>
-      {(path) => {
-        onCleanup(() => setVideo(undefined))
-        return (
-          <>
-            <video
-              ref={setVideo}
-              audio={false}
-              source={path()}
-              loop
-              fit="cover"
-              maxFps={media.capabilities().thumbnailFps}
-              width="100%"
-              height="100%"
-              onReady={(metadata) => setDuration(metadata.duration)}
-              onError={props.onFail}
-            />
-            <box position="absolute" left={0} bottom={0} zIndex={1} backgroundColor={theme.background.raised.high}>
-              <text fg={theme.text.base} wrapMode="none" selectable={false}>
-                {badge()}
-              </text>
-            </box>
-          </>
-        )
-      }}
+    <Show
+      when={!file().failed && (broken() === undefined || broken() !== file().path)}
+      fallback={<TileLabel item={props.item} />}
+    >
+      <Show when={file().path}>
+        {(path) => {
+          onCleanup(() => setVideo(undefined))
+          return (
+            <>
+              <video
+                ref={setVideo}
+                audio={false}
+                source={path()}
+                loop
+                fit="cover"
+                maxFps={media.thumbnailFps()}
+                width="100%"
+                height="100%"
+                onReady={(metadata) => setDuration(metadata.duration)}
+                onError={() => setBroken(path())}
+              />
+              <box position="absolute" left={0} bottom={0} zIndex={1} backgroundColor={theme.background.raised.high}>
+                <text fg={theme.text.base} wrapMode="none" selectable={false}>
+                  {duration() === undefined ? "▶" : `▶ ${formatDuration(duration()!)}`}
+                </text>
+              </box>
+            </>
+          )
+        }}
+      </Show>
     </Show>
   )
 }
@@ -148,15 +134,12 @@ export function isMediaClick(renderer: CliRenderer, event: MouseEvent) {
 
 /** Where a paused tile shows its poster: 10% in, past the fade most clips open with, and at most 30 s. */
 export function posterTime(duration: number) {
-  if (duration < 3) return 0
-  return Math.min(duration * 0.1, 30)
+  return duration < 3 ? 0 : Math.min(duration * 0.1, 30)
 }
 
 export function formatDuration(seconds: number) {
   const total = Math.max(0, Math.round(seconds))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const rest = String(total % 60).padStart(2, "0")
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${rest}`
-  return `${minutes}:${rest}`
+  const minutes = Math.floor(total / 60)
+  const clock = `${minutes % 60}:${String(total % 60).padStart(2, "0")}`
+  return total >= 3600 ? `${Math.floor(total / 3600)}:${clock.padStart(5, "0")}` : clock
 }
