@@ -475,11 +475,18 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                 }
                 aria-label={compactLabel()}
                 onPointerEnter={(event) => {
-                  if (modified(event)) setAlternate(true)
+                  setAlternate(modified(event))
+                }}
+                onPointerLeave={(event) => {
+                  setAlternate(modified(event))
+                }}
+                onPointerDown={(event) => {
+                  setAlternate(modified(event))
                 }}
                 onClick={(event) => {
-                  if (compactCancel() && !alternateActive()) return local.onCancel()
-                  submit(alternateActive() || modified(event))
+                  const isModified = modified(event)
+                  if (compactCancel() && !isModified) return local.onCancel()
+                  submit(isModified)
                 }}
                 onKeyDown={(event) => {
                   if (event.isComposing) return
