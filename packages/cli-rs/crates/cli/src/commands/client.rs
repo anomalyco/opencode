@@ -10,6 +10,7 @@ use opencode_api::generated::types::LocationQueryInput;
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Connection, Env, Options};
+use opencode_service::probe::Endpoint;
 use serde_json::Value;
 
 use super::Context;
@@ -27,6 +28,13 @@ pub fn block_on<F: Future>(future: F) -> anyhow::Result<F::Output> {
 pub struct Connected {
     pub client: Client,
     _connection: Connection,
+}
+
+impl Connected {
+    /// The server's URL and credentials, for requests outside the generated client.
+    pub fn endpoint(&self) -> &Endpoint {
+        &self._connection.endpoint
+    }
 }
 
 /// `ServerConnection.resolve()` with the command's `--server` and `--standalone`, and a client for it.

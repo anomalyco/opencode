@@ -42,8 +42,8 @@ export type CliCase = {
   stderrLines?: number
   // Files written into the working directory before the run, by relative path.
   files?: Record<string, string | Uint8Array>
-  // Replacements applied to stdout and stderr after the normalizers, for values that differ per run (a
-  // `Date.now()` timestamp). Each says why in the scenario.
+  // Replacements applied to stdout, stderr, and the request log after the normalizers, for values that differ
+  // per run (a `Date.now()` timestamp). Each says why in the scenario.
   masks?: { pattern: RegExp; replacement: string }[]
   // Sends `name` to the client once a request for `after` (a path) has reached the fake server.
   signal?: { after: string; name: NodeJS.Signals }
@@ -89,6 +89,7 @@ export async function runCli(side: Side, value: CliCase) {
   const context = { server: server?.url, root: box.root }
   const mask = (text: string) =>
     (value.masks ?? []).reduce((current, item) => current.replace(item.pattern, item.replacement), text)
+  const requests = requestLog(server?.requests ?? [], context)
   return {
     exit,
     ...(proc.signalCode ? { signal: proc.signalCode } : {}),
@@ -99,7 +100,7 @@ export async function runCli(side: Side, value: CliCase) {
         context,
       ),
     ),
-    requests: requestLog(server?.requests ?? [], context),
+    requests: { reads: requests.reads.map(mask), writes: requests.writes.map(mask) },
   }
 }
 
