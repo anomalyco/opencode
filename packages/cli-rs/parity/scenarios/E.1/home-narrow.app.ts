@@ -8,8 +8,9 @@ export default defineApp({
     {
       checkpoint: "narrow",
       until: "Ask",
-      masks: [{ line: "Ask.*", reason: "the prompt placeholder is picked at random" }],
-      deviation: ["T17-home-prompt"],
+      masks: [
+        { x: 2, y: 16, width: 38, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" },
+      ],
     },
   ],
 })

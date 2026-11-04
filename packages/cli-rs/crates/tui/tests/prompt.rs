@@ -433,7 +433,8 @@ fn drafts_survive_route_changes() {
     setup.ready();
     setup.app.type_text("unfinished");
     setup.tui.navigate(Route::Home);
-    setup.wait_for("Fix the parser");
+    // The home's logo (E.1).
+    setup.wait_for("█▀▀█");
     setup.tui.navigate(session_route());
     setup.ready();
     assert_eq!(setup.textarea().text(), "unfinished");
@@ -467,9 +468,7 @@ fn escape_twice_interrupts_a_running_session() {
 #[test]
 fn home_prompt_creates_a_session_and_opens_it() {
     let setup = Setup::new(Route::Home);
-    setup.wait_for("Fix the parser");
-    // The list has focus; Tab moves to the prompt.
-    setup.app.press("tab");
+    // The home (E.1) focuses its prompt.
     setup.ready();
     setup.app.type_text("Reply with ok");
     setup.app.press("return");
