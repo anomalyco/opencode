@@ -237,6 +237,15 @@ test("an open session stays visible while its server stops answering", async ({ 
   await expect(unreachable).toHaveCount(0)
 })
 
+test("a session route for a server the app no longer knows opens Home", async ({ page }) => {
+  // A restored route can name a server that was removed since; no stored or contributed server has this address.
+  await setup(page, { tabs: [] })
+  await page.goto(sessionHref("ses_removed_server", "http://127.0.0.1:4098"))
+
+  await expect(page).toHaveURL("/")
+  await expect(page.getByRole("textbox", { name: /Search sessions/ })).toBeVisible()
+})
+
 test("auto-accept responds for an unfocused server session and its child", async ({ page }) => {
   const view = await setup(page, { tabs: [sessionA.id, { session: sessionB.id, server: REMOTE_SERVER }] })
   await page.goto(sessionHref(sessionA.id))
