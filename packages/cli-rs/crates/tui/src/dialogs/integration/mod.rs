@@ -136,9 +136,7 @@ struct Flow {
 
 impl Flow {
     fn location(&self) -> Option<LocationQueryInput> {
-        Some(LocationQueryInput {
-            directory: Some(self.local.directory.clone()),
-        })
+        self.local.location()
     }
 
     /// The integration as the catalog has it now.
