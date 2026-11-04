@@ -8,7 +8,6 @@ const file = "/tmp/opencode/packages/tui/src/parser.ts"
 
 export default defineApp({
   args: { sessionID: "ses_b" },
-  config: { experimental: { "new-designs": true } },
   ide: true,
   routes: [
     { path: "/api/session/ses_b", json: { data: session("ses_b", "Fix the parser", { updated: 2 }) } },

@@ -8,7 +8,6 @@ const contents = "const a = 1\nconst b = 2\nconst c = 3\n"
 
 export default defineApp({
   args: { sessionID: "ses_b" },
-  config: { experimental: { "new-designs": true } },
   zed: {
     sql: `create table workspaces (workspace_id integer, paths text, timestamp text);
 create table panes (pane_id integer, workspace_id integer, active integer);
