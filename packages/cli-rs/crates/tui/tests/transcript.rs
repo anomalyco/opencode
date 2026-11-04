@@ -428,3 +428,29 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     // The first page plus four older ones.
     assert_eq!(h.older.load(Ordering::SeqCst), 4);
 }
+
+/// The built-in `opencode.latex` plugin (P.2) draws `latex` fences in assistant text as Unicode math.
+#[test]
+fn latex_fences_render_as_math() {
+    let text = "The roots:\n\n```latex\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\n```";
+    let messages = vec![
+        user("msg_1", 1000, "Solve it"),
+        assistant(
+            "msg_2",
+            1500,
+            json!([{ "type": "text", "text": text }]),
+            Some(4000),
+        ),
+    ];
+    let h = open(60, 20, "ses_l", messages, Info::default());
+    let screen = h.wait_for("╰╯b² - 4ac");
+    assert!(!screen.contains("\\frac"), "{screen}");
+    let rule = screen
+        .lines()
+        .position(|line| line.contains("─────────────"))
+        .unwrap();
+    assert!(
+        screen.lines().nth(rule).unwrap().contains("x ="),
+        "{screen}"
+    );
+}
