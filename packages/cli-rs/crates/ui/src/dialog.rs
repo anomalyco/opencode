@@ -224,6 +224,7 @@ impl Dialogs {
             new_designs: self.0.new_designs.get(),
             layers: RefCell::new(Vec::new()),
             editors: RefCell::new(Vec::new()),
+            focus: RefCell::new(None),
         });
         // The mode goes first, so layers registered while building see it.
         if self.0.mode.borrow().is_none() {
@@ -232,6 +233,7 @@ impl Dialogs {
         }
         let content = build(&cx);
         self.0.panel.add(&content);
+        let focus = cx.focus.borrow_mut().take();
         self.0.stack.borrow_mut().push(Entry {
             on_close,
             key: options.key,
@@ -239,6 +241,9 @@ impl Dialogs {
             cx,
         });
         self.layout_frame();
+        if let Some(widget) = focus {
+            widget.focus();
+        }
     }
 
     /// Closes every dialog, calling their close handlers (TS `clear`).
@@ -401,6 +406,7 @@ pub struct DialogCx {
     pub new_designs: bool,
     layers: RefCell<Vec<Disposer>>,
     editors: RefCell<Vec<Box<dyn Fn() -> bool>>>,
+    focus: RefCell<Option<AnyWidget>>,
 }
 
 impl DialogCx {
@@ -423,6 +429,11 @@ impl DialogCx {
     /// Registers an editor for Ctrl+C: `clear` empties it and returns `true` when it has focus and text.
     pub fn editor(&self, clear: impl Fn() -> bool + 'static) {
         self.editors.borrow_mut().push(Box::new(clear));
+    }
+
+    /// Focuses `widget` once the dialog is on screen (TS focuses inputs on a 1 ms timer after mount).
+    pub fn focus(&self, widget: &impl Widget) {
+        *self.focus.borrow_mut() = Some(widget.as_any());
     }
 
     /// Terminal width, for layouts that narrow.
