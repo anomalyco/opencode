@@ -145,7 +145,7 @@ const targets: TargetCase[] = [
     routes: [
       { method: "GET", path: "/api/session/ses_resume", replies: [ok({ data: session("ses_resume", "/session") })] },
       getLocation("/session"),
-      { method: "PUT", path: "/api/session/ses_resume/environment", replies: [{ status: 200 }] },
+      { method: "PUT", path: "/api/session/ses_resume/environment", replies: [{ status: 204 }] },
     ],
   },
   {
