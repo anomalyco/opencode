@@ -1,4 +1,4 @@
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
+import { Duration, Effect, Equal, Fiber, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -511,8 +511,17 @@ export const OpencodePlugin = define<
     yield* ProviderRefresh.onSwitch("opencode", refresh().pipe(Effect.andThen(poll())))
     yield* poll()
     // The timer pauses while the machine sleeps, so the first prompt after waking could run with a stale config,
-    // such as an expired MCP server token. Admission waits for a config older than the poll interval to reload.
-    yield* ctx.session.hook("prompt", () => (snapshot.connection ? check() : Effect.void))
+    // such as an expired MCP server token. Admission waits for a config older than the poll interval to reload, but
+    // a network still waking up gets 5 seconds; the check then finishes in the background and the prompt proceeds.
+    yield* ctx.session.hook("prompt", () =>
+      snapshot.connection
+        ? check().pipe(
+            Effect.forkIn(scope),
+            Effect.flatMap((fiber) => Fiber.join(fiber).pipe(Effect.timeout(Duration.seconds(5)))),
+            Effect.ignore,
+          )
+        : Effect.void,
+    )
   }),
 })
 

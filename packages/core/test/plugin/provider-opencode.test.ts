@@ -5,7 +5,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Clock, Effect, Layer, Schema, Stream } from "effect"
+import { Clock, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -116,6 +116,20 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
   })
   return { server, config, requests, agents }
 }
+
+// The machine slept for 70 seconds: its wall clock moved on, but timers, such as the Console poll's, have not fired.
+const afterSleep = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Clock.clockWith((clock) =>
+    effect.pipe(
+      Effect.provideService(Clock.Clock, {
+        ...clock,
+        currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe() + 70_000,
+        currentTimeMillis: Effect.sync(() => clock.currentTimeMillisUnsafe() + 70_000),
+        currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe() + 70_000_000_000n,
+        currentTimeNanos: Effect.sync(() => clock.currentTimeNanosUnsafe() + 70_000_000_000n),
+      }),
+    ),
+  )
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
@@ -1010,24 +1024,78 @@ describe("OpencodePlugin", () => {
             { action: "tool.use", resource: "shell:sudo *", effect: "deny" },
           ])
 
-          // The machine slept for 70 seconds: its wall clock moved on, but the poll's timer has not fired yet.
-          const clock = yield* Clock.clockWith(Effect.succeed)
-          const slept = 70_000
-          yield* prompt.pipe(
-            Effect.provideService(Clock.Clock, {
-              ...clock,
-              currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe() + slept,
-              currentTimeMillis: Effect.sync(() => clock.currentTimeMillisUnsafe() + slept),
-              currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n,
-              currentTimeNanos: Effect.sync(() => clock.currentTimeNanosUnsafe() + BigInt(slept) * 1_000_000n),
-            }),
-          )
+          yield* prompt.pipe(afterSleep)
           expect(state.requests).toBe(2)
           expect(yield* consolePolicies(config)).toEqual([
             { action: "tool.use", resource: "edit:*.env", effect: "deny" },
           ])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("admits a prompt after 5 seconds of a hanging Console config fetch, which then applies", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { requests: 0, resource: "shell:sudo *" }
+        const entered = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        const server = Bun.serve({
+          port: 0,
+          fetch: async () => {
+            state.requests++
+            if (state.requests > 1) {
+              entered.resolve()
+              await release.promise
+            }
+            return Response.json({
+              providers: {},
+              policies: [{ action: "tool.use", resource: state.resource, effect: "deny" }],
+            })
+          },
+        })
+        return { server, state, entered, release }
+      }),
+      ({ server, state, entered, release }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const config = yield* Config.Service
+          const hooks = yield* PluginHooks.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+          state.resource = "edit:*.env"
+
+          const prompt = yield* hooks
+            .trigger("session", "prompt", {
+              sessionID: Session.ID.make("ses_console"),
+              messageID: SessionMessage.ID.make("msg_console"),
+              prompt: { text: "hello" },
+              delivery: "steer",
+            })
+            .pipe(inProcess(server), afterSleep, Effect.forkChild({ startImmediately: true }))
+          yield* Effect.promise(() => entered.promise)
+          yield* TestClock.adjust("4 seconds")
+          expect(prompt.pollUnsafe()).toBeUndefined()
+          yield* TestClock.adjust("1 second")
+          yield* Fiber.await(prompt).pipe(Effect.timeout("1 second"), TestClock.withLive)
+          expect(prompt.pollUnsafe()).toBeDefined()
+          expect(yield* consolePolicies(config)).toEqual([
+            { action: "tool.use", resource: "shell:sudo *", effect: "deny" },
+          ])
+
+          release.resolve()
+          yield* drain
+          expect(state.requests).toBe(2)
+          expect(yield* consolePolicies(config)).toEqual([
+            { action: "tool.use", resource: "edit:*.env", effect: "deny" },
+          ])
+        }),
+      ({ server, release }) =>
+        Effect.sync(() => release.resolve()).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
     ),
   )
 
