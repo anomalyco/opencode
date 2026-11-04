@@ -87,6 +87,12 @@ export async function session(input: {
   readonly persist: boolean
   readonly resume?: string
 }): Promise<Options> {
+  // The SDK reports a missing cwd as a libc mismatch when its executable exists.
+  if (!(await input.io.directoryExists(input.directory))) {
+    throw new Error(
+      `Session directory does not exist or is not a directory: ${input.directory}. Use /cd to switch to an existing directory.`,
+    )
+  }
   const options: Options = {
     ...base(input),
     cwd: input.directory,

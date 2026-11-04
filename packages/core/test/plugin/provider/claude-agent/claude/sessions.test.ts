@@ -1,12 +1,15 @@
 import { describe, expect } from "bun:test"
+import fs from "node:fs/promises"
 import { Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
+import { ClaudeIO } from "@opencode/core/plugin/provider/claude-agent/claude/io"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
 import { ClaudeAgentLanguageModel } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
 import { ClaudeSystemPrompt } from "@opencode/core/plugin/provider/claude-agent/language-model/system-prompt"
 import { SessionRecord } from "@opencode/core/plugin/provider/claude-agent/sync/record"
 import { it } from "../../../../lib/effect"
+import { tmpdirScoped } from "../../../../fixture/tmpdir"
 import { FakeClaude } from "../lib/fake-claude"
 import { TestSessions } from "../lib/sessions"
 import { TestTools } from "../lib/tools"
@@ -15,6 +18,35 @@ import { Recorder } from "../lib/recorder"
 const first = TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker.")
 
 describe("Claude sessions", () => {
+  it.live("reports a deleted session directory before spawning Claude and recovers when restored", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const sessions = yield* test.registry.attach({
+        ...test.input,
+        directory: directory.path,
+        io: { ...test.input.io, directoryExists: ClaudeIO.real.directoryExists },
+      })
+      const model = yield* TestSessions.model(sessions)
+      yield* Effect.promise(() => fs.rmdir(directory.path))
+      const error = yield* TestSessions.reply(model, first).pipe(Effect.flip)
+      expect(String(error.cause)).toContain(directory.path)
+      expect(String(error.cause)).toContain("/cd")
+      expect(claude.runs).toHaveLength(0)
+
+      yield* Effect.promise(() => fs.mkdir(directory.path))
+      expect(TestSessions.text(yield* TestSessions.reply(model, first))).toBe("COPPER-OTTER")
+      expect(claude.runs).toHaveLength(1)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("streams consecutive turns once, on one process, with per-turn usage", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
