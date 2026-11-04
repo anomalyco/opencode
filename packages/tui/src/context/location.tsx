@@ -41,13 +41,21 @@ export function LocationProvider(props: ParentProps) {
         ? undefined
         : location
     setError(undefined)
-    // Only the server's typed LocationNotFoundError proves the folder is gone. Other failures, such as
-    // 503s while plugins are still activating after a restart, are retried until the Location warms up.
+    // Only the server's typed LocationNotFoundError proves the folder is gone. A cold Location answers
+    // with 503 while its plugins activate and earns the full timeout; every other failure keeps the
+    // default three attempts so transient drops recover without hammering the server for minutes.
+    let otherFailures = 0
     void retry(() => (generation === attempt ? data.location.sync(target) : Promise.resolve()), {
       delay: 1_000,
       maxDelay: 5_000,
       timeout: LOCATION_READY_TIMEOUT,
-      retryIf: (cause) => generation === attempt && isServiceUnavailableError(cause),
+      retryIf: (cause) => {
+        if (generation !== attempt || isLocationNotFoundError(cause)) return false
+
+        if (isServiceUnavailableError(cause)) return true
+
+        return ++otherFailures < 3
+      },
     }).catch((cause) => {
       const current = ref()
       const stale =

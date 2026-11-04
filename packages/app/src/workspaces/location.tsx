@@ -45,13 +45,20 @@ const context = createSimpleContext({
       if (serverSDK.connection.status() !== "connected") return
       // Generic sync failures do not prove the directory is missing; only the server's typed
       // LocationNotFoundError does, and retrying it cannot succeed until the folder changes.
-      // A cold Location answers with 503 while its plugins activate, so keep retrying until it warms up.
+      // A cold Location answers with 503 while its plugins activate and earns the full timeout; every
+      // other failure keeps the default three attempts so transient drops do not hang for minutes.
+      let otherFailures = 0
       void retry(() => (stale ? Promise.resolve() : data.location.sync(location)), {
         delay: 1_000,
         maxDelay: 5_000,
         timeout: 5 * 60 * 1000,
-        retryIf: (error) => !stale && isServiceUnavailableError(error),
+        retryIf: (error) => {
+          if (stale || isLocationNotFoundError(error)) return false
 
+          if (isServiceUnavailableError(error)) return true
+
+          return ++otherFailures < 3
+        },
       }).catch((error) => {
         if (stale || !isLocationNotFoundError(error)) return
         setState("missing", location)
