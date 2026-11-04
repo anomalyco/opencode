@@ -225,6 +225,17 @@ The database normally lives at:
   daemon, and make a backup before inspecting persistent data with external tools.
 </Callout>
 
+## Free model limits on VPN or shared networks
+
+The [free-model gateway](/console/models#free-models) can flag or block an entire public IP address. Shared addresses, such as commercial VPN exit nodes, corporate networks, and carrier-grade NAT (CGNAT), can be affected by traffic from other users sharing that address. OpenCode free models are available within OpenCode and cannot be used by third-party clients or API proxies.
+
+If you encounter unexpected usage limits:
+
+- **Disconnect the VPN**: Temporarily disable the VPN connection and retry the request.
+- **Configure split tunneling**: Route OpenCode traffic outside the VPN tunnel through your direct connection.
+- **Connect a provider key**: Use `/connect` in the TUI to authenticate directly with a model provider (such as Google Gemini, Groq, or OpenAI), bypassing the shared gateway IP pool.
+- **Request an IP review**: If your network remains blocked, email [help@anoma.ly](mailto:help@anoma.ly) to request a review. Include whether your connection uses a shared VPN or CGNAT address, if known.
+
 ## Report an issue
 
 Include the following when reporting a reproducible problem:
