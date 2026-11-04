@@ -12,6 +12,7 @@ import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
+import { State } from "../../state.js"
 import { SkillFile } from "./skill-file.js"
 import { SkillScan } from "./skill-scan.js"
 
@@ -171,7 +172,9 @@ export const Plugin = define({
     const updates = yield* PubSub.subscribe(changes)
     yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
-      Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(ctx.skill.reload()))),
+      Stream.runForEach((file) =>
+        refresh(file).pipe(Effect.andThen(ctx.skill.reload()), State.logFailure("failed to reload skills")),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh()
@@ -184,6 +187,7 @@ export const Plugin = define({
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
           Effect.andThen(refresh()),
           Effect.andThen(ctx.skill.reload()),
+          State.logFailure("failed to reload skills after a config change"),
         ),
       ),
       Effect.forkScoped({ startImmediately: true }),

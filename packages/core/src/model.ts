@@ -276,7 +276,7 @@ const layer = Layer.effect(
       )
     })
     yield* bus.subscribe(Provider.Event.Updated).pipe(
-      Stream.runForEach(() => notify),
+      Stream.runForEach(() => notify.pipe(State.logFailure("failed to publish model update"))),
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({

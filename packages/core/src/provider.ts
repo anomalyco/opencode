@@ -527,7 +527,7 @@ const layer = Layer.effect(
       )
     })
     yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Switched]).pipe(
-      Stream.runForEach(() => notify),
+      Stream.runForEach(() => notify.pipe(State.logFailure("failed to publish provider update"))),
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({

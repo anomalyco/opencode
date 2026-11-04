@@ -1,10 +1,14 @@
 import { expect } from "bun:test"
+import { Event } from "@opencode/schema/config"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Context, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
@@ -12,6 +16,7 @@ import { Rpc } from "@opencode/core/rpc"
 import { Session } from "@opencode/core/session"
 import { WebSearch } from "@opencode/core/websearch"
 import { organizationPolicy } from "./fixture/policy"
+import { waitUntil } from "./lib/eventually"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -265,62 +270,155 @@ it.live("continues failure reporting and cleanup after a plugin update observer 
   }),
 )
 
-it.live("keeps a guarded policy plugin's filters and hooks when one of its transforms throws", () =>
+const deny = (action: ConfigPolicy.Info["action"], resource: string): ConfigPolicy.Info => ({
+  action,
+  resource,
+  effect: "deny",
+})
+
+// The real policy plugin, failing closed like the built-in, plus one more provider transform the test can make throw.
+const activateFailingPolicy = Effect.fnUntraced(function* () {
+  const plugins = yield* Plugin.Service
+  // Only the services: the plugin must keep its activation Scope, which the full test context would replace.
+  const services = Context.pick(
+    Bus.Service,
+    Config.Service,
+    Credential.Service,
+    WebSearch.Service,
+  )(yield* Effect.context<Bus.Service | Config.Service | Credential.Service | WebSearch.Service>())
+  const transform = { fail: false, thrown: 0 }
+  yield* plugins.activate([
+    {
+      id: ConfigPolicyPlugin.Plugin.id,
+      revision: "1",
+      failClosed: true,
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          yield* ConfigPolicyPlugin.Plugin.effect(ctx)
+          yield* ctx.provider.transform(() => {
+            if (!transform.fail) return
+            transform.thrown++
+            throw new Error("policy transform failed")
+          })
+        }).pipe(Effect.provide(services)),
+    },
+  ])
+  return transform
+})
+
+it.live("keeps enforcing and updating org policy after a policy transform throws", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const catalog = yield* Provider.Service
     const hooks = yield* PluginHooks.Service
-    // Only the services: the plugin must keep its activation Scope, which the full test context would replace.
-    const services = Context.pick(
-      Bus.Service,
-      Credential.Service,
-      WebSearch.Service,
-    )(yield* Effect.context<Bus.Service | Credential.Service | WebSearch.Service>())
-    let fail = false
-    yield* catalog.transform((editor) => editor.update(Provider.ID.openai, () => {}))
-    yield* plugins.activate([
-      {
-        id: ConfigPolicyPlugin.Plugin.id,
-        revision: "1",
-        guarded: true,
-        effect: (ctx) =>
-          Effect.gen(function* () {
-            yield* ConfigPolicyPlugin.Plugin.effect(ctx)
-            yield* ctx.provider.transform(() => {
-              if (fail) throw new Error("policy transform failed")
-            })
-          }).pipe(
-            Effect.provide(
-              Config.testLayer([
-                organizationPolicy([
-                  { action: "provider.use", resource: "openai", effect: "deny" },
-                  { action: "tool.use", resource: "shell:*", effect: "deny" },
-                ]),
-              ]),
-            ),
-            Effect.provide(services),
-          ),
-      },
-    ])
-    const evaluate = hooks.trigger("permission", "evaluate", {
+    const bus = yield* Bus.Service
+    const config = yield* Config.Test
+    yield* catalog.transform((editor) => {
+      editor.update(Provider.ID.openai, () => {})
+      editor.update(Provider.ID.anthropic, () => {})
+    })
+    const transform = yield* activateFailingPolicy()
+    expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
+
+    transform.fail = true
+    yield* bus.publish(Event.Updated, {})
+    yield* waitUntil(Effect.sync(() => transform.thrown > 0))
+    // Reads of the failing state fail rather than returning the provider the policy denies.
+    expect(Exit.isFailure(yield* catalog.get(Provider.ID.openai).pipe(Effect.exit))).toBe(true)
+    const evaluated = yield* hooks.trigger("permission", "evaluate", {
       sessionID: Session.ID.make("ses_policy"),
       action: "shell",
       resources: ["ls"],
       effect: "allow",
     })
-    expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
-
-    fail = true
-    yield* catalog.reload().pipe(Effect.exit)
-    yield* plugins.awaitActivation
-    // Reads of the failing state fail rather than returning the provider the policy denies.
-    expect(Exit.isFailure(yield* catalog.get(Provider.ID.openai).pipe(Effect.exit))).toBe(true)
-    expect((yield* evaluate).effect).toBe("deny")
+    expect(evaluated.effect).toBe("deny")
     expect((yield* plugins.list())[0]?.state.status).toBe("active")
 
-    fail = false
-    yield* catalog.reload()
+    transform.fail = false
     expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
+    expect(yield* catalog.get(Provider.ID.anthropic)).toBeDefined()
+
+    // A deny added after recovery still applies.
+    yield* config.setEntries([organizationPolicy([deny("provider.use", "openai"), deny("provider.use", "anthropic")])])
+    yield* bus.publish(Event.Updated, {})
+    yield* waitUntil(catalog.get(Provider.ID.anthropic).pipe(Effect.map((provider) => provider === undefined)))
+  }).pipe(
+    Effect.provide(
+      Config.testLayer([organizationPolicy([deny("provider.use", "openai"), deny("tool.use", "shell:*")])]),
+    ),
+  ),
+)
+
+it.live("keeps applying account policy after a policy transform throws during a switch", () =>
+  Effect.gen(function* () {
+    const catalog = yield* Provider.Service
+    const credentials = yield* Credential.Service
+    const account = (orgID: string) =>
+      credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "access",
+          refresh: "refresh",
+          expires: Number.MAX_SAFE_INTEGER,
+          metadata: { accountID: "acc_test", orgID },
+        }),
+      })
+    const denied = yield* account("org_denied")
+    yield* account("org_first")
+    yield* catalog.transform((editor) => editor.update(Provider.ID.opencode, () => {}))
+    const transform = yield* activateFailingPolicy()
+    expect(yield* catalog.get(Provider.ID.opencode)).toBeDefined()
+
+    transform.fail = true
+    yield* account("org_second")
+    yield* waitUntil(Effect.sync(() => transform.thrown > 0))
+    transform.fail = false
+    expect(yield* catalog.get(Provider.ID.opencode)).toBeDefined()
+
+    // Switching to the denied account after recovery still revokes it.
+    yield* credentials.activate(denied.id)
+    yield* waitUntil(catalog.get(Provider.ID.opencode).pipe(Effect.map((provider) => provider === undefined)))
+  }).pipe(Effect.provide(Config.testLayer([organizationPolicy([deny("integration.use", "opencode#org_denied")])]))),
+)
+
+it.live("keeps publishing provider and model updates after a provider read fails", () =>
+  Effect.gen(function* () {
+    const catalog = yield* Provider.Service
+    const bus = yield* Bus.Service
+    const published = { provider: 0, model: 0 }
+    const transform = { fail: false, thrown: 0 }
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Provider.Event.Updated.type) published.provider++
+          if (event.type === Model.Event.Updated.type) published.model++
+        }),
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    // Registered outside any plugin, so it is ungrouped and rethrows from every read like a fail-closed transform.
+    yield* catalog.transform(() => {
+      if (!transform.fail) return
+      transform.thrown++
+      throw new Error("provider transform failed")
+    })
+
+    transform.fail = true
+    yield* catalog.reload().pipe(Effect.exit)
+    yield* bus.publish(Credential.Event.Switched, { integrationID: Integration.ID.make("test"), credentialID: null })
+    yield* bus.publish(Provider.Event.Updated, {})
+    // One throw from the reload, one from each observer.
+    yield* waitUntil(Effect.sync(() => transform.thrown === 3))
+    transform.fail = false
+
+    published.model = 0
+    yield* bus.publish(Provider.Event.Updated, {})
+    yield* waitUntil(Effect.sync(() => published.model > 0))
+    published.provider = 0
+    yield* bus.publish(Credential.Event.Switched, { integrationID: Integration.ID.make("test"), credentialID: null })
+    yield* waitUntil(Effect.sync(() => published.provider > 0))
   }),
 )
 

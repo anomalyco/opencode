@@ -1,9 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
+import { Event } from "@opencode/schema/event"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
@@ -22,6 +23,7 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { WellKnown } from "@opencode/core/wellknown"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { advance, drain } from "../lib/clock"
+import { waitUntil } from "../lib/eventually"
 import { tmpdir } from "../fixture/tmpdir"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -424,6 +426,72 @@ describe("ConfigSkillPlugin.Plugin", () => {
           })
           yield* emitAndWait({ type: "create", path: source })
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
+        }),
+      ),
+    ),
+  )
+
+  // A fail-closed transform rethrows from every read until it recovers; later changes must still reload skills.
+  it.live("keeps reloading after a reload fails", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "deploy"), { recursive: true })
+            await write(tmp.path, "deploy", "Initial")
+          })
+          const service = yield* Skill.Service
+          const watcher = yield* Watcher.Test
+          const updates = yield* PubSub.unbounded<{ readonly type: "config.updated" }>()
+          const reloads = { count: 0, failNext: false }
+          yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: {
+                subscribe: () =>
+                  Stream.fromPubSub(updates).pipe(
+                    Stream.map(() => ({
+                      id: Event.ID.create(),
+                      created: Date.now(),
+                      type: "config.updated",
+                      data: {},
+                    })),
+                  ),
+              },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () =>
+                  Effect.suspend(() => {
+                    reloads.count++
+                    if (!reloads.failNext) return service.reload()
+                    reloads.failNext = false
+                    return Effect.die(new Error("transform failed"))
+                  }),
+              },
+            }),
+          ).pipe(
+            Effect.provide(
+              Config.testLayer([new Document({ type: "document", info: decode({ skills: [tmp.path] }) })]),
+            ),
+            Effect.provideService(SkillDiscovery.Service, emptyDiscovery),
+            Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+            ),
+          )
+          const triggers = {
+            watcher: watcher.emit({ type: "update", path: path.join(tmp.path, "deploy", "SKILL.md") }),
+            config: PubSub.publish(updates, { type: "config.updated" as const }).pipe(Effect.asVoid),
+          }
+          for (const trigger of Object.values(triggers)) {
+            reloads.failNext = true
+            const before = reloads.count
+            yield* trigger
+            yield* waitUntil(Effect.sync(() => reloads.count === before + 1))
+            yield* trigger
+            yield* waitUntil(Effect.sync(() => reloads.count === before + 2))
+          }
         }),
       ),
     ),

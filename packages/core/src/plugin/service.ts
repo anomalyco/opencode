@@ -28,7 +28,7 @@ export type Generation = PluginDefinition & {
    * Enforces policy. A failing transform is not detached with the rest of the plugin's registrations: reads of that
    * state fail instead, so one error cannot quietly turn off every filter and hook the plugin registered.
    */
-  readonly guarded?: boolean
+  readonly failClosed?: boolean
   /**
    * The package's `./gui-experimental` bundle: its file URL, the plugin's options, and an opaque revision that changes
    * with the plugin, its options or the bundle's content. A change to the bundle alone reloads it in the app without

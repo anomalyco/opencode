@@ -97,9 +97,13 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     ...post.filter((plugin) => enabled.has(plugin.id)),
   ]
   // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
-  // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
-  const duplicate = (plugin: Plugin.Generation, index: number) =>
-    ordered.findIndex((other) => other.id === plugin.id) !== index
+  // A builtin keeps its ID, so no other plugin can replace policy enforcement by declaring it; otherwise the first
+  // occurrence in boot order wins. Report the others like any other plugin setup failure.
+  const winner = (id: string) => {
+    const builtin = ordered.findIndex((other) => other.id === id && other.source?.type === "builtin")
+    return builtin === -1 ? ordered.findIndex((other) => other.id === id) : builtin
+  }
+  const duplicate = (plugin: Plugin.Generation, index: number) => winner(plugin.id) !== index
   return {
     plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
     packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),

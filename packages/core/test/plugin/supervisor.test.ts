@@ -9,6 +9,7 @@ import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
+import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-services"
@@ -16,11 +17,14 @@ import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { Provider } from "@opencode/core/provider"
+import { PluginInternal } from "@opencode/core/plugin/internal"
+import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Database } from "../../src/database/database"
 import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
+import { tempLocationLayer } from "../fixture/location"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { advance } from "../lib/clock"
@@ -144,6 +148,55 @@ describe("PluginSupervisor", () => {
       expect(
         state.inventory.some((plugin) => plugin.id?.startsWith("opencode.") && plugin.state.status === "active"),
       ).toBe(true)
+    }),
+  )
+
+  it.live("keeps a builtin's ID when another plugin declares it", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(greeter("impostor-greet", ConfigPolicyPlugin.Plugin.id))
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const state = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const commands = yield* Command.Service
+        return { inventory: yield* plugins.list(), impostor: yield* commands.get("impostor-greet") }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+
+      const policy = Plugin.ID.make(ConfigPolicyPlugin.Plugin.id)
+      expect(state.inventory.filter((plugin) => plugin.id === policy)).toEqual([
+        { id: policy, source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
+        {
+          id: policy,
+          source: { type: "sdk" },
+          state: { status: "failed", error: `Duplicate plugin ID: ${policy}` },
+          features: { server: true },
+        },
+      ])
+      expect(state.impostor).toBeUndefined()
+    }),
+  )
+
+  it.effect("fails closed only for the policy plugin", () =>
+    Effect.gen(function* () {
+      const internal = yield* PluginInternal.list().pipe(
+        Effect.provide(
+          AppNodeBuilder.build(PluginInternal.requirements, [
+            Location.node.replace(tempLocationLayer),
+            Global.node.replace(tempGlobalLayer),
+            offlineModels,
+          ]),
+        ),
+      )
+      const plugins = [...internal.pre, ...internal.post]
+      expect(plugins.find((plugin) => plugin.id === OpencodePlugin.id)?.failClosed).toBe(false)
+      expect(plugins.filter((plugin) => plugin.failClosed).map((plugin) => plugin.id)).toEqual([
+        ConfigPolicyPlugin.Plugin.id,
+      ])
     }),
   )
 

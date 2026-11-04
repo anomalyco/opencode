@@ -6,6 +6,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, PubSub, Stream } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
+import { State } from "../../state.js"
 
 /**
  * Runs `reload` on every `config.updated`. The returned `entries` always reads the current config, so a reload that
@@ -17,7 +18,7 @@ export const observe = Effect.fnUntraced(function* (
   reload: Effect.Effect<void>,
 ) {
   yield* event.subscribe({ types: ["config.updated"] }).pipe(
-    Stream.runForEach(() => reload),
+    Stream.runForEach(() => reload.pipe(State.logFailure("failed to reload after a config change"))),
     Effect.forkScoped({ startImmediately: true }),
   )
   return {
@@ -64,7 +65,7 @@ export const observeSources = Effect.fnUntraced(function* <A>(input: {
   const updates = yield* PubSub.subscribe(changes)
   yield* Stream.fromSubscription(updates).pipe(
     Stream.debounce("100 millis"),
-    Stream.runForEach(() => reload),
+    Stream.runForEach(() => reload.pipe(State.logFailure("failed to reload after a config change"))),
     Effect.forkScoped({ startImmediately: true }),
   )
   loaded.documents = yield* input.load()

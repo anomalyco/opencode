@@ -42,7 +42,7 @@ export const Plugin = define({
             return
           current.accounts = next
           yield* State.batch(Effect.all([ctx.provider.reload(), websearch.reload()], { discard: true }))
-        }),
+        }).pipe(State.logFailure("failed to apply policy after a credential change")),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )

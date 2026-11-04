@@ -145,6 +145,20 @@ export function changes<State>(
     })
 }
 
+/**
+ * Logs a failed observer step instead of ending the observer. Reads rethrow while an ungrouped transform fails, and an
+ * observer that stopped would never apply a later change, such as a new policy deny.
+ */
+export function logFailure(message: string) {
+  return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterrupts(cause),
+        (cause) => Effect.logError(message, { cause }),
+      ),
+    )
+}
+
 export const inherit = Effect.fnUntraced(function* () {
   const batch = yield* CurrentBatch
   return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentBatch, batch)
