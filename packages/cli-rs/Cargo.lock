@@ -1229,10 +1229,22 @@ dependencies = [
 name = "opencode-mini"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "chrono",
+ "futures-util",
+ "indexmap",
+ "log",
+ "opencode-api",
  "opencode-local",
  "opencode-service",
  "opencode-store",
  "opencode-ui",
+ "opentui",
+ "rustix",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "unicode-width",
 ]
 
 [[package]]
