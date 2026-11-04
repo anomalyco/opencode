@@ -161,7 +161,7 @@ function projectsFor(scope: string) {
   const at = (key: string) =>
     createServerProjects({ store, setStore, scope: () => ServerScope.fromServerKey(ServerConnection.Key.make(key)) })
 
-  return { store, projects: at(scope), at }
+  return { store, setStore, projects: at(scope), at }
 }
 
 test("adopt opens a directory only when no project is open", () => {
@@ -177,10 +177,10 @@ test("adopt opens a directory only when no project is open", () => {
 })
 
 test("adopt is scoped per server", () => {
-  const { store, at } = projectsFor("https://a.example")
+  const { store, setStore, at } = projectsFor("https://a.example")
   const other = at("https://b.example")
 
-  store.projects["https://a.example"] = [{ worktree: "/repo" }]
+  setStore("projects", "https://a.example", [{ worktree: "/repo" }])
   other.adopt("/srv/repo")
   expect(store.projects["https://b.example"]).toEqual([{ worktree: "/srv/repo" }])
   expect(store.projects["https://a.example"]).toEqual([{ worktree: "/repo" }])
