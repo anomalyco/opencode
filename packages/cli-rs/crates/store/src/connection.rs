@@ -364,6 +364,8 @@ fn is_signal(event: &V2Event) -> bool {
             | V2Event::TuiPromptAppend(_)
             | V2Event::SessionDeleted(_)
             | V2Event::SessionMoved(_)
+            // The tab strip's prompt pulse (E.12).
+            | V2Event::SessionInboxEnqueued(_)
     )
 }
 
