@@ -62,12 +62,37 @@ export type Ends = typeof Ends.Type
 export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String }).annotate({
   identifier: "Schedule.Action.Prompt",
 })
+export type PromptAction = typeof PromptAction.Type
 
-export const Action = Schema.Union([PromptAction]).pipe(
+/**
+ * Runs `run` in the shell, in `cwd` (relative to the Session's directory, which is the default), with no model call.
+ * The check's message arrives in `OPENCODE_SCHEDULE_MESSAGE`. `timeout` defaults to 10 minutes.
+ */
+export const ShellAction = Schema.Struct({
+  type: Schema.tag("shell"),
+  run: Schema.String,
+  cwd: Schema.String.pipe(optional),
+  timeout: DurationString.pipe(optional),
+}).annotate({ identifier: "Schedule.Action.Shell" })
+export type ShellAction = typeof ShellAction.Type
+
+export const Action = Schema.Union([PromptAction, ShellAction]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Schedule.Action" }),
 )
 export type Action = typeof Action.Type
+
+/**
+ * The last shell action run. `exitCode` is absent when the command never finished: it is still running, timed out,
+ * failed to spawn, or the process died.
+ */
+export const RunResult = Schema.Struct({
+  exitCode: Schema.Int.pipe(optional),
+  durationMs: NonNegativeInt,
+  output: Schema.String,
+  error: Schema.String.pipe(optional),
+}).annotate({ identifier: "Schedule.RunResult" })
+export type RunResult = typeof RunResult.Type
 
 /**
  * Runs `run` in the Session's directory before firing, with no model call. With none of `is`, `matches` or `changes`
@@ -144,6 +169,7 @@ export const Info = Schema.Struct({
   lastFiredAt: DateTimeUtcFromMillis.pipe(optional),
   lastOutcome: Outcome.pipe(optional),
   lastOutput: Schema.String.pipe(optional),
+  lastRun: RunResult.pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis, updated: DateTimeUtcFromMillis }),
 }).annotate({ identifier: "Schedule.Info" })
 export type Info = typeof Info.Type

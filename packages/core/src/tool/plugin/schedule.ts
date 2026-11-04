@@ -229,7 +229,7 @@ function toView(info: Schedule.Info): View {
     tz: info.tz,
     if: info.if,
     until: info.until,
-    prompt: info.action.prompt,
+    prompt: info.action.type === "prompt" ? info.action.prompt : `$ ${info.action.run}`,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
     endsAt: local(info.endsAt),

@@ -22276,6 +22276,9 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Shell"
           }
         ]
       },
@@ -22291,6 +22294,26 @@
           }
         },
         "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.Action.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "timeout": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          }
+        },
+        "required": ["type", "run"],
         "additionalProperties": false
       },
       "Schedule.Condition": {
@@ -22502,6 +22525,9 @@
           "lastOutput": {
             "type": "string"
           },
+          "lastRun": {
+            "$ref": "#/components/schemas/Schedule.RunResult"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -22522,6 +22548,29 @@
       "Schedule.Outcome": {
         "type": "string",
         "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
+      },
+      "Schedule.RunResult": {
+        "type": "object",
+        "properties": {
+          "exitCode": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "output": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["durationMs", "output"],
+        "additionalProperties": false
       },
       "Schedule.Status": {
         "type": "string",

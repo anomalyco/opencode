@@ -2,7 +2,7 @@ export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
+import { Cause, Clock, Context, Cron, DateTime, Effect, FiberMap, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -15,6 +15,8 @@ import {
   Info,
   Outcome,
   Request,
+  type RunResult,
+  type ShellAction,
   Status,
   type StoredCheck,
   toCreateInput,
@@ -31,6 +33,7 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
+import { ScheduleAction } from "./schedule/action.js"
 import { ScheduleCheck } from "./schedule/check.js"
 import { ScheduleTable } from "./schedule/sql.js"
 
@@ -69,7 +72,7 @@ export interface Interface {
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
   /** Whether experimental.schedules is on in the config where the Session lives. */
   readonly enabled: (sessionID: SessionSchema.ID) => Effect.Effect<boolean, Session.NotFoundError>
-  /** Fires every schedule that is due now, at most once each. */
+  /** Fires every schedule that is due now, at most once each, then waits for the shell actions it started. */
   readonly tick: Effect.Effect<void>
   /**
    * Runs `tick` whenever a schedule falls due, until interrupted. Elects at most one active leader per SQLite
@@ -200,6 +203,7 @@ const toInfo = (row: Row, lastOutput?: string): Info => ({
   lastFiredAt: optionalTime(row.last_fired_at),
   lastOutcome: row.last_outcome ?? undefined,
   ...(lastOutput === undefined ? {} : { lastOutput }),
+  lastRun: row.last_run ?? undefined,
   time: { created: DateTime.makeUnsafe(row.time_created), updated: DateTime.makeUnsafe(row.time_updated) },
 })
 
@@ -212,6 +216,9 @@ const layer = Layer.effect(
     const instances = yield* Instance.Service
     const execution = yield* SessionExecution.Service
     const doorbell = yield* Latch.make()
+    // Shell actions run in the background so one slow command never stalls the tick loop. Layer-scoped, so a shutdown
+    // interrupts them; remove() interrupts one run, pause() lets it finish.
+    const running = yield* FiberMap.make<ID, void, never>()
 
     // Config is per location, so a schedule follows the config where its Session lives.
     const settings = (session: SessionSchema.Info) =>
@@ -285,6 +292,46 @@ const layer = Layer.effect(
       return id
     })
 
+    /**
+     * Runs one shell action in the background and records how it ended. Failures become the row's `last_run`; only
+     * interrupts are re-raised, so shutdown and `remove` stop the run and leave the start marker in place.
+     */
+    const execute = (
+      row: Row,
+      session: SessionSchema.Info,
+      action: ShellAction,
+      run: number,
+      message: string | undefined,
+    ) =>
+      ScheduleAction.run(session, action, {
+        OPENCODE_SCHEDULE_ID: row.id,
+        ...(message?.trim() ? { OPENCODE_SCHEDULE_MESSAGE: message } : {}),
+      }).pipe(
+        instances.provide(session),
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+          const error = Cause.squash(cause)
+          return Effect.succeed({
+            durationMs: 0,
+            output: "",
+            error: error instanceof Error ? error.message : String(error),
+          } satisfies RunResult)
+        }),
+        Effect.flatMap((result) =>
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis
+            // Not filtered on status = active, because a one-shot is already done. The run_count guard stops a stale
+            // completion from overwriting a newer start marker.
+            yield* db
+              .update(ScheduleTable)
+              .set({ last_run: result, time_updated: now })
+              .where(and(eq(ScheduleTable.id, row.id), eq(ScheduleTable.run_count, run)))
+              .run()
+              .pipe(Effect.orDie)
+          }),
+        ),
+      )
+
     const fire = Effect.fnUntraced(function* (row: Row, session: SessionSchema.Info, due: number, now: number) {
       const late = now - due >= LATE_AFTER
       const next = following(row, now)
@@ -314,27 +361,25 @@ const layer = Layer.effect(
         const note = outcome.invalid
           ? `[Schedule paused after invalid check: ${outcome.error}]`
           : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
-        const id = yield* admitWake(
-          row,
-          session.id,
-          run,
-          due,
-          late,
-          `${row.action.prompt}\n\n${note}`,
-          { error: outcome.error, failures: strikes },
-        )
+        const values = {
+          status: "paused" as const,
+          failures: strikes,
+          run_count: run,
+          last_fired_at: now,
+          last_outcome: "failed" as const,
+          retry_at: null,
+          time_updated: now,
+        }
+        const id =
+          row.action.type === "prompt"
+            ? yield* admitWake(row, session.id, run, due, late, `${row.action.prompt}\n\n${note}`, {
+                error: outcome.error,
+                failures: strikes,
+              })
+            : undefined
         yield* db
           .update(ScheduleTable)
-          .set({
-            status: "paused",
-            failures: strikes,
-            run_count: run,
-            last_message_id: id,
-            last_fired_at: now,
-            last_outcome: "failed",
-            retry_at: null,
-            time_updated: now,
-          })
+          .set(id === undefined ? values : { ...values, last_message_id: id })
           .where(eq(ScheduleTable.id, row.id))
           .run()
           .pipe(Effect.orDie)
@@ -346,31 +391,34 @@ const layer = Layer.effect(
         const ended = next === undefined || (row.ends_at !== null && next > row.ends_at)
         if (check.mode === "until" && ended) {
           const run = row.run_count + 1
-          const id = yield* admitWake(
-            row,
-            session.id,
-            run,
-            due,
-            late,
-            `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
-            { expired: true },
-          )
+          const values = {
+            status: "done" as const,
+            checks,
+            failures: 0,
+            state: outcome.state,
+            run_count: run,
+            last_fired_at: now,
+            last_outcome: "expired" as const,
+            next_due_at: null,
+            remaining_runs: 0,
+            retry_at: null,
+            time_updated: now,
+          }
+          const id =
+            row.action.type === "prompt"
+              ? yield* admitWake(
+                  row,
+                  session.id,
+                  run,
+                  due,
+                  late,
+                  `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
+                  { expired: true },
+                )
+              : undefined
           yield* db
             .update(ScheduleTable)
-            .set({
-              status: "done",
-              checks,
-              failures: 0,
-              state: outcome.state,
-              run_count: run,
-              last_message_id: id,
-              last_fired_at: now,
-              last_outcome: "expired",
-              next_due_at: null,
-              remaining_runs: 0,
-              retry_at: null,
-              time_updated: now,
-            })
+            .set(id === undefined ? values : { ...values, last_message_id: id })
             .where(eq(ScheduleTable.id, row.id))
             .run()
             .pipe(Effect.orDie)
@@ -389,6 +437,35 @@ const layer = Layer.effect(
       }
 
       const run = row.run_count + 1
+      const remaining = check?.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
+      const done = check?.mode === "until" || finished(row, next, remaining)
+      const values = {
+        run_count: run,
+        ...(check === null ? {} : { checks: row.checks + 1, failures: 0, state: outcome.state }),
+        last_fired_at: now,
+        last_outcome: late ? ("late" as const) : ("fired" as const),
+        retry_at: null,
+        remaining_runs: remaining,
+        ...(done ? { status: "done" as const } : {}),
+        next_due_at: done ? null : next,
+        time_updated: now,
+      }
+
+      if (row.action.type === "shell") {
+        // Advance the row before starting the command: a crash mid-run leaves the start marker (no exit code) and the
+        // advanced slot, so the command is never re-run.
+        yield* db
+          .update(ScheduleTable)
+          .set({ ...values, last_run: { durationMs: 0, output: "" } })
+          .where(eq(ScheduleTable.id, row.id))
+          .run()
+          .pipe(Effect.orDie)
+        yield* FiberMap.run(running, row.id, execute(row, session, row.action, run, outcome.message), {
+          onlyIfMissing: true,
+        })
+        return
+      }
+
       const id = yield* admitWake(
         row,
         session.id,
@@ -398,23 +475,10 @@ const layer = Layer.effect(
         promptText(row.action.prompt, outcome.message),
         check === null ? undefined : outcome.message === undefined ? {} : { message: outcome.message },
       )
-      const remaining = check?.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
-      const done = check?.mode === "until" || finished(row, next, remaining)
       // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
       yield* db
         .update(ScheduleTable)
-        .set({
-          run_count: run,
-          ...(check === null ? {} : { checks: row.checks + 1, failures: 0, state: outcome.state }),
-          last_message_id: id,
-          last_fired_at: now,
-          last_outcome: late ? "late" : "fired",
-          retry_at: null,
-          remaining_runs: remaining,
-          ...(done ? { status: "done" as const } : {}),
-          next_due_at: done ? null : next,
-          time_updated: now,
-        })
+        .set({ ...values, last_message_id: id })
         .where(eq(ScheduleTable.id, row.id))
         .run()
         .pipe(Effect.orDie)
@@ -434,6 +498,20 @@ const layer = Layer.effect(
       if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
         // The wake that followed admission may have been lost; waking again is harmless.
         yield* execution.wake(session.id)
+        const next = following(row, now)
+        const done = finished(row, next, row.remaining_runs)
+        yield* update(row, {
+          last_outcome: "skipped",
+          retry_at: null,
+          status: done ? "done" : "active",
+          next_due_at: done ? null : next,
+          time_updated: now,
+        })
+        return
+      }
+      // A shell action still running from the previous slot means this one is skipped rather than started twice. The
+      // FiberMap guard is process-local; a leadership move mid-run could duplicate one command, which is accepted.
+      if (row.action.type === "shell" && (yield* FiberMap.has(running, row.id))) {
         const next = following(row, now)
         const done = finished(row, next, row.remaining_runs)
         yield* update(row, {
@@ -489,7 +567,8 @@ const layer = Layer.effect(
       )
     }, Effect.withSpan("Schedule.tick"))
 
-    const tick = Effect.flatMap(Clock.currentTimeMillis, tickAt)
+    // Only tests tick directly; the loop calls tickAt and never waits for a shell action.
+    const tick = Effect.flatMap(Clock.currentTimeMillis, tickAt).pipe(Effect.andThen(FiberMap.awaitEmpty(running)))
 
     // Rows due by `from` that could not fire (a failed prompt, a retry_at not yet reached) are rechecked after at most
     // MAX_SLEEP, not in a spin.
@@ -684,6 +763,11 @@ const layer = Layer.effect(
         )
         if (!config.enabled) return yield* new DisabledError()
         const check = yield* resolveStoredCheck(input)
+        if (input.action.type === "shell") {
+          if (input.action.run.trim() === "")
+            return yield* new InvalidError({ reason: "A shell action needs a command" })
+          if (input.action.timeout !== undefined) yield* duration(input.action.timeout)
+        }
         const when = input.when ?? (check?.mode === "until" ? DEFAULT_UNTIL_EVERY : undefined)
         if (when === undefined)
           return yield* new InvalidError({ reason: "when is required unless until is set" })
@@ -729,6 +813,14 @@ const layer = Layer.effect(
                 return { matched: false as const, state: init.state, checks: 1 }
               })
 
+        // A shell action runs unattended, so ask for its shell and external_directory permissions now, once.
+        if (input.action.type === "shell")
+          yield* ScheduleAction.authorize(session, input.name, when, input.action).pipe(
+            instances.provide(session),
+            Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
+            Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
+          )
+
         const row = yield* db
           .insert(ScheduleTable)
           .values({
@@ -754,13 +846,22 @@ const layer = Layer.effect(
                   run_count: 1,
                   last_fired_at: now,
                   last_outcome: "fired" as const,
+                  ...(input.action.type === "shell" ? { last_run: { durationMs: 0, output: "" } } : {}),
                 }
               : {}),
           })
           .returning()
           .get()
           .pipe(Effect.orDie)
-        if (seeded.matched) return toInfo(row, seeded.message)
+        if (seeded.matched) {
+          // An until check that already matched still runs a shell action; otherwise the schedule would silently do
+          // nothing. It runs in the background like any other.
+          if (input.action.type === "shell")
+            yield* FiberMap.run(running, row.id, execute(row, session, input.action, 1, seeded.message), {
+              onlyIfMissing: true,
+            })
+          return toInfo(row, seeded.message)
+        }
         yield* doorbell.open
         return toInfo(row)
       }),
@@ -809,6 +910,7 @@ const layer = Layer.effect(
       }),
       remove: Effect.fn("Schedule.remove")(function* (id) {
         yield* find(id)
+        yield* FiberMap.remove(running, id)
         yield* db.delete(ScheduleTable).where(eq(ScheduleTable.id, id)).run().pipe(Effect.orDie)
       }),
       enabled: Effect.fn("Schedule.enabled")(function* (sessionID) {

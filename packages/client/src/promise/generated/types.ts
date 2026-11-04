@@ -339,6 +339,8 @@ export type ScheduleStatus = "active" | "paused" | "done"
 
 export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
 
+export type ScheduleRunResult = { exitCode?: number; durationMs: number; output: string; error?: string }
+
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
 export type ArtifactID = string
@@ -925,9 +927,9 @@ export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
 
 export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
 
-export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
+export type ScheduleActionShell = { type: "shell"; run: string; cwd?: string; timeout?: ScheduleDuration }
 
-export type ScheduleAction = ScheduleActionPrompt
+export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2230,6 +2232,8 @@ export type FormReplied = {
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
+export type ScheduleAction = ScheduleActionPrompt | ScheduleActionShell
+
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
 export type JobInfo = JobShell | JobSubagent | JobImage
@@ -2656,6 +2660,7 @@ export type ScheduleInfo = {
   lastFiredAt?: number
   lastOutcome?: ScheduleOutcome
   lastOutput?: string
+  lastRun?: ScheduleRunResult
   time: { created: number; updated: number }
 }
 

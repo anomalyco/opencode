@@ -21,7 +21,7 @@ import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
 
 export const TIMEOUT_MS = 30_000
-const MAX_OUTPUT_BYTES = 32 * 1024
+export const MAX_OUTPUT_BYTES = 32 * 1024
 const CODE_LIMITS: CodeMode.ExecutionLimits = {
   timeoutMs: TIMEOUT_MS,
   maxToolCalls: 20,
@@ -335,12 +335,15 @@ const runCode = Effect.fnUntraced(function* (
   return wakeOutcome(decoded.success.wake, state, message)
 })
 
-const scanShell = Effect.fnUntraced(function* (command: string) {
+export const scanShell = Effect.fnUntraced(function* (command: string, cwd?: string) {
   const location = yield* Location.Service
   const access = yield* FileAccess.Service
   const shellSelect = yield* ShellSelect.Service
   const target = yield* access
-    .resolve({ path: location.directory, kind: "directory" })
+    .resolve({
+      path: cwd === undefined ? location.directory : FileAccess.resolvePath(location.directory, cwd),
+      kind: "directory",
+    })
     .pipe(Effect.mapError((error) => error.message))
   const shell = yield* shellSelect.resolve({ priority: "compat" })
   const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(
@@ -358,7 +361,7 @@ const scanShell = Effect.fnUntraced(function* (command: string) {
   return { shell, cwd: target.absolute, workspaceID: location.workspaceID, external, commands }
 })
 
-const assertShellPermissions = Effect.fnUntraced(function* (
+export const assertShellPermissions = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   scanned: { readonly external: ReadonlyArray<string>; readonly commands: ReadonlyArray<string> },
   metadata?: Record<string, unknown>,
@@ -485,7 +488,7 @@ const runShell = Effect.fnUntraced(function* (
   return wakeOutcome(prevStdout !== null && output.stdout !== prevStdout, { stdout: output.stdout }, message)
 })
 
-function utf8Decode(bytes: Uint8Array): string {
+export function utf8Decode(bytes: Uint8Array): string {
   const text = new TextDecoder("utf-8").decode(bytes)
   return text.endsWith("\uFFFD") ? text.slice(0, -1) : text
 }
