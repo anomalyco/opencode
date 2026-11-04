@@ -33,9 +33,17 @@ export function createServerShellController(server: Accessor<ServerConnection.An
     async () => {
       const context = serverCtx()
 
+      // The client does not validate response shapes, so an incompatible server can return a
+      // non-array 200 body; treat it like a failed request instead of crashing the page.
       const [entries, shells] = await Promise.all([
-        context.sdk.api.config.get().catch(() => []),
-        context.sdk.api.config.shells().catch(() => []),
+        context.sdk.api.config
+          .get()
+          .then((value) => (Array.isArray(value) ? value : []))
+          .catch(() => []),
+        context.sdk.api.config
+          .shells()
+          .then((value) => (Array.isArray(value) ? value : []))
+          .catch(() => []),
       ])
 
       const boundary = entries.findIndex((entry) => entry.type === "directory")
