@@ -1,7 +1,10 @@
+import type { Plugin } from "@opencode/plugin/tui"
 import { expect, test } from "bun:test"
 import path from "node:path"
-import { parseStoryMedia } from "../../src/feature-plugins/system/storybook/media"
+import { useTheme } from "../../src/context/theme"
+import { mediaStory, parseStoryMedia } from "../../src/feature-plugins/system/storybook/media"
 import { tmpdir } from "../fixture/fixture"
+import { renderMedia } from "../fixture/media"
 
 test("lists the media of files and directories once each, skipping missing paths and files it cannot show", async () => {
   await using temporary = await tmpdir()
@@ -21,4 +24,23 @@ test("lists the media of files and directories once each, skipping missing paths
     [single, "image", "image/jpeg"],
   ])
   expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
+})
+
+test("the story lists the media in OPENCODE_STORY_MEDIA when it opens, not when the TUI loads", async () => {
+  await using temporary = await tmpdir()
+  for (const name of ["a.png", "b.mp4"]) await Bun.write(path.join(temporary.path, name), "")
+  const previous = process.env.OPENCODE_STORY_MEDIA
+  process.env.OPENCODE_STORY_MEDIA = temporary.path
+  try {
+    await using story = await renderMedia(() => {
+      // Only what the story reads of the plugin context.
+      const context = { theme: useTheme(), keymap: { layer: () => {} }, ui: { router: { navigate: () => {} } } }
+      return mediaStory.render(context as unknown as Plugin.Context)
+    })
+    // The two files and a WebM it can't play.
+    await story.until(() => story.frame().includes("storybook / media · 3 items"))
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_STORY_MEDIA
+    else process.env.OPENCODE_STORY_MEDIA = previous
+  }
 })

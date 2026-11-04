@@ -1,6 +1,8 @@
-import { CliRenderEvents } from "@opentui/core"
+/** @jsxImportSource @opentui/solid */
+import { CliRenderEvents, type BoxRenderable } from "@opentui/core"
 import { setRendererCapabilities } from "@opentui/core/testing"
 import { expect, jest, test } from "bun:test"
+import { For } from "solid-js"
 import { image, renderMedia, video } from "../fixture/media"
 
 test("re-reads the protocol on capability reports and the pixel size after resizes, polling a bounded time", async () => {
@@ -69,4 +71,38 @@ test("sends Kitty frames through files while rich media is on, and stops when th
   await host.setRichMedia(true)
   host.unmount()
   expect(renderer.kittyImageTransport).toBe("raw")
+})
+
+test("lets the four video tiles that came on screen last keep a poster player, the next in line once one leaves", async () => {
+  const boxes: BoxRenderable[] = []
+  await using host = await renderMedia(() => (
+    <box flexDirection="column">
+      <For each={[0, 1, 2, 3, 4]}>{() => <box ref={(element: BoxRenderable) => boxes.push(element)} height={1} />}</For>
+    </box>
+  ))
+  const media = host.media()
+  const keys = ["a", "b", "c", "d", "e"]
+  const untrack = keys.map((key, index) => media.trackPoster(key, () => boxes[index]))
+  await host.app.renderOnce()
+  expect(keys.filter(media.posterShown)).toEqual(keys)
+  expect(keys.filter(media.posterOpen)).toEqual(["b", "c", "d", "e"])
+
+  untrack[2]!()
+  expect(keys.filter(media.posterOpen)).toEqual(["a", "b", "d", "e"])
+  // A tile that leaves the screen drops off the list.
+  boxes[4]!.visible = false
+  await host.app.renderOnce()
+  expect(keys.filter(media.posterShown)).toEqual(["a", "b", "d"])
+  expect(keys.filter(media.posterOpen)).toEqual(["a", "b", "d"])
+
+  // Back on screen, it is the latest to come on screen, and the tile on screen longest gives up its player.
+  media.trackPoster("c", () => boxes[2])
+  boxes[4]!.visible = true
+  await host.app.renderOnce()
+  expect(keys.filter(media.posterOpen)).toEqual(["b", "c", "d", "e"])
+  boxes[0]!.visible = false
+  await host.app.renderOnce()
+  boxes[0]!.visible = true
+  await host.app.renderOnce()
+  expect(keys.filter(media.posterOpen)).toEqual(["a", "c", "d", "e"])
 })

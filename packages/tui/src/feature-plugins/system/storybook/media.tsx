@@ -34,14 +34,14 @@ const builtIn = ["tui/test/fixture/media", "console/app/src/asset/lander"].map((
   path.resolve(import.meta.dir, "../../../../..", directory),
 )
 const webm: MediaItem = { id: "webm", kind: "video", mime: "video/webm", uri: "", name: "screen-recording.webm" }
-const items = parseStoryMedia(process.env.OPENCODE_STORY_MEDIA || builtIn.join(path.delimiter)).concat(webm)
-const video = items.find(isPlayableVideo)
 const widths = [44, 80, Infinity]
 
 function MediaStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const media = useMedia()
   const theme = props.context.theme
+  const items = parseStoryMedia(process.env.OPENCODE_STORY_MEDIA || builtIn.join(path.delimiter)).concat(webm)
+  const video = items.find(isPlayableVideo)
   const [width, setWidth] = createSignal(0)
   const stripWidth = () => Math.min(widths[width()]!, dimensions().width - 4)
   const command = (bind: string, title: string, run: () => void) => ({ bind, title, group: "Storybook", run })

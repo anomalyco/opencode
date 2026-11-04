@@ -5,6 +5,9 @@ import { pathToFileURL } from "node:url"
 // Bound filesystem work per terminal paste; the byte budget also bounds staged data.
 const MAX_PASTED_FILEPATHS = 32
 export const MAX_LOCAL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+// Core sends a video only up to 18 MiB of base64 (VIDEO_BYTES_MAX in packages/core/src/session/model-request.ts), which
+// is 13.5 MiB of file. A larger clip would be attached and stored, then dropped on the first model turn.
+export const MAX_LOCAL_VIDEO_BYTES = (18 * 1024 * 1024 * 3) / 4
 
 export type LocalFiles = Readonly<{
   readText(path: string, maxBytes: number): Promise<string>
@@ -16,8 +19,7 @@ export type LocalAttachment =
   | Readonly<{ type: "text"; mime: "image/svg+xml"; content: string }>
   | Readonly<{ type: "binary"; mime: string; content: Uint8Array }>
 
-// `video` also accepts MP4, MOV, and M4V files.
-export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMENT_BYTES, video = false) {
+export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMENT_BYTES) {
   return readLocalAttachmentWith(
     {
       readText: async (value, limit) => (await readFileBounded(value, limit)).toString("utf8"),
@@ -26,7 +28,6 @@ export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMEN
     },
     file,
     maxBytes,
-    video,
   )
 }
 
@@ -35,16 +36,21 @@ export async function resolvePastedAttachments(text: string, platform: string, v
   const filepath = normalizePastedFilepath(pastedContent, platform)
   if (/^(https?):\/\//.test(filepath)) return undefined
 
-  const attachment = await readLocalAttachment(filepath, MAX_LOCAL_ATTACHMENT_BYTES, video)
+  const attachment = await readPastedAttachment(filepath, MAX_LOCAL_ATTACHMENT_BYTES, video)
   const attachments = attachment ? [{ filepath, attachment }] : []
   if (!attachment) {
     const filepaths = parsePastedFilepaths(pastedContent, platform)
     if (filepaths.length <= 1) return undefined
     let remaining = MAX_LOCAL_ATTACHMENT_BYTES
     for (const candidate of filepaths) {
-      const next = await readLocalAttachment(candidate, remaining, video)
+      const next = await readPastedAttachment(candidate, remaining, video)
       if (!next) return undefined
-      remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
+      remaining -=
+        next.type === "video"
+          ? next.size
+          : typeof next.content === "string"
+            ? Buffer.byteLength(next.content)
+            : next.content.byteLength
       attachments.push({ filepath: candidate, attachment: next })
     }
   }
@@ -54,13 +60,26 @@ export async function resolvePastedAttachments(text: string, platform: string, v
     if (item.attachment.type === "text") {
       return { type: "text" as const, content: item.attachment.content, filename }
     }
+    const file = path.resolve(item.filepath)
     return {
       type: "file" as const,
-      uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
+      uri:
+        item.attachment.type === "video"
+          ? pathToFileURL(file).href
+          : `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
       filename,
-      path: path.resolve(item.filepath),
+      path: file,
     }
   })
+}
+
+// A video stays a path, read when the prompt is sent, so pasting one does not stall typing while it is encoded.
+async function readPastedAttachment(file: string, maxBytes: number, video: boolean) {
+  const mime = mimeTypes[path.extname(file).toLowerCase()]
+  if (!video || !mime?.startsWith("video/")) return readLocalAttachment(file, maxBytes)
+  const info = await stat(file).catch(() => undefined)
+  if (!info?.isFile() || info.size > Math.min(maxBytes, MAX_LOCAL_VIDEO_BYTES)) return undefined
+  return { type: "video" as const, size: info.size }
 }
 
 /** The video that takes a paste of otherwise attachable files over the attachment limit, so the paste stays text. */
@@ -75,20 +94,25 @@ export async function oversizedPastedVideo(text: string, platform: string) {
       }),
     )
     if (files.length === 0 || sizes.includes(undefined)) continue
+    const isVideo = (file: string) => mimeTypes[path.extname(file).toLowerCase()]!.startsWith("video/")
     let total = 0
-    const file = files.find((_, index) => (total += sizes[index]!) > MAX_LOCAL_ATTACHMENT_BYTES)
-    return file && mimeTypes[path.extname(file).toLowerCase()]!.startsWith("video/") ? file : undefined
+    const file = files.find(
+      (file, index) =>
+        (total += sizes[index]!) > MAX_LOCAL_ATTACHMENT_BYTES ||
+        (isVideo(file) && sizes[index]! > MAX_LOCAL_VIDEO_BYTES),
+    )
+    return file && isVideo(file) ? file : undefined
   }
 }
 
-// Reads again the files history or the stash kept as local paths. `unreadable` names the ones left out.
+// Reads again the videos a draft, history, or the stash kept as local paths. `unreadable` names the ones left out.
 export async function readKeptAttachments<T extends { uri: string; path?: string }>(files: readonly T[]) {
   const read = await Promise.all(
     files.map(async (file) => {
       if (!file.path || !file.uri.startsWith("file:")) return file
-      const attachment = await readLocalAttachment(file.path, MAX_LOCAL_ATTACHMENT_BYTES, true)
-      if (attachment?.type !== "binary") return path.basename(file.path)
-      return { ...file, uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}` }
+      const content = await readFileBounded(file.path, MAX_LOCAL_VIDEO_BYTES).catch(() => undefined)
+      if (!content) return path.basename(file.path)
+      return { ...file, uri: `data:${keptVideoMime(file.path)};base64,${content.toString("base64")}` }
     }),
   )
   return {
@@ -119,6 +143,20 @@ const mimeTypes: Record<string, string> = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".webp": "image/webp",
+}
+
+/** The extension history and the stash name a kept video's file with; `keptVideoMime` reads the type back from it. */
+export function keptVideoExtension(mime: string) {
+  const type = mime.toLowerCase()
+  return (
+    Object.keys(mimeTypes).find((key) => mimeTypes[key] === type) ??
+    `.${type.slice("video/".length).replace(/[^\w+-]/g, "")}`
+  )
+}
+
+function keptVideoMime(file: string) {
+  const extension = path.extname(file).toLowerCase()
+  return mimeTypes[extension] ?? `video/${extension.slice(1)}`
 }
 
 async function readFileBounded(file: string, maxBytes: number) {
@@ -213,12 +251,10 @@ export async function readLocalAttachmentWith(
   files: LocalFiles,
   path: string,
   maxBytes = MAX_LOCAL_ATTACHMENT_BYTES,
-  video = false,
 ): Promise<LocalAttachment | undefined> {
   const mime = await files.mime(path).catch(() => undefined)
   if (!mime) return undefined
-  if (!mime.startsWith("image/") && mime !== "application/pdf" && !(video && mime.startsWith("video/")))
-    return undefined
+  if (!mime.startsWith("image/") && mime !== "application/pdf") return undefined
   if (mime === "image/svg+xml") {
     const content = await files.readText(path, maxBytes).catch(() => undefined)
     if (!content || Buffer.byteLength(content) > maxBytes) return undefined

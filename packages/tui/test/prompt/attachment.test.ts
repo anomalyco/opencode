@@ -63,6 +63,8 @@ describe("prompt attachments", () => {
 
     expect(promptAttachmentLabel(files, { uri: "data:application/pdf;base64,BBB" })).toBe("[PDF 1]")
     expect(promptAttachmentLabel(files, { uri: "data:video/mp4;base64,BBB" })).toBe("[Video 1]")
+    // A pasted local video stays a file until the prompt is sent.
+    expect(promptAttachmentLabel(files, { uri: "file:///tmp/clip.MOV" })).toBe("[Video 1]")
   })
 
   test("does not reuse a label when attachment metadata differs", () => {

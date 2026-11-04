@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { image, renderMedia, video } from "../fixture/media"
+import { TextRenderable } from "@opentui/core"
+import { descendants, image, renderMedia, video } from "../fixture/media"
 
 type Host = Awaited<ReturnType<typeof renderMedia>>
 
@@ -90,7 +91,8 @@ test("a selection released on its controls does not click them", async () => {
 test("a form taking the keys moves a playing video to picture-in-picture and closes the viewer otherwise", async () => {
   await using host = await renderMedia(() => null)
   host.media().openViewer([video("clip")], 0)
-  await host.until(() => (host.videos("media-viewer-stage")[0]?.currentTime ?? 0) > 0.2)
+  // The time the transport last reported, which trails the player's by up to a frame, goes along.
+  await host.until(() => (host.videos("media-viewer-stage")[0]?.currentTime ?? 0) > 0.3)
   const popForm = host.keymap().mode.push("form")
   await host.app.renderOnce()
   expect(host.media().viewer()).toBeUndefined()
@@ -106,6 +108,58 @@ test("a form taking the keys moves a playing video to picture-in-picture and clo
   await host.app.renderOnce()
   expect(host.media().viewer()).toBeUndefined()
   expect(host.media().pip()).toBeUndefined()
+})
+
+test("mute, volume and loop go along to picture-in-picture and back", async () => {
+  await using host = await renderMedia(() => null)
+  host.media().openViewer([video("clip")], 0)
+  await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
+  for (const key of ["m", "down", "down", "l"]) await host.press(key)
+
+  await host.press("p")
+  const pip = await readyPip(host)
+  expect({ muted: pip.muted, volume: pip.volume, loop: pip.loop }).toEqual({ muted: true, volume: 0.8, loop: true })
+
+  host.keymap().dispatch("media.pip.expand")
+  await host.until(() => host.videos("media-viewer-stage")[0]?.ready === true)
+  const player = host.videos("media-viewer-stage")[0]!
+  expect({ muted: player.muted, volume: player.volume, loop: player.loop }).toEqual({
+    muted: true,
+    volume: 0.8,
+    loop: true,
+  })
+})
+
+test("expanded before it is ready, it opens the viewer at its time and playing", async () => {
+  await using host = await renderMedia(() => null)
+  host.media().openPip(video("clip"), { time: 0.5 })
+  host.keymap().dispatch("media.pip.expand")
+  expect(host.media().pip()).toBeUndefined()
+  expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], time: 0.5, playing: true })
+})
+
+test("a seek or a move released over its controls does not click them", async () => {
+  await using host = await renderMedia(() => null)
+  host.media().openPip(video("clip"), { playing: false })
+  const pip = await readyPip(host)
+  const seekBar = () =>
+    descendants(host.find("media-pip")!).find(
+      (node): node is TextRenderable => node instanceof TextRenderable && node.plainText.includes("●"),
+    )
+  await host.until(() => seekBar() !== undefined)
+  const bar = seekBar()!
+  for (const id of ["media-pip-close", "media-pip-expand"]) {
+    const control = host.find(id)!
+    await host.app.mockMouse.drag(bar.x, bar.y, control.x, control.y)
+  }
+  // Dragged down past the screen's edge, it stops at the bottom with the pointer over its controls.
+  const title = host.find("media-pip-title")!
+  await host.app.mockMouse.drag(title.x + 1, title.y, title.x + 1, 29)
+  await host.app.renderOnce()
+  expect(host.find("media-pip")!.y + host.find("media-pip")!.height).toBe(30)
+  expect(pip.paused).toBe(true)
+  expect(host.media().pip()).toBeDefined()
+  expect(host.media().viewer()).toBeUndefined()
 })
 
 async function readyPip(host: Host) {

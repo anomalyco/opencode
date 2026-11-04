@@ -1,4 +1,4 @@
-import type { CliRenderer, MouseEvent, VideoRenderable } from "@opentui/core"
+import type { BoxRenderable, CliRenderer, MouseEvent, TimerHandle, VideoRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, createUniqueId, Match, onCleanup, Show, Switch } from "solid-js"
 import { useMedia } from "../../context/media"
@@ -6,10 +6,14 @@ import { useTheme } from "../../context/theme"
 import { isPlayableVideo, type MediaItem } from "./model"
 import { createImageSource, createVideoFile } from "./source"
 
+/** A hovered video tile plays once the pointer rests this long, so sweeping across tiles opens no players. */
+const HOVER_REST_MS = 300
+
 /**
- * A thumbnail for an image or video. A video shows a poster frame and, while the pointer is over it, plays silently
- * in a loop as the one active tile; leaving it pauses and returns to the poster. A click calls `onOpen`. A `still`
- * video shows only its name, keeping no decoder open.
+ * A thumbnail for an image or video. A video on screen shows a poster frame while it is among the few the media
+ * context lets keep a player, and its name otherwise. Once the pointer rests on it, it plays silently in a loop as the
+ * one active tile; leaving it pauses and returns to the poster. A click calls `onOpen`. A `still` video shows only its
+ * name, keeping no decoder open.
  */
 export function MediaTile(props: {
   item: MediaItem
@@ -22,11 +26,35 @@ export function MediaTile(props: {
   const theme = useTheme()
   const renderer = useRenderer()
   const key = createUniqueId()
+  const click = createMediaClick(() => props.onOpen?.())
+  const poster = () => isPlayableVideo(props.item) && !props.still
+  const active = () => media.activeTile() === key
+  let box: BoxRenderable | undefined
   let hovered = false
-  onCleanup(() => media.activeTile() === key && media.setActiveTile(undefined))
+  let rest: TimerHandle | undefined
+  const disarm = () => {
+    if (rest) renderer.clock.clearTimeout(rest)
+    rest = undefined
+  }
+  const arm = () => {
+    disarm()
+    rest = renderer.clock.setTimeout(() => {
+      rest = undefined
+      media.setActiveTile(key)
+    }, HOVER_REST_MS)
+  }
+
+  createEffect(() => {
+    if (poster()) onCleanup(media.trackPoster(key, () => box))
+  })
+  onCleanup(() => {
+    disarm()
+    if (active()) media.setActiveTile(undefined)
+  })
 
   return (
     <box
+      ref={(element: BoxRenderable) => (box = element)}
       width={props.width}
       height={props.height}
       flexShrink={0}
@@ -34,29 +62,32 @@ export function MediaTile(props: {
       backgroundColor={theme.background.raised.base}
       onMouseOver={() => {
         hovered = true
-        if (isPlayableVideo(props.item) && !props.still) media.setActiveTile(key)
+        if (poster() && !active() && !rest) arm()
       }}
+      onMouseMove={() => rest && arm()}
       onMouseOut={() => {
         hovered = false
         // Moving between the tile's own children fires out and then over; only leaving the tile releases it.
-        queueMicrotask(() => !hovered && media.activeTile() === key && media.setActiveTile(undefined))
+        queueMicrotask(() => {
+          if (hovered) return
+          disarm()
+          if (active()) media.setActiveTile(undefined)
+        })
       }}
-      onMouseUp={(event: MouseEvent) => {
-        if (!isMediaClick(renderer, event)) return
-        event.stopPropagation()
-        props.onOpen?.()
-      }}
+      {...click}
     >
       <Switch fallback={<TileLabel item={props.item} />}>
         <Match when={props.item.kind === "image"}>
           <TileImage item={props.item} />
         </Match>
-        <Match when={props.still && isPlayableVideo(props.item)}>
+        <Match when={poster() && (active() || media.posterOpen(key))}>
+          <TileVideo item={props.item} active={active()} />
+        </Match>
+        <Match when={isPlayableVideo(props.item) && (props.still || media.posterShown(key))}>
           <TileLabel item={props.item} text={`▶ ${props.item.name ?? "video"}`} />
         </Match>
-        <Match when={isPlayableVideo(props.item)}>
-          <TileVideo item={props.item} active={media.activeTile() === key} />
-        </Match>
+        {/* Off screen, a video tile draws nothing. */}
+        <Match when={isPlayableVideo(props.item)}>{null}</Match>
       </Switch>
     </box>
   )
@@ -135,6 +166,31 @@ function TileVideo(props: { item: MediaItem; active: boolean }) {
       </Show>
     </Show>
   )
+}
+
+/**
+ * Mouse handlers that call `run` on a left press and release over the same element. A release that ends a text
+ * selection reaches copy-on-select instead, and a drag that started elsewhere, or left the element, clicks nothing.
+ */
+export function createMediaClick(run: () => void) {
+  const renderer = useRenderer()
+  let pressed = false
+  return {
+    onMouseDown: (event: MouseEvent) => {
+      pressed = event.button === 0
+    },
+    onMouseUp: (event: MouseEvent) => {
+      const press = pressed
+      pressed = false
+      if (!press || !isMediaClick(renderer, event)) return
+      // The element that a drag started on gets its release wherever it ends.
+      const element = event.currentTarget!
+      if (event.x < element.x || event.x >= element.x + element.width) return
+      if (event.y < element.y || event.y >= element.y + element.height) return
+      event.stopPropagation()
+      run()
+    },
+  }
 }
 
 /** Whether a release is a left click and not the end of a text selection, which must reach copy-on-select. */

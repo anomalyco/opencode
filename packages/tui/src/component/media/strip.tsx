@@ -1,9 +1,7 @@
-import type { MouseEvent } from "@opentui/core"
-import { useRenderer } from "@opentui/solid"
 import { createMemo, For, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import type { MediaItem } from "./model"
-import { isMediaClick, MediaTile } from "./tile"
+import { createMediaClick, MediaTile } from "./tile"
 
 /**
  * `next` with each item that shows the same file as the previous item with its id replaced by that item, or `previous`
@@ -34,7 +32,7 @@ export function MediaStrip(props: {
   onOpen: (index: number) => void
 }) {
   const theme = useTheme()
-  const renderer = useRenderer()
+  const moreClick = createMediaClick(() => props.onOpen(count()))
   // Square images and 16:9 videos, with cells twice as tall as wide.
   const tileWidth = (item: MediaItem) => Math.round(props.height * (item.kind === "video" ? 32 / 9 : 2))
   const more = () => `+${props.items.length - count()} more`
@@ -70,11 +68,7 @@ export function MediaStrip(props: {
           alignItems="center"
           justifyContent="center"
           backgroundColor={theme.background.raised.base}
-          onMouseUp={(event: MouseEvent) => {
-            if (!isMediaClick(renderer, event)) return
-            event.stopPropagation()
-            props.onOpen(count())
-          }}
+          {...moreClick}
         >
           <text fg={theme.text.muted} wrapMode="none" selectable={false}>
             {more()}

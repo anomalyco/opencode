@@ -9,7 +9,7 @@ import { isPlayableVideo, type MediaItem } from "./model"
 import { MediaPip } from "./pip"
 import { createTransport, Toggle, TransportControls } from "./seek-bar"
 import { createImageSource, createVideoFile } from "./source"
-import { formatDuration, MediaTile } from "./tile"
+import { createMediaClick, formatDuration, MediaTile } from "./tile"
 import { actualZoom, fillZoom, initialView, layoutView, panBy, zoomAt, type Size, type ZoomView } from "./zoom"
 
 registerMediaViews({ viewer: MediaViewer, pip: MediaPip })
@@ -27,8 +27,8 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const items = props.request.items
-  // Sound is off in a remote session, where it would play on the remote machine, and after a failed open with sound.
-  const remote = renderer.capabilities?.remote === true
+  // Sound is off in a remote session, where it would play on the remote machine.
+  const audio = renderer.capabilities?.remote !== true
 
   const [index, setIndex] = createSignal(props.request.index)
   const [image, setImage] = createSignal<Size>()
@@ -36,10 +36,9 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const [error, setError] = createSignal<string[]>()
   const [view, setView] = createSignal<ZoomView>()
   const [stage, setStage] = createSignal<Size>({ width: 0, height: 0 })
-  const [audio, setAudio] = createSignal(!remote)
-  const [muted, setMuted] = createSignal(false)
-  const [volume, setVolume] = createSignal(1)
-  const [loop, setLoop] = createSignal(false)
+  const [muted, setMuted] = createSignal(props.request.muted ?? false)
+  const [volume, setVolume] = createSignal(props.request.volume ?? 1)
+  const [loop, setLoop] = createSignal(props.request.loop ?? false)
   const [info, setInfo] = createSignal(false)
   // The request's time and playing state apply to the item it opened at.
   let start: Partial<MediaViewerRequest> = props.request
@@ -94,7 +93,6 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       setImage(undefined)
       setError(undefined)
       setView(undefined)
-      setAudio(!remote)
     })
   }
 
@@ -104,7 +102,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     const player = video()
     if (!player) return
     player.pause()
-    seek((Math.round(player.currentTime * fps()) + frames) / fps())
+    seek((Math.round(transport().position() * fps()) + frames) / fps())
   }
 
   function zoom(next: (value: NonNullable<ReturnType<typeof geometry>>, view: ZoomView) => ZoomView) {
@@ -119,14 +117,20 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       return zoom((value, view) =>
         panBy(value, view, -dx * Math.ceil(area.width / 8), -dy * Math.ceil(area.height / 8)),
       )
-    if (dx !== 0) return seek(transport().time() + dx * 5)
+    if (dx !== 0) return seek(transport().position() + dx * 5)
     if (video()) setVolume((value) => Math.round(Math.max(0, Math.min(1, value - dy * 0.1)) * 10) / 10)
   }
 
   function pip() {
     const player = video()
     if (!player) return
-    const playback = { time: player.currentTime, playing: player.playing }
+    const playback = {
+      time: transport().position(),
+      playing: player.playing,
+      muted: muted(),
+      volume: volume(),
+      loop: loop(),
+    }
     batch(() => {
       media.closeViewer()
       media.openPip(current(), playback)
@@ -146,6 +150,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     ),
   )
 
+  const closeClick = createMediaClick(media.closeViewer)
   const toggleMute = () => setMuted((value) => !value)
   const toggleLoop = () => setLoop((value) => !value)
   const command = (bind: string, title: string, run: () => void) => ({ bind, title, group: "Media", run })
@@ -160,8 +165,8 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       command("right", "Next image, pan or seek forward", () => arrow(1, 0)),
       command("up", "Pan up or volume up", () => arrow(0, -1)),
       command("down", "Pan down or volume down", () => arrow(0, 1)),
-      command("shift+left", "Seek back 1s", () => seek(transport().time() - 1)),
-      command("shift+right", "Seek forward 1s", () => seek(transport().time() + 1)),
+      command("shift+left", "Seek back 1s", () => seek(transport().position() - 1)),
+      command("shift+right", "Seek forward 1s", () => seek(transport().position() + 1)),
       command("space", "Play or pause", () => video() && transport().toggle()),
       command(".", "Next frame", () => step(1)),
       ...Array.from({ length: 10 }, (_, digit) =>
@@ -196,7 +201,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const size = () => facts() && `${facts()!.width}×${facts()!.height}`
   const duration = () => metadata() && formatDuration(metadata()!.duration)
   const fpsLabel = () => metadata()?.fps && `${+metadata()!.fps.toFixed(2)} fps`
-  const audible = () => !!metadata()?.hasAudio && audio() && !muted()
+  const audible = () => !!metadata()?.hasAudio && audio && !muted()
   const sound = () => (metadata()?.hasAudio ? (audible() ? `♪ ${Math.round(volume() * 100)}%` : "♪ off") : "no audio")
 
   // Most useful first: the footer drops the hints that do not fit.
@@ -275,7 +280,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       <Show when={file().path}>
         {(source) => (
           <video
-            audio={audio()}
+            audio={audio}
             source={source()}
             muted={muted()}
             volume={volume()}
@@ -285,14 +290,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
             width="100%"
             height="100%"
             {...transport().events}
-            onError={(cause) => {
-              // A video that fails to open with sound may still open without it, e.g. with no audio device.
-              const player = transport().player()
-              if (!audio() || !player || player.ready)
-                return setError(["Can't play this video", cause.message, PLAYABLE_HINT])
-              setAudio(false)
-              player.play()
-            }}
+            onError={(cause) => setError(["Can't play this video", cause.message, PLAYABLE_HINT])}
           />
         )}
       </Show>
@@ -348,7 +346,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
             .join(" · ")}
         </text>
         <box flexGrow={1} />
-        <text fg={theme.text.muted} flexShrink={0} selectable={false} onMouseUp={media.closeViewer}>
+        <text fg={theme.text.muted} flexShrink={0} selectable={false} {...closeClick}>
           esc
         </text>
       </box>

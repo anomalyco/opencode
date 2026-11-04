@@ -15,7 +15,8 @@ type ProjectedFile = Readonly<
 function attachmentKind(uri: string) {
   if (uri.startsWith("data:image/")) return "Image"
   if (uri.startsWith("data:application/pdf;")) return "PDF"
-  if (uri.startsWith("data:video/")) return "Video"
+  // A pasted local video stays a file until the prompt is sent.
+  if (uri.startsWith("data:video/") || /^file:.*\.(mp4|mov|m4v)$/i.test(uri)) return "Video"
   return undefined
 }
 
