@@ -2,10 +2,12 @@
 //! keymap's and the server's), `@` mentions of agents, skills, references, and files, `/cd` with
 //! directory completion and recents, and the mentions as atomic prompt parts.
 
+#[path = "support/wait.rs"]
+mod wait;
+
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Client;
@@ -18,6 +20,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+use wait::WAIT;
 
 /// A request the fixture saw: method, path, query, and JSON body.
 type Seen = Arc<Mutex<Vec<(String, String, String, Value)>>>;
@@ -222,9 +225,7 @@ impl Setup {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -233,7 +234,7 @@ impl Setup {
     fn wait_gone(&self, text: &str) {
         let gone = self
             .app
-            .wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
+            .wait_until(WAIT, || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
@@ -256,9 +257,9 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<(String, Value)> {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
-            self.requests(method, suffix).len() >= count
-        });
+        let found = self
+            .app
+            .wait_until(WAIT, || self.requests(method, suffix).len() >= count);
         assert!(
             found,
             "no {method} …{suffix}: {:?}",
@@ -272,9 +273,9 @@ impl Setup {
     }
 
     fn wait_file(&self, name: &str, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
-            self.state_file(name).contains(text)
-        });
+        let found = self
+            .app
+            .wait_until(WAIT, || self.state_file(name).contains(text));
         assert!(found, "{name} has {:?}", self.state_file(name));
         self.state_file(name)
     }
@@ -398,13 +399,14 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     let setup = Setup::new();
     setup.app.type_text("@ma");
     setup.wait_for("src/main.rs");
-    let finds = setup.wait_request("GET", "/api/fs/find", 1);
-    assert!(
-        finds
+    // `m`'s results can show before the search for `ma` goes out.
+    let searched = setup.app.wait_until(WAIT, || {
+        setup
+            .requests("GET", "/api/fs/find")
             .iter()
-            .any(|(query, _)| query.contains("query=ma") && query.contains("limit=20")),
-        "{finds:?}"
-    );
+            .any(|(query, _)| query.contains("query=ma") && query.contains("limit=20"))
+    });
+    assert!(searched, "{:?}", setup.requests("GET", "/api/fs/find"));
     setup.app.press("return");
     assert_eq!(setup.text(), "@src/main.rs ");
     let frecency = setup.wait_file("frecency.jsonl", "/project/src/main.rs");
