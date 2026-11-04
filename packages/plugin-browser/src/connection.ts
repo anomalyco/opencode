@@ -34,20 +34,22 @@ export const withoutAccess = (permissions: NonNullable<Session.Info["permissions
 
 /**
  * A crash or SIGKILL skips the attachment finalizer, so the session keeps the allow rules while the
- * in-memory attachment is gone. No attachment survives a process restart, so every persisted allow
- * at startup is stale: drop it before the browser namespace can be listed again.
+ * in-memory attachment is gone. Reconcile only this plugin instance's location, before registering
+ * its RPC handlers. Running this in the background could revoke a newly attached browser's grants.
  */
 export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (
-  ctx: Pick<Context, "session">,
+  ctx: Pick<Context, "session" | "location">,
 ) {
   const revoke = (session: Session.Info) => {
+    // The list filter scopes the directory, but does not support workspace identity.
+    if (session.location.workspaceID !== ctx.location.workspaceID) return Effect.void
     const current = session.permissions ?? []
     const permissions = withoutAccess(current)
     if (permissions.length === current.length) return Effect.void
     return ctx.session.update({ sessionID: session.id, permissions }).pipe(Effect.ignore)
   }
   const page = (cursor?: Session.ListCursor): Effect.Effect<void> =>
-    ctx.session.list(cursor === undefined ? undefined : { cursor }).pipe(
+    ctx.session.list(cursor === undefined ? { directory: ctx.location.directory } : { cursor }).pipe(
       Effect.flatMap((result) =>
         Effect.gen(function* () {
           yield* Effect.forEach(result.data, revoke, { discard: true })
@@ -64,7 +66,8 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
 ) {
   const browsers = new Map<Session.ID, Attachment>()
-  yield* reconcileStaleGrants({ session: ctx.session })
+  const releases = new Set<Deferred.Deferred<void>>()
+  yield* reconcileStaleGrants(ctx)
   // Appended after config, so every agent hides the browser until an attachment allows it.
   yield* ctx.agent.transform((editor) =>
     editor
@@ -90,7 +93,13 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         ctx.session.get({ sessionID }).pipe(
           Effect.flatMap((session) => {
             const current = session.permissions ?? []
-            const permissions = withoutAccess(current)
+            // Remove one appended copy, preserving the order of pre-existing session rules.
+            const permissions = access.reduce((rules, allow) => {
+              const index = rules.findLastIndex(
+                (rule) => rule.action === allow.action && rule.resource === allow.resource && rule.effect === "allow",
+              )
+              return index === -1 ? rules : rules.toSpliced(index, 1)
+            }, current)
             if (permissions.length === current.length) return Effect.void
             return ctx.session.update({ sessionID, permissions })
           }),
@@ -106,10 +115,14 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       browser.tunnels.dispose()
       yield* Deferred.succeed(browser.closed, reason)
     })
-  yield* Effect.addFinalizer(() => {
-    active = false
-    return Effect.forEach(browsers.keys(), (id) => close(id), { discard: true })
-  })
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      active = false
+      yield* Effect.forEach(browsers.keys(), (id) => close(id), { discard: true })
+      // A replacement plugin must not reconcile grants while this instance is still releasing them.
+      yield* Effect.forEach(releases, Deferred.await, { discard: true })
+    }),
+  )
   const tunnels = (input: {
     sessionID: Session.ID
     connectionID: string
@@ -123,6 +136,20 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     .register(Browser.Definition, {
       attach: (input, call) =>
         Effect.gen(function* () {
+          // Register first so this finalizer runs after the attachment and its grants are released.
+          yield* Effect.acquireRelease(
+            Effect.gen(function* () {
+              const released = yield* Deferred.make<void>()
+              if (!active) return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
+              releases.add(released)
+              return released
+            }),
+            (released) =>
+              Effect.gen(function* () {
+                releases.delete(released)
+                yield* Deferred.succeed(released, undefined)
+              }),
+          )
           const session = yield* ctx.session
             .get({ sessionID: input.sessionID })
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
