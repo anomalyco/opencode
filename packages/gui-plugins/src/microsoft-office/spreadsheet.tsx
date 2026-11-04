@@ -990,7 +990,7 @@ function SpreadsheetGrid(props: {
   }
 
   return (
-    <div class="relative flex min-h-0 flex-1">
+    <div class="relative flex min-h-0 flex-1 border-t border-v2-border-border-muted">
       {/* Grids keep their column order in right-to-left layouts, as spreadsheet apps do. */}
       {/* The scroller is the grid screen readers hear: its rows are the block around the active cell, which it points
           at as the active descendant, while the canvas shows the cells. */}

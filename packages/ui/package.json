@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.2.0",
+  "version": "2.2.5",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,7 @@
     "!src/**/*.stories.ts",
     "!src/**/*.stories.tsx",
     "src/**/*.css",
+    "src/data-display/line-comment/*.svg",
     "src/theme/themes/*.json",
     "src/components/app-icons/sprite.svg",
     "src/components/provider-icons/sprite.svg",
@@ -44,6 +45,7 @@
     "./dialog": "./src/overlays/dialog/dialog.tsx",
     "./diff-changes": "./src/data-display/diff-changes/diff-changes.tsx",
     "./divider": "./src/layout/divider/divider.tsx",
+    "./document-surface.css": "./src/components/document-surface.css",
     "./field": "./src/forms/field/field.tsx",
     "./file-tree.css": "./src/styles/file-tree.css",
     "./icon": "./src/icons/icon/icon.tsx",
@@ -105,11 +107,11 @@
     "typecheck:tsc": "tsc --noEmit",
     "test": "bun test src --only-failures",
     "dev": "vite",
-    "bench:motion": "bun script/motion-bench.ts",
     "generate:tailwind": "bun run script/tailwind.ts",
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {
+    "@hona/strobe": "catalog:",
     "@solidjs/meta": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
@@ -130,7 +132,7 @@
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
     "fuzzysort": "catalog:",
-    "katex": "0.16.47",
+    "katex": "0.18.11",
     "knobs": "npm:@kitlangton/knobs@0.4.0-next.22",
     "marked": "catalog:",
     "solid-list": "catalog:",

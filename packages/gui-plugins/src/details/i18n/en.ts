@@ -14,8 +14,6 @@ export default {
   "plugins.empty": "No plugins configured",
   skills: "Skills",
   "skills.empty": "No skills configured",
-  lsp: "LSP",
-  "lsp.empty": "No LSP servers configured",
   failed: "Failed",
   retry: "Retry",
   connecting: "Connecting…",
@@ -32,9 +30,6 @@ export default {
   "setup.skills": "New skill with OpenCode",
   "setup.skills.prompt":
     "Help me write a new OpenCode skill in my global config. Ask me what it should teach you, then write its SKILL.md.",
-  "setup.lsp": "Set up with OpenCode",
-  "setup.lsp.prompt":
-    "Help me configure a language server in my global OpenCode config. Ask me which language I work in, then set it up.",
   loadingChanges: "Loading changes…",
   noChanges: "No changes",
   basedOn: "Based on {{branch}}",

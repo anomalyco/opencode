@@ -1,7 +1,7 @@
 ## Priorities
 
 - Prioritise, in this order: stability, simplicity, performance.
-- Before changing session or timeline code, record a production benchmark baseline and compare it after the change.
+- Before changing session or timeline code, benchmark it against `origin/dev` with strobe (`packages/app/perf/README.md`): `strobe bench packages/app/perf/<area>.bench.ts --base origin/dev --head .`.
 
 ## Debugging
 
@@ -14,6 +14,13 @@
 - Backend (from the repository root): `bun dev serve --port 4096`
 - App (from `packages/app`): `bun dev -- --port 4444`
 - Open `http://localhost:4444` to verify UI changes (it targets the backend at `http://localhost:4096`).
+
+## Insecure Origins (HTTP LAN)
+
+The Web UI is served over plain HTTP on non-localhost LAN and Tailscale origins (`isSecureContext === false`). This rule applies across `app`, `ui`, `session-ui` and `gui-plugins` window code.
+
+- Never call `crypto.randomUUID()` directly in renderer or browser code; it is `[SecureContext]`-only and throws `TypeError: crypto.randomUUID is not a function` on plain HTTP origins. Always use `uuid()` from `@opencode/util/uuid`.
+- Guard any other `[SecureContext]`-only Web API (`crypto.subtle`, `navigator.clipboard`, `navigator.serviceWorker`) with a non-secure fallback.
 
 ## SolidJS
 

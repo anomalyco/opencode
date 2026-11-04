@@ -25,14 +25,13 @@ import {
 import { createStore } from "solid-js/store"
 import { createKeyed, useDrawer, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
-import { configuredLsps } from "./configured-lsp"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
+import { createFlyoutMotion } from "./flyout-motion"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
   { type: "plugins", icon: "cube", label: "plugins" },
   { type: "skills", icon: "graduation-cap", label: "skills" },
-  { type: "lsp", icon: "code-slash", label: "lsp" },
 ] as const
 
 type Service = (typeof services)[number]["type"]
@@ -54,6 +53,8 @@ type ServiceSource = {
   readonly failed: boolean
   retry: () => void
   Body: Component
+  /** The actions under the list, outside its scroll box so they stay in view. */
+  Footer: Component
 }
 
 // How long a pointer may rest inside the safe triangle before the row under it takes over.
@@ -101,6 +102,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   const ctx = usePlugin()
   const drawer = useDrawer()
   const id = createUniqueId()
+  const motion = createFlyoutMotion()
 
   // A new scope whenever visibility changes closes the flyout.
   const scope = createMemo(
@@ -126,7 +128,6 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     mcp: useMcp(props, () => close()),
     plugins: useCatalog(props, "plugins"),
     skills: useCatalog(props, "skills"),
-    lsp: useLsp(props),
   }
 
   const active = () => {
@@ -141,6 +142,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
 
   const rows: Partial<Record<Service, HTMLButtonElement>> = {}
   const panes: Partial<Record<Service, HTMLElement>> = {}
+  const scrollers: Partial<Record<Service, HTMLElement>> = {}
   let flyout: HTMLDivElement | undefined
   let surface: HTMLDivElement | undefined
   // The flyout's containing block in the viewport, measured when a list opens and on scroll or resize, so pointer
@@ -339,10 +341,11 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     entries.forEach((entry) => {
       const service = services.find((item) => panes[item.type]?.contains(entry.target))?.type
       const pane = service ? panes[service] : undefined
+      const scroller = service ? scrollers[service] : undefined
 
-      if (!service || !pane) return
+      if (!service || !pane || !scroller) return
       setMenu("heights", service, pane.offsetHeight)
-      setMenu("overflow", service, pane.scrollHeight > pane.clientHeight + 1)
+      setMenu("overflow", service, scroller.scrollHeight > scroller.clientHeight + 1)
     }),
   )
 
@@ -363,6 +366,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                   <ServiceBody source={source}>
                     <source.Body />
                   </ServiceBody>
+                  <ServiceFooter source={source} />
                 </div>
               ))
 
@@ -435,6 +439,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
         ref={flyout}
         class="session-service-flyout"
         data-open={active() !== undefined || undefined}
+        data-motion={motion() || undefined}
         inert={active() === undefined || undefined}
         style={{ transform: `translateY(${offset()}px)` }}
         onKeyDown={keydown}
@@ -463,11 +468,18 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     data-overflow={menu.overflow[service.type] || undefined}
                     inert={menu.pane !== service.type || undefined}
                   >
-                    <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
-                      <ServiceBody source={source}>
-                        <source.Body />
-                      </ServiceBody>
+                    <div
+                      ref={(element) => (scrollers[service.type] = element)}
+                      class="session-service-scroll"
+                      data-scrollable
+                    >
+                      <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
+                        <ServiceBody source={source}>
+                          <source.Body />
+                        </ServiceBody>
+                      </div>
                     </div>
+                    <ServiceFooter source={source} />
                   </div>
                 )
               }}
@@ -477,65 +489,6 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
       </div>
     </>
   )
-}
-
-function useLsp(props: ServiceProps): ServiceSource {
-  const ctx = usePlugin()
-  const data = () => props.session.server.data
-
-  const [load, { refetch }] = createResource(
-    () => props.shown && data(),
-    (current) => {
-      const directory = props.directory
-
-      current.location.config.invalidate({ directory })
-
-      return current.location.config.sync({ directory })
-    },
-  )
-
-  const names = createMemo(() => configuredLsps(data().location.config.list({ directory: props.directory }) ?? []))
-
-  createKeyed(data, (current) =>
-    onCleanup(
-      current.on("config.updated", (event) => {
-        if (event.location?.directory !== props.directory) return
-        void refetch()
-      }),
-    ),
-  )
-
-  return {
-    get loading() {
-      return load.loading
-    },
-    get ready() {
-      return data().location.config.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!load.error
-    },
-    get count() {
-      return names().length
-    },
-    failed: false,
-    retry: () => void refetch(),
-    Body: () => (
-      <Show when={names().length} fallback={<ServiceEmpty owner={props} title={ctx.t("lsp.empty")} service="lsp" />}>
-        <For each={names()}>
-          {(name) => (
-            <div class="session-service-row">
-              <TruncatedText text={name} class="session-summary-label" />
-            </div>
-          )}
-        </For>
-        <div class="session-service-footer">
-          <span class="session-service-config-separator" role="separator" />
-          <ServiceConfigLink owner={props} service="lsp" />
-        </div>
-      </Show>
-    ),
-  }
 }
 
 function useMcp(props: ServiceProps, close: () => void): ServiceSource {
@@ -583,7 +536,7 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
     },
     retry: () => void refetch(),
     Body: () => (
-      <Show when={servers().length} fallback={<ServiceEmpty owner={props} title={ctx.t("mcp.empty")} service="mcp" />}>
+      <Show when={servers().length} fallback={<ServiceEmpty title={ctx.t("mcp.empty")} />}>
         <Index each={servers()}>
           {(server) => {
             const enabled = () => server().status.status !== "disabled"
@@ -671,6 +624,10 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
             )
           }}
         </Index>
+      </Show>
+    ),
+    Footer: () => (
+      <Show when={servers().length} fallback={<ServiceEmptyFooter owner={props} service="mcp" />}>
         <div class="session-service-footer">
           <span class="session-service-config-separator" role="separator" />
           <ServiceConfigLink owner={props} service="mcp" />
@@ -768,11 +725,7 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
       <Show
         when={list().length}
         fallback={
-          <ServiceEmpty
-            owner={props}
-            title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")}
-            service={service}
-          />
+          <ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />
         }
       >
         <For each={list()}>
@@ -811,6 +764,10 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
             </Show>
           )}
         </For>
+      </Show>
+    ),
+    Footer: () => (
+      <Show when={list().length} fallback={<ServiceEmptyFooter owner={props} service={service} />}>
         <div class="session-service-footer">
           <span class="session-service-config-separator" role="separator" />
           <Show when={service === "skills"}>
@@ -883,6 +840,15 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
       >
         {props.children}
       </Show>
+    </Show>
+  )
+}
+
+// Shown once the list is, as ServiceBody shows it.
+function ServiceFooter(props: { source: ServiceSource }) {
+  return (
+    <Show when={(props.source.ready || !props.source.loading) && !props.source.error}>
+      <props.source.Footer />
     </Show>
   )
 }
@@ -997,15 +963,20 @@ function ServiceSetup(props: { owner: ServiceProps; service: Service }) {
   )
 }
 
-function ServiceEmpty(props: { owner: ServiceProps; title: string; service: Service }) {
+function ServiceEmpty(props: { title: string }) {
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>
-      <div class="session-service-footer">
-        <ServiceSetup owner={props.owner} service={props.service} />
-        <span class="session-service-config-separator" role="separator" />
-        <ServiceConfigLink owner={props.owner} service={props.service} />
-      </div>
+    </div>
+  )
+}
+
+function ServiceEmptyFooter(props: { owner: ServiceProps; service: Service }) {
+  return (
+    <div class="session-service-footer">
+      <span class="session-service-config-separator" role="separator" />
+      <ServiceSetup owner={props.owner} service={props.service} />
+      <ServiceConfigLink owner={props.owner} service={props.service} />
     </div>
   )
 }
@@ -1053,11 +1024,11 @@ function useMcpToggle(session: MountedSession, directory: () => string) {
       if (!server) return
 
       if (!input.enabled) {
-        await client.mcp.disconnect({ server: input.name, location: ref })
+        await client.experimental.mcp.disconnect({ server: input.name, location: ref })
       }
 
       if (input.enabled && server.status.status !== "needs_auth") {
-        await client.mcp.connect({ server: input.name, location: ref })
+        await client.experimental.mcp.connect({ server: input.name, location: ref })
       }
 
       source.location.mcp.server.invalidate(ref)

@@ -2,12 +2,13 @@ import { Effect, Schema } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("groq")
 const baseURL = "https://api.groq.com/openai/v1"
@@ -20,7 +21,7 @@ export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"
   readonly user?: string
 }
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptions
@@ -28,7 +29,7 @@ export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptions & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -71,13 +72,8 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const configure = (input: LanguageModelOptions = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "GROQ_API_KEY"),
-  })
+export const configure = (input: Config = {}) => {
+  const configured = route.with(bearerRouteDefaults(input, "GROQ_API_KEY", baseURL))
   return {
     id,
     model: (modelID: string | ModelID) =>
@@ -96,16 +92,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Definition<Settings, ProviderOptions>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ProviderOptions> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Groq from "./groq.js"

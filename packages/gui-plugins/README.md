@@ -159,6 +159,32 @@ ctx.add(Command, () => ({
 }))
 ```
 
+### Referencing a subject
+
+Attach a `type: "note"` part to reference a subject outside workspace lines. Set `comment: ""` to attach only the
+subject: the model reads "The user referenced <subject>." With a comment it reads "The user made the following
+comment regarding <subject>: <comment>" instead.
+
+For an uncommented note, optional `title` supplies the primary heading. Optional `subtitle` supplies a plain-text
+footer beside the icon, with or without a comment. Each defaults to `label` when omitted. For example, the browser
+uses a selector as `title` and its localized annotation label as `subtitle`; a comment replaces only the heading.
+These display fields do not change `subject`. Both survive draft storage, sent-message metadata and restoration.
+Only the process-bound `live` reference is dropped when a stored draft or sent message is restored.
+
+### Quoting selected content
+
+Attach a `type: "quote"` part with a `commentID`, then call `screen.composer.focus(commentID, { anchor })` to open its
+optional comment beside the source. `anchor(size)` returns the editor's physical viewport `{ top, left }` for its
+current `width` and frozen opening `height`. It is first called after measurement (never with an unmeasured zero
+height), then again on scroll, resize, and changes to reactive values it reads. The editor holds its opening bottom
+edge as its input grows upward. Return `undefined` when the source is hidden or gone to fall back to the quote's
+composer tile. The anchor is client-only and never persisted. Omitting the options
+anchors the editor to the tile, as clicking that tile does. To quote without opening a comment, call
+`screen.composer.focus()` instead; the built-in selection toolbars offer this through Alt-click.
+
+The built-in terminal follows manual scrolling until new output or a grid resize invalidates the captured source.
+It then falls back to the quote's composer tile without closing the editor or discarding its unsaved comment.
+
 ## Primitives
 
 | Primitive                                        | Use it for                                                                     |
@@ -210,27 +236,41 @@ const screenActive = useQuery(() => ({
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, dialog frame, fields, Markdown and code with the other `ctx.ui` components.
+SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, menu rows, dialog frame, fields, selects, settings pages and rows, Markdown and code with the other `ctx.ui` components. Built-ins use them too where they need nothing more, such as the settings rows of pairing, updates and review.
 
 ### Registries
 
-| Registry                                          | Process | What an item is                                                                                                                                                     |
-| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                                                                        |
-| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                                                             |
-| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                                                                                                   |
-| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                                                                                |
-| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                                                              |
-| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
-| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
-| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                                                                     |
-| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace` through `BuiltinSlot` |
-| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
-| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
+| Registry                                             | Process | What an item is                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`Command`](../plugin/src/gui/registries.ts)         | window  | A palette command with an optional keybind and slash command                                                                                                                                                                         |
+| [`MenuItem`](../plugin/src/gui/registries.ts)        | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                                                                                                                              |
+| [`Panel`](../plugin/src/gui/registries.ts)           | window  | Tabs in the session's side region                                                                                                                                                                                                    |
+| [`SettingsPage`](../plugin/src/gui/registries.ts)    | window  | A settings page, a section on a host page, or rows in a host section                                                                                                                                                                 |
+| [`Server`](../plugin/src/gui/registries.ts)          | window  | A source of servers, such as SSH hosts                                                                                                                                                                                               |
+| [`LinkHandler`](../plugin/src/gui/registries.ts)     | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                                                                                              |
+| [`TitlebarItem`](../plugin/src/gui/registries.ts)    | window  | A pill in the titlebar or the tabs footer                                                                                                                                                                                            |
+| [`ComposerPill`](../plugin/src/gui/registries.ts)    | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                                                                                     |
+| [`CodeBlock`](../plugin/src/gui/registries.ts)       | window  | Your UI in place of the highlighted code of complete fenced code blocks of the languages you list, such as a diagram or a table                                                                                                      |
+| [`CodeBlockAction`](../plugin/src/gui/registries.ts) | window  | A button beside the Copy button of complete fenced code blocks of the languages you list, such as "Run in terminal"                                                                                                                  |
+| [`Slot`](../plugin/src/gui/registries.ts)            | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
+| [`Style`](../plugin/src/gui/registries.ts)           | window  | CSS imported with `?inline`                                                                                                                                                                                                          |
+| [`Theme`](../plugin/src/gui/registries.ts)           | window  | A color theme in the app's theme file format, listed in Settings › Appearance › Theme                                                                                                                                                |
+| [`MenubarItem`](../plugin/src/gui/main.ts)           | main    | An item of the native app menu                                                                                                                                                                                                       |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
-owning screen show the host's location details without this slot.
+owning screen show the host's location details without this slot. Render its rows with `ctx.ui.MenuItem`,
+`ctx.ui.MenuSub`, `ctx.ui.MenuGroup` and `ctx.ui.MenuSeparator`, so they navigate and close like the host's rows.
+
+`session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
+the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a
+branch name and owning screen are available. Use it for actions on the branch's working directory, such as opening
+an integrated terminal.
+
+`session.location.path.menu` (built-ins only, through `BuiltinSlot`) contributes items after the host's copy and
+reveal actions in the session directory's path submenu. It receives the same session context and renders only with
+an owning screen. Use it for external-app actions on `session.directory` without duplicating the host's file-manager
+action.
 
 `session.location.workspace` (built-ins only, through `BuiltinSlot`) replaces the current location row with the same
 session context plus its `label` and `icon`; one contribution owns it. Without a contribution, the host keeps its
@@ -254,7 +294,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.commands`               | `Commands`                                                                         | Runs a published or app command, as the palette does             |
 | `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
 | `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                          |
-| `ctx.ui`                     | `Ui`                                                                               | The app's icons, buttons, menus, dialog frame, Markdown and code |
+| `ctx.ui`                     | `Ui`                                                                               | Icons, buttons, menu rows, dialog frame, fields, settings rows   |
 | `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
 | `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
 | `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, and the light or dark scheme               |
@@ -423,7 +463,7 @@ A built-in always runs, whatever setting is saved under its id, so Extensions �
 - **The lint bans raw effects.** `createEffect`, `createRenderEffect` and `createComputed` may not be imported in `packages/gui-plugins/src`; the SDK (`packages/plugin/src/gui`) wraps them. An escape hatch needs an `oxlint-disable` comment with a reason.
 - **Suspense only on first load.** Wrap each `lazy()` component in its own `<Suspense>`, read async data through `.latest` or `createLatest`, and never read a refetching resource in render: it blanks the nearest boundary.
 - **Stable objects.** Return the same object from `Panel.list` and reactive contributions while nothing changed, so the host never remounts.
-- **No timeline work.** `session.header` is the only timeline surface.
+- **No timeline work.** `session.header` is the only timeline surface, besides `CodeBlock` and `CodeBlockAction` content, which the host renders only for a complete fenced block of a language you list.
 - **No module state.** Keep state inside setup; module state survives a reload and leaks across windows.
 
 ## Testing
@@ -668,6 +708,7 @@ export const builtins = compose({
   wsl: { ...wsl, mainEntry: () => import("./wsl/main") },
   "microsoft-office": microsoftOffice,
   sources,
+  goal,
 })
 ```
 
@@ -692,6 +733,7 @@ export const builtins = compose({
   wsl: { ...wsl, windowEntry: eager(wslRenderer) },
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
+  goal: { ...goal, windowEntry: eager(goalRenderer) },
 })
 ```
 

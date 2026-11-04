@@ -6,6 +6,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
+import { pinPromptMedia } from "@/composer/media"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
@@ -20,25 +21,34 @@ export function createSessionRevert(input: {
   const location = useWorkspaceLocation()
   const language = useLanguage()
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected request is opaque; the toast formats it
+  const fail = (error: unknown) =>
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: error instanceof Error ? error.message : String(error),
+    })
+
   const request = async <A>(action: () => Promise<A>) =>
     action()
       .then(() => true)
       .catch((error) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        })
+        fail(error)
 
         return false
       })
 
-  const restore = (target: ReturnType<typeof prompt.capture>, message: SessionMessageUser) => {
-    const restored = extractPromptFromMessage(message, {
+  const messageDraft = (message: SessionMessageUser) =>
+    extractPromptFromMessage(message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
       sessionTitle: (id) => data.session.get(id)?.title,
     })
 
+  const restore = (
+    target: ReturnType<typeof prompt.capture>,
+    message: SessionMessageUser,
+    restored = messageDraft(message),
+  ) => {
     const context = extractPromptContext(message, { directory: location().directory })
 
     target.set(restored, promptLength(restored))
@@ -56,8 +66,18 @@ export function createSessionRevert(input: {
     // An undelivered prompt has no history to rewind. Withdraw it like the TUI
     // instead of interrupting the work it is waiting behind.
     if (data.session.input.has(sessionID, message.id)) {
+      // The cancel releases the prompt's blob refs and sweeps blobs nothing else references, so the draft takes
+      // local copies of its media first; if they cannot load, the prompt stays queued.
+      const restored = await pinPromptMedia(messageDraft(message)).catch((error) => {
+        fail(error)
+
+        return undefined
+      })
+
+      if (!restored) return
+
       if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
-      restore(target, message)
+      restore(target, message, restored)
       owner.run(() => input.setActiveMessage(previous))
 
       return
@@ -68,7 +88,7 @@ export function createSessionRevert(input: {
     // Like the TUI, stop at the first failure instead of waiting on work that was never interrupted.
     if (!(await request(() => server.api.session.interrupt({ sessionID })))) return
 
-    if (!(await request(() => server.api.session.wait({ sessionID })))) return
+    if (!(await request(() => server.api.experimental.session.wait({ sessionID })))) return
 
     // Read before staging: the staged event can land before the request resolves.
     const prior = input.session.data.revertMessageID()

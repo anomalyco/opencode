@@ -1,11 +1,11 @@
-import { OpenCode, type MigrationV1StatusOutput } from "@opencode/client/promise"
+import { OpenCode, type ExperimentalMigrationV1StatusOutput } from "@opencode/client/promise"
 import { useLanguage } from "@opencode/app/desktop"
 import { Loader } from "@opencode/ui/loader"
 import { showToast, toaster, Toast } from "@opencode/ui/toast"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../shared/ipc-contract"
 
-type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
+type Progress = Extract<ExperimentalMigrationV1StatusOutput, { status: "running" }>["progress"]
 
 export function MigrationStatus(props: { server: ServerReadyData }) {
   const language = useLanguage()
@@ -87,7 +87,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
 
     void (async () => {
       while (true) {
-        const status = await client.migration.v1.status({ signal: abort.signal })
+        const status = await client.experimental.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
 
         if (status.status === "running") show()

@@ -1,12 +1,13 @@
 import {
-  LLM,
+  ai,
+  type AssistantMessage,
+  type LanguageModel,
   Media,
   Message,
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
-  type ContentPart,
-  type LanguageModel,
+  type UserMessage,
 } from "../src/effect.js"
 
 export const basicContinuation = ["system", "user-text", "assistant-text", "user-follow-up"] as const
@@ -55,8 +56,8 @@ export function continuationRequest(input: {
 }) {
   const features = new Set(input.features)
   const messages = []
-  const firstUser: ContentPart[] = []
-  const firstAssistant: ContentPart[] = []
+  const firstUser: Array<UserMessage["content"][number]> = []
+  const firstAssistant: Array<AssistantMessage["content"][number]> = []
 
   if (features.has("user-text")) firstUser.push({ type: "text", text: "What is shown here?" })
   if (features.has("user-image"))
@@ -98,7 +99,7 @@ export function continuationRequest(input: {
   if (features.has("user-follow-up"))
     messages.push(Message.user("Continue from this conversation in one short sentence."))
 
-  return LLM.request({
+  return ai.request({
     id: input.id,
     model: input.model,
     system: features.has("system") ? "You are concise. Continue from the provided history." : undefined,

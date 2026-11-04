@@ -7,15 +7,18 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  LLMRequest,
+  AssistantMessage,
+  type LLMRequest,
   Message,
   ToolDefinition,
+  ToolMessage,
   type ContentPart,
   type MediaPart,
   type OpenString,
   type ProviderID,
   type RequestEncoding,
   type TextPart,
+  type ToolCallPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
@@ -202,10 +205,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fnUntraced(function* (
-  route: string,
-  message: LLMRequest["messages"][number],
-) {
+export const systemUpdateText = Effect.fnUntraced(function* (route: string, message: LLMRequest["messages"][number]) {
   const content: TextPart[] = []
   for (const part of message.content) {
     if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
@@ -351,21 +351,29 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
-    const content = message.content.map((part) => {
-      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
-      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
-    })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
+    if (message.role === "assistant") {
+      const content = message.content.map((part) =>
+        part.type === "tool-call" || part.type === "tool-result" ? flattenToolName(part) : part,
+      )
+      return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+    }
+    if (message.role !== "tool") return message
+    const content = message.content.map(flattenToolName)
+    return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
     tools: flattenTools(request.tools),
     request: messages.every((message, index) => message === request.messages[index])
       ? request
-      : LLMRequest.update(request, { messages }),
+      : { ...request, messages },
   }
 }
+
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
+  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,

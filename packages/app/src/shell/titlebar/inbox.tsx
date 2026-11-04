@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { Button } from "@opencode/ui/button"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
@@ -13,20 +14,23 @@ import { useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
 import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { compareWorking, workingSince } from "./inbox-working"
 
-// `since` is when the inbox was first used; Recent only lists sessions that finished a run after it.
+const RECENT_LIMIT = 10
+
 const InboxState = Persistence.struct({
   workingExpanded: Schema.Boolean,
-  since: Persistence.optional(Schema.Number),
 })
 
 /** The experimental Inbox interface mode: the session inbox in place of vertical tabs. */
 export function SidebarInbox() {
   const language = useLanguage()
   const dialog = useDialog()
+  const servers = useServers()
   const inbox = createSessionInbox({ archived: true })
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
@@ -35,21 +39,38 @@ export function SidebarInbox() {
 
   const sections = createMemo(() => {
     const list = inbox.entries()
-    // The most recently finished session comes first.
-    const finished = list
-      .filter((entry) => {
-        const since = state.since
 
-        return !inboxBusy(entry.status) && since !== undefined && (entry.session.time.idle ?? 0) >= since
-      })
+    // Archived sessions are available through the Archived search dialog, not in the sidebar list.
+    const active = list.filter((entry) => !inboxArchived(entry))
+
+    const needs = active.filter((entry) => entry.status === "approval" || entry.status === "input")
+
+    const recent = active
+      .filter((entry) => !inboxBusy(entry.status) && entry.session.time.idle !== undefined)
       .toSorted((a, b) => (b.session.time.idle ?? 0) - (a.session.time.idle ?? 0))
+      .slice(0, RECENT_LIMIT)
+
+    // `time.updated` moves with every message of a run, so keep Working ordered by run start.
+    const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
+
+    const current = list.find((entry) => inbox.selected(entry))
 
     return {
-      needs: list.filter((entry) => entry.status === "approval" || entry.status === "input"),
-      inbox: finished.filter((entry) => !inboxArchived(entry)),
-      archived: finished.filter(inboxArchived),
-      working: list.filter((entry) => entry.status === "working"),
+      needs,
+      inbox: recent,
+      current:
+        current && ![...needs, ...recent, ...working].some((entry) => entry.key === current.key) ? [current] : [],
+      archived: list.some(inboxArchived),
+      working,
     }
+  })
+
+  const selectedWorking = createMemo(() => sections().working.find((entry) => inbox.selected(entry))?.key)
+
+  // Expand when a working session becomes current, not on each update or manual collapse.
+  createEffect(() => {
+    if (!ready() || !selectedWorking()) return
+    setState("workingExpanded", true)
   })
 
   // The client only refreshes `time.idle` for loaded sessions when a run ends, so load every working one.
@@ -60,16 +81,11 @@ export function SidebarInbox() {
     })
   })
 
-  // The inbox starts empty and fills as sessions finish runs.
-  createEffect(() => {
-    if (ready() && state.since === undefined) setState("since", Date.now())
-  })
-
   // Git info is not stored on the session, so eagerly load it for every shown row.
   createEffect(() => {
     const visible = sections()
 
-    inbox.loadBranches([...visible.needs, ...visible.working, ...visible.inbox, ...visible.archived])
+    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.inbox])
   })
 
   function DeleteDialog(props: { entry: InboxEntry }) {
@@ -77,6 +93,7 @@ export function SidebarInbox() {
       await inbox.remove(props.entry)
       dialog.close()
     }
+
     return (
       <Dialog fit>
         <DialogHeader hideClose>
@@ -99,16 +116,28 @@ export function SidebarInbox() {
     )
   }
 
-  const rows = (list: InboxEntry[]) => (
-    <For each={list.map((entry) => entry.key)}>
+  // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
+  // row on any session change and resetting the list's scroll.
+  const rows = (list: () => InboxEntry[]) => (
+    <For each={list().map((entry) => entry.key)}>
       {(key) => (
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
-            <InboxRow
-              entry={entry()}
+            <InboxSessionCard
+              project={entry().ctx.projects.forSession(entry().session)}
+              directory={entry().session.location.directory}
+              title={entry().session.title}
+              status={entry().status}
+              server={servers.tag(entry().conn)}
+              since={
+                entry().status === "working"
+                  ? workingSince(entry().session)
+                  : inboxBusy(entry().status)
+                    ? (workingSince(entry().session) ?? entry().session.time.updated)
+                    : (entry().session.time.idle ?? entry().session.time.updated)
+              }
               selected={inbox.selected(entry())}
               now={inbox.now()}
-              branchLoading={inbox.branchLoading(entry())}
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
@@ -124,74 +153,117 @@ export function SidebarInbox() {
   )
 
   return (
+    <InboxSessionList
+      needsCount={sections().needs.length}
+      currentCount={sections().current.length}
+      recentCount={sections().inbox.length}
+      workingCount={sections().working.length}
+      archived={sections().archived}
+      workingExpanded={state.workingExpanded}
+      onToggleWorking={() => setState("workingExpanded", !state.workingExpanded)}
+      onArchived={async () => {
+        const { DialogSessionSearch } = await import("@/shell/commands/session-search")
+
+        void dialog.show(() => <DialogSessionSearch archived />)
+      }}
+      needs={rows(() => sections().needs)}
+      current={rows(() => sections().current)}
+      recent={rows(() => sections().inbox)}
+      working={rows(() => sections().working)}
+    />
+  )
+}
+
+export function InboxSessionList(props: {
+  needsCount: number
+  currentCount: number
+  recentCount: number
+  workingCount: number
+  archived: boolean
+  workingExpanded: boolean
+  onToggleWorking: () => void
+  onArchived: () => void
+  needs: JSX.Element
+  current: JSX.Element
+  recent: JSX.Element
+  working: JSX.Element
+}) {
+  const language = useLanguage()
+
+  return (
     <div data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col">
-      <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pb-1">
-        <Show when={sections().needs.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pb-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} count={sections().needs.length} />
-            {rows(sections().needs)}
+      <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
+        <Show when={props.currentCount > 0}>
+          <div class="flex shrink-0 flex-col gap-0.5 pb-2.5">{props.current}</div>
+        </Show>
+        <Show when={props.needsCount > 0}>
+          <div class="flex shrink-0 flex-col gap-2 pb-2.5">
+            <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} />
+            <div class="flex flex-col gap-0.5">{props.needs}</div>
           </div>
         </Show>
         <Show
-          when={sections().inbox.length > 0}
+          when={props.recentCount > 0}
           fallback={
-            <Show
-              when={
-                sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0
-              }
-            >
+            <Show when={props.needsCount === 0 && props.currentCount === 0 && props.workingCount === 0}>
               <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
                 {language.t("sidebar.inbox.empty")}
               </div>
             </Show>
           }
         >
-          <Show when={sections().needs.length > 0}>
+          <div class="flex shrink-0 flex-col gap-2">
             <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
-          </Show>
-          {rows(sections().inbox)}
+            <div class="flex flex-col gap-0.5">{props.recent}</div>
+          </div>
         </Show>
-        <Show when={sections().archived.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pt-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.archived")} />
-            {rows(sections().archived)}
+        <Show when={props.archived}>
+          <div class="shrink-0 pt-3">
+            <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={props.onArchived}>
+              {language.t("sidebar.inbox.section.archived")}
+            </Button>
           </div>
         </Show>
       </div>
       {/* Working sessions sit in a shelf pinned below the scrolling list. */}
-      <Show when={sections().working.length > 0}>
-        <div
-          data-slot="sidebar-inbox-working"
-          class="flex max-h-[40%] shrink-0 flex-col gap-px border-t border-v2-border-border-muted pt-1.5"
-        >
+      <Show when={props.workingCount > 0}>
+        <div data-slot="sidebar-inbox-working" class="relative flex max-h-[40%] shrink-0 flex-col gap-2 pt-[7px]">
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute top-0 h-px bg-v2-border-border-muted"
+            style={{
+              "inset-inline-start": "calc(1px - var(--sidebar-inset-start, 11px))",
+              "inset-inline-end": "calc(1px - (var(--sidebar-inset-end, 3px) + var(--sidebar-divider-bleed, 0px)))",
+            }}
+          />
           <SectionHeader
             label={language.t("sidebar.inbox.section.working")}
-            count={sections().working.length}
-            expanded={state.workingExpanded}
-            onToggle={() => setState("workingExpanded", !state.workingExpanded)}
+            expanded={props.workingExpanded}
+            shimmer={!props.workingExpanded}
+            onToggle={props.onToggleWorking}
           />
-          <div class="flex min-h-0 flex-col gap-px overflow-y-auto">
-            {/* A collapsed shelf still shows the session that is open. */}
-            {rows(sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
-          </div>
+          <Show when={props.workingExpanded}>
+            <div class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">{props.working}</div>
+          </Show>
         </div>
       </Show>
     </div>
   )
 }
 
-function SectionHeader(props: { label: string; count?: number; expanded?: boolean; onToggle?: () => void }) {
+function SectionHeader(props: { label: string; expanded?: boolean; shimmer?: boolean; onToggle?: () => void }) {
   const content = (): JSX.Element => (
     <>
-      <span class="min-w-0 truncate">{props.label}</span>
-      <Show when={props.count}>
-        <span class="shrink-0 tabular-nums text-v2-text-text-faint">{props.count}</span>
-      </Show>
+      <span class="min-w-0 truncate">
+        <Show when={props.shimmer} fallback={props.label}>
+          <TextShimmer text={props.label} active />
+        </Show>
+      </span>
       <Show when={props.onToggle}>
         <Icon
-          name="chevron-down"
+          name="fill-triangle-down"
           size="small"
-          class="ms-auto shrink-0 transition-transform"
+          class="shrink-0 transition-transform"
           classList={{ "-rotate-90 rtl:rotate-90": !props.expanded }}
         />
       </Show>
@@ -202,7 +274,7 @@ function SectionHeader(props: { label: string; count?: number; expanded?: boolea
     <Show
       when={props.onToggle}
       fallback={
-        <div class="flex h-6 shrink-0 items-center gap-1.5 px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted">
+        <div class="flex h-6 shrink-0 items-center gap-1.5 px-2 text-[13px] leading-4 font-medium text-v2-text-text-muted">
           {content()}
         </div>
       }
@@ -211,7 +283,7 @@ function SectionHeader(props: { label: string; count?: number; expanded?: boolea
         <button
           type="button"
           aria-expanded={props.expanded}
-          class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-start text-[12px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+          class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
           onClick={toggle()}
         >
           {content()}
@@ -221,11 +293,15 @@ function SectionHeader(props: { label: string; count?: number; expanded?: boolea
   )
 }
 
-function InboxRow(props: {
-  entry: InboxEntry
+export function InboxSessionCard(props: {
+  project?: LocalProject
+  directory: string
+  title?: string
+  status: InboxStatus
+  server?: string
+  since: number | undefined
   selected: boolean
   now: number
-  branchLoading: boolean
   branch: string | undefined
   worktree: boolean
   archived: boolean
@@ -235,13 +311,7 @@ function InboxRow(props: {
   onDelete: () => void
 }) {
   const language = useLanguage()
-  const servers = useServers()
-  const project = createMemo(() => props.entry.ctx.projects.forSession(props.entry.session))
-  const status = () => props.entry.status
-  const unread = () => status() !== "ready" && status() !== "working"
-
-  // Sessions on the current server are not marked.
-  const tag = () => servers.tag(props.entry.conn)
+  const status = () => props.status
 
   const compact = (seconds: number) => {
     if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
@@ -251,18 +321,15 @@ function InboxRow(props: {
     return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
   }
 
-  const elapsed = () => {
-    // `time.updated` moves when a prompt is enqueued, so it marks when the current run was requested.
-    const seconds = Math.max(0, Math.floor((props.now - props.entry.session.time.updated) / 1000))
-
-    return seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(seconds)
-  }
+  const statusLabel = (value: InboxStatus) =>
+    value === "ready" ? undefined : language.t(`sidebar.inbox.status.${value}`)
 
   const age = () => {
-    const seconds = Math.max(
-      0,
-      Math.floor((props.now - (props.entry.session.time.idle ?? props.entry.session.time.updated)) / 1000),
-    )
+    if (props.since === undefined) return
+
+    const seconds = Math.max(0, Math.floor((props.now - props.since) / 1000))
+
+    if (status() === "working" && seconds < 60) return language.plural("sidebar.inbox.elapsed.seconds", seconds)
 
     return seconds < 60 ? language.t("sidebar.inbox.time.now") : compact(seconds)
   }
@@ -275,7 +342,7 @@ function InboxRow(props: {
         data-slot="sidebar-inbox-item"
         data-status={status()}
         data-state={props.selected ? "active" : undefined}
-        class="group flex w-full shrink-0 flex-col gap-0.5 rounded-[6px] px-1.5 py-1.5 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-background-bg-layer-02"
+        class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
           "opacity-70": status() === "working" && !props.selected,
@@ -283,86 +350,75 @@ function InboxRow(props: {
         }}
         onClick={props.onOpen}
       >
-        <span class="flex h-4 w-full min-w-0 items-center gap-1.5 text-[12px] leading-4 text-v2-text-text-faint">
+        <span class="flex h-4 w-full min-w-0 shrink-0 items-center gap-2">
           <span class="flex size-4 shrink-0 items-center justify-center">
-            <SessionTabAvatarView
-              project={project()}
-              directory={props.entry.session.location.directory}
-              unread={false}
-            />
+            <SessionTabAvatarView project={props.project} directory={props.directory} unread={false} />
           </span>
-          <span class="min-w-0 truncate">
-            {displayName(project() ?? { worktree: props.entry.session.location.directory })}
-          </span>
-          <span class="ms-auto shrink-0 tabular-nums" role={status() === "ready" ? undefined : "status"}>
-            <Show when={status() !== "ready"} fallback={age()}>
-              <span
-                classList={{
-                  "text-v2-state-fg-warning": status() === "approval" || status() === "input",
-                  "text-v2-state-fg-info": status() === "working",
-                  "text-v2-state-fg-danger": status() === "failed",
-                  "text-v2-state-fg-success": status() === "done",
-                }}
-              >
-                <Show
-                  when={status() === "working"}
-                  fallback={language.t(`sidebar.inbox.status.${status() as Exclude<InboxStatus, "ready">}`)}
-                >
-                  {/* Announce only the status: the ticking duration would be re-read every second. */}
-                  <span class="sr-only">{language.t("sidebar.inbox.status.working")}</span>
-                  {/* Keep the status colour under the sweep. */}
-                  <span
-                    aria-hidden="true"
-                    class="[&_[data-component=text-shimmer]]:[--text-shimmer-base-color:var(--v2-state-fg-info)]"
-                  >
-                    <TextShimmer text={language.t("sidebar.inbox.status.workingFor", { duration: elapsed() })} active />
-                  </span>
-                </Show>
-              </span>
-            </Show>
+          <span
+            dir="auto"
+            class="min-w-0 flex-1 truncate text-[13px] leading-4 font-medium tracking-[-0.04px] text-v2-text-text-base"
+          >
+            {sessionTabTitle(props.title, language.t("session.tab.session"))}
           </span>
         </span>
-        <span
-          dir="auto"
-          class="w-full min-w-0 truncate text-[13px] leading-4"
-          // Rows recede once read so unread results stand out.
-          classList={{
-            "font-medium text-v2-text-text-base": unread(),
-            "text-v2-text-text-muted": !unread(),
-          }}
-        >
-          {sessionTabTitle(props.entry.session.title, language.t("session.tab.session"))}
-        </span>
-        <Show when={props.branchLoading || props.branch || props.worktree || tag()}>
-          <span class="flex h-4 w-full min-w-0 items-center gap-1 text-[12px] leading-4 text-v2-text-text-faint">
-            <Show when={props.branchLoading}>
-              <span
-                aria-hidden="true"
-                class="h-2.5 w-24 max-w-full animate-pulse rounded-full bg-v2-background-bg-layer-03"
-              />
+        <span class="relative flex h-4 w-full min-w-0 shrink-0 items-center gap-2 ps-6 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted">
+          <Show when={props.server}>
+            {(name) => (
+              <Tooltip placement="right" value={name()} class="absolute start-0 top-0 flex size-4 shrink-0">
+                <Icon name="server" aria-label={name()} class="text-v2-icon-icon-muted" />
+              </Tooltip>
+            )}
+          </Show>
+          <span class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-v2-icon-icon-muted">
+            <span dir="auto" class="min-w-0 truncate text-v2-text-text-muted">
+              {displayName(props.project ?? { worktree: props.directory })}
+            </span>
+            <Show when={props.worktree}>
+              <Tooltip placement="right" value={props.directory} class="flex shrink-0">
+                <Icon name="outline-worktree" />
+              </Tooltip>
             </Show>
-            <Show when={!props.branchLoading && (props.branch || props.worktree)}>
-              <span class="flex min-w-0 items-center gap-1">
-                {/* The worktree icon stands in for the branch icon to mark sessions outside the project checkout. */}
-                <Icon name={props.worktree ? "outline-worktree" : "branch"} size="small" class="shrink-0" />
-                <Show when={props.branch}>
-                  {(name) => (
-                    <span dir="ltr" class="min-w-0 truncate">
-                      {name()}
-                    </span>
-                  )}
-                </Show>
-              </span>
-            </Show>
-            <Show when={tag()}>
+            <Show when={props.branch}>
               {(name) => (
-                <Tooltip placement="right" value={name()} class="ms-auto flex shrink-0">
-                  <Icon name="server" size="small" aria-label={name()} />
+                <Tooltip placement="right" value={name()} class="flex shrink-0">
+                  <Icon name="branch" />
                 </Tooltip>
               )}
             </Show>
           </span>
-        </Show>
+          <span
+            class="ms-auto flex shrink-0 items-center gap-1.5 text-[12px] tabular-nums"
+            role={status() === "ready" ? undefined : "status"}
+          >
+            <Show when={status() !== "ready"}>
+              <span class="sr-only">{statusLabel(status())}</span>
+              <Show
+                when={status() === "working"}
+                fallback={
+                  <span
+                    aria-hidden="true"
+                    class="size-[7px] shrink-0 rounded-full"
+                    classList={{
+                      "bg-v2-state-fg-warning": status() === "approval" || status() === "input",
+                      "bg-v2-state-fg-danger": status() === "failed",
+                      "bg-v2-background-bg-accent": status() === "done",
+                    }}
+                  />
+                }
+              >
+                <ActivityRing class="shrink-0 text-v2-icon-icon-muted" />
+              </Show>
+            </Show>
+            {/* Announce only the state, not each age update. */}
+            <Show when={age()}>
+              {(label) => (
+                <span aria-hidden={status() === "ready" ? undefined : "true"} class="text-v2-text-text-faint">
+                  {label()}
+                </span>
+              )}
+            </Show>
+          </span>
+        </span>
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
         <Menu.Context.Content>

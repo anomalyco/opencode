@@ -730,6 +730,7 @@ export const dict = {
   "dialog.server.menu.remove": "Hiq",
   "home.workspaceTip": "Filloni sesionin tjetër në një hapësirë ​​të re pune për të mbajtur ndryshimet të izoluara",
   "session.tab.add": "Shto skedën",
+  "session.tab.closeOthers": "Mbyll skedat e tjera",
   "session.queue.attachments.one": "Plus {{count}} bashkëngjitje",
   "session.queue.attachments.other": "Plus bashkëngjitjet {{count}}",
   "settings.backToSettings": "Kthehu te cilësimet",

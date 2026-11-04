@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -12,12 +12,13 @@ import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
+import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
+import { ConsoleAccess } from "@opencode/core/console-access"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -28,20 +29,35 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
-import { emptyMcp } from "../fixture/mcp"
 import { drain } from "../lib/clock"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
-import { PluginTestLayer } from "./fixture"
+import { emptyMcp } from "../fixture/mcp"
+import { makePluginTestLayer, PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* OpencodePlugin.effect(host)
 })
+
+// The Console's config merges as an integration document; its policies are what organization policy the member gets.
+const consoleDocument = (config: Config.Interface) =>
+  config
+    .entries()
+    .pipe(
+      Effect.map((entries) =>
+        entries.find((entry): entry is ConfigIntegration.Document => entry instanceof ConfigIntegration.Document),
+      ),
+    )
+const consoleSearch = { id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" }
+const consolePolicies = (config: Config.Interface) =>
+  consoleDocument(config).pipe(Effect.map((document) => document?.info.policies ?? []))
 
 const noRemoteConfig = HttpClient.make((request) =>
   Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))),
@@ -60,6 +76,51 @@ const inProcess = (server: { fetch: (request: Request) => Response | Promise<Res
       ),
     ),
   )
+
+// Without `drain`: what the hook applied must be visible when it returns.
+const prompt = Effect.fn(function* () {
+  const hooks = yield* PluginHooks.Service
+  yield* hooks.trigger("session", "prompt", {
+    sessionID: Session.ID.make("ses_console_prompt"),
+    messageID: SessionMessage.ID.make("msg_console_prompt"),
+    prompt: { text: "hello" },
+    delivery: "steer",
+  })
+})
+
+// Records the MCP servers config transforms produce, rebuilt on each reload and registration as the MCP service does.
+type McpServerConfig = NonNullable<ReturnType<Mcp.Editor["get"]>>
+const recordingMcp = (() => {
+  const transforms = new Set<(editor: Mcp.Editor) => void>()
+  const configured = new Map<string, McpServerConfig>()
+  const reload = () =>
+    Effect.sync(() => {
+      const servers = new Map<string, McpServerConfig>()
+      const editor: Mcp.Editor = {
+        list: () => Array.from(servers, ([name, config]) => [Mcp.ServerName.make(name), config] as const),
+        get: (name) => servers.get(name),
+        set: (name, config) => servers.set(name, structuredClone(config) as McpServerConfig),
+        update: (name, update) => {
+          const config = servers.get(name)
+          if (config) update(config)
+        },
+        remove: (name) => servers.delete(name),
+      }
+      transforms.forEach((transform) => transform(editor))
+      configured.clear()
+      servers.forEach((config, name) => configured.set(name, config))
+    })
+  const service = Mcp.Service.of({
+    ...emptyMcp,
+    transform: (callback) =>
+      Effect.sync(() => {
+        transforms.add(callback)
+        return { dispose: Effect.sync(() => transforms.delete(callback)).pipe(Effect.andThen(reload)) }
+      }).pipe(Effect.tap(reload)),
+    reload,
+  })
+  return { configured, layer: Layer.succeed(Mcp.Service, service) }
+})()
 
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
@@ -108,20 +169,6 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function eventually<A, E>(
-  effect: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  remaining = 1000,
-): Effect.Effect<A, E | Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
 }
 
 const cost = (input: number, output = 0) => [
@@ -697,7 +744,7 @@ describe("OpencodePlugin", () => {
             if (state.failing) return new Response("Unavailable", { status: 502 })
             return Response.json({
               providers: {},
-              ...(state.advertised ? { websearch: { providerID: "opencode" } } : {}),
+              ...(state.advertised ? { websearch: { provider: "opencode" } } : {}),
             })
           },
         })
@@ -723,231 +770,227 @@ describe("OpencodePlugin", () => {
           yield* drain
           const initial = { ...rebuilds }
           expect(state.requests).toBe(1)
-          expect(yield* websearch.default()).toBeUndefined()
+          expect(yield* websearch.providers()).toEqual([])
 
           state.advertised = true
           yield* TestClock.adjust("50 seconds")
           yield* drain
           expect(state.requests).toBe(1)
           expect(rebuilds).toEqual(initial)
-          expect(yield* websearch.default()).toBeUndefined()
+          expect(yield* websearch.providers()).toEqual([])
 
           yield* TestClock.adjust("10 seconds")
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
+          expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
           yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
+          expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
           state.failing = true
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(4)
+          // The failed fetch and its 3 retries.
+          expect(state.requests).toBe(7)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
+          expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
           state.failing = false
           state.advertised = false
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(state.requests).toBe(5)
+          expect(state.requests).toBe(8)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
-          expect(yield* websearch.default()).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
 
-  it.effect("registers the Console's MCP servers as sent, attaching the credential only where asked", () =>
+  it.effect("applies a credential switch only when it changes the Console config", () =>
     Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const state = { advertised: true }
-        const server = Bun.serve({
-          port: 0,
-          fetch: (request) =>
-            Response.json({
-              providers: {},
-              ...(state.advertised
-                ? {
-                    mcp: {
-                      servers: {
-                        opencode_console: {
-                          type: "remote",
-                          url: `${new URL(request.url).origin}/console/mcp`,
-                          headers: { "x-client": "opencode", authorization: "Bearer forged" },
-                          oauth: false,
-                          auth: "console",
-                        },
-                        opencode_console_oauth: {
-                          type: "remote",
-                          url: `${new URL(request.url).origin}/console/oauth/mcp`,
-                          oauth: { scope: "workspace" },
-                          timeout: { startup: 5000 },
-                        },
-                      },
-                    },
-                  }
-                : {}),
-            }),
-        })
-        return { server, state }
-      }),
-      ({ server, state }) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const transforms: Array<(editor: Mcp.Editor) => void> = []
-          const reloads = { count: 0 }
-          const servers = () => {
-            const configured = new Map<string, unknown>()
-            transforms.forEach((transform) =>
-              transform({
-                list: () => [],
-                get: (name) => (configured.has(name) ? { type: "remote", url: "user" } : undefined),
-                set: (name, config) => configured.set(name, config),
-                update: () => {},
-                remove: (name) => configured.delete(name),
-              }),
-            )
-            return Object.fromEntries(configured)
-          }
-          yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: Credential.Key.make({
-              type: "key",
-              key: "secret",
-              metadata: { server: server.url.origin, orgID: "org-a" },
-            }),
-          })
-          yield* addPlugin().pipe(
-            Effect.provideService(
-              Mcp.Service,
-              Mcp.Service.of({
-                ...emptyMcp,
-                transform: (transform) =>
-                  Effect.sync(() => {
-                    transforms.push(transform)
-                    return { dispose: Effect.void }
-                  }),
-                reload: () =>
-                  Effect.sync(() => {
-                    reloads.count++
-                  }),
-              }),
-            ),
-            inProcess(server),
-          )
-          yield* drain
-
-          expect(servers()).toEqual({
-            opencode_console: {
-              type: "remote",
-              url: `${server.url.origin}/console/mcp`,
-              headers: { "x-client": "opencode", authorization: "Bearer secret", "x-org-id": "org-a" },
-              oauth: false,
-            },
-            opencode_console_oauth: {
-              type: "remote",
-              url: `${server.url.origin}/console/oauth/mcp`,
-              oauth: { scope: "workspace" },
-              timeout: { startup: 5000 },
-            },
-          })
-
-          state.advertised = false
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(servers()).toEqual({})
-          expect(reloads.count).toBe(1)
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.effect("ignores unsupported managed actions, effects, and keys while enforcing supported policies", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() =>
-        Bun.serve({
-          port: 0,
-          fetch: () =>
-            Response.json({
-              providers: { opencode: {} },
-              experimental: {
-                policies: [
-                  { action: "future.use", resource: { names: ["anything"] }, effect: "future-effect", future: true },
-                  { action: "provider.use", resource: "*", effect: "deny" },
-                  { action: "provider.use", resource: "opencode", effect: "allow" },
-                  { action: "tool.use", resource: "shell:*", effect: "deny" },
-                  { action: "tool.use", resource: "shell:git *", effect: "allow" },
-                  { action: "tool.use", resource: "shell:git status", effect: "future-effect" },
-                  { action: "permission", resource: "*", effect: "deny" },
-                  { action: "tool.use", resource: "shell:sudo *", effect: "deny", audience: "ignored" },
-                  { action: "integration.use", resource: "mcp:restricted", effect: "deny" },
-                ],
-                unknown: { future: true },
-              },
-              future: { unknown: true },
-            }),
-        }),
-      ),
+      Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ providers: {} }) })),
       (server) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
-          const catalog = yield* Provider.Service
-          const managed = yield* ManagedPolicy.Service
-          const plugins = yield* Plugin.Service
-          yield* catalog.transform((catalog) => catalog.update(Provider.ID.anthropic, () => {}))
-          yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: Credential.Key.make({
-              type: "key",
-              key: "secret",
-              metadata: { server: server.url.origin, orgID: "org_test", orgName: "Acme" },
-            }),
+          const providers = yield* Provider.Service
+          const bus = yield* Bus.Service
+          const rebuilds = { count: 0 }
+          const key = (key: string) =>
+            Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
+          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("first") })
+          yield* providers.transform(() => {
+            rebuilds.count++
           })
-          const host = yield* PluginHost.make(plugins)
-          yield* OpencodePlugin.effect(host)
-          yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer([])))
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+          const initial = rebuilds.count
 
-          expect(managed.current()).toEqual({
-            statements: [
-              { action: "provider.use", resource: "*", effect: "deny" },
-              { action: "provider.use", resource: "opencode", effect: "allow" },
-              { action: "tool.use", resource: "shell:*", effect: "deny" },
-              { action: "tool.use", resource: "shell:git *", effect: "allow" },
-              { action: "tool.use", resource: "shell:sudo *", effect: "deny" },
-              { action: "integration.use", resource: "mcp:restricted", effect: "deny" },
-            ],
-            organization: "Acme",
+          const second = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: key("second"),
           })
-          const hooks = yield* PluginHooks.Service
-          const decision = yield* hooks.trigger("permission", "evaluate", {
-            sessionID: Session.ID.make("ses_tool_policy"),
-            action: "shell",
-            resources: ["sudo ls"],
-            effect: "allow",
+          yield* drain
+          expect(rebuilds.count).toBe(initial + 1)
+
+          // A switch queued behind a prompt that already applied this credential's config.
+          yield* bus.publish(Credential.Event.Switched, {
+            integrationID: Integration.ID.make("opencode"),
+            credentialID: second.id,
           })
-          expect(decision.effect).toBe("deny")
-          expect(decision.message).toBe("Blocked by Acme's policy")
-          expect(
-            (yield* hooks.trigger("permission", "evaluate", {
-              sessionID: Session.ID.make("ses_tool_policy"),
-              action: "shell",
-              resources: ["git status"],
-              effect: "ask",
-            })).effect,
-          ).toBe("ask")
-          expect(yield* catalog.get(Provider.ID.anthropic)).toBeUndefined()
-          expect(yield* catalog.get(Provider.ID.opencode)).toBeDefined()
+          yield* drain
+          expect(rebuilds.count).toBe(initial + 1)
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
   )
+
+  describe("refreshing Console config", () => {
+    const serve = () =>
+      Effect.sync(() => {
+        const state = { advertised: false, requests: [] as (string | null)[], hang: false }
+        const hanging: (() => void)[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            state.requests.push(request.headers.get("authorization"))
+            const response = Response.json({
+              providers: {},
+              ...(state.advertised ? { websearch: { provider: "opencode" } } : {}),
+            })
+            if (!state.hang) return response
+            return new Promise<Response>((resolve) => hanging.push(() => resolve(response)))
+          },
+        })
+        return { server, state, release: () => hanging.splice(0).forEach((resolve) => resolve()) }
+      })
+    const key = (server: Bun.Server<undefined>, key = "secret") =>
+      Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
+    // A real macrotask, so a request can reach the server without advancing the TestClock as `drain` does.
+    const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+    const connect = Effect.fn(function* (server: Bun.Server<undefined>, poll = false) {
+      const credentials = yield* Credential.Service
+      const credential = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: key(server),
+      })
+      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll }))
+      yield* drain
+      return credential
+    })
+
+    it.effect("schedules no background Console check", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            yield* connect(server)
+            expect(state.requests).toHaveLength(1)
+            yield* TestClock.adjust("5 minutes")
+            yield* drain
+            expect(state.requests).toHaveLength(1)
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+
+    it.effect("refreshes Console config older than a minute when a prompt starts", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            yield* connect(server)
+            state.advertised = true
+
+            yield* TestClock.adjust("50 seconds")
+            yield* prompt()
+            expect(state.requests).toHaveLength(1)
+            expect(yield* websearch.providers()).toEqual([])
+
+            yield* TestClock.adjust("20 seconds")
+            yield* prompt()
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+
+    it.effect("admits a prompt after 3 seconds on the config it has when the Console doesn't answer", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            state.advertised = true
+            yield* connect(server)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+
+            state.hang = true
+            state.advertised = false
+            yield* TestClock.adjust("2 minutes")
+            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
+            yield* TestClock.adjust("3 seconds")
+            yield* Fiber.join(admitted)
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("admits a prompt within 3 seconds while a background check waits on the Console", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            state.advertised = true
+            yield* connect(server, true)
+
+            state.hang = true
+            state.advertised = false
+            yield* TestClock.adjust("1 minute")
+            yield* settle
+            expect(state.requests).toHaveLength(2)
+
+            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
+            yield* settle
+            yield* TestClock.adjust("3 seconds")
+            yield* Fiber.join(admitted)
+            // The prompt joined the background check's request rather than sending its own.
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("fetches again under a key replaced in place, even while the last config is fresh", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            const credentials = yield* Credential.Service
+            const credential = yield* connect(server)
+            expect(state.requests).toEqual(["Bearer secret"])
+
+            yield* credentials.update(credential.id, { value: key(server, "rotated") })
+            yield* TestClock.adjust("10 seconds")
+            yield* prompt()
+            expect(state.requests).toEqual(["Bearer secret", "Bearer rotated"])
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+  })
 
   it.effect("refreshes past future-only policies while retaining config on malformed statements", () =>
     Effect.acquireUseRelease(
@@ -957,14 +1000,14 @@ describe("OpencodePlugin", () => {
         }
         const server = Bun.serve({
           port: 0,
-          fetch: () => Response.json({ providers: { opencode: {} }, experimental: { policies: state.policies } }),
+          fetch: () => Response.json({ providers: { opencode: {} }, policies: state.policies }),
         })
         return { server, state }
       }),
       ({ server, state }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
-          const managed = yield* ManagedPolicy.Service
+          const config = yield* Config.Service
           const providers = yield* Provider.Service
           const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
           const env: ConfigPolicy.Info = { action: "tool.use", resource: "edit:*.env", effect: "deny" }
@@ -978,7 +1021,7 @@ describe("OpencodePlugin", () => {
           })
           yield* addPlugin().pipe(inProcess(server))
           yield* drain
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+          expect(yield* consolePolicies(config)).toEqual([sudo])
 
           for (const malformed of [
             { action: "tool.use", resource: 42, effect: "deny" },
@@ -989,124 +1032,25 @@ describe("OpencodePlugin", () => {
             state.policies = [env, malformed]
             yield* TestClock.adjust("1 minute")
             yield* drain
-            expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+            expect(yield* consolePolicies(config)).toEqual([sudo])
             expect(yield* providers.get(Provider.ID.opencode)).toBeDefined()
           }
 
           state.policies = [env, { action: "tool.use", resource: "shell:*", effect: "future-effect" }]
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(managed.current()).toEqual({ statements: [env], organization: "Acme" })
+          expect(yield* consolePolicies(config)).toEqual([env])
 
           state.policies = [{ action: "future.use", future: { values: [true] } }]
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(managed.current()).toEqual({ statements: [], organization: "Acme" })
+          expect(yield* consolePolicies(config)).toEqual([])
           expect(yield* providers.get(Provider.ID.opencode)).toBeDefined()
 
           state.policies = [{ action: "future.use", effect: { next: true } }, env]
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(managed.current()).toEqual({ statements: [env], organization: "Acme" })
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.effect("keeps policy statements bound to the connected Console account", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const state: { status: number; policies: Record<string, unknown[]>; requests: number } = {
-          status: 200,
-          policies: {},
-          requests: 0,
-        }
-        const server = Bun.serve({
-          port: 0,
-          fetch: (request) => {
-            state.requests++
-            if (state.status !== 200) return new Response("Unavailable", { status: state.status })
-            const policies = state.policies[request.headers.get("x-org-id") ?? ""]
-            return Response.json({ providers: {}, ...(policies ? { experimental: { policies } } : {}) })
-          },
-        })
-        return { server, state }
-      }),
-      ({ server, state }) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const providers = yield* Provider.Service
-          const managed = yield* ManagedPolicy.Service
-          const rebuilds = { count: 0 }
-          const account = (orgID: string, orgName: string) =>
-            credentials.create({
-              integrationID: Integration.ID.make("opencode"),
-              value: Credential.Key.make({
-                type: "key",
-                key: orgID,
-                metadata: { server: server.url.origin, orgID, orgName },
-              }),
-            })
-          const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
-          const env: ConfigPolicy.Info = { action: "tool.use", resource: "edit:*.env", effect: "deny" }
-          yield* providers.transform(() => {
-            rebuilds.count++
-          })
-          const alpha = yield* account("org_alpha", "Alpha")
-          yield* addPlugin().pipe(inProcess(server))
-          yield* drain
-          const initial = rebuilds.count
-          expect(state.requests).toBe(1)
-          expect(managed.current()).toEqual({ statements: [], organization: "Alpha" })
-
-          state.policies.org_alpha = [sudo]
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(state.requests).toBe(2)
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Alpha" })
-          expect(rebuilds.count).toBe(initial + 1)
-
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(state.requests).toBe(3)
-          expect(rebuilds.count).toBe(initial + 1)
-
-          // An outage for the same connection keeps the last statements instead of lifting them.
-          state.status = 503
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(state.requests).toBe(4)
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Alpha" })
-          expect(rebuilds.count).toBe(initial + 1)
-
-          state.status = 200
-          state.policies.org_beta = [env]
-          const beta = yield* account("org_beta", "Beta")
-          yield* eventually(
-            Effect.sync(() => managed.current()),
-            (current) => current.organization === "Beta",
-          )
-          expect(managed.current()).toEqual({ statements: [env], organization: "Beta" })
-
-          state.status = 404
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(managed.current()).toEqual({ statements: [], organization: "Beta" })
-
-          state.status = 200
-          yield* credentials.remove(beta.id)
-          yield* eventually(
-            Effect.sync(() => managed.current()),
-            (current) => current.organization === "Alpha",
-          )
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Alpha" })
-
-          yield* credentials.remove(alpha.id)
-          yield* eventually(
-            Effect.sync(() => managed.current()),
-            (current) => current.organization === undefined,
-          )
-          expect(managed.current()).toEqual({ statements: [], organization: undefined })
+          expect(yield* consolePolicies(config)).toEqual([env])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -1126,7 +1070,7 @@ describe("OpencodePlugin", () => {
               )
             return Response.json({
               providers: {},
-              experimental: { policies: [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }] },
+              policies: [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }],
             })
           },
         })
@@ -1136,7 +1080,7 @@ describe("OpencodePlugin", () => {
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const integrations = yield* Integration.Service
-          const managed = yield* ManagedPolicy.Service
+          const config = yield* Config.Service
           const status = () =>
             integrations
               .get(Integration.ID.make("opencode"))
@@ -1159,13 +1103,13 @@ describe("OpencodePlugin", () => {
           yield* drain
           const url = `${server.url.origin}/console/auth/sso/ssoconn%2F1/start?redirectTo=%2Fconsole%2F`
           expect(yield* status()).toEqual({ status: "needs_auth", message: "Sign in with SSO again to use Acme", url })
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+          expect(yield* consolePolicies(config)).toEqual([sudo])
 
           state.sso = false
           yield* TestClock.adjust("1 minute")
           yield* drain
           expect(yield* status()).toBeUndefined()
-          expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+          expect(yield* consolePolicies(config)).toEqual([sudo])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -1262,7 +1206,7 @@ describe("OpencodePlugin", () => {
             state.body ??
             Response.json({
               providers: {},
-              experimental: { policies: [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }] },
+              policies: [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }],
             }),
         })
         return { server, state }
@@ -1271,7 +1215,7 @@ describe("OpencodePlugin", () => {
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const integrations = yield* Integration.Service
-          const managed = yield* ManagedPolicy.Service
+          const config = yield* Config.Service
           const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
@@ -1288,7 +1232,7 @@ describe("OpencodePlugin", () => {
             yield* TestClock.adjust("1 minute")
             yield* drain
             expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toBeUndefined()
-            expect(managed.current().statements).toEqual([sudo])
+            expect(yield* consolePolicies(config)).toEqual([sudo])
           }
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
@@ -1313,9 +1257,12 @@ describe("OpencodePlugin", () => {
       state.status = 503
       yield* TestClock.adjust("1 minute")
       yield* drain
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
 
       // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
-      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+      // The 404, then the 503 and its 3 retries.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true, true, true])
     }),
   )
 
@@ -1459,9 +1406,7 @@ describe("OpencodePlugin", () => {
                 providers: {},
                 ...(state.advertised
                   ? {
-                      websearch: {
-                        providerID: "opencode",
-                      },
+                      websearch: { provider: "opencode" },
                     }
                   : {}),
               })
@@ -1507,8 +1452,8 @@ describe("OpencodePlugin", () => {
             id: WebSearch.ID.make("opencode"),
             name: "OpenCode Web Search",
           })
-          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
-          expect(yield* websearch.query({ query: "effect web search" })).toEqual(
+          expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+          expect(yield* websearch.query({ query: "effect web search", providerID: consoleSearch.id })).toEqual(
             new WebSearch.Response({
               providerID: WebSearch.ID.make("opencode"),
               results: [
@@ -1540,7 +1485,7 @@ describe("OpencodePlugin", () => {
           yield* credentials.update(initial.id, {
             value: account("replacement"),
           })
-          yield* websearch.query({ query: "fresh credential" })
+          yield* websearch.query({ query: "fresh credential", providerID: consoleSearch.id })
           expect(requests.at(-1)).toMatchObject({
             method: "POST",
             authorization: "Bearer replacement",
@@ -1550,7 +1495,7 @@ describe("OpencodePlugin", () => {
           yield* credentials.update(initial.id, {
             value: account("moved", `${server.url.origin}/other///?ignored=true#ignored`),
           })
-          yield* websearch.query({ query: "updated server" })
+          yield* websearch.query({ query: "updated server", providerID: consoleSearch.id })
           expect(requests.at(-1)).toMatchObject({
             method: "POST",
             path: "/other/api/websearch",
@@ -1563,7 +1508,9 @@ describe("OpencodePlugin", () => {
           })
 
           state.providerID = "unexpected"
-          expect((yield* websearch.query({ query: "wrong provider" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(
+            (yield* websearch.query({ query: "wrong provider", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
+          ).toBe("WebSearch.Request")
 
           state.advertised = false
           state.waitForConfig = true
@@ -1576,13 +1523,14 @@ describe("OpencodePlugin", () => {
             Effect.sync(() => requests),
             (requests) => requests.some((request) => request.authorization === "Bearer switched"),
           )
-          expect((yield* websearch.query({ query: "switch race" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(
+            (yield* websearch.query({ query: "switch race", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
+          ).toBe("WebSearch.Request")
           expect(requests.filter((request) => request.path === "/api/websearch")).toHaveLength(searchCount)
           gate.resolve()
           yield* eventually(websearch.providers(), (providers) =>
             providers.every((provider) => provider.id !== WebSearch.ID.make("opencode")),
           )
-          expect(yield* websearch.default()).toBeUndefined()
           expect(requests.at(-1)).toMatchObject({
             method: "GET",
             path: "/api/v2/config",
@@ -1595,7 +1543,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.live("derives hosted search identity and the default Console endpoint locally", () =>
+  it.live("sends hosted search to the default Console when the credential names none", () =>
     Effect.acquireUseRelease(
       Effect.sync(() =>
         Bun.serve({
@@ -1604,14 +1552,10 @@ describe("OpencodePlugin", () => {
             if (new URL(request.url).pathname === "/console/api/v2/config") {
               return Response.json({
                 providers: {},
-                websearch: {
-                  providerID: "managed-search",
-                  name: "Remote name",
-                  url: "https://example.invalid/search",
-                },
+                websearch: { provider: "opencode" },
               })
             }
-            return Response.json({ providerID: "managed-search", results: [] })
+            return Response.json({ providerID: "opencode", results: [] })
           },
         }),
       ),
@@ -1637,12 +1581,8 @@ describe("OpencodePlugin", () => {
             ),
           )
 
-          expect(yield* websearch.default()).toEqual({
-            id: WebSearch.ID.make("managed-search"),
-            name: "OpenCode Web Search",
-          })
-          expect(yield* websearch.query({ query: "default Console" })).toEqual(
-            new WebSearch.Response({ providerID: WebSearch.ID.make("managed-search"), results: [] }),
+          expect(yield* websearch.query({ query: "default Console", providerID: consoleSearch.id })).toEqual(
+            new WebSearch.Response({ providerID: WebSearch.ID.make("opencode"), results: [] }),
           )
           expect(requests).toEqual([
             "https://opencode.ai/console/api/v2/config",
@@ -1666,9 +1606,7 @@ describe("OpencodePlugin", () => {
             if (url.pathname === "/console/api/v2/config") {
               return Response.json({
                 providers: {},
-                websearch: {
-                  providerID: "opencode",
-                },
+                websearch: { provider: "opencode" },
               })
             }
             if (url.pathname === "/console/api/websearch") {
@@ -1694,11 +1632,15 @@ describe("OpencodePlugin", () => {
           })
           yield* addPlugin()
 
-          expect((yield* websearch.query({ query: "private search" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(
+            (yield* websearch.query({ query: "private search", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
+          ).toBe("WebSearch.Request")
           expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch"])
 
           state.crossOrigin = true
-          expect((yield* websearch.query({ query: "private search" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")
+          expect(
+            (yield* websearch.query({ query: "private search", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
+          ).toBe("WebSearch.Request")
           expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch", "/console/api/websearch"])
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
@@ -1716,9 +1658,7 @@ describe("OpencodePlugin", () => {
             if (url.pathname === "/api/v2/config") {
               return Response.json({
                 providers: {},
-                websearch: {
-                  providerID: "opencode",
-                },
+                websearch: { provider: "opencode" },
               })
             }
             return new Response(
@@ -1750,7 +1690,9 @@ describe("OpencodePlugin", () => {
           })
           yield* addPlugin()
 
-          const error = yield* websearch.query({ query: "rejected search" }).pipe(Effect.flip)
+          const error = yield* websearch
+            .query({ query: "rejected search", providerID: consoleSearch.id })
+            .pipe(Effect.flip)
           expect(error._tag).toBe("WebSearch.Request")
           yield* eventually(
             Effect.sync(() => state.cancelled),
@@ -1853,7 +1795,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )
@@ -2034,30 +1976,28 @@ describe("OpencodePlugin", () => {
   )
 })
 
-// A Console that marks its response with `$schema` serves a regular OpenCode config, merged as an integration document.
-describe("OpencodePlugin with a Console config", () => {
-  const $schema = "https://opencode.ai/config.json"
-  const consoleDocument = (config: Config.Interface) =>
-    config
-      .entries()
-      .pipe(
-        Effect.map((entries) =>
-          entries.find((entry): entry is ConfigIntegration.Document => entry instanceof ConfigIntegration.Document),
-        ),
-      )
-  const deny: ConfigPolicy.Info = { action: "tool.use", resource: "shell:*", effect: "deny" }
+describe("OpencodePlugin prompt refresh", () => {
+  const it = testEffect(makePluginTestLayer(undefined, undefined, recordingMcp.layer))
 
-  it.effect("merges a response with $schema as config and applies one without it as before", () =>
+  it.effect("applies a rotated MCP header and a new policy before the prompt hook returns", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
-        const state = { schema: true }
+        const state = { header: "Bearer one", deny: false }
         const server = Bun.serve({
           port: 0,
           fetch: () =>
             Response.json({
-              ...(state.schema ? { $schema } : {}),
               providers: { remote: { name: "Remote" } },
-              policies: [deny],
+              mcp: {
+                servers: {
+                  gateway: {
+                    type: "remote",
+                    url: "https://gateway.example/mcp",
+                    headers: { authorization: state.header },
+                  },
+                },
+              },
+              policies: state.deny ? [{ action: "provider.use", resource: "remote", effect: "deny" }] : [],
             }),
         })
         return { server, state }
@@ -2065,8 +2005,54 @@ describe("OpencodePlugin with a Console config", () => {
       ({ server, state }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const header = () => {
+            const gateway = recordingMcp.configured.get("gateway")
+            return gateway?.type === "remote" ? gateway.headers?.authorization : undefined
+          }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+          yield* OpencodePlugin.effect(host).pipe(
+            inProcess(server),
+            Effect.provideService(ConsoleAccess.Options, { poll: false }),
+          )
+          yield* ConfigMcpPlugin.Plugin.effect(host)
+          yield* ConfigPolicyPlugin.Plugin.effect(host)
+          yield* drain
+          expect(header()).toBe("Bearer one")
+          expect(yield* providers.get(Provider.ID.make("remote"))).toBeDefined()
+
+          state.header = "Bearer two"
+          state.deny = true
+          yield* TestClock.adjust("2 minutes")
+          yield* prompt()
+          expect(header()).toBe("Bearer two")
+          expect(yield* providers.get(Provider.ID.make("remote"))).toBeUndefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+})
+
+describe("OpencodePlugin with a Console config", () => {
+  const $schema = "https://opencode.ai/config.json"
+  const deny: ConfigPolicy.Info = { action: "tool.use", resource: "shell:*", effect: "deny" }
+
+  it.effect("merges the Console response as config, with its policy named after the organization", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () => Response.json({ $schema, providers: { remote: { name: "Remote" } }, policies: [deny] }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
           const config = yield* Config.Service
-          const managed = yield* ManagedPolicy.Service
           const hooks = yield* PluginHooks.Service
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
@@ -2076,14 +2062,13 @@ describe("OpencodePlugin with a Console config", () => {
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigPolicyPlugin.Plugin.effect(host)
 
           const document = required(yield* consoleDocument(config))
           expect(document.info.providers?.remote?.name).toBe("Remote")
           expect(document.organization).toBe("Acme")
-          expect(managed.current()).toEqual({ statements: [], organization: "Acme" })
           expect(
             yield* hooks.trigger("permission", "evaluate", {
               sessionID: Session.ID.make("ses_console_policy"),
@@ -2092,14 +2077,8 @@ describe("OpencodePlugin with a Console config", () => {
               effect: "allow",
             }),
           ).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
-
-          state.schema = false
-          yield* TestClock.adjust("1 minute")
-          yield* drain
-          expect(yield* consoleDocument(config)).toBeUndefined()
-          expect(managed.current()).toEqual({ statements: [deny], organization: "Acme" })
         }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 
@@ -2252,7 +2231,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host)
           yield* ConfigProviderPlugin.Plugin.effect(host)
 
@@ -2302,7 +2281,7 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           // Registered in production order: the OpenCode and OpenAI provider plugins, then config in `post`.
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* OpenAIPlugin.effect(host)
@@ -2318,7 +2297,7 @@ describe("OpencodePlugin with a Console config", () => {
     ),
   )
 
-  it.effect("registers Console web search without forcing it, so config selects it and user config wins", () =>
+  it.effect("offers Console web search only when the Console selects it, and user config still wins", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const state = { selected: false }
@@ -2351,16 +2330,18 @@ describe("OpencodePlugin with a Console config", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          const host = yield* PluginHost.make(yield* Plugin.Service)
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigWebSearchPlugin.Plugin.effect(host)
-          expect(yield* websearch.providers()).toContainEqual(opencode)
+          // A workspace without hosted search, or a member its policy denies, would get only failed searches.
+          expect(yield* websearch.providers()).not.toContainEqual(opencode)
           expect(yield* websearch.default()).toBeUndefined()
 
           state.selected = true
           yield* TestClock.adjust("1 minute")
           yield* drain
           expect(yield* announced(opencode)).toEqual(opencode)
+          expect(yield* websearch.providers()).toContainEqual(opencode)
           expect((yield* websearch.query({ query: "console" })).providerID).toBe(opencode.id)
 
           yield* config.setEntries([

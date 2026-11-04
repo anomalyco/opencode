@@ -840,6 +840,50 @@ main {
   display: none;
 }
 
+.site-footer {
+  border-top: 1px solid var(--border);
+}
+
+.footer-inner {
+  display: flex;
+  width: min(100%, var(--frame-width));
+  margin-inline: auto;
+  padding: 1.5rem var(--gutter);
+  font-size: 0.8125rem;
+}
+
+.system-status {
+  --status-dot: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.system-status:hover {
+  color: var(--foreground);
+}
+
+.system-status::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--status-dot);
+}
+
+.system-status[data-status="operational"] {
+  --status-dot: #198b43;
+}
+
+.system-status[data-status="degraded"] {
+  --status-dot: #c48a00;
+}
+
+.system-status[data-status="outage"] {
+  --status-dot: #d93636;
+}
+
 .prose {
   width: 100%;
   max-width: var(--content-width);

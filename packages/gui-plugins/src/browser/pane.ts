@@ -3,7 +3,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
-import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
+import { Deferred, Effect, ManagedRuntime, Predicate, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
@@ -118,8 +118,15 @@ export function createBrowserPane(input: {
         .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
           callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
         )
+
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
-      let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
+      let reason:
+        | "browser.pane.unsupported"
+        | "browser.pane.replaced"
+        | "browser.pane.suspended"
+        | "browser.pane.missing"
+        | undefined
+
       let attached = false
       const stop = () => close(entry, reason)
 
@@ -293,6 +300,13 @@ export function createBrowserPane(input: {
             Effect.scoped,
             Effect.tapError((error) =>
               Effect.sync(() => {
+                if (Predicate.isTagged(error, "SessionNotFoundError")) {
+                  reason = "browser.pane.missing"
+                  restore.remove(entry.storageKey)
+
+                  return
+                }
+
                 const type = error instanceof Object && "type" in error ? error.type : undefined
 
                 if (type === "rpc.unavailable" && attached) {

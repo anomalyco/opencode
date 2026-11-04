@@ -83,8 +83,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const inSide = actions.region.focus
   // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
   const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
-  // ⌘W on the side panel's last tab closes the panel and moves focus out of it, where one press too many would close
-  // the session tab. Until the user moves on, by clicking, focusing, another key, or another session, ⌘W closes nothing.
+  // ⌘W on the side panel's last tab, or on a panel with nothing left to close, closes the panel and moves focus out of
+  // it, where one press too many would close the session tab. Until the user moves on, by clicking, focusing, another
+  // key, or another session, ⌘W closes nothing.
   // The close moves focus synchronously, before this is set, so its own focusin does not clear it.
   const [emptied, setEmptied] = createSignal(false)
   const resetEmptied = () => setEmptied(false)
@@ -235,11 +236,23 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return pane === "side" || pane === "split" ? pane : undefined
   }
 
+  // With nothing left to close, ⌘W closes the side panel itself, as an editor closes the focused pane before the window.
   const closeTab = () => {
-    if (actions.region.closeNewTab(focusedPane())) return
+    if (actions.region.closeNewTab(focusedPane())) {
+      const panel = document.getElementById("review-panel")
+
+      // A launcher row that held focus is gone; focus stays in the panel so closing it next returns focus. Closing the
+      // strip's last New tab closes the panel too, which already gave focus back.
+      if (panel && actions.session.layout.view().side.opened() && !panel.contains(document.activeElement))
+        panel.focus({ preventScroll: true, focusVisible: false })
+
+      return
+    }
+
     const tab = closableTab()
 
-    if (tab) actions.region.close(tab)
+    if (tab) return actions.region.close(tab)
+    actions.region.toggle()
   }
 
   const openSideTab = () => actions.region.openNewTab(focusedPane())

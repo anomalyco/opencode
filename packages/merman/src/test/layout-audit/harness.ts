@@ -255,6 +255,7 @@ function auditFlowchart(fixture: LayoutFixture, viewport: (typeof auditViewports
   const size = grid.getTextSize({ trimTop: true, trimBottom: true })
   const routes = layout.routes.map((route) => ({ from: route.edge.from, to: route.edge.to, points: route.points }))
   const bodyIds = layout.diagram.nodes.map((node) => node.id)
+  const endpointBounds = new Map<string, Bounds>([...layout.subgraphBounds, ...layout.bounds])
 
   if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0)
     violations.push("rendered grid has invalid dimensions")
@@ -263,7 +264,7 @@ function auditFlowchart(fixture: LayoutFixture, viewport: (typeof auditViewports
   if (layout.routes.length !== layout.diagram.edges.filter((edge) => !edge.orderOnly).length)
     violations.push("rendered route count does not match visible edge count")
   validateBodies(layout.bounds, bodyIds, violations)
-  validateRoutes(routes, layout.bounds, bodyIds, violations)
+  validateRoutes(routes, endpointBounds, bodyIds, violations)
 
   for (const node of layout.diagram.nodes)
     requireOutputLines(output, layout.bounds.get(node.id)?.lines ?? [], `node ${node.id}`, violations)

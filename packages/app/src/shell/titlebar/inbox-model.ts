@@ -218,12 +218,14 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     while (queue.length) {
       await Promise.all(
-        queue.splice(0, BRANCH_BATCH).map((entry) =>
-          entry.ctx.data.location.vcs
-            .sync(entry.session.location)
+        queue.splice(0, BRANCH_BATCH).map((entry) => {
+          const location = entry.ctx.data.location
+
+          return (location.info(entry.session.location) ? Promise.resolve() : location.syncInfo(entry.session.location))
+            .then(() => location.vcs.sync(entry.session.location))
             .catch(() => undefined)
-            .then(() => setVcs("settled", locationKey(entry), true)),
-        ),
+            .then(() => setVcs("settled", locationKey(entry), true))
+        }),
       )
     }
 
@@ -235,12 +237,6 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       const key = locationKey(entry)
 
       if (queued.has(key)) return
-
-      if (!entry.ctx.data.location.info(entry.session.location)) {
-        setVcs("settled", key, true)
-
-        return
-      }
 
       queued.add(key)
       queue.push(entry)

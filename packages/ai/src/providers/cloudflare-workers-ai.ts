@@ -7,8 +7,9 @@ import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { CloudflareShared } from "./cloudflare-shared.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
 export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
@@ -18,7 +19,7 @@ type WorkersAIURL = AtLeastOne<{
   readonly baseURL: string
 }>
 
-export type LanguageModelOptions = WorkersAIURL &
+export type Config = WorkersAIURL &
   Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: OpenAIProviderOptionsInput
@@ -27,31 +28,15 @@ export type LanguageModelOptions = WorkersAIURL &
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &
   WorkersAIURL & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 export type { CloudflareWorkersAIImageOptions } from "../protocols/cloudflare-workers-ai-images.js"
 
-export const baseURL = (input: WorkersAIURL) => {
-  if (input.baseURL) return input.baseURL
-  if (!input.accountId)
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareWorkersAI.configure requires accountId unless baseURL is supplied",
-    })
-  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(input.accountId)}/ai/v1`
-}
+export const baseURL = (input: WorkersAIURL) => CloudflareShared.baseURL(input, id, "CloudflareWorkersAI")
 
 /** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
-export const runBaseURL = (input: WorkersAIURL) => {
-  const url = Endpoint.trimBaseUrl(baseURL(input))
-  if (!url.endsWith("/ai/v1"))
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareWorkersAI needs accountId or a baseURL ending in /ai/v1 to derive the Run API base",
-    })
-  return `${url.slice(0, -"/v1".length)}/run`
-}
+export const runBaseURL = (input: WorkersAIURL) => CloudflareShared.runBaseURL(input, id, "CloudflareWorkersAI")
 
 export const route = Route.make({
   id: "cloudflare-workers-ai",
@@ -64,7 +49,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions) => {
+export const configure = (input: Config) => {
   const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...defaults } = input
   const auth = AuthOptions.bearer(input, authEnvVars)
   const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
@@ -95,7 +80,7 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)

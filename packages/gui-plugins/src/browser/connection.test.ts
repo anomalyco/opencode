@@ -273,8 +273,18 @@ test("a rejected registration clears itself and retries with its tabs after the 
     app.ipc.reject = new Error("browser.pane.registration.invalid")
     await expect(app.connection.command({ type: "reload", tabID })).rejects.toThrow("browser.pane.registration.invalid")
     expect(app.listeners.has(app.calls[1].input.binding)).toBe(false)
-    expect(app.states.at(-1)).toMatchObject({ registration: undefined, embeds: {}, browser, suspended: false })
+    expect(app.states.at(-1)).toMatchObject({
+      registration: undefined,
+      ready: false,
+      embeds: {},
+      browser,
+      suspended: false,
+    })
+    // Rejected attempts never mark the attachment ready, and passive wakes do not bypass the active backoff timer.
+    expect(app.states.slice(2).every((entry) => !entry.ready)).toBe(true)
     app.ipc.reject = undefined
+    app.connection.wake()
+    expect(app.calls).toHaveLength(2)
     jest.advanceTimersByTime(999)
     expect(app.calls).toHaveLength(2)
     jest.advanceTimersByTime(1)
@@ -285,9 +295,10 @@ test("a rejected registration clears itself and retries with its tabs after the 
       session: "ses_browser",
       restore: browser,
     })
-    // Let the new registration settle: a replayed command would reach it now.
+    // Let the new registration settle: a replayed command would reach it now, and resolving marks it ready.
     jest.useRealTimers()
     await Bun.sleep(0)
+    expect(app.states.at(-1)?.ready).toBe(true)
     expect(app.calls.map((call) => call.commands)).toEqual([[], [], []])
   } finally {
     app.connection.dispose()
@@ -335,6 +346,24 @@ test.each([
     app.connection.wake()
     expect(app.calls).toHaveLength(rejected ? 2 : 1)
     expect(app.states.at(-1)?.error).toBe(error)
+  } finally {
+    app.connection.dispose()
+  }
+})
+
+test("browser.pane.missing stops retry backoff without surfacing an error and wakes only when created", () => {
+  jest.useFakeTimers()
+  const app = fixture()
+
+  try {
+    app.emit(0, { type: "state", state: null, error: "browser.pane.missing" })
+    jest.advanceTimersByTime(60_000)
+    app.connection.wake()
+    expect(app.calls).toHaveLength(1)
+    expect(app.states.at(-1)?.error).toBeUndefined()
+
+    app.connection.wake(true)
+    expect(app.calls).toHaveLength(2)
   } finally {
     app.connection.dispose()
   }

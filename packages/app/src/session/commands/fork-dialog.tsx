@@ -2,12 +2,14 @@ import { Component, createMemo, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Dialog, DialogBody, DialogTitle, DialogTitleGroup } from "@opencode/ui/dialog"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSessionFork } from "@/session/fork"
+import "@/shell/commands/dialog.css"
+import "@/shell/palette-menu.css"
 import "@/shell/search-list.css"
 
 interface ForkableMessage {
@@ -24,7 +26,6 @@ export const DialogFork: Component = () => {
   const params = useParams()
   const data = useData()
   const dialog = useDialog()
-  const language = useLanguage()
   const fork = useSessionFork()
 
   const messages = createMemo((): ForkableMessage[] => {
@@ -48,21 +49,31 @@ export const DialogFork: Component = () => {
     return result.reverse()
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
+  const handleSelect = (messageID: string) => {
     const sessionID = params.id
 
-    if (!item || !sessionID) return
+    if (!sessionID) return
 
-    void fork({ sessionID, messageID: item.id }).then((opened) => {
+    void fork({ sessionID, messageID }).then((opened) => {
       if (opened) dialog.close()
     })
   }
 
+  return <ForkDialog messages={messages()} onSelect={handleSelect} />
+}
+
+export function ForkDialog(props: { messages: ForkableMessage[]; onSelect: (messageID: string) => void }) {
+  const language = useLanguage()
+
+  const select = (item: ForkableMessage | undefined) => {
+    if (item) props.onSelect(item.id)
+  }
+
   const list = useFilteredList({
-    items: messages,
+    items: () => props.messages,
     key: (x) => x.id,
     filterKeys: ["text"],
-    onSelect: handleSelect,
+    onSelect: select,
   })
 
   let resultsRef: HTMLDivElement | undefined
@@ -71,7 +82,7 @@ export const DialogFork: Component = () => {
     // The pointer leaving the rows clears the highlight, so Enter then forks from the newest match.
     if (event.key === "Enter" && !event.isComposing && !list.active()) {
       event.preventDefault()
-      handleSelect(list.flat()[0])
+      select(list.flat()[0])
 
       return
     }
@@ -84,20 +95,17 @@ export const DialogFork: Component = () => {
   }
 
   return (
-    <Dialog class="search-list-dialog">
-      <DialogHeader>
-        <DialogTitleGroup
-          title={language.t("command.session.fork")}
-          description={language.t("dialog.fork.description")}
-        />
-      </DialogHeader>
-      <DialogBody class="search-list-body">
-        <div class="search-list-search">
+    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+      <div class="sr-only">
+        <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
+      </div>
+      <DialogBody class="command-palette-body">
+        <div class="palette-menu-search" data-slot="search-list-search">
           <TextInput
             type="search"
             appearance="base"
             class="!w-full"
-            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            leadingIcon={<Icon name="magnifying-glass" />}
             value={list.filter()}
             onInput={(event) => list.onInput(event.currentTarget.value)}
             onKeyDown={onKeyDown}
@@ -114,16 +122,19 @@ export const DialogFork: Component = () => {
             onClearClick={() => list.clear()}
           />
         </div>
+        <div class="fork-dialog-section">
+          <DialogTitleGroup description={language.t("dialog.fork.description")} />
+        </div>
         <div class="search-list-scroll" data-scrollable ref={(el) => (resultsRef = el)}>
           <Show
             when={list.flat().length > 0}
             fallback={
               <div class="search-list-empty">
-                {language.t(messages().length > 0 ? "dialog.fork.search.empty" : "dialog.fork.empty")}
+                {language.t(props.messages.length > 0 ? "dialog.fork.search.empty" : "dialog.fork.empty")}
               </div>
             }
           >
-            <div role="listbox" class="search-list-results">
+            <div role="listbox" class="search-list-results" data-slot="search-list-results">
               <For each={list.flat()}>
                 {(item) => (
                   <button
@@ -132,18 +143,21 @@ export const DialogFork: Component = () => {
                     aria-selected={list.active() === item.id}
                     data-option-key={item.id}
                     data-active={list.active() === item.id ? "" : undefined}
+                    data-slot="search-list-row"
                     class="search-list-row"
                     onMouseMove={() => list.setActive(item.id)}
                     onMouseLeave={() => list.setActive("")}
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => handleSelect(item)}
+                    onClick={() => select(item)}
                   >
                     <span class="search-list-row-text">
-                      <span class="search-list-title" data-weight="regular">
+                      <span class="search-list-title" data-weight="regular" dir="auto">
                         {item.text}
                       </span>
                     </span>
-                    <span class="search-list-trailing">{item.time}</span>
+                    <span class="search-list-trailing" dir="auto">
+                      {item.time}
+                    </span>
                   </button>
                 )}
               </For>

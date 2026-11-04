@@ -15,10 +15,9 @@
     border: 0;
     border-radius: 6px;
     outline: 1px solid transparent;
-    outline-offset: 0;
-    background:
-      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-2) 100%), var(--v2-background-bg-base);
-    box-shadow: var(--v2-elevation-button-neutral);
+    outline-offset: -1px;
+    background: var(--v2-background-bg-base);
+    box-shadow: var(--v2-elevation-input);
     flex: none;
     align-self: stretch;
     transition:
@@ -27,14 +26,37 @@
       box-shadow 85ms ease-out;
   }
 
+  [data-component="text-input-v2"][data-appearance="small"] {
+    height: 24px;
+  }
+
   [data-component="text-input-v2"][data-appearance="large"] {
     height: 32px;
   }
 
-  [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
-    background:
-      linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-2) 100%), var(--v2-background-bg-base);
+  [data-component="text-input-v2"][data-surface="layer-1"] {
+    background: var(--v2-background-bg-layer-01);
+  }
+
+  [data-component="text-input-v2"][data-surface="invisible"] {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    [data-component="text-input-v2"]:where(:hover):not([data-disabled], [data-invalid], [data-surface="invisible"]):not(
+        :focus-within
+      ) {
+      box-shadow:
+        inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-hover),
+        var(--v2-elevation-input);
+    }
+
+    [data-component="text-input-v2"][data-surface="invisible"]:where(:hover):not([data-disabled], [data-invalid]):not(
+        :focus-within
+      ) {
+      background: var(--v2-overlay-simple-overlay-hover);
+    }
   }
 
   [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
@@ -164,14 +186,6 @@
     display: block;
     flex: none;
     color: currentColor;
-  }
-
-  [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 6px;
-    margin-inline-end: -8px;
   }
 
   /* Pulls the buttons' padding out so their glyphs sit at the same inset as the leading icon. */

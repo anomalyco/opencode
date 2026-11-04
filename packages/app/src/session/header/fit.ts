@@ -1,16 +1,19 @@
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 
-/** Fits the location names before allowing the session title to truncate. */
+/** Fits the location names, then the actions' details, before allowing the session title to truncate. */
 export function createSessionHeaderFit() {
-  const [store, setStore] = createStore({ collapse: 0 })
+  const [store, setStore] = createStore({ collapse: 0, compact: false })
   let root!: HTMLDivElement
+  // Compact actions drop their details, so their last expanded width is what expanding them again takes back.
+  let expandedActions = 0
 
   onMount(() => {
     const fit = () => {
       const location = root.querySelector<HTMLElement>(".session-header-location")
       const title = root.querySelector<HTMLElement>(".session-header-title")
       const measure = root.querySelector<HTMLElement>(".session-header-title-measure > span")
+      const actions = root.querySelector<HTMLElement>(".session-header-actions")
       const trigger = root.querySelector<HTMLElement>('[data-slot="session-location-trigger"]')
       const project = trigger?.querySelector<HTMLElement>('[data-slot="session-location-project"]')
       const worktree = trigger?.querySelector<HTMLElement>('[data-slot="session-location-worktree"]')
@@ -56,16 +59,25 @@ export function createSessionHeaderFit() {
         Math.max(0, children.length - 1) * Number.parseFloat(getComputedStyle(title).columnGap),
       )
 
-      // Everything outside these two sections is reserved for actions, separators and their spacing.
-      const available = location.getBoundingClientRect().width + title.getBoundingClientRect().width - titleWidth
-      setStore(
-        "collapse",
-        Math.min(expanded, limit) <= available
-          ? 0
-          : worktree && Math.min(expanded - worktreeWidth, limit) <= available
-            ? 1
-            : 2,
-      )
+      const actionsWidth = actions?.getBoundingClientRect().width ?? 0
+
+      if (!store.compact) expandedActions = actionsWidth
+
+      // Everything outside these two sections is reserved for actions, separators and their spacing. Candidates are
+      // fitted against expanded actions, so compact actions expand again once the title fits beside them.
+      const available =
+        location.getBoundingClientRect().width +
+        title.getBoundingClientRect().width -
+        titleWidth -
+        (store.compact ? Math.max(0, expandedActions - actionsWidth) : 0)
+
+      const fits = (width: number) => Math.min(width, limit) <= available
+
+      const collapse = fits(expanded) ? 0 : worktree && fits(expanded - worktreeWidth) ? 1 : 2
+      setStore({
+        collapse,
+        compact: !!actions && collapse === 2 && !fits(expanded - worktreeWidth - projectWidth),
+      })
     }
 
     const resize = new ResizeObserver(fit)
@@ -95,6 +107,10 @@ export function createSessionHeaderFit() {
     ref: (element: HTMLDivElement) => (root = element),
     get collapse() {
       return store.collapse
+    },
+    /** The title does not fit even with the location collapsed, so the actions show without their details. */
+    get compact() {
+      return store.compact
     },
   }
 }

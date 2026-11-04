@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createResource, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -8,7 +9,7 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@/runtime/array-move"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
-import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
+import { DraftTabItem, TabNavItem, type TabCloseActions } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
@@ -32,25 +33,26 @@ export const previousSessionCommand = { id: "session.previous", keybind: "alt+ar
 
 export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
 
-function SessionTabSlot(props: {
-  tab: SessionTab
-  id: string
-  index: number
-  active: boolean
-  orientation: "horizontal" | "vertical"
-  session: SessionInfo | undefined
-  preparing: boolean
-  unread: boolean
-  attention: boolean
-  loading: boolean
-  fallbackTitle?: string
-  fallbackDirectory?: string
-  onRename: (title: string) => Promise<void>
-  onDelete: () => void
-  onNavigate: (element: HTMLDivElement) => void
-  onClose: () => void
-  onIntent: (hovered: boolean) => void
-}) {
+function SessionTabSlot(
+  props: TabCloseActions & {
+    tab: SessionTab
+    id: string
+    index: number
+    active: boolean
+    orientation: "horizontal" | "vertical"
+    session: SessionInfo | undefined
+    preparing: boolean
+    unread: boolean
+    attention: boolean
+    loading: boolean
+    fallbackTitle?: string
+    fallbackDirectory?: string
+    onRename: (title: string) => Promise<void>
+    onDelete: () => void
+    onNavigate: (element: HTMLDivElement) => void
+    onIntent: (hovered: boolean) => void
+  },
+) {
   const sortable = useSortable({
     get id() {
       return props.id
@@ -94,6 +96,8 @@ function SessionTabSlot(props: {
         onDelete={props.onDelete}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        onCloseOthers={props.onCloseOthers}
+        onCloseAfter={props.onCloseAfter}
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
@@ -102,19 +106,20 @@ function SessionTabSlot(props: {
   )
 }
 
-function SessionTabEntry(props: {
-  tab: SessionTab
-  currentTab?: Tab
-  id: string
-  index: number
-  active: boolean
-  orientation: "horizontal" | "vertical"
-  serverCtx: ServerCtx | undefined
-  onVisibleChange: (visible: boolean) => void
-  onUnreadChange: (unread: boolean) => void
-  onNavigate: (element: HTMLDivElement) => void
-  onClose: () => void
-}) {
+function SessionTabEntry(
+  props: TabCloseActions & {
+    tab: SessionTab
+    currentTab?: Tab
+    id: string
+    index: number
+    active: boolean
+    orientation: "horizontal" | "vertical"
+    serverCtx: ServerCtx | undefined
+    onVisibleChange: (visible: boolean) => void
+    onUnreadChange: (unread: boolean) => void
+    onNavigate: (element: HTMLDivElement) => void
+  },
+) {
   const tabs = useTabs()
   const language = useLanguage()
   const dialog = useDialog()
@@ -228,6 +233,7 @@ function SessionTabEntry(props: {
       pending() ||
       !ctx ||
       props.active ||
+      ctx.data.session.missing(id) ||
       (!session() && !persisted()?.title) ||
       ctx.sdk.connection.status() !== "connected"
     )
@@ -323,22 +329,25 @@ function SessionTabEntry(props: {
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
+        onCloseOthers={props.onCloseOthers}
+        onCloseAfter={props.onCloseAfter}
         onIntent={hover}
       />
     </Show>
   )
 }
 
-function DraftTabSlot(props: {
-  tab: Extract<Tab, { type: "draft" }>
-  id: string
-  index: number
-  active: boolean
-  orientation: "horizontal" | "vertical"
-  title: string
-  onNavigate: (element: HTMLDivElement) => void
-  onClose: () => void
-}) {
+function DraftTabSlot(
+  props: TabCloseActions & {
+    tab: Extract<Tab, { type: "draft" }>
+    id: string
+    index: number
+    active: boolean
+    orientation: "horizontal" | "vertical"
+    title: string
+    onNavigate: (element: HTMLDivElement) => void
+  },
+) {
   const sortable = useSortable({
     get id() {
       return props.id
@@ -371,6 +380,8 @@ function DraftTabSlot(props: {
         title={props.title}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
+        onCloseOthers={props.onCloseOthers}
+        onCloseAfter={props.onCloseAfter}
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
@@ -385,6 +396,7 @@ export function TitlebarTabStrip(props: {
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
+  onCloseTabs: (tabs: Tab[], keep: Tab) => void
   onReorder: (keys: string[]) => void
 }) {
   const global = useGlobal()
@@ -392,6 +404,22 @@ export function TitlebarTabStrip(props: {
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
+  let scrollRef!: HTMLDivElement
+  // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
+  const [fade, setFade] = createStore({ top: 0, bottom: 0 })
+
+  const measureFade = () =>
+    setFade({
+      top: Math.min(16, Math.round(scrollRef.scrollTop)),
+      bottom: Math.min(
+        16,
+        Math.max(0, Math.round(scrollRef.scrollHeight - scrollRef.clientHeight - scrollRef.scrollTop)),
+      ),
+    })
+
+  onMount(() => {
+    if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
+  })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
   const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
@@ -482,11 +510,20 @@ export function TitlebarTabStrip(props: {
       classList={{ "min-h-0 overflow-hidden": vertical() }}
     >
       <div
+        ref={scrollRef}
         data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
         class="flex min-w-0 no-scrollbar [app-region:no-drag]"
         classList={{
           "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
           "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+        }}
+        style={
+          vertical()
+            ? { "--vertical-tabs-fade-top": `${fade.top}px`, "--vertical-tabs-fade-bottom": `${fade.bottom}px` }
+            : undefined
+        }
+        onScroll={() => {
+          if (vertical()) measureFade()
         }}
       >
         <DragDropProvider
@@ -498,7 +535,9 @@ export function TitlebarTabStrip(props: {
                   : [new PointerActivationConstraints.Distance({ value: 4 })],
               preventActivation: (event) =>
                 event.target instanceof Element &&
-                !!event.target.closest('[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]'),
+                !!event.target.closest(
+                  '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                ),
             }),
           ]}
           modifiers={[
@@ -553,6 +592,15 @@ export function TitlebarTabStrip(props: {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+
+                const others = () => visibleTabs().filter((item) => tabKey(item) !== id)
+
+                const after = () => visibleTabs().slice(visibleIndex() + 1)
+
+                const closeOthers = () => props.onCloseTabs(others(), tab)
+
+                const closeAfter = () => props.onCloseTabs(after(), tab)
+
                 const element = () => ref
                 tabRefs.set(id, element)
                 onCleanup(() => {
@@ -582,6 +630,8 @@ export function TitlebarTabStrip(props: {
                         props.onNavigate(tab, element)
                       }}
                       onClose={() => props.onClose(tab)}
+                      onCloseOthers={others().length ? closeOthers : undefined}
+                      onCloseAfter={after().length ? closeAfter : undefined}
                     />
                   )
                 }
@@ -599,6 +649,8 @@ export function TitlebarTabStrip(props: {
                       props.onNavigate(tab, element)
                     }}
                     onClose={() => props.onClose(tab)}
+                    onCloseOthers={others().length ? closeOthers : undefined}
+                    onCloseAfter={after().length ? closeAfter : undefined}
                   />
                 )
               }}

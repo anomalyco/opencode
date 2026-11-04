@@ -233,7 +233,7 @@ test("a project's auto-accept choice overrides the default in both directions", 
       onPermissionReply: (reply) => replies.push(reply.permissionID),
     },
   })
-  await seed(page, { tabs: [api.id, web.id] })
+  await seed(page, { tabs: [api.id, web.id], usedProjects: { local: ["proj_api", "proj_web"] } })
   const dock = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   const settings = page.getByTestId("settings-screen")
 

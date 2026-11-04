@@ -1,5 +1,4 @@
-import { protocol } from "electron"
-import type { BrowserWindow } from "electron"
+import electron, { type BrowserWindow } from "electron"
 
 export const rendererProtocol = "oc"
 
@@ -34,7 +33,7 @@ export function isRendererUrl(value?: string, html = false) {
 // Scheme privileges can only be granted before the app is ready, so the entry module calls this
 // before it loads anything else.
 export function registerRendererScheme() {
-  protocol.registerSchemesAsPrivileged([
+  electron.protocol.registerSchemesAsPrivileged([
     {
       scheme: rendererProtocol,
       privileges: {

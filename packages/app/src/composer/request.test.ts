@@ -4,6 +4,7 @@ import { Session } from "@opencode/schema/session"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import type { FileSelection } from "@/workspaces/files/model"
 import { buildPromptRequest } from "./request"
+import { readPromptPresentation } from "./comment-note"
 
 function inline(filename: string, mime: string, extra?: Partial<ImageAttachmentPart>) {
   return { type: "image" as const, id: `img_${filename}`, filename, mime, dataUrl: `data:${mime};base64,AAA`, ...extra }
@@ -156,6 +157,47 @@ describe("buildPromptRequest", () => {
     expect(result.comments).toEqual([note])
     // A note has no file of its own; only files it mentions are attached.
     expect(result.files).toEqual([{ uri: "file:///repo/src/button.css", mime: "text/plain", name: "button.css" }])
+  })
+
+  test("sends uncommented live and durable notes beside a global instruction and preserves their metadata", () => {
+    const notes = [
+      {
+        type: "note" as const,
+        origin: "example",
+        label: "Save",
+        title: "button#save",
+        subtitle: "Browser annotation",
+        icon: "select-element",
+        subject: 'the "Save" element',
+        href: "example:save",
+        live: { subject: 'the "Save" element (live reference @e42)', href: "example:save#e42" },
+        comment: "",
+      },
+      {
+        type: "note" as const,
+        origin: "another-plugin",
+        label: "Cancel",
+        icon: "select-element",
+        subject: 'the "Cancel" element',
+        comment: "",
+      },
+    ]
+
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "Align these targets", start: 0, end: 19 }],
+      context: notes.map((note, index) => ({ ...note, key: `note:${index}`, commentID: `${index}`, comment: "  " })),
+      images: [],
+      text: "Align these targets",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.text).toBe(
+      'Align these targets\nThe user referenced the "Save" element (live reference @e42).\nThe user referenced the "Cancel" element.',
+    )
+    expect(result.displayText).toBe("Align these targets")
+    expect(result.comments).toEqual(notes)
+    expect(readPromptPresentation({ displayText: result.displayText, comments: result.comments })?.comments).toEqual(notes)
+    expect(result.files).toEqual([])
   })
 
   test("sends quotes as prefixed text naming their source, with or without a comment, and attaches only files the comment mentions", () => {

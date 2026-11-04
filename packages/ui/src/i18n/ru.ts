@@ -76,10 +76,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Подпишитесь на OpenCode Go за $10/месяц для надёжного доступа к лучшим моделям с открытым исходным кодом.",
   "dialog.usageExceeded.freeTier.actionLabel": "Подписаться",
-  "dialog.usageExceeded.accountRateLimit.title": "Достигнут лимит Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Достигнут лимит использования. Чтобы продолжить использовать эту модель сейчас, включите использование из доступного баланса",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Открыть настройки",
 
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",

@@ -120,6 +120,7 @@ export class VoiceTools {
 
       const seen = new Set<string>()
       const tabs = new Set(this.screen.tabs())
+
       // Best match first; among equal matches, top-level sessions with an open tab, then the most recent.
       const rank = (session: SessionInfo) =>
         (search.score(session) ?? 0) * 4 + (session.parentID ? 0 : 2) + (tabs.has(session.id) ? 1 : 0)
@@ -300,7 +301,7 @@ export class VoiceTools {
 
     if (call.name === "read_session" || call.name === "wait_for_session") {
       if (call.name === "wait_for_session") {
-        await api.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
+        await api.experimental.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
       }
 
       const [session, messages] = await Promise.all([
