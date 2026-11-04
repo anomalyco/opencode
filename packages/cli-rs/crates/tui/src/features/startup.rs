@@ -1,6 +1,6 @@
 //! Startup flows (E.1, rows T02, T14b and T27): `--continue`, `--session` with and without `--fork`,
 //! `--prompt`, a new session ID taken from `--session`, `--agent` and `--model`, and `OPENCODE_ROUTE`
-//! (`app.tsx:664-726`, `context/args.tsx`, `context/route.tsx:48-69`).
+//! (`app.tsx:664-726`, `context/args.tsx`, `context/route.tsx:48-69`). C.13 adds where `--prompt` goes.
 //!
 //! `app::mount` mounts the initial route, then calls [`run`]. The root command resolves `--session`
 //! first: an ID the server knows opens that session; any other becomes [`Startup::take_new_session_id`],
@@ -8,6 +8,8 @@
 
 use std::cell::RefCell;
 use std::time::Duration;
+
+use indexmap::IndexMap;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
@@ -32,10 +34,14 @@ pub struct Args {
     pub fork: bool,
     pub agent: Option<String>,
     pub model: Option<String>,
-    /// The server runs on this machine, so sessions get the terminal's environment (G13).
+    /// The server runs on this machine (TS `server.local`).
     pub local: bool,
     /// The server is the background service (TS `client.restart`), which the reconnecting overlay names.
     pub managed: bool,
+    /// `--auto`: permissions that are not denied are accepted (`context/permission.tsx`).
+    pub auto: bool,
+    /// The terminal's variables, uploaded to each session on a local server (TS `environment`, G13).
+    pub environment: Option<IndexMap<String, String>>,
 }
 
 impl Default for Args {
@@ -50,6 +56,8 @@ impl Default for Args {
             model: None,
             local: false,
             managed: false,
+            auto: false,
+            environment: None,
         }
     }
 }
@@ -58,13 +66,62 @@ impl Default for Args {
 pub struct Startup {
     pub args: Args,
     new_session_id: RefCell<Option<SessionID>>,
+    prompt: RefCell<Option<Target>>,
+}
+
+/// Which prompt receives `--prompt`: TS hands it to the first home, or through `route.prompt` to the
+/// session that startup opens.
+#[derive(Clone, Debug, PartialEq)]
+enum Target {
+    Home,
+    Session(SessionID),
+    /// `--continue` or `--fork` has not opened its session yet.
+    Pending,
 }
 
 impl Startup {
     pub fn new(args: Args) -> Self {
         Self {
             new_session_id: RefCell::new(args.new_session_id.clone()),
+            prompt: RefCell::new(None),
             args,
+        }
+    }
+
+    /// Picks the prompt `--prompt` goes to, before the first route mounts.
+    pub fn aim(&self, route: &Route, continue_: bool) {
+        if self.args.prompt.is_none() {
+            return;
+        }
+        let forked = self.args.fork && self.args.session.is_some();
+        *self.prompt.borrow_mut() = match route {
+            _ if continue_ || forked => Some(Target::Pending),
+            Route::Home => Some(Target::Home),
+            Route::Session { id } => Some(Target::Session(id.clone())),
+            Route::Plugin { .. } => None,
+        };
+    }
+
+    /// The startup prompt, once, for the prompt of `session` (`None` on home).
+    pub fn take_prompt(&self, session: Option<&SessionID>) -> Option<String> {
+        let mut target = self.prompt.borrow_mut();
+        let matches = match (target.as_ref()?, session) {
+            (Target::Home, None) => true,
+            (Target::Session(id), Some(session)) => id == session,
+            _ => false,
+        };
+        if !matches {
+            return None;
+        }
+        *target = None;
+        self.args.prompt.clone()
+    }
+
+    /// `--continue` or `--fork` opens `id`, so the pending startup prompt goes there.
+    fn arrive(&self, id: &SessionID) {
+        let mut target = self.prompt.borrow_mut();
+        if *target == Some(Target::Pending) {
+            *target = Some(Target::Session(id.clone()));
         }
     }
 
@@ -160,6 +217,7 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
                     }
                     let id = session.id.clone();
                     tui.data.remember(session);
+                    tui.startup.arrive(&id);
                     tui.navigate(Route::Session { id });
                 }
                 Err(error) => tui.toasts.error(error.to_string()),
@@ -190,6 +248,7 @@ fn fork(tui: &Tui, id: SessionID) {
                 Ok(session) => {
                     let id = session.id.clone();
                     tui.data.remember(session);
+                    tui.startup.arrive(&id);
                     tui.navigate(Route::Session { id });
                 }
                 Err(error) => tui.toasts.error(error.to_string()),
@@ -217,6 +276,53 @@ mod tests {
         assert_eq!(parse_model("gpt-5"), None);
         assert_eq!(parse_model("/gpt-5"), None);
         assert_eq!(parse_model("openai/"), None);
+    }
+
+    #[test]
+    fn the_startup_prompt_goes_to_one_prompt_once() {
+        let id = |value: &str| SessionID(value.into());
+        let startup = |args: Args, route: Route, continue_: bool| {
+            let startup = Startup::new(Args {
+                prompt: Some("hello".into()),
+                ..args
+            });
+            startup.aim(&route, continue_);
+            startup
+        };
+        let home = startup(Args::default(), Route::Home, false);
+        assert_eq!(home.take_prompt(Some(&id("ses_a"))), None);
+        assert_eq!(home.take_prompt(None).as_deref(), Some("hello"));
+        assert_eq!(home.take_prompt(None), None);
+
+        let session = startup(Args::default(), Route::Session { id: id("ses_b") }, false);
+        assert_eq!(session.take_prompt(None), None);
+        assert_eq!(session.take_prompt(Some(&id("ses_a"))), None);
+        assert_eq!(
+            session.take_prompt(Some(&id("ses_b"))).as_deref(),
+            Some("hello")
+        );
+
+        // `--continue` and `--fork` wait for the session they open; home does not take it meanwhile.
+        let forked = Args {
+            fork: true,
+            session: Some(id("ses_b")),
+            ..Args::default()
+        };
+        for pending in [
+            startup(Args::default(), Route::Home, true),
+            startup(forked, Route::Home, false),
+        ] {
+            assert_eq!(pending.take_prompt(None), None);
+            pending.arrive(&id("ses_c"));
+            assert_eq!(
+                pending.take_prompt(Some(&id("ses_c"))).as_deref(),
+                Some("hello")
+            );
+        }
+
+        let none = Startup::new(Args::default());
+        none.aim(&Route::Home, false);
+        assert_eq!(none.take_prompt(None), None);
     }
 
     #[test]

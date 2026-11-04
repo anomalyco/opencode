@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
-use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigMode};
+use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, ThemeMode as ConfigMode};
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
@@ -262,7 +262,11 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
 }
 
 /// [`mount`] with the startup arguments.
-pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
+pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
+    // `--auto` wins over `session.permissions` (`context/permission.tsx`).
+    if args.auto {
+        deps.config.permissions = Permissions::Autoaccept;
+    }
     let runtime = app.runtime();
     let _guard = runtime.enter();
     let data = Data::with_runtime(
@@ -389,6 +393,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
     crate::plugins::host::install(&tui);
+    tui.startup.aim(&deps.route, deps.continue_);
     tui.navigate(deps.route);
     crate::features::startup::run(&tui, deps.continue_);
     tui
