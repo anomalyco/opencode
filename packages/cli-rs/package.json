@@ -21,6 +21,7 @@
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
+    "effect": "catalog:",
     "solid-js": "catalog:"
   }
 }
