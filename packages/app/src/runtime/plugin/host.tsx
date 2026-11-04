@@ -156,6 +156,8 @@ type HostInput = {
   plugin?: (id: string) => PluginInput | undefined
   /** How many times an Ipc became available. Reactive. */
   generation?: (token: Ipc) => number
+  /** Main did not answer the window's subscribe to an Ipc. Reactive. */
+  ipcFailed?: (token: Ipc) => boolean
 }
 
 export function PluginHostProvider(props: ParentProps<HostInput>) {
@@ -573,7 +575,12 @@ function createHost(input: HostInput) {
 
       const client = input.ipc(token)
 
-      if (!client) return absent(token.id, true)
+      if (!client) {
+        const reason = absent(token.id, true)
+
+        // A provider that may still start, but whose subscribe failed, is not coming until main provides it again.
+        return reason === pending && input.ipcFailed?.(token) ? inactive.failed : reason
+      }
 
       const generation = input.generation?.(token) ?? 1
       const cached = clients.get(token.id)

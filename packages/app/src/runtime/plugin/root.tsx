@@ -95,6 +95,7 @@ export function PluginRoot(props: ParentProps) {
           ipc={bridge ? (token) => ipcs.client(token) : undefined}
           plugin={(id) => plugins()?.find((plugin) => plugin.definition.id === id)}
           generation={ipcs.generation}
+          ipcFailed={ipcs.failed}
         >
           <PluginStyles />
           <PluginThemes loaded={() => plugins() !== undefined} />
