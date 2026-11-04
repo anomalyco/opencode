@@ -305,6 +305,41 @@ describe("SubagentTool", () => {
     ),
   )
 
+  completionIt.live("returns a foreground child inline without reporting to the parent", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Foreground recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-foreground-completion",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "foreground review", prompt: "review" },
+            },
+          })
+          expect(result).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+
+          // The blocked foreground caller receives the result inline, so settlement must stay quiet.
+          yield* sessions.wait(parent.id)
+          expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+          expect(yield* (yield* Job.Service).pendingBackground).toEqual([])
+        }),
+      ),
+    ),
+  )
+
   productionIt.live("registers globally while resolving agents from the caller location", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
