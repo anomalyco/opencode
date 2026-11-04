@@ -282,14 +282,18 @@ const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   }
 }
 
+/**
+ * A provider for one credential the caller already selected, or none. It never looks up the active credential
+ * itself: it reads and refreshes only the selected row, and a provider made without one stays anonymous.
+ */
 export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly config: typeof ConfigMCP.Remote.Type
-  readonly integrationID: Integration.ID
+  readonly credential: Credential.Info | undefined
 }) {
   const credentials = yield* Credential.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
   const fetch = yield* sender
-  const found = (yield* credentials.list(input.integrationID)).at(-1)
+  const found = input.credential
   if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore(), fetch })
   const id = found.id
   const methodID = found.value.methodID

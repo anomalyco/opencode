@@ -268,10 +268,20 @@ export const layer = (options?: Options) =>
         return { entry, client: entry.connection.client }
       })
 
-      const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
+      // The credential one start connects with: the integration's latest, or none. Read it once per start and
+      // pass the result along, so anything keyed on it and the provider it builds agree on the account.
+      const selectCredential = (entry: ServerEntry) =>
+        entry.config.type === "remote" && entry.integrationID
+          ? credentials.list(entry.integrationID).pipe(Effect.map((rows) => rows.at(-1)))
+          : Effect.succeed(undefined)
+
+      const connectProvider = Effect.fnUntraced(function* (
+        entry: ServerEntry,
+        credential: Credential.Info | undefined,
+      ) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
+        return yield* McpOAuth.connectProvider({ config: entry.config, credential }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
@@ -362,16 +372,20 @@ export const layer = (options?: Options) =>
         const share = (input: McpConnection.Input) =>
           pool.connection({
             ...input,
-            key: Effect.gen(function* () {
+            select: Effect.gen(function* () {
               if (input.config.type === "remote") {
-                const credential = entry.integrationID
-                  ? (yield* credentials.list(entry.integrationID)).at(-1)?.id
-                  : undefined
-                return McpPool.key({ ...input, credential })
+                const credential = yield* selectCredential(entry)
+                return {
+                  key: McpPool.key({ ...input, credential: credential?.id }),
+                  authProvider: connectProvider(entry, credential),
+                }
               }
               // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
               const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
-              return McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) })
+              return {
+                key: McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) }),
+                authProvider: input.authProvider,
+              }
             }),
           })
         const entry: ServerEntry = {
@@ -385,7 +399,9 @@ export const layer = (options?: Options) =>
             config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
-            authProvider: Effect.suspend(() => connectProvider(entry)),
+            authProvider: Effect.suspend(() =>
+              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(entry, credential))),
+            ),
             elicitation,
             environment,
             fetch,

@@ -4,7 +4,9 @@ import type { OAuthClientProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
@@ -12,8 +14,17 @@ import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 
 export interface Input extends McpConnection.Input {
-  /** What tells this connection apart from every other one to the same server; see `key`. Read on every start. */
-  readonly key: Effect.Effect<string>
+  /**
+   * Run once per start: what tells this connection apart from every other one to the same server (see `key`),
+   * and the OAuth provider to open it with. Both come from one credential selection, so a slot's key and the
+   * account it connects as can't disagree.
+   */
+  readonly select: Effect.Effect<Selection>
+}
+
+export interface Selection {
+  readonly key: string
+  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
 }
 
 export interface Interface {
@@ -101,6 +112,7 @@ export const layer = Layer.effect(
     const run = yield* FiberSet.makeRuntime<never, void, never>()
     const driver = Environment.makeLocalDriver(yield* ChildProcessSpawner)
     const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
+    const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
@@ -135,6 +147,7 @@ export const layer = Layer.effect(
             complete: () => Effect.void,
           },
           environment: host,
+          fetch,
           scope,
           lock: (effect) => slot.lock.withPermit(effect),
           callbacks: run,
@@ -261,19 +274,19 @@ export const layer = Layer.effect(
       })
 
       // Resolves false when the key can't be shared, leaving the start to the Location's own connection.
-      const join = (key: string) =>
+      const join = (selected: Selection) =>
         Effect.gen(function* () {
           yield* input.events.connecting
           const claim = yield* Scope.fork(input.scope)
           const holder: Holder = {
-            authProvider: input.authProvider,
+            authProvider: selected.authProvider,
             elicitation: elicit,
             closed: (reason) => current(holder, () => input.events.closed(reason)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
           state.claim = claim
           state.holder = holder
-          const outcome = yield* acquire(key, input, holder).pipe(
+          const outcome = yield* acquire(selected.key, input, holder).pipe(
             Scope.provide(claim),
             Effect.onInterrupt(() => clear),
           )
@@ -319,8 +332,8 @@ export const layer = Layer.effect(
               },
             )
           }
-          const key = yield* input.key
-          if (!unpoolable.has(key) && (yield* join(key))) return
+          const selected = yield* input.select
+          if (!unpoolable.has(selected.key) && (yield* join(selected))) return
           yield* own.start
         }),
         stop: Effect.gen(function* () {
@@ -342,4 +355,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [CrossSpawnSpawner.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [CrossSpawnSpawner.node, httpFetch] })

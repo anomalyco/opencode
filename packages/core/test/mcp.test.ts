@@ -68,6 +68,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Image } from "@opencode/core/image"
 import { Global } from "@opencode/util/global"
+import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
@@ -358,6 +359,9 @@ function resourceMcpLayer(
     published?: string[]
     pool?: Layer.Layer<McpPool.Service>
     directory?: string
+    /** The configured server's name; "resources" unless given. */
+    name?: string
+    credentials?: Partial<Credential.Interface>
   },
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
@@ -392,7 +396,7 @@ function resourceMcpLayer(
                   policies: overrides?.policies ?? [],
                   mcp: new ConfigMCP.Info({
                     servers: {
-                      resources:
+                      [overrides?.name ?? "resources"]:
                         typeof server === "string"
                           ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
                           : server,
@@ -441,7 +445,7 @@ function resourceMcpLayer(
             cancel: unusedIntegration,
           },
         }),
-        Layer.mock(Credential.Service, { list: () => Effect.succeed([]) }),
+        Layer.mock(Credential.Service, { list: () => Effect.succeed([]), ...overrides?.credentials }),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -3201,6 +3205,8 @@ describe("MCP pool", () => {
       onFormCreated?: (form: Form.Info) => Effect.Effect<void>
       published?: string[]
       environment?: Layer.Layer<Environment.Service>
+      name?: string
+      credentials?: Partial<Credential.Interface>
     } = {},
   ) =>
     Effect.gen(function* () {
@@ -3212,6 +3218,8 @@ describe("MCP pool", () => {
           directory,
           published: overrides.published,
           environment: overrides.environment,
+          name: overrides.name,
+          credentials: overrides.credentials,
         }),
         scope,
       )
@@ -3407,6 +3415,60 @@ describe("MCP pool", () => {
     }),
   )
 
+  live("connects with the credential its key was made from, even when a sign-in lands mid-start", () =>
+    Effect.gen(function* () {
+      // The authorization header of every tool call, in order.
+      const calls: Array<string | null> = []
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: async (request) => {
+          if (request.method !== "POST") return undefined
+          const body: unknown = await request.clone().json()
+          if (isRecord(body) && body.method === "tools/call") calls.push(request.headers.get("authorization"))
+          return undefined
+        },
+      })
+      const pool = yield* makePool
+      // "resources" signs in right after its first read of the credential store; "guest" never signs in.
+      let signed: Integration.ID | undefined
+      let reads = 0
+      const row = (integrationID: Integration.ID) =>
+        new Credential.Info({
+          id: Credential.ID.make("cred_signed"),
+          integrationID,
+          label: "signed",
+          value: {
+            type: "oauth",
+            methodID: Integration.MethodID.make("signed"),
+            access: "signed-in",
+            refresh: "signed-refresh",
+            expires: Date.now() + 3_600_000,
+            metadata: { serverUrl: server.url, tokenType: "Bearer" },
+          },
+        })
+      const credentials: Partial<Credential.Interface> = {
+        list: (integrationID) =>
+          Effect.sync(() => {
+            signed ??= integrationID
+            if (integrationID !== signed) return []
+            reads += 1
+            return reads > 1 ? [row(integrationID)] : []
+          }),
+        get: () => Effect.sync(() => (signed ? row(signed) : undefined)),
+      }
+      const config = pooled(server.url, { oauth: undefined })
+      const owner = yield* open(config, pool, directories[0], { credentials })
+      const guest = yield* open(config, pool, directories[1], { credentials, name: "guest" })
+      yield* guest.mcp.callTool({ server: "guest", name: "echo" })
+      // Reconnecting picks up the sign-in under a key of its own.
+      yield* owner.mcp.connect("resources")
+      yield* owner.mcp.callTool({ server: "resources", name: "echo" })
+      yield* guest.mcp.callTool({ server: "guest", name: "echo" })
+      expect(calls).toEqual([null, "Bearer signed-in", null])
+    }),
+  )
+
   live("routes an elicitation to the Location whose call caused it", () =>
     Effect.gen(function* () {
       const server = yield* resourceServer({ modern: true, resources: false, urlElicitation: true })
@@ -3470,6 +3532,7 @@ describe("MCP pool", () => {
               complete: () => Effect.void,
             },
             environment,
+            fetch,
             scope,
             lock: Semaphore.makeUnsafe(1).withPermit,
             callbacks: run,
@@ -3482,7 +3545,7 @@ describe("MCP pool", () => {
               closed: () => Effect.void,
               changed: () => Effect.void,
             },
-            key: Effect.succeed(McpPool.key({ config })),
+            select: Effect.succeed({ key: McpPool.key({ config }), authProvider: Effect.undefined }),
           })
           yield* connection.start
           return { connection, forms, asked }
