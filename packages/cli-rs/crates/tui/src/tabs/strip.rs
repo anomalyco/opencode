@@ -180,7 +180,16 @@ pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
         .collect()
 }
 
-/// Draws `characters` from `x` with one color per character, and returns the cells used.
+/// Draws a pulse row from `x`: half blocks for an edge, else a blank on the default foreground, as the TS
+/// renderable sets its cells.
+pub(super) fn paint_pulse(painter: &mut Painter<'_>, x: i32, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
+    for (column, (glyph, fg, bg)) in cells.into_iter().flatten().enumerate() {
+        let (glyph, fg) = glyph.map_or((' ', Color::DEFAULT_FOREGROUND), |glyph| (glyph, fg));
+        painter.cell(x + column as i32, y, glyph, Style::new().fg(fg).bg(bg));
+    }
+}
+
+/// Draws `characters` from `x` with one color per character.
 pub(super) fn draw_chars(
     painter: &mut Painter<'_>,
     x: i32,
@@ -341,11 +350,7 @@ impl Component for Strip {
                 flash_tail: None,
             };
             let sweep = pulse.level(tab_width);
-            if let Some(cells) = pulse::paint(pulse, &colors, None, tab_width) {
-                for (column, (_, _, bg)) in cells.into_iter().enumerate() {
-                    painter.fill(left + column as i32, 0, 1, 1, bg);
-                }
-            }
+            paint_pulse(painter, left, 0, pulse::paint(pulse, &colors, None, tab_width));
 
             let foreground = if hovered {
                 theme.text.base
