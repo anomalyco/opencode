@@ -7,8 +7,8 @@ use super::client::{block_on, connect, get_located, locale_compare};
 
 pub fn run(context: &Context) -> anyhow::Result<()> {
     let response = block_on(async {
-        let (_, client) = connect(context).await?;
-        get_located(&client, "/api/model", &[400, 401, 404, 503]).await
+        let server = connect(context).await?;
+        get_located(&server.client, "/api/model", &[400, 401, 404, 503]).await
     })??;
     let mut models: Vec<String> = data(&response)
         .iter()
