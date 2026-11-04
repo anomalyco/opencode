@@ -380,6 +380,7 @@ impl Mcp {
         }
         let props = error_details::Props {
             title: format!("MCP server: {}", server.name),
+            source: None,
             error: status_error(&server.status)
                 .unwrap_or("Unknown MCP connection error")
                 .to_owned(),
