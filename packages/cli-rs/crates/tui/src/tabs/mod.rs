@@ -227,15 +227,8 @@ pub fn install(tui: &Rc<Tui>) {
             changed(&tui);
         }
     });
-    // Keyboard input counts as focus, as `useKeyboard(onFocus)` does.
-    let weak = tui.weak();
-    tui.app.on_key(move |_, _| {
-        if let Some(tui) = weak.upgrade()
-            && tui.tabs.focused.replace(Some(true)) != Some(true)
-        {
-            acknowledge(&tui);
-        }
-    });
+    // Terminal focus reports set the focus. TS also counts `useKeyboard`, but the keymap consumes the keys
+    // before it in practice (`E.12/tab-strip` posts no `session.view` after key presses).
     let weak = tui.weak();
     tui.app.on_terminal_focus(move |_, focused| {
         if let Some(tui) = weak.upgrade() {

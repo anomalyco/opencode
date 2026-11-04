@@ -81,6 +81,8 @@ async function record(name: string, file: string) {
     if ("type" in step) await setup.mockInput.typeText(step.type)
     if ("click" in step) await setup.mockMouse.click(...step.click)
     if ("event" in step) setup.events.emit(step.event as never)
+    if ("drag" in step) await setup.mockMouse.drag(...step.drag[0], ...step.drag[1])
+    if ("click" in step) await setup.mockMouse.click(...step.click)
     if (!("checkpoint" in step)) {
       steps.push(step)
       continue
