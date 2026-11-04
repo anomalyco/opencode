@@ -25,8 +25,15 @@ function replay(events: VoiceDelegationEvent[], start = createVoiceDelegationSta
   )
 }
 
+type LiveResponseEvent = {
+  type: string
+  response_id?: string
+  response?: { id: string }
+  item?: { type: string; call_id: string; name: string; arguments: string }
+}
+
 // Response events go through the real decoder, so they carry only the fields Live sends.
-function live(delegationID: string | null, nested: object) {
+function live(delegationID: string | null, nested: LiveResponseEvent) {
   const event = decodeEvent(JSON.stringify({ type: "response.event", delegation_id: delegationID, event: nested }))
   const next = event && responseEvent(event)
 
@@ -77,9 +84,7 @@ const timeout = (state: VoiceDelegationState, id: string, channelOpen: boolean):
 const finishes = (effects: VoiceDelegationEffect[]) => effects.filter((effect) => effect.type === "finish")
 
 const rounds = (effects: VoiceDelegationEffect[]) =>
-  effects
-    .filter((effect) => effect.type === "round")
-    .map((effect) => [effect.id, effect.calls.map((call) => call.call_id)])
+  effects.flatMap((effect) => (effect.type === "round" ? [[effect.id, effect.calls.map((call) => call.call_id)]] : []))
 
 test("an untagged response reaches the open delegation while another runs tools", () => {
   // del_1 runs send_message when del_2 starts; Live then omits delegation_id on del_2's events.
