@@ -101,7 +101,12 @@ impl Setup {
     fn pending_ids(&self) -> Vec<String> {
         self.pending(SESSION)
             .iter()
-            .map(|item| serde_json::to_value(item).unwrap()["id"].as_str().unwrap().to_owned())
+            .map(|item| {
+                serde_json::to_value(item).unwrap()["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
             .collect()
     }
 
@@ -119,7 +124,10 @@ impl Setup {
         emit(&self.data, value);
     }
 
-    fn compact(&self, model: bool) -> Shared<BoxFuture<'static, Result<SessionInboxCompaction, Error>>> {
+    fn compact(
+        &self,
+        model: bool,
+    ) -> Shared<BoxFuture<'static, Result<SessionInboxCompaction, Error>>> {
         let model = model.then(|| ModelRef {
             provider_id: ProviderID("demo".into()),
             id: "model".into(),
@@ -164,7 +172,9 @@ async fn admits_compaction_before_model_setup_and_serializes_the_following_promp
     parts.model.resolve(true);
     wait(|| parts.calls.len() == 2).await;
     assert_eq!(parts.calls.get(), ["model", "compact"]);
-    parts.response.resolve(ok(json!({ "data": item(&proposed, 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item(&proposed, 10) })));
     compact.await.unwrap();
     prompt.await.unwrap();
     assert_eq!(parts.calls.get(), ["model", "compact", "prompt"]);
@@ -179,7 +189,9 @@ async fn coalesces_duplicate_gestures_until_the_admission_request_settles() {
     assert!(Shared::ptr_eq(&first, &fixture.compact(false)));
     assert_eq!(fixture.pending(SESSION).len(), 1);
     wait(|| parts.calls.len() == 1).await;
-    parts.response.resolve(ok(json!({ "data": item("msg_canonical", 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item("msg_canonical", 10) })));
     first.clone().await.unwrap();
     assert_eq!(parts.calls.get(), ["compact"]);
     let next = fixture.compact(false);
@@ -199,12 +211,24 @@ async fn substitutes_the_canonical_response_id_and_reconciles_its_later_echo() {
     let proposed = fixture.pending_ids()[0].clone();
     fixture.data.pending_sync(&session()).await.unwrap();
     assert_eq!(fixture.pending_ids(), [proposed]);
-    parts.response.resolve(ok(json!({ "data": item("msg_canonical", 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item("msg_canonical", 10) })));
     request.await.unwrap();
-    assert_eq!(fixture.pending(SESSION), info(json!([item("msg_canonical", 10)])));
+    assert_eq!(
+        fixture.pending(SESSION),
+        info(json!([item("msg_canonical", 10)]))
+    );
     fixture.enqueue("msg_canonical", 20);
-    assert_eq!(fixture.pending(SESSION), info(json!([item("msg_canonical", 20)])));
-    assert!(fixture.data.read(|state| state.inputs(&session()).is_empty()));
+    assert_eq!(
+        fixture.pending(SESSION),
+        info(json!([item("msg_canonical", 20)]))
+    );
+    assert!(
+        fixture
+            .data
+            .read(|state| state.inputs(&session()).is_empty())
+    );
 }
 
 async fn adopts_echo(kind: &str) {
@@ -238,8 +262,14 @@ async fn does_not_resurrect(kind: &str) {
     let request = fixture.compact(false);
     fixture.enqueue("msg_canonical", 10);
     let data = match kind {
-        "started" => ("session.compaction.started", json!({ "inputID": "msg_canonical", "reason": "manual" })),
-        "cancelled" => ("session.inbox.cancelled", json!({ "inboxID": "msg_canonical" })),
+        "started" => (
+            "session.compaction.started",
+            json!({ "inputID": "msg_canonical", "reason": "manual" }),
+        ),
+        "cancelled" => (
+            "session.inbox.cancelled",
+            json!({ "inboxID": "msg_canonical" }),
+        ),
         _ => (
             "session.compaction.failed",
             json!({ "inputID": "msg_canonical", "reason": "manual", "error": { "type": "aborted", "message": "Cancelled" } }),
@@ -249,7 +279,9 @@ async fn does_not_resurrect(kind: &str) {
     payload["sessionID"] = SESSION.into();
     emit(&fixture.data, event(data.0, payload));
     assert!(fixture.pending(SESSION).is_empty());
-    parts.response.resolve(ok(json!({ "data": item("msg_canonical", 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item("msg_canonical", 10) })));
     request.await.unwrap();
     assert!(fixture.pending(SESSION).is_empty());
     if kind != "started" {
@@ -349,7 +381,9 @@ async fn preserves_acknowledged(kind: &str) {
         fixture.enqueue(&id, 10);
     }
     assert_eq!(fixture.pending(SESSION), info(json!([item(&id, 10)])));
-    parts.response.resolve(Reply::Text(500, "Lost response".into()));
+    parts
+        .response
+        .resolve(Reply::Text(500, "Lost response".into()));
     assert!(request.await.is_err());
     assert_eq!(fixture.pending(SESSION), info(json!([item(&id, 10)])));
 }
@@ -385,7 +419,10 @@ async fn uses_a_fresh_control_id_when_the_known_pending_compaction_starts_during
             Some(
                 async move {
                     if id == "msg_existing" {
-                        return Reply::Json(409, json!({ "message": "Control ID already consumed" }));
+                        return Reply::Json(
+                            409,
+                            json!({ "message": "Control ID already consumed" }),
+                        );
                     }
                     ok(json!({ "data": item(&id, 10) }))
                 }
@@ -395,7 +432,10 @@ async fn uses_a_fresh_control_id_when_the_known_pending_compaction_starts_during
     );
     fixture.enqueue("msg_existing", 10);
     let request = fixture.compact(true);
-    assert_eq!(fixture.pending(SESSION), info(json!([item("msg_existing", 10)])));
+    assert_eq!(
+        fixture.pending(SESSION),
+        info(json!([item("msg_existing", 10)]))
+    );
     wait(|| parts.calls.get().contains(&"model".to_owned())).await;
     emit(
         &fixture.data,
@@ -429,9 +469,15 @@ async fn preserves_fetched_durable(kind: &str) {
         })),
     );
     let request = if kind == "user" {
-        fixture.prompt("Follow up").map(|result| result.map(|_| ())).boxed()
+        fixture
+            .prompt("Follow up")
+            .map(|result| result.map(|_| ()))
+            .boxed()
     } else {
-        fixture.compact(false).map(|result| result.map(|_| ())).boxed()
+        fixture
+            .compact(false)
+            .map(|result| result.map(|_| ()))
+            .boxed()
     };
     let id = match kind {
         "canonical compaction" => "msg_canonical".to_owned(),
@@ -445,7 +491,9 @@ async fn preserves_fetched_durable(kind: &str) {
     parts.pending.push(durable.clone());
     fixture.data.pending_sync(&session()).await.unwrap();
     assert_eq!(fixture.pending(SESSION), info(json!([durable])));
-    parts.response.resolve(Reply::Text(500, "Lost response".into()));
+    parts
+        .response
+        .resolve(Reply::Text(500, "Lost response".into()));
     assert!(request.await.is_err());
     assert_eq!(fixture.pending(SESSION), info(json!([durable])));
     if kind == "user" {
@@ -483,13 +531,21 @@ async fn settles_admissions_when_the_data_owner_is_disposed_during_a_gate() {
             text: "First".into(),
             ..Default::default()
         },
-        gate: Some(async move { Ok(wait.await) }.boxed()),
+        gate: Some(
+            async move {
+                wait.await;
+                Ok(())
+            }
+            .boxed(),
+        ),
         prepare: None,
     });
     let compact = fixture.compact(false);
     fixture.data.dispose();
     gate.resolve(());
-    parts.response.resolve(ok(json!({ "data": item("msg_canonical", 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item("msg_canonical", 10) })));
     first.await.unwrap();
     compact.await.unwrap();
 }
@@ -615,7 +671,9 @@ async fn failed_preparation(kind: &str) {
     let expected: &[&str] = if kind == "prepare" { &["first"] } else { &[] };
     assert_eq!(prepared.get(), expected);
     parts.model.resolve(true);
-    parts.response.resolve(ok(json!({ "data": item("msg_canonical", 10) })));
+    parts
+        .response
+        .resolve(ok(json!({ "data": item("msg_canonical", 10) })));
     compact.await.unwrap();
     following.await.unwrap();
     assert_eq!(parts.calls.get(), ["model", "compact", "model", "prompt"]);
@@ -633,7 +691,7 @@ async fn a_preceding_prompts_failed_gate_does_not_block_compaction_or_following_
 
 #[tokio::test]
 async fn a_preceding_prompts_failed_prepare_does_not_block_compaction_or_following_model_preparation()
-{
+ {
     failed_preparation("prepare").await;
 }
 
@@ -667,7 +725,13 @@ async fn creation_failure_rejects_gated_prompt_compaction_and_following_preparat
             text: "First".into(),
             ..Default::default()
         },
-        gate: Some(async move { Ok(wait.await) }.boxed()),
+        gate: Some(
+            async move {
+                wait.await;
+                Ok(())
+            }
+            .boxed(),
+        ),
         prepare: None,
     });
     let compact = fixture.compact(true);
@@ -691,7 +755,11 @@ async fn creation_failure_rejects_gated_prompt_compaction_and_following_preparat
     assert!(created.is_err() && first.is_err() && compact.is_err() && following.is_err());
     assert!(parts.calls.get().is_empty());
     assert!(prepared.get().is_empty());
-    assert!(fixture.data.read(|state| state.session(&session()).is_none()));
+    assert!(
+        fixture
+            .data
+            .read(|state| state.session(&session()).is_none())
+    );
     assert!(fixture.pending(SESSION).is_empty());
     gate.resolve(());
 }
