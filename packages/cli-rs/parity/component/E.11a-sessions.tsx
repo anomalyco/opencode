@@ -56,7 +56,9 @@ const now = Date.now()
 const recent = [
   session("ses_r1", "Review the plan", now - 5 * 60_000),
   session("ses_r2", "Fix the parser", now - 3 * 3_600_000),
-  session("ses_r3", "Explore the worktree", now - 2 * 86_400_000, { location: { directory: "/tmp/opencode/app-feature" } }),
+  session("ses_r3", "Explore the worktree", now - 2 * 86_400_000, {
+    location: { directory: "/tmp/opencode/app-feature" },
+  }),
 ]
 const recentOther = session("ses_r4", "Other project", now - 40 * 86_400_000, {
   projectID: "proj_other",
