@@ -1964,3 +1964,80 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   await expect(inbox.getByRole("status")).toHaveText("New live question has a question.")
   await expect(inbox.getByRole("status")).toHaveCount(1)
 })
+
+test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "horizontal")
+  await page.goto(sessionHref(a.id))
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  const dot = tab.locator('[data-mark="attention"]')
+
+  // The first reply proves the client holds the request; auto-accept still owns it, so the tab only shows work.
+  await reply.arrived
+  await expect(tab.locator('[data-mark="busy"]')).toBeVisible()
+  await expect(dot).toBeHidden()
+
+  reply.release()
+  await expect(dot).toBeVisible()
+  await expect(tab.locator('[data-mark="busy"]')).toBeHidden()
+  expect(reply.attempts()).toBe(3)
+})
+
+test("the inbox moves a session to Needs attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "inbox")
+  await page.goto(sessionHref(a.id))
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: b.title })
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await reply.arrived
+  await expect(row).toHaveAttribute("data-status", "working")
+  await expect(needs).toHaveCount(0)
+
+  reply.release()
+  await expect(needs).toHaveCount(1)
+  await expect(needs).toContainText(b.title)
+  await expect(needs).toHaveAttribute("data-status", "approval")
+  expect(reply.attempts()).toBe(3)
+})
+
+// Auto-accept is on and every reply to session B's permission fails. The first reply waits for `release()`; then it
+// and both retries fail, and auto-accept gives up.
+async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox") {
+  const permissionID = "permission-gave-up"
+  const released = Promise.withResolvers<void>()
+  const arrived = Promise.withResolvers<void>()
+  const attempts = { count: 0 }
+
+  await mockWorkspace(page, {
+    name: "GaveUp",
+    sessions: [a, b],
+    sessionPermissions: {
+      [b.id]: [
+        { id: permissionID, sessionID: b.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      settings: { appearance: { tabLayout }, permissions: { autoApprove: true } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.route(new RegExp(`/api/session/${b.id}/permission/${permissionID}/reply(\\?|$)`), async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attempts.count++
+    arrived.resolve()
+
+    if (attempts.count === 1) await released.promise
+    await route.fulfill({ status: 500, json: { message: "Reply failed" } })
+  })
+
+  return {
+    arrived: arrived.promise,
+    release: () => released.resolve(),
+    attempts: () => attempts.count,
+  }
+}

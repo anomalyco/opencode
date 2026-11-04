@@ -8,7 +8,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { sessionBusy, sessionRequests } from "@/shell/layout/project-avatar-state"
+import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
@@ -153,10 +153,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           ),
         )
 
-        const status = (session: SessionInfo): InboxStatus => {
-          const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
-          const requests = sessionRequests(data, session.id, true, settings.permissions.autoApproves(project))
-
+        const status = (session: SessionInfo, requests: SessionRequests): InboxStatus => {
           if (requests.permission) return "approval"
 
           if (requests.form) return "input"
@@ -168,15 +165,13 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           return session.outcome === "failed" ? "failed" : "done"
         }
 
-        const since = (value: InboxStatus, session: SessionInfo) => {
+        // A waiting session ages from the request it shows, not from one auto-approve still answers.
+        const since = (value: InboxStatus, session: SessionInfo, requests: SessionRequests) => {
           if (value === "working") return workingSince(session)
 
           if (!inboxBusy(value)) return session.time.idle ?? session.time.updated
 
-          const request =
-            value === "approval"
-              ? sessionPermissionRequest(data.session.list(), data.session.permission.list, session.id)
-              : sessionFormRequest(data.session.list(), data.session.form.list, session.id)
+          const request = value === "approval" ? requests.permission : requests.form
 
           return (request && requestTimes[`${server}\0${request.id}`]) ?? workingSince(session) ?? session.time.updated
         }
@@ -193,7 +188,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
         return data.session
           .apply([...sessions.values()].filter((session) => !session.parentID))
           .map((session): InboxEntry => {
-            const value = status(session)
+            const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
+            const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
+            const value = status(session, requests)
 
             return {
               key: `${server}\0${session.id}`,
@@ -202,7 +199,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
               ctx: item.ctx,
               session,
               status: value,
-              since: since(value, session),
+              since: since(value, session, requests),
             }
           })
       })
