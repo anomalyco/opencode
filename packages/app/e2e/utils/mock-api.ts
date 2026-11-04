@@ -131,6 +131,7 @@ const Group = HttpApiGroup.make("mock")
       params: { integrationID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
