@@ -65,6 +65,9 @@ fn handle(tui: &Tui, event: &V2Event) {
     // Pins and the worktrees dialog see every event, tabs or not (E.11b).
     crate::features::quick_switch::event(tui, event);
     crate::dialogs::worktrees::event(event);
+    if let V2Event::SessionDeleted(event) = event {
+        tui.local.forget(&event.data.session_id);
+    }
     // The tab strip sees `session.deleted` first; with tabs on it leaves the deleted tab without a toast.
     if crate::tabs::event(tui, event) {
         return;
