@@ -4,7 +4,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -122,6 +122,29 @@ const recordingMcp = (() => {
     reload,
   })
   return { configured, layer: Layer.succeed(Mcp.Service, service) }
+})()
+
+// An MCP service whose reloads wait for the test once it blocks them, standing in for slow server handshakes.
+const blockingMcp = (() => {
+  const state: { started?: Deferred.Deferred<void>; release?: Deferred.Deferred<void> } = {}
+  const reload = () =>
+    Effect.suspend(() =>
+      state.started && state.release
+        ? Deferred.succeed(state.started, undefined).pipe(Effect.andThen(Deferred.await(state.release)))
+        : Effect.void,
+    )
+  const block = Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    Object.assign(state, { started, release })
+    return {
+      started: Deferred.await(started),
+      release: Effect.sync(() => Object.assign(state, { started: undefined, release: undefined })).pipe(
+        Effect.andThen(Deferred.succeed(release, undefined)),
+      ),
+    }
+  })
+  return { block, layer: Layer.succeed(Mcp.Service, Mcp.Service.of({ ...emptyMcp, reload })) }
 })()
 
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
@@ -1171,7 +1194,14 @@ describe("OpencodePlugin", () => {
         const next = yield* settled(yield* request())
         expect(Exit.isSuccess(next.exit)).toBe(true)
         expect(next.elapsed).toBe(0)
+
+        // The refresh that outlasted its wait applies once the Console answers.
+        api.state.answer.set("one", () =>
+          Response.json({ providers: {}, library: { instructions: [{ id: "one", content: "Use one, refreshed" }] } }),
+        )
         api.release()
+        yield* drain
+        expect(yield* instructions).toEqual(["Use one, refreshed"])
       }),
     )
 
@@ -1251,6 +1281,91 @@ describe("OpencodePlugin", () => {
           unavailable("Couldn't load the OpenCode Console config."),
         )
         api.release()
+      }),
+    )
+
+    const slow = testEffect(makePluginTestLayer(undefined, undefined, blockingMcp.layer))
+
+    slow.effect("holds a request that arrives while the config is being applied until it is", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        const reload = yield* blockingMcp.block
+        yield* connect(api)
+        yield* reload.started
+
+        const held = yield* request()
+        // 4 seconds, past the 3 a refresh of an applied config waits.
+        yield* drain
+        yield* drain
+        expect(held.pollUnsafe()).toBeUndefined()
+        yield* reload.release
+        const result = yield* Fiber.join(held)
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use one"])
+        // It waited for the apply in progress instead of loading again.
+        expect(api.state.requests).toEqual(["one"])
+      }),
+    )
+
+    slow.effect("holds a request within a minute of the last while a switch's config is being applied", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        yield* connect(api)
+        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+
+        const reload = yield* blockingMcp.block
+        yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("two") })
+        yield* reload.started
+        const held = yield* request()
+        yield* drain
+        expect(held.pollUnsafe()).toBeUndefined()
+        yield* reload.release
+        const result = yield* Fiber.join(held)
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use two"])
+        expect(api.state.requests).toEqual(["one", "two"])
+      }),
+    )
+
+    slow.effect("waits out a slow apply after the Console answers instead of failing", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        const credential = yield* connect(api)
+        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+
+        const reload = yield* blockingMcp.block
+        yield* credentials.update(credential.id, { value: key("rotated") })
+        const held = yield* request()
+        yield* reload.started
+        // 12 seconds, past the 10 the Console is waited for.
+        yield* Effect.forEach([1, 2, 3, 4, 5, 6], () => drain, { discard: true })
+        expect(held.pollUnsafe()).toBeUndefined()
+        yield* reload.release
+        const result = yield* Fiber.join(held)
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use rotated"])
+      }),
+    )
+
+    slow.effect("applies a config again when a request is cancelled while applying it", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        const credential = yield* connect(api)
+        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+
+        const reload = yield* blockingMcp.block
+        yield* credentials.update(credential.id, { value: key("rotated") })
+        const cancelled = yield* request()
+        yield* reload.started
+        yield* Fiber.interrupt(cancelled)
+        yield* reload.release
+
+        const result = yield* settled(yield* request())
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use rotated"])
       }),
     )
 
