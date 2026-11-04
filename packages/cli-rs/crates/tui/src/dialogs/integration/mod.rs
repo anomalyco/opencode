@@ -499,7 +499,8 @@ fn build_manage(
     };
     let mut props = SelectProps::dynamic(state.integration.name.clone(), options);
     props.current = active.map(Account::Credential);
-    props.focus_current = false;
+    // `focusCurrent={false}`: the marker shows on the active account, but a reopen keeps the selection.
+    props.focus_current = focus.is_some();
     props.focus_target = focus;
     props.preserve_selection = true;
     props.on_move = Some({
