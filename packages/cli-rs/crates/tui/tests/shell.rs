@@ -157,7 +157,8 @@ fn the_session_list_opens_a_session_and_its_transcript_streams() {
 fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
     let app = TestApp::new(80, 30);
     let tui = mount(&app, Route::Home);
-    wait_for(&app, "Fix the parser");
+    // The home's logo (E.1).
+    wait_for(&app, "█▀▀█");
 
     // The terminal reports a light background between the leader and its second key.
     app.press("ctrl+x");
