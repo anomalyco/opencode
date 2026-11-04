@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createSidecarResolver, initializationData } from "./initialization"
 
-function failure(error: unknown) {
+function failure(error: Error | string) {
   try {
     initializationData(Object.assign(() => undefined, { error }))
   } catch (caught) {

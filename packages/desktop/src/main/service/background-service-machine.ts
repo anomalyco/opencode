@@ -11,7 +11,7 @@ export type ConnectMode = "initial" | "reconnect"
 /** Settles one caller of `connection` or `reconnect`. */
 export type Reply = {
   readonly resolve: (data: Data) => void
-  readonly reject: (cause: unknown) => void
+  readonly reject: (error: Error) => void
 }
 
 /**
@@ -31,7 +31,7 @@ export type State =
       readonly waiters: readonly Reply[]
     }
   /** The last attempt failed; the next caller starts a new one instead of receiving `error` again. */
-  | { readonly status: "failed"; readonly attempt: number; readonly error: unknown; readonly last: Data | undefined }
+  | { readonly status: "failed"; readonly attempt: number; readonly error: Error; readonly last: Data | undefined }
   | { readonly status: "disposed" }
 
 export type Event =
@@ -40,9 +40,9 @@ export type Event =
   | { readonly type: "waiter.cancelled"; readonly reply: Reply }
   | { readonly type: "probe.succeeded"; readonly attempt: number; readonly data: Data }
   | { readonly type: "connect.succeeded"; readonly attempt: number; readonly data: Data }
-  | { readonly type: "connect.failed"; readonly attempt: number; readonly error: unknown }
+  | { readonly type: "connect.failed"; readonly attempt: number; readonly error: Error }
   | { readonly type: "verify.succeeded"; readonly attempt: number; readonly data: Data }
-  | { readonly type: "verify.failed"; readonly attempt: number; readonly error: unknown }
+  | { readonly type: "verify.failed"; readonly attempt: number; readonly error: Error }
   | { readonly type: "disposed" }
 
 export type Command =
@@ -50,7 +50,7 @@ export type Command =
   | { readonly type: "verify"; readonly attempt: number }
   | { readonly type: "publish"; readonly data: Data }
   | { readonly type: "resolve"; readonly replies: readonly Reply[]; readonly data: Data }
-  | { readonly type: "reject"; readonly replies: readonly Reply[]; readonly error: unknown }
+  | { readonly type: "reject"; readonly replies: readonly Reply[]; readonly error: Error }
 
 export type Transition = {
   readonly state: State
@@ -180,7 +180,7 @@ function resolve(replies: readonly Reply[], data: Data): Command[] {
   return replies.length > 0 ? [{ type: "resolve", replies, data }] : []
 }
 
-function reject(replies: readonly Reply[], error: unknown): Command[] {
+function reject(replies: readonly Reply[], error: Error): Command[] {
   return replies.length > 0 ? [{ type: "reject", replies, error }] : []
 }
 
@@ -216,7 +216,7 @@ export const make = Effect.fn("BackgroundServiceMachine.make")(function* (input:
 
   // A failure of `ensure` can be a defect (`DesktopCli.resolve` dies), so every exit reports back as an event. An
   // interrupt only happens on disposal, which the machine already left.
-  const report = (effect: Effect.Effect<Event, unknown>, failed: (error: unknown) => Event) =>
+  const report = (effect: Effect.Effect<Event, unknown>, failed: (error: Error) => Event) =>
     run(
       effect.pipe(
         Effect.exit,
@@ -225,7 +225,8 @@ export const make = Effect.fn("BackgroundServiceMachine.make")(function* (input:
 
           if (Cause.hasInterruptsOnly(exit.cause)) return Effect.void
 
-          const event = failed(Cause.squash(exit.cause))
+          const error = Cause.squash(exit.cause)
+          const event = failed(error instanceof Error ? error : new Error(String(error)))
 
           return Effect.logError("v2 CLI background service failed", { event }).pipe(
             Effect.andThen(Effect.sync(() => dispatch(event))),
