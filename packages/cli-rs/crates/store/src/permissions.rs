@@ -54,27 +54,30 @@ impl Data {
     /// Reads pending permissions once per invalidation (`permission.sync`).
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
-        self.sync_run(format!("session.permission:{}", session.0), move |data| async move {
-            let started = data.read(|state| state.deletion_epoch);
-            let list = data
-                .client()
-                .permission_list(
-                    &PermissionListInput {
-                        session_id: session.clone(),
-                    },
-                    &RequestOptions::default(),
-                )
-                .await
-                .map_err(|error| evict_missing(&data, error))?;
-            data.write(|state| {
-                if state.deleted_since(&session, started) {
-                    return;
-                }
-                state.permission.insert(session.clone(), list);
-                state.log.permissions(&session);
-            });
-            Ok(())
-        })
+        self.sync_run(
+            format!("session.permission:{}", session.0),
+            move |data| async move {
+                let started = data.read(|state| state.deletion_epoch);
+                let list = data
+                    .client()
+                    .permission_list(
+                        &PermissionListInput {
+                            session_id: session.clone(),
+                        },
+                        &RequestOptions::default(),
+                    )
+                    .await
+                    .map_err(|error| evict_missing(&data, error))?;
+                data.write(|state| {
+                    if state.deleted_since(&session, started) {
+                        return;
+                    }
+                    state.permission.insert(session.clone(), list);
+                    state.log.permissions(&session);
+                });
+                Ok(())
+            },
+        )
     }
 
     pub fn permission_invalidate(&self, session: &SessionID) {

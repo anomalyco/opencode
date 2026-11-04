@@ -159,10 +159,17 @@ impl State {
         for item in self.pending.get(id).into_iter().flatten() {
             self.outbox.remove(item.id());
         }
-        for key in ["session", "session.family", "session.pending", "session.message", "session.permission"] {
+        for key in [
+            "session",
+            "session.family",
+            "session.pending",
+            "session.message",
+            "session.permission",
+        ] {
             self.syncs.invalidate(&format!("{key}:{}", id.0));
         }
-        self.syncs.invalidate_prefix(&format!("session.form:{}:", id.0));
+        self.syncs
+            .invalidate_prefix(&format!("session.form:{}:", id.0));
         self.info.remove(id);
         self.active.remove(id);
         self.messages.remove(id);
@@ -275,7 +282,9 @@ impl State {
             .info
             .get(&data.session_id)
             .and_then(|info| info.agent.clone());
-        self.edit_info(&data.session_id, |info| info.agent = Some(data.agent.clone()));
+        self.edit_info(&data.session_id, |info| {
+            info.agent = Some(data.agent.clone())
+        });
         let row = SessionMessageAgentSelected {
             id: from_event(&event.id),
             r#type: "agent-switched".into(),
@@ -296,7 +305,9 @@ impl State {
                 .get(&data.session_id)
                 .and_then(|info| info.model.clone())
         });
-        self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
+        self.edit_info(&data.session_id, |info| {
+            info.model = Some(data.model.clone())
+        });
         if !self.messages.contains_key(&data.session_id) {
             return Vec::new();
         }
@@ -356,7 +367,9 @@ impl State {
 
     pub(crate) fn on_metadata(&mut self, data: &SessionMetadataUpdatedData) {
         // The event carries the whole record, so keys it drops go too.
-        self.edit_info(&data.session_id, |info| info.metadata = Some(data.metadata.clone()));
+        self.edit_info(&data.session_id, |info| {
+            info.metadata = Some(data.metadata.clone())
+        });
     }
 
     pub(crate) fn on_archived(&mut self, id: &SessionID, archived: Option<f64>) {
@@ -364,7 +377,9 @@ impl State {
     }
 
     pub(crate) fn on_revert_staged(&mut self, data: &SessionRevertStagedData) {
-        self.edit_info(&data.session_id, |info| info.revert = Some(data.revert.clone()));
+        self.edit_info(&data.session_id, |info| {
+            info.revert = Some(data.revert.clone())
+        });
     }
 
     pub(crate) fn on_revert_cleared(&mut self, id: &SessionID) {
@@ -435,7 +450,11 @@ impl Data {
     /// Reads a session once per invalidation (`session.sync`); with `children`, also every direct
     /// child, under its own key.
     pub fn session_sync(&self, id: &SessionID, children: bool) -> Task<()> {
-        let key = if children { "session.family" } else { "session" };
+        let key = if children {
+            "session.family"
+        } else {
+            "session"
+        };
         let id = id.clone();
         self.sync_run(format!("{key}:{}", id.0), move |data| async move {
             let started = data.read(|state| state.deletion_epoch);
@@ -563,14 +582,22 @@ impl Data {
                         }
                     }
                 }
-                if state.creating.get(&session).is_some_and(|(current, _)| *current == token) {
+                if state
+                    .creating
+                    .get(&session)
+                    .is_some_and(|(current, _)| *current == token)
+                {
                     state.creating.remove(&session);
                 }
             });
             result
         });
         if fresh {
-            let gate = task.clone().map(|result| result.map(|_| ())).boxed().shared();
+            let gate = task
+                .clone()
+                .map(|result| result.map(|_| ()))
+                .boxed()
+                .shared();
             state.creating.insert(id.clone(), (token, gate));
         }
         self.flush(&mut state);
