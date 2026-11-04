@@ -34,7 +34,8 @@ export default defineApp({
     {
       checkpoint: "list",
       until: "Write docs",
-      deviation: ["DLG14-session-list-dialog", "T17-home-session-list", "T04-connection-footer"],
+      // The dialog panel itself matches (E.11a/session-list); the home and the footer around it differ.
+      deviation: ["T17-home-session-list", "T04-connection-footer"],
     },
     { keys: ["enter"] },
     {
