@@ -141,6 +141,17 @@ export function transitionTabPromotion(state: TabPromotionState, event: TabPromo
   }
 }
 
+// These events remove pending sessions from view, so they commit in the same transition as the tab strip and route.
+export type TabPromotionCommit = Extract<
+  TabPromotionEvent,
+  { type: "complete.settled" | "rollback.settled" | "abandon" }
+>
+
+/** Disposing tab memory or a persisted draft waits until the transition that removes its screen commits. */
+export function runsAfterCommit(effect: TabPromotionEffect) {
+  return effect.type === "session.cleanup" || effect.type === "draft.dispose"
+}
+
 /** The pending session shown in place of a promoted draft until its promotion settles. */
 export function pendingPromotion(state: TabPromotionState, key: string) {
   return state.status === "active" ? state.entries[key]?.pending : undefined

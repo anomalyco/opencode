@@ -6,8 +6,10 @@ import { tabKey, type DraftTab, type PendingSession, type SessionTab } from "./t
 import {
   INITIAL_TAB_PROMOTION_STATE,
   pendingPromotion,
+  runsAfterCommit,
   transitionTabPromotion,
   type ComposerTarget,
+  type TabPromotionCommit,
   type TabPromotionEvent,
   type TabPromotionState,
 } from "./promotion-machine"
@@ -144,9 +146,45 @@ describe("tab promotion", () => {
     },
   )
 
+  test("disposal waits for the commit that removes the screen, while the tab swap and prompt move commit with it", () => {
+    const committed = (events: TabPromotionEvent[], commit: TabPromotionCommit) =>
+      transitionTabPromotion(replay(events).state, commit).effects.map((effect) => [
+        effect.type,
+        runsAfterCommit(effect),
+      ])
+
+    expect(committed([prepare], { type: "abandon", keys: [key] })).toEqual([
+      ["session.cleanup", true],
+      ["draft.dispose", true],
+    ])
+    expect(
+      committed([prepare, { type: "rollback.start", key, attempt: 1 }], {
+        type: "rollback.settled",
+        key,
+        attempt: 1,
+        open: true,
+      }),
+    ).toEqual([
+      ["composer.recover", false],
+      ["tab.restore", false],
+      ["session.cleanup", true],
+    ])
+    expect(
+      committed([prepare, { type: "complete.start", key, attempt: 1, target }], {
+        type: "complete.settled",
+        key,
+        attempt: 1,
+      }),
+    ).toEqual([
+      ["composer.transfer", false],
+      ["draft.dispose", true],
+    ])
+  })
+
   test("removing nothing that is pending keeps the state", () => {
     const state = replay([prepare]).state
 
+    expect(transitionTabPromotion(state, { type: "abandon", keys: [] }).state).toBe(state)
     expect(transitionTabPromotion(state, { type: "abandon", keys: ["other"] }).state).toBe(state)
     expect(transitionTabPromotion(state, { type: "abandon.server", server: other }).state).toBe(state)
     expect(transitionTabPromotion(state, { type: "keep.servers", servers: new Set([server]) }).state).toBe(state)
