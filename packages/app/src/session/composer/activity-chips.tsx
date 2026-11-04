@@ -1,6 +1,7 @@
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
@@ -253,19 +254,11 @@ export function SessionActivityChips(props: {
               data-view={panel.state.shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
-              onFocusIn={(event: FocusEvent) => {
-                if (!(event.target instanceof HTMLElement)) return
-                const row = event.target.closest<HTMLElement>('[data-component="menu-v2-item"]')
-
-                if (!row) return
-                // Kobalte's scroll adjustment ignores scroll-padding; native scrolling keeps the row clear of the edge.
-                queueMicrotask(() => row.scrollIntoView({ block: "nearest", inline: "nearest" }))
-              }}
             >
               <Show
                 when={panel.state.shell}
                 fallback={
-                  <>
+                  <MenuScroll>
                     <For each={props.subagents}>
                       {(item) => (
                         <Menu.Item {...row(item)}>
@@ -298,7 +291,7 @@ export function SessionActivityChips(props: {
                         </Menu.Item>
                       )}
                     </For>
-                  </>
+                  </MenuScroll>
                 }
               >
                 {(shell) => (

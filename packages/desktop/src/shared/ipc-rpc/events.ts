@@ -4,6 +4,7 @@ import { Rpc, RpcGroup } from "effect/rpc"
 import { PluginInstalled, PluginMenubarItem, PluginPayload, PluginGuis } from "./plugins"
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
+  attempt: Schema.Number,
   urls: Schema.Array(Schema.String),
 }) {}
 

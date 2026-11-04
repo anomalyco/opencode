@@ -1,9 +1,9 @@
 import { showToast } from "@opencode/ui/toast"
 import { lazy, onCleanup, Suspense } from "solid-js"
-import { createStore } from "solid-js/store"
 import { MenuItem, Server, Style, type ServerEntry, type ServerState, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Wsl, type WslServerItem } from "./contract"
+import { wslRowView } from "./row-view"
 import type definition from "./index"
 
 const loadDialog = () => import("./dialog")
@@ -32,21 +32,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const state = () => client()?.state()
   const styled = { added: false }
-  // Row actions of one server share a pending state, like one request per row.
-  const [requests, setRequests] = createStore<Record<string, number>>({})
-  const pending = (key: string) => (requests[key] ?? 0) > 0
 
-  const request = <T,>(key: string, action: () => Promise<T>) => {
-    setRequests(key, (count = 0) => count + 1)
-    void Promise.try(action)
-      .catch((cause: unknown) =>
-        showToast({
-          variant: "error",
-          title: ctx.t("common.requestFailed"),
-          description: cause instanceof Error ? cause.message : String(cause),
-        }),
-      )
-      .finally(() => setRequests(key, (count = 1) => count - 1))
+  // What a row can do follows main's state; a request only reports its failure.
+  const run = (action: () => Promise<void>) => {
+    void Promise.try(action).catch((cause: unknown) =>
+      showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: cause instanceof Error ? cause.message : String(cause),
+      }),
+    )
   }
 
   const byKey = (key: string) => state()?.servers.find((item) => `wsl:${item.config.distro}` === key)
@@ -74,7 +69,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       remove: () => Promise.try(() => api().removeServer({ id: item.config.id })),
       row: (row) => (
         <Suspense>
-          <Row row={row} distro={item.config.distro} state={state} api={client} pending={pending} request={request} />
+          <Row row={row} distro={item.config.distro} state={state} api={client} run={run} />
         </Suspense>
       ),
     }
@@ -98,12 +93,12 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       id: "retry",
       title: ctx.t("server.retryStart"),
       when: (key) => {
-        const kind = byKey(key)?.runtime.kind
+        const item = byKey(key)
 
-        return kind === "failed" || kind === "stopped"
+        return !!item && wslRowView(state(), item.config.distro).retry
       },
       run: (key) =>
-        request(key, async () => {
+        run(async () => {
           const wsl = api()
           const item = byKey(key)
 

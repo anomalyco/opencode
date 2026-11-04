@@ -123,6 +123,23 @@ story.describe("message actions menu", () => {
   })
 })
 
+story("keeps pending steer actions usable after a request fails", async ({ mount }) => {
+  const timeline = await mount("current-prompt-message--pending")
+  const queue = timeline.getByRole("button", { name: "Move to queue", exact: true })
+  const remove = timeline.getByRole("button", { name: "Delete", exact: true })
+  const failures = timeline.getByLabel("Failed actions")
+
+  await timeline.getByLabel("Actions fail").check()
+  await timeline.locator('[data-component="user-message"]').hover()
+  await queue.click()
+  await expect(failures).toHaveText("1")
+  await expect(queue).toBeEnabled()
+  await expect(remove).toBeEnabled()
+  await remove.click()
+  await expect(failures).toHaveText("2")
+  await expect(remove).toBeEnabled()
+})
+
 story("drops a pending footer at once on delivery with and without hover", async ({ mount, page }) => {
   const timeline = await mount("current-prompt-message--pending")
   const message = timeline.locator('[data-component="user-message"]')

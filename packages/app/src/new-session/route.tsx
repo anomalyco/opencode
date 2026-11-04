@@ -11,7 +11,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
-import { ServerUnavailablePanel } from "@/session/server-unavailable-panel"
+import { ServerSignedOutPanel, ServerUnavailablePanel } from "@/session/server-unavailable-panel"
 import { ErrorPage } from "@/shell/errors/error"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 
@@ -38,7 +38,16 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
       <Show when={conn()} keyed>
         {(conn) => (
-          <ServerProvider conn={conn}>
+          <ServerProvider
+            conn={conn}
+            signedOut={
+              <SessionRouteFrame padded>
+                <SessionPanelFrame raised>
+                  <ServerSignedOutPanel conn={conn} />
+                </SessionPanelFrame>
+              </SessionRouteFrame>
+            }
+          >
             <ResolvedDraftContent draft={props.draft} />
           </ServerProvider>
         )}

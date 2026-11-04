@@ -23,6 +23,7 @@ import { Dialog, DialogBody, DialogTitle } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SearchHighlight, SearchList, type SearchListHandle, type SearchListRow } from "@opencode/ui/search-list"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { TextInput } from "@opencode/ui/text-input"
@@ -1039,53 +1040,55 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             style={{ left: `${store.position.left}px`, top: `${store.position.top}px` }}
             onMouseEnter={() => triangle.cancel()}
           >
-            {/* A model without variants still lists Default, its only option. */}
-            <For each={[undefined, ...variantsOf(item())]}>
-              {(value) => (
-                <div
-                  data-component="menu-v2-item"
-                  role="menuitemradio"
-                  aria-checked={variant(item()) === value}
-                  data-checked={variant(item()) === value ? "" : undefined}
-                  onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
-                  onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
-                  onClick={() => choose(item(), value ?? null)}
-                >
-                  <span data-slot="menu-v2-item-content" class="capitalize">
-                    {value ?? language.t("common.default")}
-                  </span>
-                  <span data-slot="menu-v2-item-indicator" data-checked={variant(item()) === value ? "" : undefined}>
-                    <Icon name="check" size="small" />
-                  </span>
-                </div>
-              )}
-            </For>
-            <div data-slot="menu-v2-separator" role="separator" />
-            <div
-              data-component="menu-v2-item"
-              role="menuitem"
-              onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
-              onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
-              onClick={() => {
-                // The row moves between Favorites and its group, so the flyout would be left beside nothing.
-                controller.toggleFavorite(item())
-                close()
-              }}
-            >
-              <span data-slot="menu-v2-item-content">
-                {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
-              </span>
-              <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
-            </div>
-            <div data-slot="menu-v2-separator" role="separator" />
-            {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
-            <ModelDetails
-              model={item()}
-              provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
-              compact
-              standalone
-              usage={usage(item())}
-            />
+            <MenuScroll>
+              {/* A model without variants still lists Default, its only option. */}
+              <For each={[undefined, ...variantsOf(item())]}>
+                {(value) => (
+                  <div
+                    data-component="menu-v2-item"
+                    role="menuitemradio"
+                    aria-checked={variant(item()) === value}
+                    data-checked={variant(item()) === value ? "" : undefined}
+                    onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
+                    onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
+                    onClick={() => choose(item(), value ?? null)}
+                  >
+                    <span data-slot="menu-v2-item-content" class="capitalize">
+                      {value ?? language.t("common.default")}
+                    </span>
+                    <span data-slot="menu-v2-item-indicator" data-checked={variant(item()) === value ? "" : undefined}>
+                      <Icon name="check" size="small" />
+                    </span>
+                  </div>
+                )}
+              </For>
+              <div data-slot="menu-v2-separator" role="separator" />
+              <div
+                data-component="menu-v2-item"
+                role="menuitem"
+                onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
+                onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
+                onClick={() => {
+                  // The row moves between Favorites and its group, so the flyout would be left beside nothing.
+                  controller.toggleFavorite(item())
+                  close()
+                }}
+              >
+                <span data-slot="menu-v2-item-content">
+                  {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
+                </span>
+                <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
+              </div>
+              <div data-slot="menu-v2-separator" role="separator" />
+              {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
+              <ModelDetails
+                model={item()}
+                provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
+                compact
+                standalone
+                usage={usage(item())}
+              />
+            </MenuScroll>
           </div>
         )}
       </Show>

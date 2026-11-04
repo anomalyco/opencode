@@ -386,6 +386,11 @@ export const dict = {
   "dialog.mcp.error.disable": "Disable",
   "dialog.mcp.signIn": "Sign in",
   "dialog.mcp.signIn.open": "Sign in to {{name}}",
+  "dialog.mcp.signIn.description":
+    "Your browser opens so you can sign in to {{name}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
+  "dialog.mcp.signIn.paste.label": "Redirect URL",
+  "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
+  "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
@@ -612,6 +617,9 @@ export const dict = {
   "session.error.unreachable": "Can't reach this server",
   "session.error.unreachable.description":
     "{{server}} isn't responding, so this session can't load. It will open automatically once the server is reachable again.",
+  "session.error.signedOut": "Signed out of this server",
+  "session.error.signedOut.description": "{{server}} no longer accepts this app's sign-in. Sign in again to continue.",
+  "session.error.signedOut.signIn": "Sign in again",
   "session.background.moveRunning": "Move to background",
   "session.background.moveInline": "Press {{keybind}} to move running work to the background",
   "command.session.background": "Move to background",
@@ -680,6 +688,7 @@ export const dict = {
   "session.new.project.add": "Add project",
   "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
+  "session.new.starting": "Starting session",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",

@@ -45,7 +45,7 @@ const registry = createWindowRegistry<BrowserWindow>({
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
 })
 
-const opened = new Set<(win: BrowserWindow) => void>()
+const opened = new Set<(win: BrowserWindow, id: string) => void>()
 
 let relaunchHandler = () => {
   setAppQuitting()
@@ -99,13 +99,19 @@ export function getWindowByID(id: string) {
   return win
 }
 
+/** The persistent id of an app window, or undefined for popups and other native windows. */
+export function getWindowID(win: BrowserWindow) {
+  // An open window's id stays in the persisted list until it closes.
+  return registry.persisted().find((id) => registry.get(id) === win)
+}
+
 /** App windows that host the renderer, excluding popups and other native windows. */
 export function getMainWindows() {
   return registry.list().filter((win) => !win.isDestroyed())
 }
 
 /** Runs for each app window as it registers, before its renderer loads. */
-export function onMainWindow(listener: (win: BrowserWindow) => void) {
+export function onMainWindow(listener: (win: BrowserWindow, id: string) => void) {
   opened.add(listener)
 
   return () => {
@@ -234,7 +240,7 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
         ),
       )
     })
-    opened.forEach((listener) => listener(win))
+    opened.forEach((listener) => listener(win, id))
   }
 
   return { create, restore }

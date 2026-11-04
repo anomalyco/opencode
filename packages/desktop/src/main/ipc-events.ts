@@ -23,8 +23,9 @@ export function ipcEventStream(senderId: number) {
   return queue ? Stream.fromQueue(queue) : Stream.empty
 }
 
+/** Returns false when the renderer has no event stream to receive the event. */
 export function emitIpcEvent(sender: WebContents, event: DesktopEvent) {
   const queue = queues.get(sender.id)
 
-  if (queue) Queue.offerUnsafe(queue, event)
+  return queue ? Queue.offerUnsafe(queue, event) : false
 }

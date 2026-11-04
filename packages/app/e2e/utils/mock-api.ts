@@ -131,6 +131,7 @@ const Group = HttpApiGroup.make("mock")
       params: { integrationID: Schema.String },
       payload: JsonPayload,
       success: NoContent,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
   .add(
@@ -276,7 +277,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("persistentPtyList", "/api/experimental/session/:sessionID/terminal", {
       params: SessionParams,
       success: Json,
-      error: PersistentPtyUnavailable,
+      error: [PersistentPtyUnavailable, MockInternal.pipe(HttpApiSchema.status(500))],
     }),
   )
   .add(
