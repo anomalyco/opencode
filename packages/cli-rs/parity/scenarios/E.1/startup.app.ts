@@ -4,7 +4,11 @@ import { assistant, defineApp, session, user } from "../../lib/app"
 export default defineApp({
   args: { sessionID: "ses_b", fork: true },
   routes: [
-    { method: "POST", path: "/api/session/ses_b/fork", json: { data: session("ses_f", "Fix the parser (fork)", { updated: 3 }) } },
+    {
+      method: "POST",
+      path: "/api/session/ses_b/fork",
+      json: { data: session("ses_f", "Fix the parser (fork)", { updated: 3 }) },
+    },
     { path: "/api/session/ses_f", json: { data: session("ses_f", "Fix the parser (fork)", { updated: 3 }) } },
     {
       path: "/api/session/ses_f/message",
