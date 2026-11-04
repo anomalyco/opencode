@@ -1155,7 +1155,7 @@ test.describe("background shortcut", () => {
       const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
       const list = page.getByRole("menu", { name: "1 shell", exact: true })
       const closed = (await capsule.boundingBox())!
-      const inset = (await capsule.locator("svg").boundingBox())!.x - closed.x
+      const inset = (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
 
       await capsule.click()
       // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
@@ -1336,7 +1336,7 @@ test.describe("background shortcut", () => {
     // The open menu hides the rest of the page from the accessibility tree, the capsule included.
     const capsule = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true, includeHidden: true })
     const label = capsule.getByText("2 subagents · 1 shell", { exact: true })
-    const glyph = await capsule.locator("svg").boundingBox()
+    const glyph = await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox()
     const text = await label.boundingBox()
     const inset = glyph!.x - (await capsule.boundingBox())!.x
 
