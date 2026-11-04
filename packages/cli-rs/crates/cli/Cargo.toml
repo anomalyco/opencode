@@ -21,7 +21,9 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 chrono.workspace = true
+futures-util.workspace = true
 clap = { workspace = true, features = ["string"] }
 clap_complete.workspace = true
 log = { workspace = true, features = ["kv"] }
