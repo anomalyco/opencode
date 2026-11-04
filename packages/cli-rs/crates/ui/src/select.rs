@@ -377,7 +377,10 @@ pub fn select<T: Clone + PartialEq + 'static>(
             .placeholder(placeholder)
             .placeholder_color(theme.text.muted)
             .colors(theme.text.formfield.focused, Color::TRANSPARENT)
-            .focused_colors(theme.text.formfield.base, theme.background.formfield.focused)
+            .focused_colors(
+                theme.text.formfield.base,
+                theme.background.formfield.focused,
+            )
             .cursor_color(search_cursor(theme, ""))
     });
     let scroll = ScrollBox::new(app).scrollbars(false);
@@ -416,7 +419,10 @@ pub fn select<T: Clone + PartialEq + 'static>(
     handle.register_layer();
     let weak = Rc::downgrade(&handle.0);
     handle.0.scroll.on_mouse(move |cx, event| {
-        if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+        if !matches!(
+            event.kind,
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+        ) {
             return;
         }
         let weak = weak.clone();
@@ -1155,13 +1161,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     ));
                     for detail in &option.details {
                         row.add(
-                            &View::new(app)
-                                .padding_x(DIALOG_LIST_INSET)
-                                .child(
-                                    &Text::new(app, truncate_middle(detail, width.max(1) as usize))
-                                        .fg(theme.text.muted)
-                                        .wrap(WrapMode::None),
-                                ),
+                            &View::new(app).padding_x(DIALOG_LIST_INSET).child(
+                                &Text::new(app, truncate_middle(detail, width.max(1) as usize))
+                                    .fg(theme.text.muted)
+                                    .wrap(WrapMode::None),
+                            ),
                         );
                     }
                     self.row_mouse(&row, option.value.clone());

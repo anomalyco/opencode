@@ -477,7 +477,10 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
         }
     });
     row.add(&close);
-    match props.description.filter(|description| !description.is_empty()) {
+    match props
+        .description
+        .filter(|description| !description.is_empty())
+    {
         Some(description) => View::new(&cx.app).child(&row).child(
             &Text::new(&cx.app, description)
                 .fg(theme.text.muted)
