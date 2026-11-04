@@ -62,7 +62,12 @@ const serve = (database: string, mediaBlob: boolean) =>
   ServerFetch.make({
     app: { version: "test" },
     database: { path: database },
-    config: { project: false, content: JSON.stringify(mediaBlob ? { experimental: { media_blob: true } } : {}) },
+    // Its own global config directory, so the developer's global config can't add remote MCP servers.
+    config: {
+      directory: path.dirname(database),
+      project: false,
+      content: JSON.stringify(mediaBlob ? { experimental: { media_blob: true } } : {}),
+    },
     models: { fetch: false },
     fs: { filewatcher: false },
   })

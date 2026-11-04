@@ -38,8 +38,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import { PluginHostProvider, usePluginHost, type HostApiFactories } from "../src/runtime/plugin/host"
 import { createHostApis } from "../src/runtime/plugin/host-apis"
-import { createInstalled } from "../src/runtime/plugin/installed"
-import { pluginEnabled, type Entry } from "@opencode/plugin/gui/host"
+import type { Bridge, Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
@@ -232,7 +231,7 @@ export function mountPluginHost() {
 export function mountPlugins(input: {
   definitions: readonly Entry[]
   disabled?: readonly string[]
-  bridge?: Parameters<typeof createInstalled>[0]
+  bridge?: Bridge
   stored?: Readonly<Record<string, Json>>
   /** Shows the production Extensions › Plugins rows of the desktop app's own server, which lists these plugins. */
   plugins?: readonly PluginInfo[]
@@ -282,36 +281,6 @@ export function mountPlugins(input: {
     remove() {},
   })
 
-  function MountedHost() {
-    const installed = input.bridge ? createInstalled(input.bridge) : undefined
-
-    const disabledState = createMemo(() => {
-      if (!installed) return disabled()
-
-      const state = installed.enableState()
-
-      if (!state) return undefined
-
-      return new Set(
-        definitions().flatMap((definition) =>
-          pluginEnabled({ id: definition.id, builtin: false }, state) ? [] : [definition.id],
-        ),
-      )
-    })
-
-    return (
-      <PluginHostProvider
-        definitions={definitions}
-        disabled={disabledState}
-        apis={fakeApis(storage)}
-        whenMounted={mounted}
-        ipc={input.ipc}
-      >
-        <Capture />
-      </PluginHostProvider>
-    )
-  }
-
   function Capture() {
     const host = usePluginHost()
     hosts.push(host)
@@ -335,7 +304,17 @@ export function mountPlugins(input: {
       <PlatformProvider value={platform}>
         <LanguageProvider locale="en">
           <DialogProvider>
-            <MountedHost />
+            {/* With a bridge, main's plugin manager holds the enable settings, as in a desktop window. */}
+            <PluginHostProvider
+              definitions={definitions}
+              disabled={input.bridge ? undefined : disabled}
+              bridge={input.bridge}
+              apis={fakeApis(storage)}
+              whenMounted={mounted}
+              ipc={input.ipc}
+            >
+              <Capture />
+            </PluginHostProvider>
           </DialogProvider>
         </LanguageProvider>
       </PlatformProvider>

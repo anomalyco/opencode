@@ -1,8 +1,29 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, untrack } from "solid-js"
+import {
+  Accessor,
+  batch,
+  createComputed,
+  createEffect,
+  createMemo,
+  createResource,
+  createRoot,
+  createSignal,
+  getOwner,
+  onCleanup,
+  untrack,
+} from "solid-js"
 import { createServerProjects, ServerConnection, useServers } from "./registry"
+import {
+  createServerControllersState,
+  selectServerCtx,
+  selectServerSignedOut,
+  serverCredentials,
+  transitionServerControllers,
+  type ServerControllersEvent,
+} from "./machine"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
+import { selectServerHostname } from "@/runtime/server/health-machine"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
 import { createData, createSessionRetention } from "@opencode/client/solid"
@@ -29,84 +50,69 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   name: "Global",
   init: () => {
     const server = useServers()
-
-    const serverHealth = useServerHealth(
-      () => server.list,
-      () => true,
-    )
-
     const models = createGlobalModels()
     const notificationCoordinator = createNotificationCoordinator()
-
-    const serverCtxs = new Map<ServerConnection.Key, ReturnType<typeof createServerController>>()
-    const serverCtxDisposers = new Map<ServerConnection.Key, () => void>()
-    // The credentials each controller started with, as plain values: the listed connection is a store proxy that
-    // already reads the new password once the user saves it.
-    const serverCtxCredentials = new Map<ServerConnection.Key, string>()
-
     const owner = getOwner()
 
     if (!owner) throw new Error("Global provider requires a Solid owner")
 
-    const disposeServerCtx = (key: ServerConnection.Key) => {
-      serverCtxDisposers.get(key)?.()
-      serverCtxDisposers.delete(key)
-      serverCtxCredentials.delete(key)
-      serverCtxs.delete(key)
-    }
+    // Every server's controller, created and disposed only by the machine's effects. Readers derive the live
+    // controller from this state and never start one themselves.
+    const [controllers, setControllers] = createSignal(createServerControllersState<ServerCtx>())
 
-    const ensureServerCtx = (input: ServerConnection.Any) => {
-      const key = ServerConnection.key(input)
-      // Callers can hold an older copy of the connection; the listed one has the credentials the user saved last.
-      const conn = untrack(() => server.list.find((item) => ServerConnection.key(item) === key)) ?? input
-      const existing = serverCtxs.get(key)
+    const dispatch = (event: ServerControllersEvent<ServerCtx>) =>
+      batch(() => {
+        const result = transitionServerControllers(untrack(controllers), event)
+        setControllers(result.state)
 
-      if (existing && serverCtxCredentials.get(key) === credentials(conn)) return existing
+        // A replaced controller is disposed before its successor starts, so the old one's cleanup cannot undo what the
+        // new one registers under the same server key.
+        result.effects.forEach((effect) => {
+          if (effect.type === "dispose") return effect.dispose()
 
-      // A controller keeps the credentials it started with, so a server signed in again under the same address needs
-      // a new one.
-      if (existing) disposeServerCtx(key)
+          const created = createRoot(
+            (dispose) => ({
+              ctx: createServerController(
+                effect.conn,
+                server.scope(effect.key),
+                () => server.local(effect.conn),
+                server.projects.forServer(effect.key),
+                notificationCoordinator,
+              ),
+              dispose,
+            }),
+            owner,
+          )
 
-      const serverCtx = createRoot((dispose) => {
-        serverCtxDisposers.set(key, dispose)
+          dispatch({ type: "controller.created", key: effect.key, attempt: effect.attempt, ...created })
+        })
+      })
 
-        return createServerController(
-          conn,
-          server.scope(key),
-          () => server.local(conn),
-          server.projects.forServer(key),
-          notificationCoordinator,
-        )
-      }, owner)
+    const serverHealth = useServerHealth(
+      () => server.list,
+      (probe) => dispatch({ type: "health.reported", key: probe.key, auth: probe.auth, result: probe.result }),
+    )
 
-      serverCtxs.set(key, serverCtx)
-      serverCtxCredentials.set(key, credentials(conn))
+    // Runs during updates, so listed servers have a controller before anything reads them, including on first render.
+    // Reading the credentials here tracks the saved password and a plugin server's endpoint and state.
+    createComputed(() => {
+      const entries = server.list.map((conn) => ({
+        key: ServerConnection.key(conn),
+        conn,
+        credentials: serverCredentials(conn),
+      }))
 
-      return serverCtx
-    }
-
-    // A server that rejects our credentials would retry its event stream every second with the same
-    // credentials, so its controller waits until health recovers and then starts with the current ones.
-    createMemo(() => {
-      for (const conn of server.list) {
-        if (serverHealth.status[ServerConnection.key(conn)]?.unauthorized) continue
-        ensureServerCtx(conn)
-      }
+      untrack(() => dispatch({ type: "servers.synced", entries }))
     })
+
+    onCleanup(() => dispatch({ type: "disposed" }))
 
     createEffect(() => {
       for (const conn of server.list) {
         const key = ServerConnection.key(conn)
-        const hostname = serverHealth.status[key]?.hostname
+        const hostname = selectServerHostname(serverHealth.status[key])
 
         if (hostname) server.setHostname(key, hostname)
-      }
-    })
-
-    createEffect(() => {
-      for (const [key] of serverCtxs) {
-        if (serverHealth.status[key]?.unauthorized || !server.list.find((conn) => ServerConnection.key(conn) === key))
-          disposeServerCtx(key)
       }
     })
 
@@ -119,16 +125,13 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       models,
       /** Runs each keyed sound and system notification once across windows; notifications only while none has focus. */
       notifications: notificationCoordinator,
-      ensureServerCtx(conn: ServerConnection.Any) {
-        return ensureServerCtx(conn)
-      },
       /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
       serverCtx(key: ServerConnection.Key) {
-        const conn = server.list.find((item) => ServerConnection.key(item) === key)
-
-        if (!conn || serverHealth.status[key]?.unauthorized) return
-
-        return ensureServerCtx(conn)
+        return selectServerCtx(controllers(), key)
+      },
+      /** The server rejects our credentials and waits for the user to sign in again. Reactive. */
+      serverSignedOut(key: ServerConnection.Key) {
+        return selectServerSignedOut(controllers(), key)
       },
     }
   },
@@ -249,7 +252,7 @@ function createServerController(
   })
 
   const sync = createServerSyncContext(sdk, data)
-  createPermissionAutoApprover({ sdk, data })
+  const autoApprove = createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
 
   // Projects whose repository has no root commit share the `global` ID; their name and icon stay local to the
@@ -257,7 +260,7 @@ function createServerController(
   function withLocalMeta(project: Project): Project {
     if (project.id !== "global") return project
 
-    return { ...project, ...sync.child(project.worktree, { bootstrap: false })[0].projectMeta }
+    return { ...project, ...sync.child(project.worktree)[0].projectMeta }
   }
 
   const list = createMemo(() => sync.data.project.map(withLocalMeta))
@@ -356,24 +359,19 @@ function createServerController(
       },
     },
     notification,
+    autoApprove,
   }
 }
 
-export function useServerCtx(server: Accessor<ServerConnection.Any>): Accessor<ServerCtx>
-export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>): Accessor<ServerCtx | undefined>
+/** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
 export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>) {
   const global = useGlobal()
 
   return () => {
-    const s = server()
+    const conn = server()
 
-    if (s) return global.ensureServerCtx(s)
+    return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
   }
 }
 
 export type ServerCtx = ReturnType<typeof createServerController>
-
-/** What an HTTP server's controller authenticates with; other servers keep one controller per id. */
-function credentials(conn: ServerConnection.Any) {
-  return conn.type === "http" ? `${conn.http.url}\n${conn.http.password ?? ""}` : ""
-}

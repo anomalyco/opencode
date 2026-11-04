@@ -30,7 +30,7 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
     const option = settings.getByRole("radio", { name: mode, exact: true })
-    await settings.getByRole("group", { name: "Interface", exact: true }).getByText(mode, { exact: true }).click()
+    await settings.getByRole("group", { name: "Interface layout", exact: true }).getByText(mode, { exact: true }).click()
     await expect(option).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(page).toHaveURL("/")

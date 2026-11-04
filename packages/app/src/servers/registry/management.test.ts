@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { ServerProbeResult } from "@/runtime/server/health-machine"
 import { ServerConnection } from "@/runtime/server/registry"
 import { createServerHealthPreview, replaceServerConnection, type ServerFormValues } from "./management"
 
@@ -21,51 +22,55 @@ describe("createServerHealthPreview", () => {
     const preview = createServerHealthPreview(async (http) => {
       requests.push(http)
 
-      return { healthy: true }
+      return { type: "healthy" }
     })
 
     await preview.preview({ ...values("server.example.com"), password }, () => {})
-    expect(requests).toEqual([{ url: "http://server.example.com", ...(password ? { password } : {}) }])
+
+    const expected: ServerConnection.HttpBase = { url: "http://server.example.com" }
+
+    if (password) expected.password = password
+    expect(requests).toEqual([expected])
   })
 
   test("ignores an older response that resolves after the latest response", async () => {
-    const first = deferred<{ healthy: boolean }>()
-    const second = deferred<{ healthy: boolean }>()
+    const first = deferred<ServerProbeResult>()
+    const second = deferred<ServerProbeResult>()
     const requests = [first, second]
     const status: Array<boolean | undefined> = []
     const preview = createServerHealthPreview(() => requests.shift()!.promise)
 
     const older = preview.preview(values("old.example.com"), (value) => status.push(value))
     const latest = preview.preview(values("new.example.com"), (value) => status.push(value))
-    second.resolve({ healthy: true })
+    second.resolve({ type: "healthy" })
     await latest
-    first.resolve({ healthy: false })
+    first.resolve({ type: "unreachable" })
     await older
 
     expect(status).toEqual([undefined, undefined, true])
   })
 
   test("an incomplete value invalidates an in-flight response", async () => {
-    const request = deferred<{ healthy: boolean }>()
+    const request = deferred<ServerProbeResult>()
     const status: Array<boolean | undefined> = []
     const preview = createServerHealthPreview(() => request.promise)
 
     const pending = preview.preview(values("server.example.com"), (value) => status.push(value))
     await preview.preview(values("server"), (value) => status.push(value))
-    request.resolve({ healthy: true })
+    request.resolve({ type: "healthy" })
     await pending
 
     expect(status).toEqual([undefined, undefined])
   })
 
   test("cancellation prevents an in-flight response from updating status", async () => {
-    const request = deferred<{ healthy: boolean }>()
+    const request = deferred<ServerProbeResult>()
     const status: Array<boolean | undefined> = []
     const preview = createServerHealthPreview(() => request.promise)
 
     const pending = preview.preview(values("server.example.com"), (value) => status.push(value))
     preview.cancel()
-    request.resolve({ healthy: true })
+    request.resolve({ type: "healthy" })
     await pending
 
     expect(status).toEqual([undefined])

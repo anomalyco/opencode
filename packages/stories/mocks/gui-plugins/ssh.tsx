@@ -114,7 +114,7 @@ export function SshProvider(props: ParentProps) {
 function SshHost(props: ParentProps) {
   const host = usePluginHost()
   return (
-    <PluginServersProvider failed={(id) => host.state.status[id] === "failed"}>
+    <PluginServersProvider>
       <PluginStyles />
       <Show when={host.state.status[plugin.id] === "active"}>{props.children}</Show>
     </PluginServersProvider>

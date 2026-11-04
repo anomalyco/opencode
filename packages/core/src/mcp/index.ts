@@ -7,8 +7,24 @@ import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Clock, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import {
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Latch,
+  Layer,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
+import { FetchHttpClient } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -189,6 +205,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const fetch = yield* FetchHttpClient.Fetch
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -205,6 +222,12 @@ export const layer = (options?: Options) =>
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
+      // Runs a requested lifecycle operation to the end even if its caller is interrupted, such as by a
+      // client dropping the HTTP request. Stopped halfway, a server stays "pending" after a cancelled
+      // connect, or "connected" with no connection after a cancelled disconnect. Location shutdown
+      // still interrupts it.
+      const transition = <E>(effect: Effect.Effect<void, E>) =>
+        Effect.forkIn(effect, root, { startImmediately: true }).pipe(Effect.flatMap(Fiber.join))
       // Attached connections lock separately so a configured server of the same name never contends.
       const attachedLocks = KeyedMutex.makeUnsafe<ServerName>()
       // Legacy era only: pending URL-mode elicitation forms, settled by notifications/elicitation/complete.
@@ -245,6 +268,7 @@ export const layer = (options?: Options) =>
                   const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
                   return yield* McpOAuth.authorize({ name, config: remote, integrationID, methodID }).pipe(
                     Effect.provideService(Credential.Service, credentials),
+                    Effect.provideService(FetchHttpClient.Fetch, fetch),
                   )
                 }),
             })
@@ -267,6 +291,7 @@ export const layer = (options?: Options) =>
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
           Effect.provideService(Credential.Service, credentials),
+          Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
       })
 
@@ -357,6 +382,7 @@ export const layer = (options?: Options) =>
             authProvider: Effect.suspend(() => connectProvider(entry)),
             elicitation,
             environment,
+            fetch,
             scope: servers,
             lock: locks.withLock(name),
             handshake: (effect) => (config.type === "remote" ? endpointLoads.withLock(config.url)(effect) : effect),
@@ -460,9 +486,10 @@ export const layer = (options?: Options) =>
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = entries.get(name)
-        if (previous) yield* disposeServer(previous)
         const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
+        // Readers that arrive while the previous connection closes wait for this one instead of using that one.
         entries.set(name, entry)
+        if (previous) yield* disposeServer(previous)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {
@@ -694,20 +721,24 @@ export const layer = (options?: Options) =>
         }),
         connect: Effect.fn("MCP.connect")(function* (server) {
           const name = ServerName.make(server)
-          yield* Effect.gen(function* () {
-            const entry = yield* requireServer(name)
-            yield* entry.connection.stop
-            yield* entry.connection.start
-          }).pipe(locks.withLock(name))
+          yield* transition(
+            Effect.gen(function* () {
+              const entry = yield* requireServer(name)
+              yield* entry.connection.stop
+              yield* entry.connection.start
+            }).pipe(locks.withLock(name)),
+          )
         }),
         disconnect: Effect.fn("MCP.disconnect")(function* (server) {
           const name = ServerName.make(server)
-          yield* Effect.gen(function* () {
-            const entry = yield* requireServer(name)
-            yield* entry.connection.stop
-            entry.status = { status: "disabled" }
-            yield* bus.publish(McpEvent.StatusChanged, { server: name })
-          }).pipe(locks.withLock(name))
+          yield* transition(
+            Effect.gen(function* () {
+              const entry = yield* requireServer(name)
+              yield* entry.connection.stop
+              entry.status = { status: "disabled" }
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }).pipe(locks.withLock(name)),
+          )
         }),
         remove: Effect.fn("MCP.remove")(function* (server) {
           const name = ServerName.make(server)
@@ -856,7 +887,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node, httpFetch],
   })
 }
 

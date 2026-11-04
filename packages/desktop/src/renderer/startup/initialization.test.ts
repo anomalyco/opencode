@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createSidecarResolver, initializationData } from "./initialization"
 
-function failure(error: unknown) {
+function failure(error: Error | string) {
   try {
     initializationData(Object.assign(() => undefined, { error }))
   } catch (caught) {
@@ -53,13 +53,20 @@ describe("desktop renderer initialization", () => {
     expect(updates).toEqual([])
   })
 
-  test("does not publish a sidecar resolved after cancellation", async () => {
+  test("does not publish a sidecar resolved after cancellation, and cancels the wait in main", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const pending = Promise.withResolvers<typeof sidecar>()
     const updates: (typeof sidecar)[] = []
+    const signals: (AbortSignal | undefined)[] = []
 
     const resolve = createSidecarResolver({
-      api: { reconnectService: () => pending.promise },
+      api: {
+        reconnectService: (signal) => {
+          signals.push(signal)
+
+          return pending.promise
+        },
+      },
       current: () => undefined,
       update: (next) => updates.push(next),
     })
@@ -71,5 +78,6 @@ describe("desktop renderer initialization", () => {
 
     await expect(result).rejects.toBe(abort.signal.reason)
     expect(updates).toEqual([])
+    expect(signals).toEqual([abort.signal])
   })
 })

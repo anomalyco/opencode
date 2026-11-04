@@ -28,11 +28,12 @@ import { registerRendererProtocol, setProtocolReporter } from "./protocol"
 import { loadWindow } from "./scheme"
 import { createWindowRegistry } from "./registry"
 import { windowRecovery } from "./recovery"
+import { createRevealDriver } from "./reveal-machine"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
-const themeReady = new WeakMap<BrowserWindow, () => void>()
+const revealDrivers = new WeakMap<BrowserWindow, ReturnType<typeof createRevealDriver>>()
 
 const displays = {
   all: () => screen.getAllDisplays().map((display) => display.bounds),
@@ -45,7 +46,7 @@ const registry = createWindowRegistry<BrowserWindow>({
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
 })
 
-const opened = new Set<(win: BrowserWindow) => void>()
+const opened = new Set<(win: BrowserWindow, id: string) => void>()
 
 let relaunchHandler = () => {
   setAppQuitting()
@@ -99,13 +100,19 @@ export function getWindowByID(id: string) {
   return win
 }
 
+/** The persistent id of an app window, or undefined for popups and other native windows. */
+export function getWindowID(win: BrowserWindow) {
+  // An open window's id stays in the persisted list until it closes.
+  return registry.persisted().find((id) => registry.get(id) === win)
+}
+
 /** App windows that host the renderer, excluding popups and other native windows. */
 export function getMainWindows() {
   return registry.list().filter((win) => !win.isDestroyed())
 }
 
 /** Runs for each app window as it registers, before its renderer loads. */
-export function onMainWindow(listener: (win: BrowserWindow) => void) {
+export function onMainWindow(listener: (win: BrowserWindow, id: string) => void) {
   opened.add(listener)
 
   return () => {
@@ -114,7 +121,7 @@ export function onMainWindow(listener: (win: BrowserWindow) => void) {
 }
 
 export function setWindowThemeReady(win: BrowserWindow) {
-  themeReady.get(win)?.()
+  revealDrivers.get(win)?.dispatch({ type: "theme.ready" })
 }
 
 export const mainWindows = Effect.fn("Window.make")(function* () {
@@ -170,17 +177,6 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
       manageWindowState(win, stateFile, state, displays)
     }
 
-    wireWindowRecovery(win, id, () => relaunchHandler())
-    register(win, id)
-    wireFullscreen(win)
-    wireFocus(win)
-
-    if (!early) loadWindow(win, "index.html")
-    wireZoom(win)
-    let contentReady = false
-    let appliedTheme = false
-    let revealed = !!early
-
     const focusForTests = () => {
       if (app.isPackaged || process.env.OPENCODE_TEST_ONBOARDING !== "1") return
 
@@ -188,32 +184,43 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
       win.focus()
     }
 
+    const reveal = createRevealDriver({
+      early: !!early,
+      show: (reason) => {
+        if (win.isDestroyed()) return
+        win.show()
+        focusForTests()
+        runFork(Effect.logInfo("main window visible", reason === "ready" ? { window: id } : { window: id, reason }))
+      },
+    })
+
+    revealDrivers.set(win, reveal)
+
+    wireWindowRecovery(win, id, {
+      relaunch: () => relaunchHandler(),
+      reveal: () => reveal.dispatch({ type: "recovery.requested" }),
+    })
+    register(win, id)
+    wireFullscreen(win)
+    wireFocus(win)
+
+    if (!early) loadWindow(win, "index.html")
+    wireZoom(win)
+
     if (early) {
       focusForTests()
       runFork(Effect.logInfo("main window visible", { window: id, shownAt: early.shownAt }))
     }
 
-    const reveal = () => {
-      if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
-      revealed = true
-      win.show()
-      focusForTests()
-      runFork(Effect.logInfo("main window visible", { window: id }))
-    }
+    const contentReady = () => reveal.dispatch({ type: "content.ready" })
 
-    const ready = () => {
-      contentReady = true
-      reveal()
-    }
+    win.once("ready-to-show", contentReady)
 
-    themeReady.set(win, () => {
-      appliedTheme = true
-      reveal()
+    if (process.platform === "linux") win.webContents.once("did-finish-load", contentReady)
+    win.once("closed", () => {
+      reveal.dispatch({ type: "window.closed" })
+      revealDrivers.delete(win)
     })
-    win.once("ready-to-show", ready)
-
-    if (process.platform === "linux") win.webContents.once("did-finish-load", ready)
-    win.once("closed", () => themeReady.delete(win))
 
     return win
   }
@@ -234,7 +241,7 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
         ),
       )
     })
-    opened.forEach((listener) => listener(win))
+    opened.forEach((listener) => listener(win, id))
   }
 
   return { create, restore }

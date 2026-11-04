@@ -16,8 +16,9 @@ import {
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { ServerReadyData } from "../shared/ipc-contract"
 import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
@@ -27,6 +28,8 @@ import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
+
+const offline = { url: "http://127.0.0.1:0" }
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
@@ -60,7 +63,15 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   )
 
   const platform = createDesktopPlatform(props.api, windowState)
-  const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
+  const [sidecar] = createResource(() => props.api.awaitInitialization())
+
+  // The origin main moved every window to after initialization: this window's reconnect, another's, or a probed
+  // service that `Service.ensure` replaced.
+  const [movedSidecar, setMovedSidecar] = createSignal<ServerReadyData | undefined>(undefined, {
+    equals: (a, b) => a?.url === b?.url,
+  })
+
+  onCleanup(props.api.onSidecarChanged((data) => setMovedSidecar(data)))
 
   const [locale] = createResource(() => preloadStoredLocale(platform))
 
@@ -85,23 +96,34 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
     const pluginServers = usePluginServers()
     const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && pluginServers.ready())
 
-    const servers = createMemo(() => {
-      const data = initializationData(sidecar)
-      const list: ServerConnection.Any[] = []
+    const activeSidecar = createMemo(
+      () => {
+        const data = movedSidecar() ?? initializationData(sidecar)
 
-      if (data) {
-        list.push({
-          type: "sidecar",
-          variant: "base",
-          http: sidecarHttp(data),
-          reconnect: createSidecarResolver({ api: props.api, current: sidecar, update: setSidecar }),
-        })
-      }
+        return data ? sidecarHttp(data) : undefined
+      },
+      undefined,
+      { equals: (a, b) => a?.url === b?.url },
+    )
 
-      list.push(...pluginServers.list())
+    // One connection for the window's lifetime: the server SDK follows its `http` to a new origin in place.
+    const sidecarServer: ServerConnection.Sidecar = {
+      type: "sidecar",
+      variant: "base",
+      get http() {
+        return activeSidecar() ?? offline
+      },
+      reconnect: createSidecarResolver({
+        api: props.api,
+        current: () => movedSidecar() ?? (sidecar.state === "ready" ? sidecar.latest : undefined),
+        update: (data) => setMovedSidecar(data),
+      }),
+    }
 
-      return list
-    })
+    const servers = createMemo((): ServerConnection.Any[] => [
+      ...(activeSidecar() ? [sidecarServer] : []),
+      ...pluginServers.list(),
+    ])
 
     return (
       <Show when={ready()}>
@@ -119,7 +141,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
           />
           <DesktopEffects api={props.api} />
           <Suspense fallback={null}>
-            <Show when={initializationData(sidecar)} keyed>
+            <Show when={activeSidecar()} keyed>
               {(server) => <MigrationStatus server={server} />}
             </Show>
           </Suspense>

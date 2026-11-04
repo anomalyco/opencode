@@ -3,9 +3,11 @@ import type { ElectronAPI } from "../api-types"
 type SidecarData = Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>
 
 export function initializationData<A>(state: (() => A | undefined) & { error: unknown }) {
-  if (state.error !== undefined) throw markLocalServerStartup(state.error)
+  if (state.error === undefined) return state()
+  const failure = state.error instanceof Error ? state.error : new Error(String(state.error))
+  Object.defineProperty(failure, "localServerStartup", { value: true })
 
-  return state()
+  throw failure
 }
 
 // The main process adds Authorization to sidecar requests (`wireRendererHeaders`); the renderer never
@@ -21,7 +23,8 @@ export function createSidecarResolver(input: {
 }) {
   return async (signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
-    const next = await input.api.reconnectService()
+    // Aborting interrupts this window's wait in main; the reconnect keeps running for other windows.
+    const next = await input.api.reconnectService(signal)
 
     if (signal.aborted) throw signal.reason
 
@@ -33,11 +36,4 @@ export function createSidecarResolver(input: {
 
 function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
   return current?.url === next.url
-}
-
-function markLocalServerStartup(error: unknown) {
-  const failure = error instanceof Error ? error : new Error(String(error))
-  Object.defineProperty(failure, "localServerStartup", { value: true })
-
-  return failure
 }

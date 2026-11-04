@@ -21,6 +21,7 @@ import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
+import type { TimelineFollow } from "./follow"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { createSelectedEffect } from "./selected-effect"
 import { containsDirectory } from "@opencode/util/path"
@@ -74,6 +75,7 @@ type MessageTimelineProps = {
   /** Hands the header's empty gap to the pane's window drag area. */
   registerHeaderGap?: (gap: HTMLElement) => () => void
   active?: boolean
+  caughtUp: boolean
   session: TimelineSessionSource
   view: MountedSession
   screen: SessionScreen
@@ -83,12 +85,9 @@ type MessageTimelineProps = {
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
-  onPin: () => void
-  onUnpin: () => void
+  follow: TimelineFollow
   onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
-  onSelectionInteraction: (event: MouseEvent) => void
-  pinned: boolean
   centered: boolean
   reserveReviewToggle: boolean
   onContentResize: () => void
@@ -97,15 +96,20 @@ type MessageTimelineProps = {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setRevealPart?: (fn: (target: string) => boolean) => void
-  setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  setScrollToEnd?: (fn: (behavior?: ScrollBehavior, read?: boolean) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ session: props.session, active: () => props.active !== false })
-  const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
+  const controller = createTimelineController({
+    session: props.session,
+    active: () => props.active !== false,
+    caughtUp: () => props.caughtUp,
+  })
+
+  const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined
 
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
     const message = controller.data.projection.messageByID().get(tail.group.ref.messageID)
@@ -180,7 +184,6 @@ function MessageTimelineView(
   )
   const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
-  const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
 
   const virtualized = createTimelineVirtualizer({
@@ -189,7 +192,9 @@ function MessageTimelineView(
     presentationKey: () => JSON.stringify(props.data.timelineDetail()),
     projection,
     showHeader,
-    pinned,
+    follow: props.follow,
+    onReadEnd: props.data.newMessages.read,
+    onReadMarkPassed: props.data.newMessages.release,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
@@ -197,15 +202,13 @@ function MessageTimelineView(
     bottomInset: () => props.bottomInset ?? 0,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
-    onPin: props.onPin,
-    onUnpin: props.onUnpin,
-    onSelectionInteraction: props.onSelectionInteraction,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     canRenderImmediately: (row, disclosure) => {
       if (
         Predicate.isTagged(row, "TurnGap") ||
         Predicate.isTagged(row, "TurnDivider") ||
+        Predicate.isTagged(row, "NewMessages") ||
         Predicate.isTagged(row, "CompactionQueued") ||
         Predicate.isTagged(row, "Activity")
       )
