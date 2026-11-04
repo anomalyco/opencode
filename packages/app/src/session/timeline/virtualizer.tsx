@@ -979,11 +979,12 @@ export function createTimelineVirtualizer(input: Input) {
 
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
-  // Only the primary button: a secondary one opens a context menu that can swallow its release.
+  // Not the secondary button: it opens a context menu that can swallow its release. The middle button stays, as its
+  // drag autoscrolls on Windows and Linux.
   const handleListPointerDown = (event: PointerEvent) => {
     readIntent = true
 
-    if (!active() || event.button !== 0) return
+    if (!active() || event.button === 2) return
     input.onUserScroll(event.target)
     input.follow.dispatch(pointerDownEvent)
   }
