@@ -9,6 +9,17 @@ export type RepoFiles = Record<string, string | null>
 
 // `base` is committed; `changes` writes, or with `null` deletes, files on top of it.
 export async function repoDiff(base: RepoFiles, changes: RepoFiles, context = 12) {
+  return (await repoFixture(base, changes, { context })).files
+}
+
+// The diff and the repository's branches as `/api/vcs/branch` lists them (E.15b): `main` and each of `branches`,
+// created at the base commit, sorted by name.
+export async function repoFixture(
+  base: RepoFiles,
+  changes: RepoFiles,
+  options: { context?: number; branches?: string[] } = {},
+) {
+  const context = options.context ?? 12
   const root = await mkdtemp(path.join(tmpdir(), "opencode-parity-repo-"))
   try {
     const git = (...args: string[]) => {
@@ -34,6 +45,8 @@ export async function repoDiff(base: RepoFiles, changes: RepoFiles, context = 12
     await write(base)
     git("add", "-A")
     git("commit", "-q", "-m", "base")
+    for (const branch of options.branches ?? []) git("branch", branch)
+    const branches = git("branch", "--format=%(refname:short)").split("\n").filter(Boolean).toSorted()
     await write(changes)
     git("add", "-A")
     const output = git(
@@ -46,7 +59,7 @@ export async function repoDiff(base: RepoFiles, changes: RepoFiles, context = 12
       `-U${context}`,
       "main",
     )
-    return output
+    const files = output
       .split(/^(?=diff --git )/m)
       .filter(Boolean)
       .map((patch) => {
@@ -60,6 +73,7 @@ export async function repoDiff(base: RepoFiles, changes: RepoFiles, context = 12
           status: /^new file mode/m.test(patch) ? "added" : /^deleted file mode/m.test(patch) ? "deleted" : "modified",
         }
       })
+    return { files, branches }
   } finally {
     await rm(root, { recursive: true, force: true })
   }
