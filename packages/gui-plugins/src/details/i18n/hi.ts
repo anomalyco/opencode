@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "कोई प्लगइन्स कॉन्फ़िगर नहीं किया गया",
   skills: "कौशल",
   "skills.empty": "कोई कौशल कॉन्फ़िगर नहीं किया गया",
-  lsp: "LSP",
-  "lsp.empty": "कोई LSP सर्वर कॉन्फ़िगर नहीं किया गया",
   failed: "असफल",
   retry: "पुन: प्रयास करें",
   connecting: "कनेक्ट हो रहा है...",

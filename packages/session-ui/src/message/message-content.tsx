@@ -19,6 +19,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
+import { LinkedText } from "../components/linked-text"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
@@ -1034,7 +1035,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
         </Show>
         <Show when={error()}>
           <Card variant="error" class="error-card">
-            {error()}
+            <LinkedText text={error()} />
           </Card>
         </Show>
       </div>
@@ -1138,6 +1139,7 @@ export function AssistantTextContent(props: {
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
@@ -1196,6 +1198,17 @@ export function AssistantTextContent(props: {
     ),
   ])
 
+  const speed = createMemo(() => {
+    if (props.turnTokensPerSecond === undefined) return undefined
+
+    return i18n.t("ui.message.tokensPerSecond", {
+      value: new Intl.NumberFormat(i18n.locale(), {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(props.turnTokensPerSecond),
+    })
+  })
+
   const [copied, setCopied] = createSignal(false)
 
   const copy = async () => {
@@ -1241,6 +1254,14 @@ export function AssistantTextContent(props: {
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
             <MetaItems items={meta()} slot="text-part" />
+            <Show when={speed()}>
+              {(label) => (
+                <span data-slot="text-part-meta-speed">
+                  <span aria-hidden="true">{"\u00B7"}</span>
+                  <span dir="auto">{label()}</span>
+                </span>
+              )}
+            </Show>
           </span>
         </Show>
       </div>

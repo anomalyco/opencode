@@ -520,7 +520,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   type="button"
                   data-titlebar-tab-action
                   data-action="vertical-tabs-search"
-                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint"
+                  class="group flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
                   onClick={() => command.trigger("sessions.search")}
                 >
                   <Icon name="magnifying-glass" class="shrink-0" />
@@ -739,6 +739,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                                 if (index !== -1) tabsStoreActions.closeTab(index)
                               }}
+                              onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                               onReorder={(keys) => tabsStoreActions.reorder(keys)}
                             />
                           </div>
@@ -814,6 +815,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                             if (index !== -1) tabsStoreActions.closeTab(index)
                           }}
+                          onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
                         />
                         <RecentlyClosedTabsMenu
@@ -896,6 +898,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                                       if (index !== -1) tabsStoreActions.closeTab(index)
                                     }}
+                                    onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                                     onReorder={(keys) => tabsStoreActions.reorder(keys)}
                                   />
                                 }

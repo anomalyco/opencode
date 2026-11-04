@@ -1,5 +1,51 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("reveals turn speed only while hovering the response metadata", async ({ mount, page }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
+
+  const footer = timeline.locator('[data-slot="text-part-copy-wrapper"]').last()
+
+  const meta = footer.locator('[data-slot="text-part-meta"]')
+
+  const speed = meta.locator('[data-slot="text-part-meta-speed"]')
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
+  await expect(speed).toHaveText("·60.0 tok/s")
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await expect(footer).toHaveCSS("opacity", "1")
+  await expect(speed).toBeHidden()
+
+  for (const width of [1000, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+    await meta.hover()
+    await expect(speed).toBeVisible()
+    expect(
+      await speed.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+
+        const parent = element.parentElement!.getBoundingClientRect()
+
+        return box.left >= parent.left && box.right <= parent.right + 1
+      }),
+    ).toBe(true)
+    await footer.getByRole("button", { name: "Copy response", exact: true }).hover()
+    await expect(speed).toBeHidden()
+  }
+})
+
+story("omits turn speed when a model step has no streaming time", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { measured: false } })
+
+  const meta = timeline.locator('[data-slot="text-part-meta"]')
+
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await meta.hover()
+  await expect(meta).toContainText("5m 2s")
+  await expect(meta.locator('[data-slot="text-part-meta-speed"]')).toHaveCount(0)
+})
+
 story("keeps quote attachment icons fixed while long text truncates", async ({ mount, page }) => {
   const gallery = await mount("current-session-timeline-rows--quote-attachments")
 

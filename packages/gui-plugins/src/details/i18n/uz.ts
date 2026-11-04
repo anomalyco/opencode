@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Hech qanday plagin sozlanmagan",
   skills: "Ko'nikmalar",
   "skills.empty": "Hech qanday mahorat sozlanmagan",
-  lsp: "LSP",
-  "lsp.empty": "Hech qanday LSP serveri sozlanmagan",
   failed: "Muvaffaqiyatsiz",
   retry: "Qayta urinish",
   connecting: "Ulanmoqda…",

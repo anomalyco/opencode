@@ -263,8 +263,8 @@ export const SettingsGeneral: Component = () => {
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
-      <InterfaceModeSetting />
       <SettingsList>
+        <InterfaceModeSetting />
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />

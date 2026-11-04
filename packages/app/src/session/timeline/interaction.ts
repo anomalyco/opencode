@@ -64,7 +64,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   let revealPart = (_target: string) => false
 
-  let scrollToEnd = (_behavior?: ScrollBehavior) => {}
+  let scrollToEnd = (_behavior?: ScrollBehavior, _read?: boolean) => {}
 
   let page = (_direction: 1 | -1) => {}
 
@@ -186,7 +186,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     resumeFrame?.()
     resumeFrame = frameLoop.add(() => {
       resumeFrame = undefined
-      scrollToEnd(behavior)
+      scrollToEnd(behavior, true)
 
       return false
     })
@@ -441,7 +441,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
         },
       },
       setScrollRef,
-      setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
+      setScrollToEnd: (scroll: (behavior?: ScrollBehavior, read?: boolean) => void) => {
         scrollToEnd = scroll
       },
       setPage: (scroll: (direction: 1 | -1) => void) => {

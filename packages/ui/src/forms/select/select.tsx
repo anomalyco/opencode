@@ -56,8 +56,6 @@ const CheckSmall = () => (
   </svg>
 )
 
-type SelectState = { key?: string; cleanup?: void | (() => void) }
-
 export type SelectProps<T> = Omit<
   ComponentProps<typeof Root<T, { category: string; options: T[] }>>,
   "value" | "onSelect" | "children" | "options" | "itemComponent" | "sectionComponent" | "defaultValue" | "multiple"
@@ -73,10 +71,16 @@ export type SelectProps<T> = Omit<
   onHighlight?: (value: T | undefined) => void | (() => void)
   invalid?: boolean
   numeric?: boolean
+  /** `inline` is the borderless settings trigger; `small`, `base` and `large` are 24px, 28px and 32px input fields. */
+  appearance?: "inline" | "small" | "base" | "large"
+  /** Background surface of an input field; invisible gains a fill on hover. */
+  surface?: "base" | "layer-1" | "invisible"
   children?: (item: T) => JSX.Element
   valueClass?: string
   contentClass?: string
 }
+
+type HighlightState = { key?: string; cleanup?: void | (() => void) }
 
 export function Select<T>(props: SelectProps<T>) {
   const [local, others] = splitProps(props, [
@@ -94,6 +98,8 @@ export function Select<T>(props: SelectProps<T>) {
     "children",
     "invalid",
     "numeric",
+    "appearance",
+    "surface",
     "disabled",
     "valueClass",
     "contentClass",
@@ -105,7 +111,7 @@ export function Select<T>(props: SelectProps<T>) {
     "fitViewport",
   ])
 
-  const state: SelectState = {}
+  const state: HighlightState = {}
 
   let scroller: HTMLDivElement | undefined
 
@@ -185,8 +191,7 @@ export function Select<T>(props: SelectProps<T>) {
         </Item>
       )}
       onChange={(next) => {
-        // SAFETY: Root is single-select over `T` options, so Kobalte reports a `T` (or `T[]` in its widened type).
-        const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
+        const v = next == null ? null : Array.isArray(next) ? (next[0] ?? null) : next
         local.onSelect?.(v)
         stop()
       }}
@@ -201,7 +206,8 @@ export function Select<T>(props: SelectProps<T>) {
         aria-label={props["aria-label"]}
         aria-labelledby={props["aria-labelledby"]}
         data-component="select-v2"
-        data-appearance="inline"
+        data-appearance={local.appearance ?? "inline"}
+        data-surface={local.appearance && local.appearance !== "inline" ? (local.surface ?? "base") : undefined}
         data-invalid={local.invalid ? "" : undefined}
         data-numeric={local.numeric ? "" : undefined}
         disabled={local.disabled}

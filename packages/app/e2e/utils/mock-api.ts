@@ -30,6 +30,7 @@ const JsonPayload = Schema.Unknown.pipe(HttpApiSchema.asJson())
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
   parentID: Schema.optional(Schema.String),
+  archived: Schema.optional(Schema.String),
   search: Schema.optional(Schema.String),
   order: Schema.optional(Schema.String),
   cursor: Schema.optional(Schema.String),
