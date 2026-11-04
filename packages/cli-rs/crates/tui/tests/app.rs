@@ -133,7 +133,9 @@ fn run(recording: &Recording) -> (bool, String) {
             Step::Event { event } => memory.emit(event),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
-                let ide = ide.as_ref().expect("an ide step needs `ide` in the scenario");
+                let ide = ide
+                    .as_ref()
+                    .expect("an ide step needs `ide` in the scenario");
                 app.wait_until(UNTIL, || ide.initialized());
                 ide.send(message);
             }

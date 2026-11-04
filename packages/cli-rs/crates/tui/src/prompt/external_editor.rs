@@ -31,7 +31,11 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
     tui.app.release_terminal(move |_| {
-        let result = edit(&command, snapshot["text"].as_str().unwrap_or_default(), &cwd);
+        let result = edit(
+            &command,
+            snapshot["text"].as_str().unwrap_or_default(),
+            &cwd,
+        );
         let Some(prompt) = weak.upgrade() else { return };
         let Some(tui) = prompt.tui.upgrade() else {
             return;
@@ -53,9 +57,8 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
 }
 
 fn failed(tui: &Tui, message: &str) {
-    tui.toasts.show(
-        ToastOptions::new(Variant::Error, message.to_owned()).title("Failed to open editor"),
-    );
+    tui.toasts
+        .show(ToastOptions::new(Variant::Error, message.to_owned()).title("Failed to open editor"));
 }
 
 /// The project's directory unless it is `/`, else the location's, else the TUI's.
@@ -167,7 +170,11 @@ pub fn realign(content: &str, prompt: &Value) -> Value {
         .iter()
         .map(|key| prompt.get(*key).and_then(Value::as_array))
         .collect();
-    let parts: Vec<&Value> = lists.iter().flatten().flat_map(|list| list.iter()).collect();
+    let parts: Vec<&Value> = lists
+        .iter()
+        .flatten()
+        .flat_map(|list| list.iter())
+        .collect();
     let mentions: Vec<Option<Mention>> = parts.iter().map(|part| mention(part)).collect();
     let aligned = realign_mentions(content, &mentions);
 
@@ -198,7 +205,10 @@ pub fn realign(content: &str, prompt: &Value) -> Value {
 /// A part's mention with text.
 fn mention(part: &Value) -> Option<Mention> {
     let mention = part.get("mention")?;
-    let text = mention.get("text")?.as_str().filter(|text| !text.is_empty())?;
+    let text = mention
+        .get("text")?
+        .as_str()
+        .filter(|text| !text.is_empty())?;
     let offset = |key: &str| mention.get(key).and_then(Value::as_f64).unwrap_or_default() as u32;
     Some(Mention {
         start: offset("start"),
@@ -334,21 +344,31 @@ mod tests {
         });
         let next = realign("日本 @general then @a.ts", &prompt);
         assert_eq!(next["text"], "日本 @general then @a.ts");
-        assert_eq!(next["files"][0]["mention"], json!({ "text": "@a.ts", "start": 19, "end": 24 }));
-        assert_eq!(next["files"][1], json!({ "uri": "file:///w/b.ts", "name": "b.ts" }));
-        assert_eq!(next["agents"][0]["mention"], json!({ "text": "@general", "start": 5, "end": 13 }));
+        assert_eq!(
+            next["files"][0]["mention"],
+            json!({ "text": "@a.ts", "start": 19, "end": 24 })
+        );
+        assert_eq!(
+            next["files"][1],
+            json!({ "uri": "file:///w/b.ts", "name": "b.ts" })
+        );
+        assert_eq!(
+            next["agents"][0]["mention"],
+            json!({ "text": "@general", "start": 5, "end": 13 })
+        );
         assert!(next.get("skills").is_none());
 
         let gone = realign("nothing left", &prompt);
-        assert_eq!(gone["files"], json!([{ "uri": "file:///w/b.ts", "name": "b.ts" }]));
+        assert_eq!(
+            gone["files"],
+            json!([{ "uri": "file:///w/b.ts", "name": "b.ts" }])
+        );
         assert_eq!(gone["agents"], json!([]));
     }
 
     #[test]
     fn repeated_mentions_take_the_nearest_occurrences_and_longer_texts_go_first() {
-        let part = |start: u32, text: &str| {
-            json!({ "uri": "file:///x", "name": "x", "mention": { "start": start, "end": start + measure(text), "text": text } })
-        };
+        let part = |start: u32, text: &str| json!({ "uri": "file:///x", "name": "x", "mention": { "start": start, "end": start + measure(text), "text": text } });
         let prompt = json!({ "files": [part(0, "@x"), part(20, "@x"), part(30, "@x.ts")] });
         // Three "@x" candidates, one inside "@x.ts", which the longer mention protects.
         let next = realign("@x @x.ts                @x", &prompt);
