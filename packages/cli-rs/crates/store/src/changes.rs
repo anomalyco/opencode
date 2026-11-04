@@ -130,7 +130,11 @@ impl Log {
         if seen >= self.revision {
             return Changes::default();
         }
-        if self.entries.front().is_none_or(|(oldest, _)| seen + 1 < *oldest) {
+        if self
+            .entries
+            .front()
+            .is_none_or(|(oldest, _)| seen + 1 < *oldest)
+        {
             return Changes::everything();
         }
         let mut changes = Changes::default();

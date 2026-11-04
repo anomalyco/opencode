@@ -70,7 +70,9 @@ impl Fixture {
 
     fn settled(&self, outcome: &str) {
         let payload = match outcome {
-            "failed" => json!({ "error": { "type": "provider", "message": "Provider unavailable" } }),
+            "failed" => {
+                json!({ "error": { "type": "provider", "message": "Provider unavailable" } })
+            }
             "interrupted" => json!({ "reason": "user" }),
             _ => json!({}),
         };
@@ -85,8 +87,7 @@ impl Fixture {
     }
 
     fn status(&self, id: &str) -> Option<PendingStatus> {
-        self.data
-            .read(|state| state.pending_status(&session(), id))
+        self.data.read(|state| state.pending_status(&session(), id))
     }
 }
 
@@ -127,7 +128,8 @@ async fn an_idle_send_is_starting_from_optimistic_admission_until_delivery() {
 }
 
 #[tokio::test]
-async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follows_delivery_changes() {
+async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follows_delivery_changes()
+{
     let setup = fixture();
     setup.enqueue("msg_first", "steer");
     setup.started();
@@ -237,7 +239,13 @@ async fn optimistic_prompt_admission_preserves_inline_data_attachments_before_th
     let wait = gate.wait();
     let sending = setup.data.prompt(Prompt {
         input,
-        gate: Some(async move { Ok(wait.await) }.boxed()),
+        gate: Some(
+            async move {
+                wait.await;
+                Ok(())
+            }
+            .boxed(),
+        ),
         prepare: None,
     });
     let expected = json!([{
