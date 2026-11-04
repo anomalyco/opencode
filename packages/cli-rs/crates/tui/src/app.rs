@@ -188,6 +188,7 @@ impl Tui {
         }
         crate::features::title::sync(self, &changes);
         crate::features::events::sync(self, &changes);
+        self.local.sync(&changes);
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
         crate::features::attention::program_status::sync(self);
@@ -334,12 +335,12 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
         local: crate::dialogs::model::Local::new(
             app,
-            deps.client.clone(),
-            deps.directory.clone(),
+            data.clone(),
             dialogs.clone(),
             toasts.clone(),
             local_files,
             crate::dialogs::model::route_fn(this.clone()),
+            crate::dialogs::model::location_fn(this.clone()),
         ),
         app: app.clone(),
         data,
