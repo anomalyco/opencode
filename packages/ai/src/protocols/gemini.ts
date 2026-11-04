@@ -266,14 +266,20 @@ interface ParserState {
   /** Usage of the earlier requests of a response Gemini continued across requests. */
   readonly continuedUsage?: ReadonlyArray<GeminiUsage>
   readonly lifecycle: Lifecycle.State
-  readonly reasoningSignature?: string
-  readonly textSignature?: string
-  readonly reasoningId?: string
-  readonly textId?: string
+  /** At most one text or reasoning block is open; it stays open across continued requests of one response. */
+  readonly active: ActiveBlock
   readonly nextReasoningId: number
   readonly nextTextId: number
   readonly seenCallIds?: ReadonlySet<string>
 }
+
+type OpenBlock = {
+  readonly _tag: "text" | "reasoning"
+  readonly id: string
+  /** Text emits it with the next delta, else at block end; reasoning emits the latest at block end. */
+  readonly signature?: string
+}
+type ActiveBlock = { readonly _tag: "none" } | OpenBlock
 
 // =============================================================================
 // Request Lowering
@@ -593,21 +599,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   if (finishReason === undefined && state.usage === undefined && state.continuedUsage === undefined) return []
 
   const events: LLMEvent[] = []
-  let lifecycle = state.lifecycle
-  if (state.reasoningId !== undefined)
-    lifecycle = Lifecycle.reasoningEnd(
-      lifecycle,
-      events,
-      state.reasoningId,
-      signatureMetadata(state.providerMetadataKey, state.reasoningSignature),
-    )
-  if (state.textId !== undefined)
-    lifecycle = Lifecycle.textEnd(
-      lifecycle,
-      events,
-      state.textId,
-      signatureMetadata(state.providerMetadataKey, state.textSignature),
-    )
+  const lifecycle = endBlock(state.lifecycle, events, state.active, state.providerMetadataKey)
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
@@ -624,6 +616,13 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
         : providerMetadata(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
   })
   return events
+}
+
+const endBlock = (lifecycle: Lifecycle.State, events: LLMEvent[], active: ActiveBlock, metadataKey: string) => {
+  if (active._tag === "none") return lifecycle
+  const metadata = signatureMetadata(metadataKey, active.signature)
+  if (active._tag === "text") return Lifecycle.textEnd(lifecycle, events, active.id, metadata)
+  return Lifecycle.reasoningEnd(lifecycle, events, active.id, metadata)
 }
 
 const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
@@ -675,26 +674,24 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
   let lifecycle = nextState.lifecycle
-  let reasoningSignature = nextState.reasoningSignature
-  let textSignature = nextState.textSignature
-  let reasoningId = nextState.reasoningId
-  let textId = nextState.textId
+  let active = nextState.active
   let nextReasoningId = nextState.nextReasoningId
   let nextTextId = nextState.nextTextId
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
   const signed = (signature: string | undefined) => signatureMetadata(state.providerMetadataKey, signature)
-  const endReasoning = () => {
-    if (reasoningId === undefined) return
-    lifecycle = Lifecycle.reasoningEnd(lifecycle, events, reasoningId, signed(reasoningSignature))
-    reasoningId = undefined
-    reasoningSignature = undefined
+  const close = () => {
+    lifecycle = endBlock(lifecycle, events, active, state.providerMetadataKey)
+    active = { _tag: "none" }
   }
-  const endText = () => {
-    if (textId === undefined) return
-    lifecycle = Lifecycle.textEnd(lifecycle, events, textId, signed(textSignature))
-    textId = undefined
-    textSignature = undefined
+  // Entering a different kind closes the open block first, so blocks never interleave.
+  const enter = (_tag: OpenBlock["_tag"], signature: string | undefined) => {
+    if (active._tag !== _tag) {
+      close()
+      active = { _tag, id: _tag === "text" ? `text-${nextTextId++}` : `reasoning-${nextReasoningId++}` }
+    }
+    active = { ...active, signature: signature ?? active.signature }
+    return active
   }
 
   for (const input of candidate.content.parts ?? []) {
@@ -713,12 +710,9 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       )
     const part = decoded.value
     const signature = "thoughtSignature" in part && part.thoughtSignature ? part.thoughtSignature : undefined
-    // Gemini attaches replay signatures to thought parts, visible text, or function calls;
-    // each block kind must retain the signature attached to its own parts.
-    if (signature !== undefined && "thought" in part && part.thought) reasoningSignature = signature
-    else if (signature !== undefined && "text" in part) textSignature = signature
     // Image-capable Gemini models return generated images as inline data parts; surface them as first-class output.
     if ("inlineData" in part) {
+      close()
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.media({
@@ -728,23 +722,19 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       )
       continue
     }
-    if ("text" in part && part.text.length > 0) {
+    // Gemini attaches replay signatures to thought parts, visible text, or function calls; each block
+    // keeps the signatures of its own parts, including a trailing empty part that only carries one.
+    if ("text" in part && (part.text.length > 0 || signature !== undefined)) {
       if (part.thought) {
-        endText()
-        if (reasoningId === undefined) {
-          reasoningId = `reasoning-${nextReasoningId}`
-          nextReasoningId += 1
-        }
-        lifecycle = Lifecycle.reasoningDelta(lifecycle, events, reasoningId, part.text, signed(signature))
+        const block = enter("reasoning", signature)
+        if (part.text.length > 0)
+          lifecycle = Lifecycle.reasoningDelta(lifecycle, events, block.id, part.text, signed(signature))
         continue
       }
-      endReasoning()
-      if (textId === undefined) {
-        textId = `text-${nextTextId}`
-        nextTextId += 1
-      }
-      lifecycle = Lifecycle.textDelta(lifecycle, events, textId, part.text, signed(textSignature))
-      textSignature = undefined
+      const block = enter("text", signature)
+      if (part.text.length === 0) continue
+      lifecycle = Lifecycle.textDelta(lifecycle, events, block.id, part.text, signed(block.signature))
+      active = { _tag: "text", id: block.id }
       continue
     }
 
@@ -758,8 +748,7 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       const duplicate = supplied !== undefined && seenCallIds.has(supplied)
       if (supplied !== undefined) seenCallIds.add(supplied)
       const id = supplied !== undefined && !duplicate ? supplied : `tool_${crypto.randomUUID().replaceAll("-", "")}`
-      endReasoning()
-      endText()
+      close()
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
@@ -778,10 +767,7 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
       ...nextState,
       hasToolCalls,
       lifecycle,
-      reasoningSignature,
-      textSignature,
-      reasoningId,
-      textId,
+      active,
       nextReasoningId,
       nextTextId,
       seenCallIds,
@@ -904,6 +890,7 @@ export const protocol = Protocol.make({
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
+      active: { _tag: "none" },
       nextReasoningId: 0,
       nextTextId: 0,
     }),

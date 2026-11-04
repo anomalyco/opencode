@@ -1208,6 +1208,46 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("starts a new text block after an inline image", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { candidates: [{ content: { role: "model", parts: [{ text: "A" }] } }] },
+        {
+          candidates: [
+            {
+              content: { role: "model", parts: [{ inlineData: { mimeType: "image/png", data: "AAECAw==" } }] },
+            },
+          ],
+        },
+        { candidates: [{ content: { role: "model", parts: [{ text: "B" }] }, finishReason: "STOP" }] },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(
+        response.events.flatMap((event) =>
+          event.type === "text-start" || event.type === "text-delta" || event.type === "text-end"
+            ? [`${event.type}:${event.id}`]
+            : event.type === "media"
+              ? ["media"]
+              : [],
+        ),
+      ).toEqual([
+        "text-start:text-0",
+        "text-delta:text-0",
+        "text-end:text-0",
+        "media",
+        "text-start:text-1",
+        "text-delta:text-1",
+        "text-end:text-1",
+      ])
+      expect(response.message.content).toEqual([
+        { type: "text", text: "A" },
+        { type: "media", media: Media.base64("AAECAw==", "image/png") },
+        { type: "text", text: "B" },
+      ])
+    }),
+  )
+
   it.effect("ignores unknown response parts", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
