@@ -690,9 +690,17 @@ const mapUsage = (usage: BedrockUsageSchema | undefined, providerMetadataKey: st
   })
 }
 
+// One entry per open content block index. Bedrock sends no start event for text
+// or reasoning, so their first delta opens the block. A delta of a different
+// kind for an index that is already open is dropped.
+type Block =
+  | { readonly kind: "text" }
+  | { readonly kind: "reasoning"; readonly signature?: string; readonly redacted?: ReadonlyArray<Uint8Array> }
+  | { readonly kind: "tool"; readonly tool: ToolStream.PendingTool }
+
 interface ParserState {
   readonly providerMetadataKey: string
-  readonly tools: ToolStream.State<number>
+  readonly blocks: Readonly<Partial<Record<number, Block>>>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). Hold both in state so `onHalt` can emit exactly
   // one finish after both chunks have had a chance to arrive.
@@ -700,11 +708,12 @@ interface ParserState {
   readonly usage: Usage | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
-  readonly reasoningSignatures: Readonly<Record<number, string>>
-  readonly reasoningRedactedContent: Readonly<Record<number, Uint8Array[]>>
 }
 
-const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => Base64.encode(concatBytes(chunks))
+const reasoningEndMetadata = (key: string, block: Block & { readonly kind: "reasoning" }) => {
+  if (block.signature) return providerMetadata(key, { signature: block.signature })
+  if (block.redacted) return providerMetadata(key, { redactedData: Base64.encode(concatBytes(block.redacted)) })
+}
 
 const step = (state: ParserState, event: BedrockEvent) =>
   Effect.gen(function* () {
@@ -716,10 +725,17 @@ const step = (state: ParserState, event: BedrockEvent) =>
         {
           ...state,
           lifecycle,
-          tools: ToolStream.start(state.tools, index, {
-            id: event.contentBlockStart.start.toolUse.toolUseId,
-            name: event.contentBlockStart.start.toolUse.name,
-          }),
+          blocks: {
+            ...state.blocks,
+            [index]: {
+              kind: "tool",
+              tool: {
+                id: event.contentBlockStart.start.toolUse.toolUseId,
+                name: event.contentBlockStart.start.toolUse.name,
+                input: "",
+              },
+            },
+          },
         },
         [
           ...events,
@@ -732,16 +748,15 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockDelta?.delta?.text) {
+      const index = event.contentBlockDelta.contentBlockIndex
+      const block = state.blocks[index]
+      if (block && block.kind !== "text") return [state, []] as const
       const events: LLMEvent[] = []
       return [
         {
           ...state,
-          lifecycle: Lifecycle.textDelta(
-            state.lifecycle,
-            events,
-            `text-${event.contentBlockDelta.contentBlockIndex}`,
-            event.contentBlockDelta.delta.text,
-          ),
+          blocks: block ? state.blocks : { ...state.blocks, [index]: { kind: "text" } satisfies Block },
+          lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${index}`, event.contentBlockDelta.delta.text),
         },
         events,
       ] as const
@@ -750,6 +765,8 @@ const step = (state: ParserState, event: BedrockEvent) =>
     if (event.contentBlockDelta?.delta?.reasoningContent) {
       const index = event.contentBlockDelta.contentBlockIndex
       const reasoning = event.contentBlockDelta.delta.reasoningContent
+      const block = state.blocks[index]
+      if (block && block.kind !== "reasoning") return [state, []] as const
       const events: LLMEvent[] = []
       const redactedChunk = yield* (() => {
         if (reasoning.redactedContent === undefined) return Effect.succeed(undefined)
@@ -764,8 +781,6 @@ const step = (state: ParserState, event: BedrockEvent) =>
           ),
         )
       })()
-      const redactedChunks = state.reasoningRedactedContent[index] ?? []
-      if (redactedChunk !== undefined) redactedChunks.push(redactedChunk)
       const metadata = (() => {
         if (reasoning.signature) return providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
         if (redactedChunk === undefined && reasoning.data !== undefined)
@@ -777,23 +792,19 @@ const step = (state: ParserState, event: BedrockEvent) =>
         if (redactedChunk !== undefined) return Lifecycle.reasoningStart(state.lifecycle, events, `reasoning-${index}`)
         return state.lifecycle
       })()
-      const reasoningRedactedContent = (() => {
-        if (redactedChunk !== undefined) return { ...state.reasoningRedactedContent, [index]: redactedChunks }
-        if (reasoning.data === undefined) return state.reasoningRedactedContent
-        return Object.fromEntries(
-          Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
-        )
-      })()
-      const reasoningSignatures = (() => {
-        if (!reasoning.signature) return state.reasoningSignatures
-        return { ...state.reasoningSignatures, [index]: reasoning.signature }
+      // A plain `data` payload replaces any redacted chunks collected so far.
+      const redacted = (() => {
+        if (redactedChunk !== undefined) return [...(block?.redacted ?? []), redactedChunk]
+        if (reasoning.data === undefined) return block?.redacted
       })()
       return [
         {
           ...state,
           lifecycle,
-          reasoningSignatures,
-          reasoningRedactedContent,
+          blocks: {
+            ...state.blocks,
+            [index]: { kind: "reasoning", signature: reasoning.signature || block?.signature, redacted },
+          },
         },
         events,
       ] as const
@@ -802,59 +813,41 @@ const step = (state: ParserState, event: BedrockEvent) =>
     if (event.contentBlockDelta?.delta?.toolUse) {
       // A delta for a block that is not open, whether it already stopped or never
       // started, has nothing to attach to and is dropped.
-      const result = ToolStream.append(
-        state.tools,
-        event.contentBlockDelta.contentBlockIndex,
-        event.contentBlockDelta.delta.toolUse.input,
-      )
+      const index = event.contentBlockDelta.contentBlockIndex
+      const block = state.blocks[index]
+      if (block?.kind !== "tool") return [state, []] as const
+      const result = ToolStream.append({ [index]: block.tool }, index, event.contentBlockDelta.delta.toolUse.input)
       if (!result) return [state, []] as const
       const events: LLMEvent[] = []
       const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
       events.push(...result.events)
-      return [{ ...state, lifecycle, tools: result.tools }, events] as const
+      return [
+        { ...state, lifecycle, blocks: { ...state.blocks, [index]: { kind: "tool", tool: result.tool } } },
+        events,
+      ] as const
     }
 
     if (event.contentBlockStop) {
       const index = event.contentBlockStop.contentBlockIndex
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, index)
+      const { [index]: block, ...blocks } = state.blocks
+      if (!block) return [state, []] as const
       const events: LLMEvent[] = []
-      const resultEvents = result.events ?? []
-      const lifecycle = (() => {
-        if (resultEvents.length) return Lifecycle.stepStart(state.lifecycle, events)
-        const metadata = (() => {
-          const signature = state.reasoningSignatures[index]
-          if (signature) return providerMetadata(state.providerMetadataKey, { signature })
-          const redactedContent = state.reasoningRedactedContent[index]
-          if (redactedContent)
-            return providerMetadata(state.providerMetadataKey, {
-              redactedData: encodeRedactedContent(redactedContent),
-            })
-        })()
-        return Lifecycle.reasoningEnd(
-          Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
-          events,
-          `reasoning-${index}`,
-          metadata,
-        )
-      })()
-      events.push(...resultEvents)
-      return [
-        {
-          ...state,
-          hasToolCalls:
-            resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
-            state.hasToolCalls,
-          lifecycle,
-          tools: result.tools,
-          reasoningSignatures: Object.fromEntries(
-            Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
-          ),
-          reasoningRedactedContent: Object.fromEntries(
-            Object.entries(state.reasoningRedactedContent).filter(([key]) => key !== String(index)),
-          ),
-        },
-        events,
-      ] as const
+      if (block.kind === "tool") {
+        const result = yield* ToolStream.finish(ADAPTER, { [index]: block.tool }, index)
+        const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+        events.push(...(result.events ?? []))
+        return [{ ...state, hasToolCalls: true, lifecycle, blocks }, events] as const
+      }
+      const lifecycle =
+        block.kind === "text"
+          ? Lifecycle.textEnd(state.lifecycle, events, `text-${index}`)
+          : Lifecycle.reasoningEnd(
+              state.lifecycle,
+              events,
+              `reasoning-${index}`,
+              reasoningEndMetadata(state.providerMetadataKey, block),
+            )
+      return [{ ...state, lifecycle, blocks }, events] as const
     }
 
     if (event.messageStop) {
@@ -915,18 +908,18 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> => {
     return state.finishReason.normalized
   })()
   const events: LLMEvent[] = []
-  const lifecycle = Object.entries(state.reasoningRedactedContent).reduce((current, [index, chunks]) => {
-    const signature = state.reasoningSignatures[Number(index)]
-    return Lifecycle.reasoningEnd(
-      current,
-      events,
-      `reasoning-${index}`,
-      providerMetadata(
-        state.providerMetadataKey,
-        signature ? { signature } : { redactedData: encodeRedactedContent(chunks) },
-      ),
-    )
-  }, state.lifecycle)
+  const lifecycle = Object.entries(state.blocks).reduce(
+    (current, [index, block]) =>
+      block?.kind === "reasoning" && block.redacted
+        ? Lifecycle.reasoningEnd(
+            current,
+            events,
+            `reasoning-${index}`,
+            reasoningEndMetadata(state.providerMetadataKey, block),
+          )
+        : current,
+    state.lifecycle,
+  )
   Lifecycle.finish(lifecycle, events, {
     reason: {
       ...state.finishReason,
@@ -954,13 +947,11 @@ export const protocol = Protocol.make({
     event: BedrockEventStream.Frame.pipe(Schema.decodeTo(BedrockEvent)),
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
-      tools: ToolStream.empty<number>(),
+      blocks: {},
       finishReason: undefined,
       usage: undefined,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
-      reasoningSignatures: {},
-      reasoningRedactedContent: {},
     }),
     step,
     onHalt: (state) => Effect.succeed(onHalt(state)),
