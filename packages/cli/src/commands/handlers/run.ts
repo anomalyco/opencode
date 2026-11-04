@@ -7,7 +7,8 @@ export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
     const { reportRunError, runNonInteractive } = yield* Effect.promise(() => import("../../run/run"))
     const separator = process.argv.indexOf("--", 2)
-    const server = yield* ServerConnection.resolve().pipe(
+    // A one-off run uses the background service when it is already up, but never leaves a new one running.
+    const server = yield* ServerConnection.resolve({ autostart: false }).pipe(
       Effect.tapError((error) => Effect.logError("run could not resolve its server", { cause: error })),
       Effect.catch((error) => Effect.sync(() => reportRunError(input, error.message))),
     )

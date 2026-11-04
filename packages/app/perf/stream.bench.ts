@@ -48,6 +48,10 @@ export default bench({
     await page.waitFor(timeline, { timeout: 60_000 })
 
     if (name === "stream with review open") await openReview(page)
+
+    // Its animations never stop, and with the attribution probes on a slow machine their frames can run long enough
+    // that the page never counts as idle.
+    if (name === "wait on a running session") return page.wait(2000)
     await page.idle()
   },
 
@@ -60,5 +64,12 @@ export default bench({
     "stream into a tool-heavy history": stream,
     // The review pane open beside the timeline on 72 changed files.
     "stream with review open": stream,
+    // Five seconds of a running session between deltas: the tab's spinner and the Working shimmer animate, and nothing
+    // else changes. Animation the compositor runs costs the page's main thread nothing.
+    "wait on a running session": {
+      primary: "main.work",
+      metrics: ["main.style", "cpu.renderer", "cpu.gpu", "frames.presented.count"],
+      run: ({ page }) => page.wait(5000),
+    },
   },
 })
