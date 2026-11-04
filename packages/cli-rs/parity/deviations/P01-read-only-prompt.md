@@ -8,6 +8,10 @@ edge, and the footer's `directory:branch`. The hints are missing. P-APP `E.2/pro
 `typed`), `H.2/home-sessions` (`session`), and `H.2/session-open` (`open`, `streamed`) differ in those
 cells of the footer row.
 
+The editor context's file label (E.5, `prompt.footer.file`) sits before the hints in TS. Without them it
+ends at the right edge of the row, so in `E.5/ide` (`selected`, `mentioned`) and `E.5/zed` (`selected`) the
+label's cells are shifted; its text and colors match.
+
 Reason: the hints come from the prompt footer plugin, which E.14 builds (`plugins/prompt_footer.rs`). E.14
 removes this file and the `deviation` entries that name it. The file keeps its H.2 name, so the H.2
 recordings stay valid.
