@@ -256,7 +256,7 @@ impl Kit {
         };
         let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
         let theme = opencode_ui::theme::Catalog::default()
-            .load("opencode", opencode_ui::theme::ThemeMode::Dark, false)
+            .load("opencode", opencode_ui::theme::ThemeMode::Dark)
             .unwrap()
             .theme;
         // As the TS screen, the app clears with the page background the backdrop blends over.
