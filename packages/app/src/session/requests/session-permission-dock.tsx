@@ -1,9 +1,14 @@
+import { Option, Schema } from "effect"
 import { For, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
+
+const decodeToolInput = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
+
+const isString = Schema.is(Schema.String)
 
 export function SessionPermissionDock(props: {
   request: PermissionRequest
@@ -14,6 +19,7 @@ export function SessionPermissionDock(props: {
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.action}.description`
+    // SAFETY: an action without a curated description returns the key itself, which the check below detects.
     const value = language.t(key as Parameters<typeof language.t>[0])
 
     if (value === key) return ""
@@ -21,13 +27,12 @@ export function SessionPermissionDock(props: {
     return value
   }
 
-  const input = () => {
-    const value = props.request.metadata?.input
-    if (!value || typeof value !== "object") return []
-    return Object.entries(value).map(
-      ([key, item]) => `${key}: ${typeof item === "string" ? item : JSON.stringify(item)}`,
-    )
-  }
+  const input = () =>
+    Option.match(decodeToolInput(props.request.metadata?.input), {
+      onNone: () => [],
+      onSome: (value) =>
+        Object.entries(value).map(([key, item]) => `${key}: ${isString(item) ? item : JSON.stringify(item)}`),
+    })
 
   return (
     <DockPrompt
@@ -64,7 +69,7 @@ export function SessionPermissionDock(props: {
     >
       <div data-slot="permission-row">
         <span data-slot="permission-spacer" aria-hidden="true" />
-        <Show when={toolDescription()} fallback={<code data-slot="permission-hint">{props.request.action}</code>}>
+        <Show when={toolDescription()} fallback={<code data-slot="permission-action">{props.request.action}</code>}>
           <div data-slot="permission-hint">{toolDescription()}</div>
         </Show>
       </div>

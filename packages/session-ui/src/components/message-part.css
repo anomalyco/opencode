@@ -1458,9 +1458,9 @@
 
   [data-slot="permission-header-title"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-base);
     min-width: 0;
   }
@@ -1475,11 +1475,20 @@
 
   [data-slot="permission-hint"] {
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-base);
     color: var(--v2-text-text-muted);
     padding: 0;
+  }
+
+  [data-slot="permission-action"] {
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-base);
   }
 
   [data-slot="permission-input"] {
@@ -1495,7 +1504,7 @@
       font-size: 13px;
       font-weight: 440;
       letter-spacing: -0.04px;
-      line-height: var(--line-height-compact);
+      line-height: var(--line-height-base);
       white-space: pre-wrap;
     }
   }
