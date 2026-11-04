@@ -1963,6 +1963,51 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("lowers video media into Bedrock video blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "text", text: "What happens in these clips?" },
+              { type: "media", media: Media.base64("AAAA", "video/mp4"), filename: "a.mp4" },
+              { type: "media", media: Media.base64("BBBB", "video/quicktime") },
+              { type: "media", media: Media.base64("CCCC", "video/3gpp") },
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { text: "What happens in these clips?" },
+            { video: { format: "mp4", source: { bytes: "AAAA" } } },
+            { video: { format: "mov", source: { bytes: "BBBB" } } },
+            { video: { format: "three_gp", source: { bytes: "CCCC" } } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects video media types without a Converse format", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [Message.user({ type: "media", media: Media.base64("AAAA", "video/x-msvideo") })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("Bedrock Converse does not support video media type video/x-msvideo")
+    }),
+  )
+
   it.effect("base64-encodes Uint8Array image bytes", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

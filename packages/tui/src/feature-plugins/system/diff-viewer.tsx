@@ -16,7 +16,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { DiffFileMenu } from "./diff-viewer-file-menu"
-import { DiffViewerImage, isDiffImageFile } from "./diff-viewer-image"
+import { DiffViewerImage, diffMediaKind } from "./diff-viewer-image"
 import { DIALOG_LIST_INSET, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { EmptyBorder } from "../../ui/border"
@@ -24,7 +24,7 @@ import { SESSION_PANEL_SPLIT_MIN_WIDTH } from "../../ui/layout"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
 import { createDebouncedSignal } from "../../util/signal"
-import { type DiffSource, useConfig } from "../../config"
+import { type DiffSource, useConfig, useRichMedia } from "../../config"
 import { locationKey } from "../../context/data"
 import { useTheme, useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
@@ -203,6 +203,7 @@ function DiffViewer(props: {
       unavailable={mode() === "committed" && !!result() && !result()?.base}
       preferences={config.data.diffs}
       panel={props.panel}
+      location={location()}
       loadImage={(file, signal) => props.context.client.file.read({ path: file, location: location() }, { signal })}
       onPreferencesChange={(value) => {
         void config
@@ -313,6 +314,8 @@ export function DiffViewerContent(props: {
   sourceDetail?: string
   sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
   unavailable?: boolean
+  /** Where working-tree files live, for previews that read them in place. */
+  location?: LocationRef
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   preferences?: DiffPreferences
   panel?: PanelInput
@@ -324,6 +327,7 @@ export function DiffViewerContent(props: {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const config = useConfig()
+  const richMedia = useRichMedia()
   const dialog = props.context.ui.dialog
   const theme = useTheme()
   const currentSyntax = useThemes().currentSyntax
@@ -990,7 +994,8 @@ export function DiffViewerContent(props: {
                       const reviewed = () => reviewedFileNames().has(entry.file.file)
                       const background = () =>
                         reviewed() ? theme.background.raised.high : theme.diff.background.context
-                      const image = () => isDiffImageFile(entry.file.file)
+                      const media = () => diffMediaKind(entry.file.file, richMedia())
+                      const image = () => media() !== undefined
                       const countsWidth = () =>
                         (image() ? 6 : String(entry.file.additions).length + String(entry.file.deletions).length + 5) +
                         (reviewed() ? 2 : 0)
@@ -1041,7 +1046,10 @@ export function DiffViewerContent(props: {
                                   ✓
                                 </text>
                               </Show>
-                              <Show when={!image()} fallback={<text fg={theme.text.muted}>Image</text>}>
+                              <Show
+                                when={!image()}
+                                fallback={<text fg={theme.text.muted}>{media() === "video" ? "Video" : "Image"}</text>}
+                              >
                                 <text flexShrink={0} fg={reviewed() ? theme.text.muted : theme.diff.text.added}>
                                   +{entry.file.additions}
                                 </text>
@@ -1067,9 +1075,9 @@ export function DiffViewerContent(props: {
                                   >
                                     <text fg={theme.text.muted}>
                                       {mode() === "committed" && image()
-                                        ? "Committed image preview unavailable. The working-tree image is not shown."
+                                        ? `Committed ${media()} preview unavailable. The working-tree ${media()} is not shown.`
                                         : entry.file.status === "deleted" && image()
-                                          ? "Deleted image. The previous revision is not available for preview."
+                                          ? `Deleted ${media()}. The previous revision is not available for preview.`
                                           : "No patch available for this file."}
                                     </text>
                                   </box>
@@ -1083,7 +1091,9 @@ export function DiffViewerContent(props: {
                                     props.loadImage
                                   }
                                 >
-                                  {(load) => <DiffViewerImage file={entry.file.file} load={load()} />}
+                                  {(load) => (
+                                    <DiffViewerImage file={entry.file.file} load={load()} location={props.location} />
+                                  )}
                                 </Match>
                                 <Match when={!(mode() === "committed" && image()) && entry.file.patch}>
                                   {(patch) => (

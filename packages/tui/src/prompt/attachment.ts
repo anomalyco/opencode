@@ -15,6 +15,7 @@ type ProjectedFile = Readonly<
 function attachmentKind(uri: string) {
   if (uri.startsWith("data:image/")) return "Image"
   if (uri.startsWith("data:application/pdf;")) return "PDF"
+  if (uri.startsWith("data:video/")) return "Video"
   return undefined
 }
 
@@ -38,7 +39,7 @@ function deduplicateByIdentity<T>(
   })
 }
 
-export function deduplicatePromptImages(files: readonly PromptFile[] | undefined) {
+export function deduplicatePromptImages<T extends PromptFile>(files: readonly T[] | undefined) {
   if (!files || files.length < 2) return files
   return deduplicateByIdentity(files, (file) =>
     file.uri.startsWith("data:image/") && file.mention?.text

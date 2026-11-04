@@ -495,8 +495,12 @@ describe("run interactive runtime", () => {
     let getDirectory: (() => string) | undefined
     let findFiles: ((query: string) => Promise<string[]>) | undefined
     let transportLocation: unknown
+    let transportRichMedia: boolean | undefined
     let runtimeConfig: LifecycleInput["tuiConfig"] | undefined
-    const tuiConfig = createTuiResolvedConfig({ keybinds: { "variant.cycle": "ctrl+g" } })
+    const tuiConfig = createTuiResolvedConfig({
+      keybinds: { "variant.cycle": "ctrl+g" },
+      experimental: { "rich-media": true },
+    })
     const catalogs = stubCatalogLists(sdk, {
       location: { directory: "/session", workspaceID: "work-1" },
     })
@@ -553,6 +557,7 @@ describe("run interactive runtime", () => {
         streamTransport: Promise.resolve({
           createSessionTransport: async (input) => {
             transportLocation = input.location
+            transportRichMedia = input.richMedia
             await findFiles?.("index")
             setTimeout(() => input.footer.close(), 0)
             return {
@@ -581,6 +586,7 @@ describe("run interactive runtime", () => {
     if (!runtimeConfig) throw new Error("runtime lifecycle did not receive TUI config")
     expect(await runtimeConfig).toBe(tuiConfig)
     expect(transportLocation).toMatchObject({ directory: "/session", workspaceID: "work-1" })
+    expect(transportRichMedia).toBe(true)
     expect(catalogs.provider).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.model).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.agent).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
