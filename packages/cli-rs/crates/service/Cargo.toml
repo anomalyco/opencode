@@ -27,5 +27,6 @@ rustix.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 bytes.workspace = true
+reqwest.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
