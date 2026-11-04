@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// Interpreter benchmarks: median wall-clock milliseconds per program over several runs.
+// Interpreter benchmarks: median and fastest wall-clock milliseconds per program over several runs.
 // Usage: bun run script/bench.ts [--iterations N] [--filter name]
 
 import { Effect, Schema } from "effect"
@@ -106,5 +106,7 @@ for (const [name, code] of cases) {
     await Effect.runPromise(runtime.execute(code))
     times[index] = performance.now() - start
   }
-  console.log(`${name.padEnd(28)} ${median(times).toFixed(1).padStart(8)} ms`)
+  console.log(
+    `${name.padEnd(28)} ${median(times).toFixed(1).padStart(8)} ms  (min ${Math.min(...times).toFixed(1)} ms)`,
+  )
 }
