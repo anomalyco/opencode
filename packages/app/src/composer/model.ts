@@ -32,6 +32,7 @@ import { isCommentItem } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
+import { composerSubmitView } from "./machine"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
 
@@ -356,6 +357,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
   })
 
+  const submitView = createMemo(() => composerSubmitView(submission.state()))
+
   const controller = createComposerEditor({
     store: prompt.store,
     state: interaction,
@@ -555,14 +558,19 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       submit: {
         available,
         stopping,
-        held: submission.held,
+        held: () => submitView().held,
+        busy: () => submitView().busy,
+        canSubmit: () => submitView().canSubmit,
         working: adapter.working,
         queue: options?.queue,
         quote:
           adapter.kind === "active-session"
             ? {
                 available: () =>
-                  available() && !adapter.controls().model.loading && !submission.held() && !options?.queue?.undoing(),
+                  available() &&
+                  !adapter.controls().model.loading &&
+                  submitView().canSubmit &&
+                  !options?.queue?.undoing(),
                 delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
                 onSubmit: submission.submitQuote,
               }
