@@ -1128,15 +1128,19 @@ name = "opencode-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "bytes",
  "futures-util",
  "opencode-api",
  "opencode-local",
+ "rand",
+ "rustix",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "url",
+ "uuid",
 ]
 
 [[package]]
