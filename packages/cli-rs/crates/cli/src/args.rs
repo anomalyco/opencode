@@ -1035,6 +1035,10 @@ fn push_bool(out: &mut Vec<OsString>, node: &clap::Command, arg: &clap::Arg, ena
     }
 }
 
+/// The repeatable flags with `Flag.atMost(100)` in commands.ts, by command name and flag.
+pub const AT_MOST_100: [(&str, &str); 3] =
+    [("api", "header"), ("login", "answer"), ("run", "file")];
+
 /// Checks Effect CLI rules clap does not know, after clap parsed `matches` of `command` (built). Returns the
 /// `--standalone` and `--server` that apply to the selected command: the root's own, or those of the
 /// command that declares them, which may be given before the subcommand (`opencode --server URL session list`).
@@ -1092,8 +1096,10 @@ pub fn validate(command: &clap::Command, matches: &ArgMatches) -> Result<ServerF
         }
     }
     // Flag.atMost(100) in commands.ts.
-    let limited = [("api", "header"), ("login", "answer"), ("run", "file")];
-    if let Some((_, id)) = limited.iter().find(|(name, _)| names.last() == Some(name)) {
+    if let Some((_, id)) = AT_MOST_100
+        .iter()
+        .find(|(name, _)| names.last() == Some(name))
+    {
         let count = leaf
             .get_raw_occurrences(id)
             .map_or(0, |values| values.count());
