@@ -18,7 +18,7 @@ use opencode_api::generated::{
     SessionInboxInfo, SessionInfo, SessionMessageID,
 };
 use tokio::runtime::Handle;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tokio::task::AbortHandle;
 
 use crate::changes::{Changes, Log};
@@ -26,6 +26,9 @@ use crate::forms::Form;
 use crate::inbox::PendingUpdate;
 use crate::location::{Location, LocationData};
 use crate::messages::Transcript;
+
+/// How many [`Data::signals`] events a slow receiver may fall behind.
+const SIGNALS: usize = 64;
 
 /// A store error. Shared, because one keyed read answers every caller.
 pub type Error = Arc<opencode_api::error::Error>;
@@ -265,6 +268,8 @@ pub(crate) struct Inner {
     runtime: Handle,
     state: Mutex<State>,
     revision: watch::Sender<u64>,
+    /// The events views act on themselves, sent after their batch is applied.
+    pub(crate) signals: broadcast::Sender<opencode_api::generated::V2Event>,
     /// False while the event connection is not connected; follow-up reads are skipped then.
     pub(crate) online: AtomicBool,
     disposed: AtomicBool,
@@ -290,6 +295,7 @@ impl Data {
                 runtime,
                 state: Mutex::new(state),
                 revision: watch::channel(0).0,
+                signals: broadcast::channel(SIGNALS).0,
                 online: AtomicBool::new(true),
                 disposed: AtomicBool::new(false),
                 on_error: Mutex::new(None),
@@ -327,6 +333,12 @@ impl Data {
     /// Wakes on every flush with its revision.
     pub fn subscribe(&self) -> watch::Receiver<u64> {
         self.inner.revision.subscribe()
+    }
+
+    /// Receives the events a view handles itself (`tui.*`, `session.deleted`, `session.moved`),
+    /// after the store applied their batch. A receiver that falls behind skips the oldest.
+    pub fn signals(&self) -> broadcast::Receiver<opencode_api::generated::V2Event> {
+        self.inner.signals.subscribe()
     }
 
     /// The current revision and what changed after `seen`.
