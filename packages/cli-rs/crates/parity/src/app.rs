@@ -32,6 +32,12 @@ pub struct Recording {
     pub env: BTreeMap<String, String>,
     pub routes: Vec<RouteSpec>,
     pub steps: Vec<Step>,
+    /// With a fake IDE MCP server (E.5): what the TS TUI sent it, in order.
+    #[serde(default)]
+    pub ide: Option<Vec<Value>>,
+    /// With a Zed database built from this SQL (E.5).
+    #[serde(default)]
+    pub zed: Option<Zed>,
     /// A deviation that allows the request comparison to differ.
     pub deviation: Option<String>,
     pub requests: Requests,
@@ -90,6 +96,16 @@ pub enum Step {
     Drag {
         drag: [[u16; 2]; 2],
     },
+    /// A notification from the fake IDE server, `{method, params}`, once the client is initialized (E.5).
+    Ide {
+        ide: Value,
+    },
+}
+
+/// A Zed database for the scenario: the SQL that creates it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Zed {
+    pub sql: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
