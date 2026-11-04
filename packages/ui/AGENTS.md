@@ -18,3 +18,4 @@
 - Inter text at `13px` must use at least the compact `16px` line height. A `13px` solid line box can clip `g`, `j`, `p`, `q`, and `y` when the text or an ancestor truncates or hides overflow.
 - Reserve `line-height: 1` and `leading-none` for non-text glyphs, icons, or deliberately reviewed display marks. Do not compensate text with transforms, negative margins, or clip-padding hacks.
 - `TextShimmer` inherits font metrics. Put typography overrides on its parent when they must supersede the component defaults.
+- Fonts follow the Fonts section of `packages/app/AGENTS.md`: use `var(--font-family-sans)` or `var(--font-family-mono)` and their aliases, never a literal family, and never add font files or `@font-face` rules here.

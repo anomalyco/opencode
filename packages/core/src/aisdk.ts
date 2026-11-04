@@ -1,6 +1,7 @@
 export * as AISDK from "./aisdk.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
@@ -28,14 +29,14 @@ import {
   type LLMRequest,
   type Media,
   type ToolDefinition,
+  type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
-import { ProviderShared } from "@opencode/ai/protocols/shared"
-import { isRecord } from "@opencode/ai/utils/record"
-import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import { isRecord } from "@opencode/util/record"
+import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
-import { HttpClientRequest, HttpClientResponse } from "effect/http"
+import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
@@ -120,21 +121,19 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function prepareOptions(model: RuntimeInfo, pkg: string) {
+// `outbound` sends requests for providers whose settings name no `fetch` of their own.
+function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
   const projected = mapBodyToProviderOptions(model, pkg)
+  const settings = model.settings ?? {}
   const options: Record<string, unknown> = {
     name: model.canonical ?? model.providerID,
-    ...(model.settings ?? {}),
+    ...Provider.nativeSettings(settings),
     headers: model.headers,
     body: projected.body,
   }
 
-  const customFetch = options.fetch
-  const timeouts = Provider.timeouts(options)
-  delete options.headerTimeout
-  delete options.chunkTimeout
-  delete options.compaction
-  delete options.transport
+  const customFetch = settings.fetch
+  const timeouts = Provider.timeouts(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
@@ -161,7 +160,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
       }
     }
 
-    const send: Fetch = isFetch(customFetch) ? customFetch : fetch
+    const send: Fetch = isFetch(customFetch) ? customFetch : outbound
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware
@@ -258,6 +257,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AI
 export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const outbound = yield* FetchHttpClient.Fetch
     let sdkHooks: ((event: SDKEvent) => Effect.Effect<void> | void)[] = []
     let languageHooks: ((event: LanguageEvent) => Effect.Effect<void> | void)[] = []
     const languages = new Map<string, LanguageModelV3>()
@@ -336,7 +336,7 @@ export const locationLayer = Layer.effect(
           })
 
         const packageName = Provider.packageName(model.package)
-        const options = prepareOptions(model, packageName)
+        const options = prepareOptions(model, packageName, outbound)
         const sdkKey = cacheKey({
           providerID: model.providerID,
           canonical: model.canonical,
@@ -391,13 +391,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     },
     defaults: {
       headers: info.headers,
-      http:
-        projected.body === undefined && info.headers === undefined
-          ? undefined
-          : {
-              body: projected.body === undefined ? undefined : { ...projected.body },
-              headers: info.headers,
-            },
+      http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
     },
     body: {
@@ -453,24 +447,16 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   return providerID
 }
 
-function requestSettings(settings: Readonly<Record<string, unknown>> | undefined) {
+function requestSettings(settings: Provider.Settings | undefined) {
   if (settings === undefined) return undefined
-  const result = Object.fromEntries(
-    Object.entries(settings).filter(
-      ([key]) =>
-        ![
-          "apiKey",
-          "authToken",
-          "baseURL",
-          "chunkTimeout",
-          "compaction",
-          "fetch",
-          "headerTimeout",
-          "timeout",
-          "transport",
-        ].includes(key),
-    ),
-  )
+  // These configure the SDK provider when it is created, not each request.
+  const result = Struct.omit(Provider.nativeSettings(settings), [
+    "accessToken",
+    "apiKey",
+    "authToken",
+    "baseURL",
+    "fetch",
+  ])
   return Object.keys(result).length === 0 ? undefined : result
 }
 
@@ -509,7 +495,7 @@ function callOptions(
     seed: request.generation?.seed,
     tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
-    headers: request.http?.headers,
+    headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
@@ -539,7 +525,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
+function message(input: Exclude<LLMRequest["messages"][number], ToolMessage>): LanguageModelV3Message[] {
   switch (input.role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
@@ -560,12 +546,10 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
       return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
-    case "tool":
-      return toolMessage(input).messages
   }
 }
 
-function toolMessage(input: LLMRequest["messages"][number]) {
+function toolMessage(input: ToolMessage) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
     if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
@@ -850,20 +834,14 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish":
-      return Effect.succeed([
-        LLMEvent.stepFinish({
-          index: state.step++,
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-        LLMEvent.finish({
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+    case "finish": {
+      const finish = {
+        reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+        usage: usage(event.usage),
+        providerMetadata: providerMetadata(event.providerMetadata),
+      }
+      return Effect.succeed([LLMEvent.stepFinish({ index: state.step++, ...finish }), LLMEvent.finish(finish)])
+    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -953,7 +931,7 @@ function llmError(error: unknown, operation: "request" | "read") {
 
 // AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
 // response in `value`, which carries the message and codes.
-const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
+const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch
@@ -1067,4 +1045,4 @@ function providerErrorMessage(error: APICallError) {
   return error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`))
 }
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [httpFetch] })

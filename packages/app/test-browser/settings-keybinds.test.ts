@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
-function setup(overrides: Record<string, string> = {}) {
+function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>) {
   const changes: [string, string][] = []
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
@@ -16,10 +16,12 @@ function setup(overrides: Record<string, string> = {}) {
           catalog: [
             { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
             { id: "session.beta", title: "Beta", keybind: "mod+b" },
+            { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
           ],
           options: [],
           keybinds: (enabled) => suppression.push(enabled),
         },
+        plugins: plugins && (() => plugins),
         settings: {
           current: { keybinds: overrides },
           keybinds: {
@@ -74,6 +76,17 @@ describe("keybind settings controller", () => {
     expect(state.controller.catalog.keybind("session.beta")).toBe("Alt+K")
     expect(state.controller.catalog.filtered("alt k").get("Session")).toEqual(["session.beta"])
     expect(state.controller.settings.hasOverrides()).toBe(true)
+
+    state.dispose()
+  })
+
+  test.each([
+    { plugins: new Set(["acme"]), listed: true },
+    { plugins: new Set(["other"]), listed: false },
+  ])("lists a plugin's remembered command only while the plugin is installed: $listed", (row) => {
+    const state = setup({}, row.plugins)
+
+    expect(state.controller.catalog.filtered("open acme").get("Session")).toEqual(row.listed ? ["acme.open"] : [])
 
     state.dispose()
   })

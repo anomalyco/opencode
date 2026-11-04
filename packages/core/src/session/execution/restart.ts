@@ -9,6 +9,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 
@@ -98,24 +99,21 @@ export const layer = (options?: Options) =>
         return true
       })
 
-      const recoverShell = Effect.fnUntraced(function* (
+      const restartMessage = (
         background: Job.Background,
-        recovery: Extract<Job.Recovery, { kind: "shell" }>,
-      ) {
+        recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
+      ) => {
         const state = background.status === "running" ? "cancelled" : background.status
-        const text =
-          background.status === "running"
-            ? "Command cancelled because the server restarted"
-            : state === "completed"
-              ? (background.output ?? "Command completed")
-              : state === "error"
-                ? (background.error ?? "Command failed")
-                : "Command cancelled"
-
-        yield* sessions
-          .synthetic({
-            id: background.notificationID,
-            sessionID: recovery.sessionID,
+        if (recovery.kind === "shell") {
+          const text =
+            background.status === "running"
+              ? "Command cancelled because the server restarted"
+              : state === "completed"
+                ? (background.output ?? "Command completed")
+                : state === "error"
+                  ? (background.error ?? "Command failed")
+                  : "Command cancelled"
+          return {
             description: recovery.command,
             ...ShellResult.notification({
               jobID: background.id,
@@ -124,7 +122,38 @@ export const layer = (options?: Options) =>
               state,
               text,
             }),
-            // Restart notices must not revive idle owners of long-lived shells.
+          }
+        }
+        const body =
+          background.status === "running"
+            ? `Image request for ${recovery.path} was cancelled because the server restarted.`
+            : state === "completed"
+              ? (background.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
+              : state === "error"
+                ? (background.error ?? `Image request failed for ${recovery.path}.`)
+                : `Image request for ${recovery.path} was cancelled.`
+        return {
+          description: "Image generation",
+          text: ImageNotice.text({ id: background.id, state, body }),
+          metadata: {
+            source: "experimental_image_generate",
+            jobID: background.id,
+            state,
+            path: recovery.path,
+          },
+        }
+      }
+
+      const recoverToolJob = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
+      ) {
+        yield* sessions
+          .synthetic({
+            id: background.notificationID,
+            sessionID: recovery.sessionID,
+            ...restartMessage(background, recovery),
+            // Restart notices must not revive idle owners of long-lived background tools.
             // Interrupted executions resume separately after their notices are admitted.
             resume: false,
           })
@@ -209,9 +238,8 @@ export const layer = (options?: Options) =>
             Effect.fnUntraced(function* (background) {
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
-              yield* recovery.kind === "shell"
-                ? recoverShell(background, recovery)
-                : recoverSubagent(background, recovery, suspended)
+              if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
+              yield* recoverSubagent(background, recovery, suspended)
             }),
             { discard: true },
           )

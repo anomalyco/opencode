@@ -1,8 +1,22 @@
 import { CloseButton, Content, Description, Title } from "@kobalte/core/dialog"
-import { type ComponentProps, type JSXElement, type ParentProps, Show, children, createEffect, splitProps } from "solid-js"
+import {
+  type ComponentProps,
+  type JSXElement,
+  type ParentProps,
+  Show,
+  children,
+  createEffect,
+  splitProps,
+} from "solid-js"
 import { useDialogLayer } from "../../context/dialog"
 import { useI18n } from "../../context/i18n"
 import "./dialog.css"
+
+const TEXT_FIELD = [
+  'input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="range"], [type="file"], [type="color"], [type="image"]):not(:disabled, [readonly])',
+  "textarea:not(:disabled, [readonly])",
+  '[contenteditable="true"]',
+].join(", ")
 
 export interface DialogProps extends ParentProps {
   size?: "normal" | "large" | "x-large"
@@ -115,20 +129,43 @@ export function Dialog(props: DialogProps) {
           onPointerDownOutside={(event) => {
             if (local.preventBackdropDismiss) event.preventDefault()
           }}
+          onInteractOutside={(event) => {
+            const target = event.target
+
+            if (layer?.container && target instanceof Node && !layer.container.contains(target)) event.preventDefault()
+          }}
           classList={{
             ...local.classList,
             [local.class ?? ""]: !!local.class,
           }}
           onOpenAutoFocus={(e) => {
-            const autofocusEl =
-              e.currentTarget instanceof HTMLElement ? e.currentTarget.querySelector<HTMLElement>("[autofocus]") : null
+            const content = e.currentTarget
 
-            if (autofocusEl) {
-              e.preventDefault()
-              // Kobalte attaches its focus trap after this event, so focusing now would leave the trap with no
-              // element to return to. Deferring, as Kobalte's own autofocus does, lets it pull stray focus back.
-              setTimeout(() => autofocusEl.focus({ preventScroll: true }))
-            }
+            if (!(content instanceof HTMLElement)) return
+            // Kobalte would focus the first tabbable element, usually the close button, which Escape already covers.
+            e.preventDefault()
+            // Kobalte attaches its focus trap after this event, so focusing now would leave the trap with no element
+            // to return to. Deferring, as Kobalte's own autofocus does, also lets children that focus themselves on
+            // mount keep that focus.
+            setTimeout(() => {
+              const autofocus = content.querySelector<HTMLElement>("[autofocus]")
+              const active = document.activeElement
+
+              const kept =
+                active instanceof HTMLElement &&
+                active !== content &&
+                content.contains(active) &&
+                !active.closest('[data-slot="dialog-close-button"]')
+                  ? active
+                  : undefined
+
+              const field = Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
+                (element) => element.getClientRects().length > 0,
+              )
+
+              const target = autofocus ?? kept ?? field ?? content
+              target.focus({ preventScroll: true })
+            })
           }}
         >
           {local.children}

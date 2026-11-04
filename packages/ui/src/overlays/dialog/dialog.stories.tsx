@@ -1,6 +1,8 @@
 import { Overlay, Portal, Root, Trigger } from "@kobalte/core/dialog"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, DialogTitleGroup } from "./dialog"
 import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { onMount } from "solid-js"
 
 const docs = `### Overview
 Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
@@ -42,21 +44,29 @@ function dialogHeader(title: string, description: string) {
   )
 }
 
+// Opens through the dialog stack, so a preview that holds its dialogs holds this one too.
+function OpenAtOnce() {
+  const dialog = useDialog()
+
+  const open = () =>
+    dialog.show(() => (
+      <Dialog>
+        {dialogHeader("Dialog", "Description")}
+        <DialogBody>Dialog body content.</DialogBody>
+      </Dialog>
+    ))
+
+  onMount(open)
+
+  return (
+    <Button variant="neutral" onClick={open}>
+      Open dialog
+    </Button>
+  )
+}
+
 export const Basic = {
-  render: () => (
-    <Root defaultOpen>
-      <Trigger as={Button} variant="neutral">
-        Open dialog
-      </Trigger>
-      <Portal>
-        <Overlay />
-        <Dialog>
-          {dialogHeader("Dialog", "Description")}
-          <DialogBody>Dialog body content.</DialogBody>
-        </Dialog>
-      </Portal>
-    </Root>
-  ),
+  render: () => <OpenAtOnce />,
 }
 
 export const Sizes = {
@@ -203,4 +213,28 @@ export const Fit = {
       </Portal>
     </Root>
   ),
+}
+
+function OpenFromButton() {
+  const dialog = useDialog()
+
+  return (
+    <Button
+      variant="neutral"
+      onClick={() =>
+        dialog.show(() => (
+          <Dialog>
+            {dialogHeader("Choose model", "Pick Alpha or Beta")}
+            <DialogBody>Alpha and Beta are available.</DialogBody>
+          </Dialog>
+        ))
+      }
+    >
+      Choose model
+    </Button>
+  )
+}
+
+export const OpenedFromButton = {
+  render: () => <OpenFromButton />,
 }

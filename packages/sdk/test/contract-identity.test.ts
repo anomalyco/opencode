@@ -19,7 +19,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { Workspace } from "@opencode/schema/workspace"
 import { Worktree } from "@opencode/schema/worktree"
 import { Api } from "@opencode/server/api"
-import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
+import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
 import { compile, emitPromise } from "@opencode/httpapi-codegen"
 
 const SDK = await import("../src/index")
@@ -97,8 +97,8 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
 })
 
 test("client and Server contracts generate identically", () => {
-  const server = compile(Api, { groupNames, omitEndpoints: promiseOmitEndpoints })
-  const client = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints })
+  const server = compile(Api, { groupNames, omitEndpoints: promiseOmitEndpoints, namespace: clientNamespace })
+  const client = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints, namespace: clientNamespace })
 
   expect(emitPromise(client)).toEqual(emitPromise(server))
 })

@@ -55,6 +55,22 @@ a Durable Object without running cleanup, so correctness does not depend on `clo
 }
 ```
 
+## Route outbound requests
+
+Pass `fetch` to route OpenCode's outbound HTTP requests (OpenCode Console config, model requests, web fetch and
+search, well-known config, and remote MCP servers) through a custom handler such as a Service Binding. Agent code in
+Code Mode continues to use `globalThis.fetch`.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
 ## Customize
 
 Customize your OpenCode instance by registering plugins bundled with your
@@ -83,5 +99,5 @@ await OpenCodeWorkerd.create({
 })
 ```
 
-See the [full plugins documentation](/build/plugins) for plugin hooks,
+See the [full plugins documentation](/build/plugins/server) for plugin hooks,
 transforms, tools, and the complete plugin context.

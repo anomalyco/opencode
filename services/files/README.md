@@ -67,14 +67,11 @@ files to be consumed from other origins.
 
 ## Release Binaries
 
-Each package owns its publishing destinations. `packages/cli/script/publish.ts`
-publishes npm packages, Cloudflare archives, and AUR releases.
-`packages/desktop/scripts/publish.ts` publishes GitHub release assets, finalizes
-desktop manifests, uploads to Cloudflare, and registers its update artifacts.
-The root release script invokes these package publishers.
-
-Both publishers upload signed/packaged outputs to the production bucket for
-every release channel:
+The `release` workflow (`.github/workflows/release.yml`) uploads release files.
+Its `publish-cli` and `publish-desktop` jobs run in the `release` environment,
+check out only `.github/release/`, and never execute repository code:
+`publish-cli.sh` and `publish-desktop.sh` upload verified, signed build artifacts
+to the production bucket for every release channel:
 
 ```text
 R2 key: bin/0.0.0-dev-123/opencode-linux-x64.tar.gz
@@ -84,27 +81,18 @@ R2 key: bin/2.0.0/opencode-desktop-mac-arm64.dmg
 URL:    https://opencode.ai/files/bin/2.0.0/opencode-desktop-mac-arm64.dmg
 ```
 
-CLI and Node CLI archives contain the standalone executable at their root, with
-execute permissions restored after GitHub artifact downloads. Linux uses
-`.tar.gz`; macOS and Windows use `.zip`. Desktop uploads retain their GitHub
-release filenames, including blockmaps and `.app.tar.gz` bundles.
+CLI and Node CLI archives contain the standalone executable at their root.
+Linux uses `.tar.gz`; macOS and Windows use `.zip`. Desktop uploads keep their
+electron-builder filenames and include `.app.tar.gz` bundles.
 
-The package publishers use the shared `UpdateArtifact.upload` helper with the
-existing GitHub `CLOUDFLARE_API_TOKEN` secret and R2 object write access. It derives
-S3 credentials from the verified token, streams uploads, and sets the content
-type, download filename, and immutable cache headers.
+The jobs derive S3 credentials from the `CLOUDFLARE_API_TOKEN` secret and set
+the content type, download filename, and immutable cache headers.
 
-The publishers register `cli`, `cli-node` (when built), and `desktop` (when
-released) with distribution `opencode`. Each record is published only after all
-of its files have uploaded successfully.
-Every `metadata.files` entry contains the direct CDN `url`, SHA-256 checksum,
-and byte size. Desktop `metadata.manifests` also use those CDN URLs and retain
-the original SHA-512 and blockmap metadata.
-
-For local verification, each package publisher accepts `--dry-run` with
-`OPENCODE_VERSION` and `OPENCODE_CHANNEL` matching the build. CLI reads its own
-`dist/` directory (or `OPENCODE_CLI_DIST`). Desktop reads `OPENCODE_DESKTOP_DIST`;
-its dry run expects already-finalized manifests in `RUNNER_TEMP`.
+They register `cli`, `cli-node` (dev builds), and `desktop` (beta and versioned
+releases) with distribution `opencode`, each only after all of its files have
+uploaded. Every `metadata.files` entry contains the direct CDN `url`, SHA-256
+checksum, and byte size. Desktop `metadata.manifests` use those CDN URLs with
+SHA-512 checksums computed from the final signed files.
 
 ## Caching
 

@@ -1,6 +1,5 @@
 import { createMemo, Show } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsRow } from "@/settings/row"
@@ -40,7 +39,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
       aria-label={language.t("session.websearch.title")}
       aria-busy={props.model.sending()}
     >
-      <DockShell class="websearch-body">
+      <div class="websearch-body">
         <div class="websearch-setting">
           <SettingsRow
             title={language.t("session.websearch.title")}
@@ -59,8 +58,8 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
             />
           </SettingsRow>
         </div>
-      </DockShell>
-      <DockTray attach="top" class="websearch-footer">
+      </div>
+      <div class="websearch-footer">
         <div class="websearch-status" aria-live="polite">
           <Show when={props.model.loadFailed()} fallback={status()}>
             <span>{language.t("session.websearch.loadFailed")}</span>
@@ -88,7 +87,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
             {language.t("session.websearch.enable")}
           </Button>
         </div>
-      </DockTray>
+      </div>
     </section>
   )
 }

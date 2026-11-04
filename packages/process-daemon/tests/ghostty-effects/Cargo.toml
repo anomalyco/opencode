@@ -1,0 +1,13 @@
+[package]
+name = "ghostty-effects-miri"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "../ghostty-effects.rs"
+doctest = false
+
+# Isolate Miri from the native build and PTY dependencies. The test imports the
+# production effects module directly, rather than copying its implementation.
+[workspace]

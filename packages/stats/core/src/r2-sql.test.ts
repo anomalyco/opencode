@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite"
 import { Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { expect, test } from "bun:test"
-import { queryR2SqlPages, R2SqlQueryError, type R2SqlData } from "./r2-sql"
+import { isDeterministicR2SqlError, queryR2SqlPages, R2SqlQueryError, type R2SqlData } from "./r2-sql"
 
 test("includes the transport failure in the message used by sync logging", () => {
   const cause = new DOMException("The operation timed out.", "TimeoutError")
@@ -158,3 +158,36 @@ test("bounds transient retries and preserves the final error", async () => {
   expect(calls).toHaveLength(3)
   expect(result).toBe(error)
 }, 20000)
+
+test("treats rejected queries, rejected credentials and row-limit results as deterministic", async () => {
+  const rowLimit = await Effect.runPromise(
+    queryR2SqlPages("SELECT * FROM aggregates LIMIT 10000", undefined, () =>
+      Effect.succeed(Array.from({ length: 10000 }, () => ({}))),
+    ).pipe(Effect.flip),
+  )
+
+  expect(
+    [
+      rowLimit,
+      new R2SqlQueryError({ message: "syntax error", status: 400 }),
+      new R2SqlQueryError({ message: "unauthorized", status: 401 }),
+      new R2SqlQueryError({ message: "forbidden", status: 403 }),
+    ].map(isDeterministicR2SqlError),
+  ).toEqual([true, true, true, true])
+})
+
+test("leaves transient and unexplained failures retryable", () => {
+  expect(
+    [
+      new R2SqlQueryError({ message: "query timeout", status: 400, code: 40005 }),
+      new R2SqlQueryError({ message: "Unprocessable Entity", status: 422, code: 60104 }),
+      new R2SqlQueryError({ message: "rate limited", status: 429 }),
+      new R2SqlQueryError({ message: "unavailable", status: 503 }),
+      new R2SqlQueryError({ message: "Failed to run R2 SQL stats query", cause: new TypeError("connection closed") }),
+      new R2SqlQueryError({
+        message: "Failed to run R2 SQL stats query",
+        cause: new DOMException("The operation timed out.", "TimeoutError"),
+      }),
+    ].map(isDeterministicR2SqlError),
+  ).toEqual([false, false, false, false, false, false])
+})
