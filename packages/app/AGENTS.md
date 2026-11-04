@@ -26,6 +26,25 @@ The Web UI is served over plain HTTP on non-localhost LAN and Tailscale origins 
 
 - Always prefer `createStore` over multiple `createSignal` calls
 
+## State Machines
+
+This section is the single source for lifecycle state across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`. Anything that moves through phases (loading, submitting, connecting, retrying, dragging, revealing, quitting) is an explicit state machine. Precedents: `src/composer/machine.ts`, `src/session/requests/auto-approve-machine.ts`, `packages/desktop/src/main/deep-links/machine.ts`, `packages/gui-plugins/src/terminal/machine.ts`, `packages/ui/src/hooks/list-machine.ts`.
+
+- Model the lifecycle as one discriminated union (`type` or `status` tag) in its own module next to the feature (`machine.ts`, or `<feature>-machine.ts` when the folder already has one). It is the single source of truth: no booleans, nullable "in-flight" fields, `WeakSet`s, generation counters or closure variables beside it that also encode the phase. Data that exists only in a phase lives inside that phase's variant.
+- Write one pure `transition(state, event)` over a closed event union that returns the next state, or `{ state, effects }`. No I/O, timers, signals, `await` or `Date.now()` inside it. An event that does not apply to the current state returns the same state object, so it is visible in the code and writes no signal.
+- Keep only phases the user can observe. Merge phases nothing distinguishes, and model a variation as a field, not a new variant (for example a `gesture` field instead of one variant per input device). Fewer, real variants beat a faithful copy of every step.
+- Derive the UI with pure selectors or a `view(state)`: disabled, busy, spinner, error text, which panel or tab shows. Components read selectors; they never branch on side flags or re-check the phase themselves. In the main process, every consumer (quit handlers, menus, IPC) branches only on selectors of the machine.
+- Run async work in a thin driver at the edge. The driver turns effects into calls, dispatches the results back as events, and owns timers and abort controllers. Tie its cleanup to the owner's lifetime (`onCleanup`, `ctx.onCleanup`), and dispatch a `disposed` event rather than keeping a disposed flag.
+- Reject stale results inside the machine. Carry an attempt id in the state variant and in each result event, and ignore a result whose id is not current. A machine that only moves forward can match on the phase instead; each timeout event names its phase.
+- Claim work synchronously. Leave `idle` in the same event that starts the work, before the first `await` (image resolution, a request, a dynamic import). A guard checked before an `await` and set after it lets a second Enter, click or retry through.
+- Every async path ends in a state. A failure, timeout or cancel is a transition, never a log line or a silent `return`. Give a request that can hang a bounded fallback (a reveal timeout, a phase timeout) so the UI cannot stay hidden, disabled or "Loading" forever.
+- A result that arrives late can still have side effects. When the user went back but the server already saved the change (a key, a credential), keep the state and emit only the refresh effect. When a timeout cuts a batch short, report the real outcome of the parts that finished and time out only the rest.
+- Serialize operations that touch the same data through one queue in the machine (`active` plus `pending`), including actions that look independent (steer, remove, reorder, undo). A side path that skips the queue can resurrect what another operation removed.
+- On an identity change (another session, server, window or credential), move to a new target with a new attempt instead of carrying the previous target's error, controller or result forward.
+- On hot paths (scroll, pointer, resize, streaming), keep the machine allocation-free: return the same object when nothing changes, reuse event objects, and keep frozen singleton states. Benchmark with strobe as the Priorities section requires.
+- Test the pure transition. Replay the bug's event sequence as a regression that fails on the old logic, then cover stale attempts and every exit (success, failure, timeout, cancel, dispose). Build events the way production builds them (through the real decoder, without fields the wire never carries), or the test passes on routes production never takes. These tests need no DOM, timers or mocks.
+- Name new driver inputs so they cannot collide with existing ones (`appState`, not a second `state`), and wire Solid reads of machine state into `<Match>` and `<Show>` with keyed matches or memos so a branch never reads a value another branch already narrowed.
+
 ## Suspense
 
 A flash, a blanked area, a dialog that resizes or a reset scroll on first open almost always means a read entered Suspense. Do not ship UI that reads async data without the guard below.
