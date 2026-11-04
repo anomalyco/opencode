@@ -38,9 +38,6 @@ export function createWindowRegistry<W>(persistence: {
     get(id: string) {
       return windows.get(id)
     },
-    idOf(window: W) {
-      return [...windows].find((entry) => entry[1] === window)?.[0]
-    },
     list() {
       return [...windows.values()]
     },

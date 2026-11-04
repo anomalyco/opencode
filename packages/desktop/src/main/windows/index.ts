@@ -101,7 +101,8 @@ export function getWindowByID(id: string) {
 
 /** The persistent id of an app window, or undefined for popups and other native windows. */
 export function getWindowID(win: BrowserWindow) {
-  return registry.idOf(win)
+  // An open window's id stays in the persisted list until it closes.
+  return registry.persisted().find((id) => registry.get(id) === win)
 }
 
 /** App windows that host the renderer, excluding popups and other native windows. */
