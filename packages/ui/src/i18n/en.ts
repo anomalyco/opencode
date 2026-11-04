@@ -294,6 +294,7 @@ const source = {
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.duration.hoursMinutes": "{{hours}}h {{minutes}}m",
+  "ui.message.tokensPerSecond": "{{value}} tok/s",
   "ui.message.interrupted": "Interrupted",
   "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.message.time.justNow": "Just now",

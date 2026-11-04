@@ -548,6 +548,19 @@
     }
   }
 
+  [data-slot="text-part-meta-speed"] {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+
+  @media (hover: hover) {
+    [data-slot="text-part-meta"]:hover [data-slot="text-part-meta-speed"] {
+      display: inline-flex;
+    }
+  }
+
   [data-slot="text-part-meta-separator"] {
     flex: none;
   }

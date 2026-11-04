@@ -5,6 +5,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { SessionTurn } from "@opencode/util/session-turn"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
@@ -108,6 +109,16 @@ export function createSessionTimelineRowRenderer(input: {
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
+
+  const turns = createMemo(() => {
+    const messages = [...input.projection.messageByID().values()]
+
+    return {
+      messages,
+      legacy: SessionTurn.legacy(messages),
+      indexes: new Map(messages.map((message, index) => [message.id, index])),
+    }
+  })
 
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
@@ -455,6 +466,23 @@ export function createSessionTimelineRowRenderer(input: {
       return value.steps.length > 0 ? value : undefined
     })
 
+    const turnTokensPerSecond = createMemo(() => {
+      const current = ref()
+
+      if (!current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const messages = input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages
+
+      const last = messages.at(-1)
+
+      if (!last) return undefined
+
+      return SessionTurn.tokensPerSecond(turns().messages, last, {
+        index: turns().indexes.get(last.id),
+        legacy: turns().legacy,
+      })
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -468,6 +496,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
