@@ -35,6 +35,13 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
           const request = yield* HttpServerRequest.HttpServerRequest
           // Browser navigations ask for HTML; everything else is an API client that wants the token.
           const browser = request.headers.accept?.includes("text/html") === true
+          // Chat clients fetch shared links to render a preview. A plain HTML fetch must not spend
+          // the single-use code; only a real browser navigation carries Sec-Fetch-Mode: navigate.
+          if (browser && request.headers["sec-fetch-mode"] !== "navigate")
+            return HttpServerResponse.text(
+              "<!doctype html><title>Connect this device</title><p>Open this link in your browser to connect this device.",
+              { status: 200, contentType: "text/html; charset=utf-8" },
+            )
           const token = (yield* pairing.consume(ctx.params.code)) ? ServerAuth.issueSession(auth) : undefined
           if (token === undefined) {
             if (!browser) return yield* new UnauthorizedError({ message: "Pairing link expired or already used" })

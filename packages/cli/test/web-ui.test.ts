@@ -79,7 +79,7 @@ describe("web UI", () => {
       const redirect = yield* Effect.promise(() =>
         fetch(new URL(`/auth/connect/${pairing.code}`, origin), {
           redirect: "manual",
-          headers: { accept: "text/html" },
+          headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
         }),
       )
       expect(redirect.status).toBe(302)

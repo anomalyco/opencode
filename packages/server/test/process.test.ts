@@ -198,7 +198,17 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
 
     const browser = yield* pair
     expect(browser.expires_in).toBe(300)
-    const redirect = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    // Chat apps preview links with a plain HTML fetch; that must not spend the one-time code.
+    const preview = yield* request(`/auth/connect/${browser.code}`, {
+      headers: { accept: "text/html", "user-agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)" },
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.headers.get("content-type")).toContain("text/html")
+    expect(yield* Effect.promise(() => preview.text())).toContain("Open this link in your browser")
+
+    const redirect = yield* request(`/auth/connect/${browser.code}`, {
+      headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+    })
     expect(redirect.status).toBe(302)
     expect(redirect.headers.get("location")).toBe("/")
     const setCookie = redirect.headers.get("set-cookie") ?? ""
@@ -207,7 +217,9 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect(setCookie).toContain("SameSite=Lax")
     const cookie = setCookie.split(";")[0]
 
-    const reused = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    const reused = yield* request(`/auth/connect/${browser.code}`, {
+      headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+    })
     expect(reused.status).toBe(401)
     expect(yield* Effect.promise(() => reused.text())).toContain("opencode pair")
 
