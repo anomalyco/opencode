@@ -631,6 +631,7 @@ describe("Config", () => {
           }).pipe(
             Effect.provide(
               AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+                Config.node.replace(Config.configured({ system: false })),
                 Location.node.replace(
                   Layer.succeed(
                     Location.Service,
