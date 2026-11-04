@@ -1073,6 +1073,7 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "opencode-local",
+ "opencode-parity",
  "opentui",
  "serde",
  "serde_json",
