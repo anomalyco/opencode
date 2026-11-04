@@ -63,6 +63,7 @@ pub fn view(
     conceal: bool,
     streaming: bool,
 ) -> Markdown {
+    crate::grammars::register();
     let markdown = Markdown::new(app)
         .colors(colors(theme))
         .syntax_theme(syntax.clone())
