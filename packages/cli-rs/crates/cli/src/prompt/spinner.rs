@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::Output;
 use super::core::{ERASE_DOWN, HIDE, SHOW, move_cursor};
@@ -13,13 +13,12 @@ use super::style::{
 };
 use super::term::{Keys, Raw};
 
+/// Printed when Ctrl+C ends the process, or when the spinner is dropped while spinning.
+const CANCELED: &str = "Canceled";
+
 /// A line with an animated frame while work runs. While it spins, Ctrl+C or Escape prints the cancel
 /// message and exits the process with code 0, as Clack's spinner does.
 pub struct Spinner {
-    timer: bool,
-    cancel_message: String,
-    error_message: String,
-    output: Output,
     shared: Arc<Mutex<Shared>>,
     threads: Option<Threads>,
 }
@@ -27,7 +26,6 @@ pub struct Spinner {
 struct Shared {
     message: String,
     previous: Option<String>,
-    origin: Instant,
     raw: Option<Raw>,
 }
 
@@ -40,14 +38,9 @@ struct Threads {
 
 pub fn spinner() -> Spinner {
     Spinner {
-        timer: false,
-        cancel_message: "Canceled".to_string(),
-        error_message: "Something went wrong".to_string(),
-        output: Output::Stdout,
         shared: Arc::new(Mutex::new(Shared {
             message: String::new(),
             previous: None,
-            origin: Instant::now(),
             raw: None,
         })),
         threads: None,
@@ -55,45 +48,21 @@ pub fn spinner() -> Spinner {
 }
 
 impl Spinner {
-    /// Shows the elapsed time (`[1m 5s]`) instead of growing dots (`indicator: "timer"`).
-    pub fn timer(mut self) -> Self {
-        self.timer = true;
-        self
-    }
-
-    /// Printed when Ctrl+C ends the process, or when the spinner is dropped while spinning.
-    pub fn cancel_message(mut self, message: impl Into<String>) -> Self {
-        self.cancel_message = message.into();
-        self
-    }
-
-    pub fn error_message(mut self, message: impl Into<String>) -> Self {
-        self.error_message = message.into();
-        self
-    }
-
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
-        self
-    }
-
     pub fn start(&mut self, message: &str) {
         if self.threads.is_some() {
             self.stop("");
         }
-        let output = self.output;
+        let output = Output::Stdout;
         {
             let mut shared = lock(&self.shared);
             shared.raw = Some(Raw::enable());
             shared.message = trim_dots(message);
-            shared.origin = Instant::now();
             shared.previous = None;
         }
         output.write(HIDE);
         output.write(&format!("{}\n", gray(S_BAR())));
         let (frames, receive) = mpsc::channel();
         let shared = self.shared.clone();
-        let timer = self.timer;
         let frame_thread = std::thread::spawn(move || {
             let ci = std::env::var("CI").as_deref() == Ok("true");
             let frames: [&str; 4] = if unicode() {
@@ -114,8 +83,6 @@ impl Spinner {
                 let frame = magenta(frames[index]);
                 let line = if ci {
                     format!("{frame}  {}...", shared.message)
-                } else if timer {
-                    format!("{frame}  {} {}", shared.message, elapsed(shared.origin))
                 } else {
                     format!(
                         "{frame}  {}{}",
@@ -135,7 +102,6 @@ impl Spinner {
         let input_thread = {
             let stop = stop_input.clone();
             let shared = self.shared.clone();
-            let message = self.cancel_message.clone();
             std::thread::spawn(move || {
                 let mut keys = Keys::stoppable(stop);
                 while let Some(press) = keys.next() {
@@ -150,11 +116,7 @@ impl Spinner {
                             output,
                             std::env::var("CI").as_deref() == Ok("true"),
                         );
-                        output.write(&format!(
-                            "{}  {message}{}\n",
-                            green(S_STEP_SUBMIT()),
-                            timer_suffix(timer, &shared)
-                        ));
+                        output.write(&format!("{}  {CANCELED}\n", green(S_STEP_SUBMIT())));
                         output.write(SHOW);
                         shared.raw.take();
                         std::process::exit(0);
@@ -170,6 +132,7 @@ impl Spinner {
         });
     }
 
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// Changes the message while it spins.
     pub fn message(&self, message: &str) {
         lock(&self.shared).message = trim_dots(message);
@@ -190,20 +153,16 @@ impl Spinner {
         threads.stop_input.store(true, Ordering::Relaxed);
         let _ = threads.input_thread.join();
         let mut shared = lock(&self.shared);
-        clear_previous(
-            &shared,
-            self.output,
-            std::env::var("CI").as_deref() == Ok("true"),
-        );
+        let output = Output::Stdout;
+        clear_previous(&shared, output, std::env::var("CI").as_deref() == Ok("true"));
         let step = match code {
             0 => green(S_STEP_SUBMIT()),
             1 => red(S_STEP_CANCEL()),
             _ => red(S_STEP_ERROR()),
         };
         shared.message = message.to_string();
-        let suffix = timer_suffix(self.timer, &shared);
-        self.output.write(&format!("{step}  {message}{suffix}\n"));
-        self.output.write(SHOW);
+        output.write(&format!("{step}  {message}\n"));
+        output.write(SHOW);
         shared.raw.take();
     }
 }
@@ -212,8 +171,7 @@ impl Drop for Spinner {
     /// A spinner dropped while spinning stops as Clack's does when the process exits with code 1.
     fn drop(&mut self) {
         if self.threads.is_some() {
-            let message = self.cancel_message.clone();
-            self.stop_with(&message, 1);
+            self.stop_with(CANCELED, 1);
         }
     }
 }
@@ -239,22 +197,4 @@ fn clear_previous(shared: &Shared, output: Output, ci: bool) {
 
 fn trim_dots(message: &str) -> String {
     message.trim_end_matches('.').to_string()
-}
-
-fn elapsed(origin: Instant) -> String {
-    let seconds = origin.elapsed().as_secs();
-    let minutes = seconds / 60;
-    if minutes > 0 {
-        format!("[{minutes}m {}s]", seconds % 60)
-    } else {
-        format!("[{seconds}s]")
-    }
-}
-
-fn timer_suffix(timer: bool, shared: &Shared) -> String {
-    if timer {
-        format!(" {}", elapsed(shared.origin))
-    } else {
-        String::new()
-    }
 }
