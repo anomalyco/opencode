@@ -761,6 +761,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         for (const id of ["chat", "pinned"])
           editor.models.update(providerID, Model.ID.make(id), (model) => {
             model.settings = { baseURL: "https://catalog.example/v1" }
+            model.capabilities.freeform = ["text", "lark"]
           })
       })
       yield* addPlugin([
@@ -770,7 +771,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               gateway: {
                 settings: { baseURL: "http://127.0.0.1:17322" },
-                models: { pinned: { settings: { baseURL: "http://127.0.0.1:9000" } } },
+                models: {
+                  pinned: { settings: { baseURL: "http://127.0.0.1:9000" }, capabilities: { freeform: ["text"] } },
+                },
               },
             },
           }),
@@ -781,6 +784,64 @@ describe("ConfigProviderPlugin.Plugin", () => {
         models.get(providerID, Model.ID.make(id)).pipe(Effect.map((model) => required(model).settings?.baseURL))
       expect(yield* baseURL("chat")).toBe("http://127.0.0.1:17322")
       expect(yield* baseURL("pinned")).toBe("http://127.0.0.1:9000")
+      expect(required(yield* models.get(providerID, Model.ID.make("chat"))).capabilities.freeform).toBeUndefined()
+      expect(required(yield* models.get(providerID, Model.ID.make("pinned"))).capabilities.freeform).toEqual(["text"])
+    }),
+  )
+
+  it.effect("only inherits freeform formats for an unchanged catalog route", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("gateway")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/openai"
+        })
+        editor.models.update(providerID, Model.ID.make("source"), (model) => {
+          model.capabilities.freeform = ["lark"]
+        })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              gateway: {
+                models: {
+                  renamed: { modelID: "source" },
+                  repackaged: { modelID: "source", package: "@opencode/ai/providers/openai-compatible" },
+                  proxied: { modelID: "source", settings: { baseURL: "https://proxy.test/v1" } },
+                },
+              },
+              alternate: {
+                canonical: "gateway",
+                package: "@opencode/ai/providers/openai-compatible",
+                models: {
+                  chat: { modelID: "source" },
+                  configured: { modelID: "source", capabilities: { freeform: ["regex"] } },
+                },
+              },
+            },
+          }),
+        }),
+        new Document({
+          type: "document",
+          info: decode({ providers: { alternate: { models: { later: { modelID: "source" } } } } }),
+        }),
+      ])
+      for (const [provider, id, formats] of [
+        ["gateway", "source", ["lark"]],
+        ["gateway", "renamed", ["lark"]],
+        ["gateway", "repackaged", undefined],
+        ["gateway", "proxied", undefined],
+        ["alternate", "chat", undefined],
+        ["alternate", "configured", ["regex"]],
+        ["alternate", "later", undefined],
+      ] as const)
+        expect(
+          required(yield* models.get(Provider.ID.make(provider), Model.ID.make(id))).capabilities.freeform,
+        ).toEqual(formats)
     }),
   )
 

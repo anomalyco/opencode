@@ -56,12 +56,19 @@ export const Plugin = define({
     }
     yield* ctx.provider.transform((providers) => {
       const next: typeof sources.models = new Map()
-      for (const [id, item] of configuredProviders(loaded.entries)) {
+      const configured = configuredProviders(loaded.entries)
+      const rerouted = new Set(configured.filter(([, item]) => overridesRoute(item)).map(([id]) => id))
+      for (const [id, item] of configured) {
         const providerID = id
         const { current, source, changed } = overlayProvider(providers, providerID, item)
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
-          const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
+          const original = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
+          // The route override and an alias copied from the catalog may live in different config files.
+          const base =
+            original?.capabilities.freeform && rerouted.has(providerID)
+              ? { ...original, capabilities: { ...original.capabilities, freeform: undefined } }
+              : original
           const inherit = changed || !current?.models.has(id)
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
@@ -149,6 +156,10 @@ function configuredProviders(entries: readonly Entry[]) {
     .flatMap((file) => Object.entries(file.info.providers ?? {}))
 }
 
+function overridesRoute(config: Pick<ConfigProvider.Info, "package" | "settings">) {
+  return config.package !== undefined || config.settings?.baseURL !== undefined
+}
+
 /**
  * Applies an integration document's providers. The integration's plugin calls this at its own position in the
  * provider chain, so provider plugins registered after it treat these providers as configured ones rather than
@@ -201,6 +212,14 @@ function overlayProvider(
     if (item.headers !== undefined) provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
     if (item.body !== undefined) provider.body = Provider.mergeOverlay(provider.body, item.body)
   })
+  // A proxy or alternate package hasn't advertised the catalog endpoint's tool formats.
+  // Include catalog models not listed in this config document.
+  if (overridesRoute(item))
+    for (const [id, model] of providers.get(providerID)?.models ?? [])
+      if (model.capabilities.freeform?.length)
+        providers.models.update(providerID, id, (model) => {
+          delete model.capabilities.freeform
+        })
   return { current, source, changed }
 }
 
@@ -223,6 +242,14 @@ function overlay(
     if (config.type !== undefined) model.type = config.type
     if (config.family !== undefined) model.family = config.family
     if (config.name) model.name = config.name
+    // An alias may just have copied its canonical model again. Apply route overrides
+    // before merging any formats explicitly declared for the new destination.
+    if (
+      overridesRoute(item) ||
+      overridesRoute(config) ||
+      (config.modelID !== undefined && config.modelID !== model.modelID)
+    )
+      delete model.capabilities.freeform
     if (config.modelID !== undefined) model.modelID = config.modelID
     if (config.releaseDate !== undefined) model.time = { released: Date.parse(config.releaseDate) }
     if (config.compatibility !== undefined) model.compatibility = { ...model.compatibility, ...config.compatibility }
