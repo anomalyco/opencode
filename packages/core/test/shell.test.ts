@@ -57,7 +57,7 @@ describe("shell", () => {
     // wrapped in an exit-recovery suffix that reports $LASTEXITCODE only when the last
     // statement was native, without masking pure PowerShell failures.
     const psCommand = (command: string) =>
-      `$__e = $error.Count\n${command}\nif ($?) { exit 0 } elseif ($LASTEXITCODE -ne $null -and $error.Count -ge $__e -and @($error | Select-Object -Skip $__e | Where-Object { $_.FullyQualifiedErrorId -ne "NativeCommandError" }).Count -eq 0) { exit $LASTEXITCODE } else { exit 1 }`
+      `${command}\nif ($?) { exit 0 } elseif ($LASTEXITCODE -ne $null -and @($error | Where-Object { $_.FullyQualifiedErrorId -notlike "NativeCommandError*" }).Count -eq 0) { exit $LASTEXITCODE } else { exit 1 }`
     expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
       "-NoLogo",
       "-NoProfile",

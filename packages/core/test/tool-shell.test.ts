@@ -198,6 +198,9 @@ const nativeExitStderrCommand = isWindows
 const stderrMergeCommand = isWindows
   ? 'cmd /c "echo x 1>&2 & exit 0" 2>&1'
   : "{ echo x 1>&2; exit 0; } 2>&1"
+const multiStderrMergeCommand = isWindows
+  ? 'cmd /c "(echo a & echo b) 1>&2 & exit 0" 2>&1'
+  : "{ echo a 1>&2; echo b 1>&2; exit 0; } 2>&1"
 const psFailAfterNativeCommand = isWindows
   ? 'cmd /c "exit 0"; Get-Item definitely-missing-xyz'
   : "true; cat definitely-missing-xyz"
@@ -215,7 +218,11 @@ const progressOverflowCommand = (bytes: number, release: string) =>
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
     : `head -c ${bytes} /dev/zero | tr '\\0' 'x'; while [ ! -e '${release}' ]; do sleep 0.05; done`
 
-const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
+const withSession = <A, E, R>(
+  directory: string,
+  body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
+  shell?: string,
+) =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const location = Location.Ref.make({ directory: AbsolutePath.make(directory) })
@@ -230,6 +237,10 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     return yield* Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       yield* plugins.awaitActivation
+      if (shell) {
+        const selection = yield* ShellSelect.Service
+        yield* selection.transform((editor) => editor.configure(shell))
+      }
       const registry = yield* Tool.Service
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
@@ -1253,11 +1264,16 @@ describe("ShellTool", () => {
     )
   }
 
+  // These pin Windows PowerShell 5.1 on Windows: it is the engine where PowerShell clamps
+  // native exit codes and merges stderr into $error, and it is always present on Windows.
+  const ps51 = isWindows ? "powershell" : undefined
+
   it.live("keeps non-zero exits useful", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: bodyExitCommand }, "call-nonzero")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1276,6 +1292,7 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: nativeExitCommand }, "call-native-exit")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1293,6 +1310,7 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: stderrMergeCommand }, "call-stderr-merge")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1305,11 +1323,31 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live("keeps exit 0 when multiple stderr lines are merged with 2>&1", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: multiStderrMergeCommand }, "call-multi-stderr-merge")),
+        ps51,
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
+            expect(settled.content?.[0]?.type === "text" && settled.content[0].text).toContain("a")
+            expect(settled.content?.[0]?.type === "text" && settled.content[0].text).toContain("b")
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("keeps exit 1 when a failing statement follows a successful native command", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: psFailAfterNativeCommand }, "call-ps-fail-after-native")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1327,6 +1365,7 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: psFailOnlyCommand }, "call-ps-fail-only")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1344,6 +1383,7 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: nativeExitStderrCommand }, "call-native-exit-stderr")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
@@ -1362,6 +1402,7 @@ describe("ShellTool", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         executeTool(registry, call({ command: failThenOkCommand }, "call-fail-then-ok")),
+        ps51,
       ).pipe(
         Effect.andThen((settled) =>
           Effect.sync(() => {
