@@ -386,9 +386,8 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
     kit.wait_requests("POST", "/api/experimental/mcp/", 2);
     space_at(5);
     kit.wait_requests("POST", "/api/experimental/mcp/", 3);
-    // figma is pending, and notion signs in through its integration (E.17a): no request.
+    // figma is pending: no request.
     space_at(1);
-    space_at(4);
     // docs is disabled: connect, which fails with a toast and leaves the row as it was.
     space_at(0);
     kit.wait_requests("POST", "/api/experimental/mcp/", 4);
@@ -413,6 +412,11 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
             .iter()
             .all(|(_, _, body)| body.is_null())
     );
+    // notion signs in through its integration: the integration dialog opens (E.17a) instead of a toggle. This
+    // fixture serves no integrations, so it shows none.
+    space_at(4);
+    kit.wait_for("No integrations available");
+    assert_eq!(kit.toggles().len(), 4);
 }
 
 #[test]
