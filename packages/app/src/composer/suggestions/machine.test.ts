@@ -98,6 +98,22 @@ test.each<{
     popover: { type: "closed" },
   },
   {
+    name: "closes context on a second press and takes back the @ it typed",
+    from: { popover: { type: "context", query: "" } },
+    event: { type: "context.open" },
+    draft: persisted("see @"),
+    popover: { type: "closed" },
+    command: { type: "draft.removeTextBefore", value: "@" },
+  },
+  {
+    name: "closes context on a second press and keeps a typed query",
+    from: { popover: { type: "context", query: "sr" } },
+    event: { type: "context.open" },
+    draft: persisted("see @sr"),
+    popover: { type: "closed" },
+    command: { type: "focus.editor" },
+  },
+  {
     name: "opens inline commands when slash is the entire prompt",
     event: { type: "input.changed", value: "/re" },
     popover: { type: "command-inline", query: "re" },

@@ -953,7 +953,7 @@ test.describe("touch keyboard", () => {
       .toEqual(["first line\nsecond line", "from the iPad keyboard"])
   })
 
-  test("the / key toggles the commands, and Backspace or typing in the editor closes them", async ({ page }) => {
+  test("the / and @ keys toggle their lists, and Backspace or typing in the editor closes them", async ({ page }) => {
     const view = await openSession(page, { name: "ComposerTouchSlash" })
     const suggestions = page.locator('[data-component="composer-suggestions"]')
     const slash = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-commands"]')
@@ -984,6 +984,16 @@ test.describe("touch keyboard", () => {
     await view.editor.pressSequentially(" now")
     await expect(suggestions).toBeHidden()
     await expect(view.editor).toHaveText("keep me now")
+
+    // @ toggles the same way, taking back only the @ it typed.
+    const at = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-context"]')
+    await view.editor.pressSequentially(" ")
+    await at.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("keep me now @")
+    await at.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now ")
   })
 })
 

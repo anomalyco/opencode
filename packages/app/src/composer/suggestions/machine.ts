@@ -36,6 +36,7 @@ export type ComposerInteractionEvent =
 export type ComposerInteractionCommand =
   | { type: "draft.setText"; value: string }
   | { type: "draft.addText"; value: string }
+  | { type: "draft.removeTextBefore"; value: string }
   | { type: "mention.add"; item: ComposerSuggestion; range?: { start: number; end: number } }
   | { type: "popover.filter"; popover: "command" | "context"; query: string }
   | { type: "suggestion.select"; id: string }
@@ -173,6 +174,14 @@ function openCommands(state: ComposerInteractionState, persisted: ComposerPersis
 }
 
 function openContext(state: ComposerInteractionState): ComposerEditorTransition {
+  // A second press closes the context list, taking back the @ it typed when nothing follows it yet.
+  if (state.popover.type === "context") {
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [
+      ...(state.popover.query ? [] : [{ type: "draft.removeTextBefore" as const, value: "@" }]),
+      { type: "focus.editor" },
+    ])
+  }
+
   return changed({ ...state, popover: { type: "context", query: "" }, focus: "editor" }, [
     { type: "draft.addText", value: "@" },
     { type: "popover.filter", popover: "context", query: "" },
