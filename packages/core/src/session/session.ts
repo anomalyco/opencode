@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
+import { Job } from "../job.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
 import {
@@ -46,6 +47,7 @@ export const make = Effect.fn("Session.make")(function* () {
   const instances = yield* Instance.Service
   const execution = yield* SessionExecution.Service
   const admission = yield* SessionInbox.Service
+  const jobs = yield* Job.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
 
@@ -146,6 +148,7 @@ export const make = Effect.fn("Session.make")(function* () {
     inboxID: SessionMessage.ID,
   ) {
     yield* mutatePending(sessionID, inboxID, admission.steer)
+    if (yield* SessionInbox.hasUserSteer(database.db, sessionID)) yield* jobs.backgroundAll({ sessionID })
     yield* execution.wake(sessionID)
   }, Effect.uninterruptible)
   const queueInbox = Effect.fn("Session.queueInbox")(
@@ -184,7 +187,11 @@ export const make = Effect.fn("Session.make")(function* () {
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )
-        if (input.resume !== false) yield* execution.wake(sessionID)
+        if (input.resume !== false) {
+          if (admitted.delivery === "steer" && (yield* SessionInbox.hasUserSteer(database.db, sessionID)))
+            yield* jobs.backgroundAll({ sessionID })
+          yield* execution.wake(sessionID)
+        }
         return admitted
       }),
     ),

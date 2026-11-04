@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/solid-query"
 import { Option, Schema } from "effect"
 import type { PromptAttachment, SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
-import type { ComposerDelivery, ComposerSession } from "@/composer/adapter"
+import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
@@ -50,7 +50,6 @@ export function createSessionQueue(input: {
   working: Accessor<boolean>
   behavior: Accessor<ComposerDelivery>
   restoreFocus: (cursor: number) => void
-  background: NonNullable<ComposerSession["background"]>
 }) {
   const data = useData()
   const server = useServerSDK()
@@ -148,9 +147,7 @@ export function createSessionQueue(input: {
 
       if (!pending.some((item) => item.id === change.original && item.type === "user" && item.delivery === "queue"))
         throw new Error("Queued prompt was delivered before the edit")
-      const background = input.background()
       await data.session.prompt(admission)
-      void background?.move()
       setState("sent", (edit) => edit.original === change.original, "admitted", true)
       // Cancelling is a no-op once the original is gone, so one retry is safe.
       const cancel = () => server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
@@ -314,13 +311,9 @@ export function createSessionQueue(input: {
 
   const steer = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
-    const background = input.background()
 
     return server.api.session.inbox.update({ sessionID: input.sessionID, inboxID: id, delivery: "steer" }).then(
-      () => {
-        void background?.move()
-        hide([id])
-      },
+      () => hide([id]),
       () => notify(),
     )
   }

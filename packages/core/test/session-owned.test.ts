@@ -16,6 +16,7 @@ import { Database } from "../src/database/database.js"
 import { EventTable } from "../src/event/sql.js"
 import { Image } from "../src/image.js"
 import { Instance } from "../src/instance/service.js"
+import { Job } from "../src/job.js"
 import { Location } from "../src/location.js"
 import { Plugin } from "../src/plugin.js"
 import { PluginHooks } from "../src/plugin/hooks.js"
@@ -46,6 +47,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       Bus.node,
+      Job.node,
       SessionProjector.node,
       SessionStore.node,
       SessionInbox.node,
@@ -153,6 +155,7 @@ const setup = Effect.fnUntraced(function* (options?: {
       | Bus.Service
       | Database.Service
       | FSUtil.Service
+      | Job.Service
       | SessionStore.Service
       | Instance.Service
       | SessionExecution.Service
