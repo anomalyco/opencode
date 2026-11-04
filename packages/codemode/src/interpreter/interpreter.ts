@@ -128,6 +128,7 @@ import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from ".
 import { fn } from "./native.js"
 import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
+import type { NodeId, Source } from "./source.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
 import { compoundOperators } from "../stdlib/value.js"
@@ -389,6 +390,8 @@ export class Interpreter<R> {
   readonly logs: Array<string>
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
+  /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
+  readonly sources = new Map<string, Source>()
   private readonly root: Frame<R>
   private readonly globalScope: ReadonlyMap<string, Binding>
   private readonly modules = new Map<string, Value>()
@@ -452,8 +455,14 @@ export class Interpreter<R> {
   }
 
   /** The program's body, as the first job: its completion value, copied out for the host. */
-  *main(program: Program): Eval<Json | undefined> {
-    return yield* toBoundary(this, yield* this.root.run(program))
+  *main(source: Source): Eval<Json | undefined> {
+    this.sources.set(source.id, source)
+    return yield* toBoundary(this, yield* this.root.run(source.program))
+  }
+
+  /** The node a `NodeId` names, in one of this execution's sources. */
+  node(id: NodeId): AstNode | undefined {
+    return this.sources.get(id.source)?.node(id)
   }
 
   /** Calls into the program; a built-in passes its own call site so failures inside are located there. */

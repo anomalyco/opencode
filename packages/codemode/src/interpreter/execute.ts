@@ -8,6 +8,7 @@ import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
 import type { Runner } from "./runner.js"
+import { Source } from "./source.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -40,7 +41,7 @@ export const executeProgram = <R>(
       const services = yield* Effect.context<R>()
       const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
       runner = ctx.runner
-      const outcome = yield* runner.run(ctx.main(parsed.program))
+      const outcome = yield* runner.run(ctx.main(parsed.source))
       if (!outcome.ok) {
         return { ok: false, error: normalizeError(outcome.error), ...logged(), toolCalls: tools.calls } satisfies Result
       }
@@ -110,7 +111,9 @@ export const executeProgram = <R>(
   })
 }
 
-export const parseProgram = (code: string): { ok: true; program: Program } | { ok: false; error: Diagnostic } => {
+export const parseProgram = (
+  code: string,
+): { ok: true; program: Program; source: Source } | { ok: false; error: Diagnostic } => {
   try {
     const program = parse(code, {
       ecmaVersion: "latest",
@@ -133,7 +136,7 @@ export const parseProgram = (code: string): { ok: true; program: Program } | { o
         },
       }
     }
-    return { ok: true, program }
+    return { ok: true, program, source: new Source("main", code, program) }
   } catch (error) {
     // Only acorn's own syntax errors become a located ParseError; anything else keeps the generic failure path.
     const acorn = error instanceof SyntaxError ? decodeAcornError(error) : Option.none()
