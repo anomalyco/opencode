@@ -509,14 +509,18 @@ export function RegionContent(props: {
   )
 
   // A switch to a session with nothing open in this pane keeps the last tab, so switching back shows it again instead of
-  // tearing down and building a panel such as the review, its file tree and diffs, on every switch.
-  const single = createMemo<string | undefined>((previous) => {
+  // tearing down and building a panel such as the review, its file tree and diffs, on every switch. Closing a tab in
+  // the same session still unmounts it.
+  const kept = createMemo<{ key: string | undefined; session: string }>((previous) => {
     const entry = props.pane.selected()
+    const session = props.view.key
 
-    if (!entry) return previous
+    if (!entry && previous?.key && previous.session !== session) return previous
 
-    return entry.tab.group ? undefined : entry.key
+    return { key: entry && !entry.tab.group ? entry.key : undefined, session }
   })
+
+  const single = () => kept().key
 
   const shown = () => props.pane.selected()?.key === single()
 
