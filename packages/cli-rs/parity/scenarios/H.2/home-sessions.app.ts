@@ -1,7 +1,8 @@
 // Home with two sessions, the session list, and opening the newest session from it (T01, DLG14).
 import { assistant, defineApp, session, user } from "../../lib/app"
 
-const placeholder = { line: 'Ask anything… ".*"', reason: "the prompt placeholder is picked at random" }
+// To the end of the row: the placeholders differ in length.
+const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }
 
 export default defineApp({
   routes: [

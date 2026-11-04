@@ -123,7 +123,9 @@ selects one. Each case:
    three polls in a row read the same cells, not only the same characters. Highlighting changes colors after
    the text shows. A poll that meets a frame in progress (`OutputBusy`) is skipped. The process runs with
    `TZ=UTC`, so dates in the cells are the same on every machine;
-4. writes the cell files and the recording.
+4. stays open until 1.5 s after `ready`, so the migration status poll, which starts 1 s after mount
+   (`packages/tui/src/component/migration-overlay.tsx:19`), is recorded in every scenario;
+5. writes the cell files and the recording.
 
 Replaying a scenario twice must give byte-identical files. That is the step's TS-against-TS proof.
 
