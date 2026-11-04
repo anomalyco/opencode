@@ -2,13 +2,16 @@ import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promis
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
-import { UsageDialogContent } from "./dialog"
+import { DialogStoryRuntime, STORY_DIRECTORY } from "@/components-lab/dialog-story-runtime"
+import { DialogUsage, UsageDialogContent } from "./dialog"
 import type { CurrentModel } from "./limits"
 
 const resetsAt = Date.UTC(2026, 10, 1)
+
 const hour = 3_600_000
 
 const opus = { providerID: "opencode", modelID: "claude-opus-5", name: "Claude Opus 5" }
+
 const sonnet = { providerID: "opencode", modelID: "claude-sonnet-5", name: "Claude Sonnet 5" }
 
 const budget = (input: Partial<UsageLimitsBudget> & Pick<UsageLimitsBudget, "id">): UsageLimitsBudget => ({
@@ -32,26 +35,41 @@ const pool = (spent: number) => budget({ id: "pool", scope: "combined", shared: 
 
 const info = (budgets: UsageLimitsBudget[], go = false): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
-  ...(go
+  go: go
     ? {
-        go: {
-          rolling: { percent: 42, limited: false, resetsAt: Date.now() + 3 * hour },
-          weekly: { percent: 18, limited: false, resetsAt: Date.now() + 100 * hour },
-          monthly: { percent: 7, limited: false, resetsAt: Date.now() + 500 * hour },
-        },
+        rolling: { percent: 42, limited: false, resetsAt: Date.now() + 3 * hour },
+        weekly: { percent: 18, limited: false, resetsAt: Date.now() + 100 * hour },
+        monthly: { percent: 7, limited: false, resetsAt: Date.now() + 500 * hour },
       }
-    : {}),
+    : undefined,
   budgets,
 })
 
 function UsageStory(props: { info: UsageLimitsInfo; model?: CurrentModel; credits?: boolean }) {
   const dialog = useDialog()
-  const open = () => dialog.show(() => <UsageDialogContent {...props} onSwitchModel={() => {}} />)
+
+  const open = () => void dialog.show(() => <UsageDialogContent {...props} onSwitchModel={() => {}} />)
 
   onMount(open)
 
   return (
     <div class="flex min-h-[560px] items-end justify-center">
+      <Button variant="ghost-muted" onClick={open}>
+        Usage
+      </Button>
+    </div>
+  )
+}
+
+function LiveUsageStory() {
+  const dialog = useDialog()
+
+  const open = () => void dialog.show(() => <DialogUsage location={{ directory: STORY_DIRECTORY }} />)
+
+  onMount(open)
+
+  return (
+    <div class="flex min-h-[320px] items-end justify-center">
       <Button variant="ghost-muted" onClick={open}>
         Usage
       </Button>
@@ -65,6 +83,14 @@ export default {
 }
 
 export const Default = { render: () => <UsageStory info={info([anthropic(123.14), pool(394.57)], true)} /> }
+
+export const SignedOut = {
+  render: () => (
+    <DialogStoryRuntime>
+      <LiveUsageStory />
+    </DialogStoryRuntime>
+  ),
+}
 
 export const PerModel = {
   render: () => (

@@ -1,29 +1,32 @@
-// @ts-nocheck
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { onMount } from "solid-js"
+import { DialogStoryRuntime, STORY_DIRECTORY } from "@/components-lab/dialog-story-runtime"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
 function ConnectProviderDialogStory() {
   const dialog = useDialog()
-  const open = () => dialog.show(() => <DialogConnectProvider />)
+
+  const open = () => void dialog.show(() => <DialogConnectProvider directory={STORY_DIRECTORY} />)
 
   onMount(open)
 
   return (
     <Button variant="neutral" onClick={open}>
-      Open connect provider dialog
+      Open connect integration dialog
     </Button>
   )
 }
 
-// The server describes the provider's sign-in methods.
-function ProviderConnectionDialogStory(props) {
+function ProviderConnectionDialogStory(props: { provider: string }) {
   const dialog = useDialog()
+
   const controller = useProviderConnectController()
-  controller.select(props.provider)
-  const open = () => dialog.show(() => <DialogConnectProvider controller={controller} />)
+
+  const open = () => {
+    controller.select(props.provider)
+    void dialog.show(() => <DialogConnectProvider directory={STORY_DIRECTORY} controller={controller} />)
+  }
 
   onMount(open)
 
@@ -34,11 +37,11 @@ function ProviderConnectionDialogStory(props) {
   )
 }
 
-function renderConnection(provider) {
+function renderConnection(provider: string) {
   return () => (
-    <QueryClientProvider client={new QueryClient()}>
+    <DialogStoryRuntime>
       <ProviderConnectionDialogStory provider={provider} />
-    </QueryClientProvider>
+    </DialogStoryRuntime>
   )
 }
 
@@ -49,18 +52,18 @@ export default {
 
 export const Picker = {
   render: () => (
-    <QueryClientProvider client={new QueryClient()}>
+    <DialogStoryRuntime>
       <ConnectProviderDialogStory />
-    </QueryClientProvider>
+    </DialogStoryRuntime>
   ),
+}
+
+export const ChooseMethod = {
+  render: renderConnection("opencode"),
 }
 
 export const ApiKey = {
   render: renderConnection("openrouter"),
-}
-
-export const OpenCodeZen = {
-  render: renderConnection("opencode"),
 }
 
 export const LoginMethods = {
