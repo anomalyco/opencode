@@ -2387,6 +2387,7 @@ export type ConfigEntry =
             | "mcp.use"
             | "skill.use"
             | "plugin.use"
+            | "websearch.use"
           resource: string
           effect: "allow" | "deny"
         }>
@@ -2558,6 +2559,7 @@ export type ConfigEntry =
               | "mcp.use"
               | "skill.use"
               | "plugin.use"
+              | "websearch.use"
             resource: string
             effect: "allow" | "deny"
           }>
