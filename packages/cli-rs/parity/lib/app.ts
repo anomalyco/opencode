@@ -44,6 +44,7 @@ export type AppScenario = {
     model?: string
     agent?: string
     newSessionID?: string
+    auto?: boolean
   }
   // Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
   env?: Record<string, string>
