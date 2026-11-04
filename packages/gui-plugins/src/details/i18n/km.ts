@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "មិនមានផ្លាតថ្ន័ណាមួយត្រូវបានកំណត់",
   skills: "ជំនាញ",
   "skills.empty": "មិនមានជំនាញដែលបានកំណត់ទេ",
-  lsp: "LSP",
-  "lsp.empty": "មិនមានម៉ាស៊ីនមេ LSP ត្រូវបានកំណត់ទេ",
   failed: "បរាជ័យ",
   retry: "សាកលើកម្តងទៀត",
   connecting: "កំពុងភ្ជាប់…",

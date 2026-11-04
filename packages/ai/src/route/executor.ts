@@ -253,6 +253,23 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
+/**
+ * Per-call middleware that sends through `fetch` instead of the executor's HTTP client. Executor middleware and
+ * `middleware` still wrap the call, and status classification still applies.
+ */
+export const withFetch = (
+  fetch: typeof globalThis.fetch | undefined,
+  middleware?: HttpMiddleware,
+): HttpMiddleware | undefined => {
+  if (fetch === undefined) return middleware
+  const send = (request: HttpClientRequest.HttpClientRequest) =>
+    HttpClient.execute(request).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+  return middleware === undefined ? send : (request) => middleware(request, send)
+}
+
 /** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
 export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
   Layer.effect(

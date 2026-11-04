@@ -5,6 +5,7 @@ import { Button } from "@opencode/ui/button"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
+import { LinkedText } from "@opencode/session-ui/linked-text"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
 import { TextInput } from "@opencode/ui/text-input"
@@ -678,7 +679,9 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                   overflow: store.minimized ? "hidden" : undefined,
                 }}
               >
-                <bdi>{question()?.question}</bdi>
+                <bdi>
+                  <LinkedText text={question()?.question ?? ""} />
+                </bdi>
               </div>
               <Show when={!store.minimized}>
                 <div data-slot="question-hint">

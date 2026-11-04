@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "尚未設定任何外掛程式",
   skills: "技能",
   "skills.empty": "未設定技能",
-  lsp: "LSP",
-  "lsp.empty": "未設定 LSP 伺服器",
   failed: "失敗",
   retry: "重試",
   connecting: "連線中…",

@@ -2,15 +2,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import {
-  HttpOptions,
-  ProviderID,
-  ToolDefinition,
-  mergeHttpOptions,
-  type ModelID,
-  type OpenString,
-  type ProviderOptions,
-} from "../schema/index.js"
+import { ProviderID, ToolDefinition, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -111,10 +103,7 @@ export const configure = (input: Config = {}) => {
   const deployment = MediaRoute.deployment(input, auth(input))
   const media = {
     ...deployment,
-    http: mergeHttpOptions(
-      deployment.http,
-      input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-    ),
+    http: { ...deployment.http, query: { ...deployment.http?.query, ...input.queryParams } },
   }
   // The ChatGPT backend (ChatGPT sign-in) rejects multipart image edits with "Unsupported content type".
   const imageInput = media.baseURL?.startsWith("https://chatgpt.com/") ? "json-edits" : undefined

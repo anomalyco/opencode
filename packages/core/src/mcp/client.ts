@@ -1,6 +1,5 @@
 export * as McpClient from "./client.js"
 
-import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
@@ -290,7 +289,7 @@ export const connect = Effect.fnUntraced(function* (
         server,
         command,
         args,
-        cwd: config.cwd ? path.resolve(directory, config.cwd) : directory,
+        cwd: McpStdio.resolveCwd(directory, config.cwd),
         environment: {
           ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...config.environment,
