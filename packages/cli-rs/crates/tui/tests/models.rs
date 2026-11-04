@@ -36,6 +36,8 @@ use serde_json::{Value, json};
 struct Server {
     routes: Value,
     seen: Mutex<Vec<(String, String)>>,
+    /// Holds the usage limits back, as OpenCode Console can.
+    slow_usage: std::sync::atomic::AtomicBool,
 }
 
 impl Server {
@@ -45,6 +47,7 @@ impl Server {
         Arc::new(Self {
             routes: server["routes"].clone(),
             seen: Mutex::default(),
+            slow_usage: Default::default(),
         })
     }
 
@@ -75,7 +78,12 @@ impl Transport for Server {
             _ => (404, json!({})),
         };
         let body = serde_json::to_vec(&body).unwrap();
+        let slow = path == "/api/experimental/usage/limits"
+            && self.slow_usage.load(std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move {
+            if slow {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
             Ok(Response {
                 status,
                 headers: vec![("content-type".into(), "application/json".into())],
@@ -373,6 +381,30 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
     );
     assert_eq!(local.current(), Some(Model::new("openai", "gpt-5-mini")));
     assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn a_filter_typed_before_the_limits_arrive_stays() {
+    let h = mount();
+    h.fixture
+        .slow_usage
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    // The limits load when the dialog opens; the dialog opens again to show the usage action.
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Select model");
+    h.app.type_text("mini");
+    h.wait_for("GPT-5 mini");
+    assert!(
+        !h.app.text().contains("ctrl+u"),
+        "the limits came too early"
+    );
+    let screen = h.wait_for("ctrl+u");
+    assert!(screen.contains("GPT-5 mini"), "{screen}");
+    assert!(
+        !screen.contains("Claude Haiku"),
+        "the filter was lost:\n{screen}"
+    );
 }
 
 #[test]
