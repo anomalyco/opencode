@@ -88,7 +88,7 @@ async fn requests_match_the_typescript_client() {
                 files: None,
                 agents: None,
                 skills: None,
-                metadata: Some(BTreeMap::from([("k".to_owned(), json!(1))])),
+                metadata: Some(indexmap::IndexMap::from([("k".to_owned(), json!(1))])),
                 delivery: None,
                 resume: Some(None),
             },

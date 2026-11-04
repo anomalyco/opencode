@@ -932,6 +932,7 @@ dependencies = [
  "base64",
  "bytes",
  "futures-util",
+ "indexmap",
  "log",
  "percent-encoding",
  "rand",
