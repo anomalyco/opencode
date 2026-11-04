@@ -8,8 +8,10 @@ export function setTerminalTitle(renderer: TitleRenderer, title: string) {
   renderer.setTerminalTitle(title)
 }
 
-export function destroyRenderer(renderer: TitleRenderer & Pick<CliRenderer, "destroy">) {
+export function destroyRenderer(renderer: TitleRenderer & Pick<CliRenderer, "setProgramStatus" | "destroy">) {
   if (renderer.isDestroyed) return
   setTerminalTitle(renderer, "")
+  // Terminals keep the idle root OSC 7501 record after exit. Solid cleanup runs after destroy, too late to clear it.
+  if (renderer.controlState !== RendererControlState.EXPLICIT_SUSPENDED) renderer.setProgramStatus({ state: "clear" })
   renderer.destroy()
 }
