@@ -195,7 +195,6 @@
       "checkpoint": "sent",
       "until": "Demo Model",
       "deviation": [
-        "P01-read-only-prompt",
         "C01-startup-prompt-cells"
       ],
       "fixture": "C.13/prompt-new/sent"
@@ -261,7 +260,7 @@
         "path": "/api/session/ses_new/prompt",
         "query": {},
         "body": {
-          "id": "msg_1a85ccb9c001oEH5r7Bi5RTSyC",
+          "id": "msg_1a86d2cb8001XIMo9oEpRLEyJQ",
           "text": "hello",
           "files": [],
           "agents": [],

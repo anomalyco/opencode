@@ -298,9 +298,9 @@ fn paths(home: &Path) -> Paths {
 fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     let setup = Setup::new();
     setup.app.type_text("/");
-    // The first ten of the sorted list, keymap commands with their titles.
+    // The first ten of the sorted list, keymap commands with their titles; E.14's `/btw` is among them.
     let screen = setup.wait_for("/agents");
-    for row in ["/cd", "/compact", "/exit", "Change working directory"] {
+    for row in ["/btw", "/cd", "/compact", "Change working directory"] {
         assert!(screen.contains(row), "{row:?} missing:\n{screen}");
     }
     // The server's command, with its description.

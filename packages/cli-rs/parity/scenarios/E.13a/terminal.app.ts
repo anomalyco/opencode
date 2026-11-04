@@ -17,10 +17,6 @@ const terminal = {
   output: { head: 0, tail: 27 },
 }
 
-// The prompt footer row: its hints are missing in Rust, and TS shortens the location label to the width they
-// leave beside the narrowed session pane (parity/deviations/P01-read-only-prompt.md).
-const footer = { x: 0, y: 28, width: 100, height: 1, reason: "prompt footer hints and label width (P01-read-only-prompt)" }
-
 const checkpoint = "Welcome to the fake shell\r\n"
 
 export default defineApp({
@@ -50,20 +46,20 @@ export default defineApp({
   ],
   pty: { size: { cols: 80, rows: 24 }, checkpoint, replay: "$ " },
   steps: [
-    { checkpoint: "session", until: "Open a terminal", masks: [footer] },
+    { checkpoint: "session", until: "Open a terminal" },
     { keys: ["ctrl+x", "t"] },
-    { checkpoint: "shown", until: "fake shell", masks: [footer] },
+    { checkpoint: "shown", until: "fake shell" },
     { type: "echo hi" },
     { keys: ["enter"] },
-    { checkpoint: "typed", until: "echo hi", masks: [footer] },
+    { checkpoint: "typed", until: "echo hi" },
     // Normal red, blue, and magenta, and bright green, which the palette maps to theme colors.
     { pty: { output: "hi\r\n\x1b[31mred \x1b[34mblue \x1b[35mmagenta \x1b[92mgreen\x1b[0m\r\n$ " } },
-    { checkpoint: "output", masks: [footer] },
+    { checkpoint: "output" },
     { keys: ["ctrl+x", "up"] },
-    { checkpoint: "closed", masks: [footer] },
+    { checkpoint: "closed" },
     { keys: ["ctrl+x", "t"] },
-    { checkpoint: "reopened", until: "fake shell", masks: [footer] },
+    { checkpoint: "reopened", until: "fake shell" },
     { pty: { close: true } },
-    { checkpoint: "disconnected", until: "Terminal disconnected", masks: [footer] },
+    { checkpoint: "disconnected", until: "Terminal disconnected" },
   ],
 })
