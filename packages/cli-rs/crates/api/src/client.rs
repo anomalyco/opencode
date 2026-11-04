@@ -232,7 +232,8 @@ impl Client {
             .map(|value| value.data)
     }
 
-    pub(crate) async fn empty(&self, call: Call, options: &RequestOptions) -> Result<(), Error> {
+    /// Sends `call` and expects no body. Public so a caller can send a body with its own key order.
+    pub async fn empty(&self, call: Call, options: &RequestOptions) -> Result<(), Error> {
         self.execute(call, options).await.map(|_| ())
     }
 
