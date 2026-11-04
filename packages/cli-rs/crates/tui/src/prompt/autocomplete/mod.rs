@@ -75,9 +75,8 @@ impl Shared {
         // `paths.cwd`: the directory the TUI started in.
         let cwd = std::path::PathBuf::from(&tui.directory);
         tui.app.runtime().spawn_blocking(move || {
-            let loaded = Frecency::load(&state, &cwd);
             if let Ok(mut slot) = frecency.lock() {
-                *slot = Some(loaded);
+                slot.get_or_insert_with(|| Frecency::load(&state, &cwd));
             }
             let stored =
                 storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
@@ -99,12 +98,18 @@ impl Shared {
             .unwrap_or(0.0)
     }
 
-    /// `updateFrecency(path)`, written on a blocking thread.
-    fn visit(&self, app: &App, path: String) {
+    /// `updateFrecency(path)`, written on a blocking thread. A pick can run before the load does, so
+    /// whichever runs first loads the file.
+    fn visit(&self, tui: &Tui, path: String) {
+        let Some(state) = tui.state_dir() else {
+            return;
+        };
         let frecency = self.frecency.clone();
-        app.runtime().spawn_blocking(move || {
-            if let Some(frecency) = frecency.lock().ok().as_mut().and_then(|slot| slot.as_mut()) {
-                frecency.update(&path, jsonl::now_ms());
+        let cwd = std::path::PathBuf::from(&tui.directory);
+        tui.app.runtime().spawn_blocking(move || {
+            if let Ok(mut slot) = frecency.lock() {
+                slot.get_or_insert_with(|| Frecency::load(&state, &cwd))
+                    .update(&path, jsonl::now_ms());
             }
         });
     }
@@ -843,7 +848,7 @@ impl State {
             } => {
                 parts::insert(prompt, self.index.get(), text, *kind, part.clone());
                 if let Some(path) = visit {
-                    tui.prompt.complete.visit(&tui.app, path.clone());
+                    tui.prompt.complete.visit(&tui, path.clone());
                 }
             }
             Action::Run(id) => {
