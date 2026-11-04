@@ -200,6 +200,7 @@ describe("transitionLineComment", () => {
     const editing: LineCommentMode = { status: "editing", id: "c1", range: line(4), text: "x" }
     const selecting: LineCommentMode = { status: "selecting", range: line(2) }
     const viewing: LineCommentMode = { status: "viewing", id: "c1", range: line(4) }
+
     const cleared: LineCommentTransition = {
       state: IDLE_LINE_COMMENT_MODE,
       effects: [{ type: "sync-selected", range: null }],
