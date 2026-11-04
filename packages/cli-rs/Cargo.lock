@@ -1183,6 +1183,7 @@ dependencies = [
  "base64",
  "bytes",
  "futures-util",
+ "log",
  "opencode-api",
  "opencode-local",
  "rand",
