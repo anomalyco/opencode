@@ -17,7 +17,6 @@ const connection: ServerConnection.Plugin = {
   authenticate: () => false,
   managed: true,
   displayName: "Build server",
-  http: { url: "http://127.0.0.1:4000", password: "secret" },
 }
 
 describe("settings server inventory", () => {

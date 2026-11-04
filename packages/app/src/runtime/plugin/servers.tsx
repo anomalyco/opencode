@@ -30,9 +30,6 @@ import { renamedFrom } from "./stores"
 /** A server a plugin contributes. `key` is `${plugin}:${entry.id}`. */
 export type PluginServer = { readonly key: string; readonly plugin: string; readonly entry: ServerEntry }
 
-// Where a contributed server's event stream starts before its plugin reports an endpoint; it never answers.
-const offline = { url: "http://127.0.0.1:0" }
-
 // The last complete inventory of each plugin that contributes servers, without endpoints or credentials.
 const Inventories = Schema.Record(
   Schema.String,
@@ -211,14 +208,18 @@ function connection(initial: PluginServer) {
     get managed() {
       return !!entry().reconnect
     },
-    get http() {
-      return entry().http ?? offline
-    },
     // Resolved per call: the connection outlives a reload of the plugin that provides it.
     get reconnect() {
       if (!entry().reconnect) return undefined
 
-      return (signal: AbortSignal) => entry().reconnect?.(signal) ?? Promise.resolve(entry().http ?? offline)
+      return (signal: AbortSignal) => {
+        const status = selectPluginStatus(untrack(machine))
+
+        return (
+          entry().reconnect?.(signal) ??
+          (status.type === "ready" ? Promise.resolve(status.http) : Promise.reject(new Error("Server is not ready")))
+        )
+      }
     },
     authenticate: (onConnected) => {
       if (!canAuthenticatePluginServer(untrack(machine))) return false

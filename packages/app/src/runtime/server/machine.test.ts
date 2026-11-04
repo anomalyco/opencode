@@ -113,14 +113,13 @@ test("a rejection of credentials the server has since replaced changes nothing",
   expect(selectServerCtx(late.state, key)?.name).toBe("ctx2")
 })
 
-test("a contributed server has credentials to check only while it is ready, never its placeholder endpoint", () => {
+test("a contributed server has credentials to check only while it is ready", () => {
   const plugin = (status: ServerConnection.Plugin["status"]): ServerConnection.Plugin => ({
     type: "plugin",
     key: "ssh:box",
     plugin: "ssh",
     status,
     managed: true,
-    http: { url: "http://127.0.0.1:0" },
     authenticate: () => false,
   })
 

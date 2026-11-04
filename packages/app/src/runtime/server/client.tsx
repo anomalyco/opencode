@@ -77,9 +77,13 @@ type ServerSDKBase = {
   event: OpenCodeEventSource
 }
 
+// Where a plugin server's transport points until the plugin reports the server ready; it never answers. The server has
+// a controller, and so a transport, from the moment it is listed.
+const unready = { url: "http://127.0.0.1:0" }
+
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
-  const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
+  const transport = createServerTransport({ http: ServerConnection.http(server) ?? unready, fetch: platform.fetch })
   const media = createMediaCache(() => transport.api)
   const serverKey = ServerConnection.key(server)
   setMediaBlobLoader(serverKey, (uri) => media.load(uri))
@@ -91,7 +95,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   const events = createOpenCodeEventSource()
   const reconnect = resolveEndpoint(server)
   // Read only by `dispatchEndpoint`, the transport's only writer.
-  let endpoint = createEndpointSyncState(server.http)
+  let endpoint = createEndpointSyncState(transport.http)
 
   function dispatchEndpoint(event: EndpointSyncEvent) {
     const result = transitionEndpointSync(endpoint, event)
@@ -141,8 +145,17 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   if (server.type === "plugin" || server.type === "sidecar") {
     createEffect(
       on(
-        () => `${server.http.url}\0${server.http.password ?? ""}`,
-        () => dispatchEndpoint({ type: "endpoint.reported", http: server.http }),
+        () => {
+          const http = ServerConnection.http(server)
+
+          return http && `${http.url}\0${http.password ?? ""}`
+        },
+        () => {
+          const http = ServerConnection.http(server)
+
+          // A plugin server that stops being ready keeps its last endpoint until the plugin reports it ready again.
+          if (http) dispatchEndpoint({ type: "endpoint.reported", http })
+        },
         { defer: true },
       ),
     )
@@ -169,14 +182,22 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 }
 
 /**
- * Where the event stream connects after a disconnect. A plugin's server can exist before the plugin reports its
- * endpoint (a server restored from the plugin's last inventory starts on a placeholder) and can move at any time, so
- * its stream always resolves the plugin's current endpoint, through the plugin's `reconnect` when it has one then.
+ * Where the event stream connects after a disconnect. A plugin's server can exist before it is ready (a server restored
+ * from the plugin's last inventory starts on `unready`) and can move at any time, so its stream always resolves the
+ * plugin's current endpoint, through the plugin's `reconnect` when it has one then. A server that is not ready has none
+ * to resolve, so the stream keeps retrying where it is.
  */
 function resolveEndpoint(
   server: ServerConnection.Any,
 ): ((signal: AbortSignal) => Promise<ServerConnection.HttpBase>) | undefined {
-  if (server.type === "plugin") return (signal) => server.reconnect?.(signal) ?? Promise.resolve(server.http)
+  if (server.type === "plugin")
+    return (signal) => {
+      const http = ServerConnection.http(server)
+
+      return (
+        server.reconnect?.(signal) ?? (http ? Promise.resolve(http) : Promise.reject(new Error("Server is not ready")))
+      )
+    }
 
   if (server.type === "sidecar") return server.reconnect
 

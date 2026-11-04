@@ -308,7 +308,9 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   }
 
   const editing = createMemo(() =>
-    allServers().find((item) => item.type === "http" && item.http.url === store.originalUrl),
+    allServers().find(
+      (item): item is ServerConnection.Http => item.type === "http" && item.http.url === store.originalUrl,
+    ),
   )
 
   const add = (connection: ServerConnection.Http) => server.add(connection)

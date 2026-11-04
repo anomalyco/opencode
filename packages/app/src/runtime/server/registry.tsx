@@ -115,7 +115,7 @@ export function resolveServerList(input: {
       deduped.set(key, {
         ...existing,
         ...conn,
-        http: { ...existing.http, ...conn.http },
+        http: { ...ServerConnection.http(existing), ...conn.http },
       })
     else deduped.set(key, conn)
   }
@@ -172,11 +172,6 @@ export namespace ServerConnection {
     status: PluginServerStatus
     /** The plugin re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
     managed: boolean
-    /**
-     * Where the event stream starts and follows: the plugin's last endpoint, or an unroutable placeholder before it
-     * reports one. Everything else reads `ServerConnection.http`, which has an endpoint only while the server is ready.
-     */
-    http: HttpBase
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
     /**
      * Starts sign-in while the server waits for it, or joins the one in progress; false when the server does not
@@ -319,7 +314,12 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const current = (conn: ServerConnection.Any) =>
       ServerConnection.builtin(conn) || ServerConnection.key(conn) === props.canonicalLocalServer
 
-    const ownUrl = () => props.servers?.find(ServerConnection.builtin)?.http.url ?? props.canonicalLocalServer
+    const ownUrl = () => {
+      const builtin = props.servers?.find(ServerConnection.builtin)
+
+      return (builtin && ServerConnection.http(builtin)?.url) ?? props.canonicalLocalServer
+    }
+
     const local = (conn?: ServerConnection.Any) => ServerConnection.local(conn, ownUrl())
 
     const label = (conn: ServerConnection.Any) =>
