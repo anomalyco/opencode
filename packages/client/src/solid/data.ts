@@ -974,6 +974,9 @@ export function createData(config: CreateDataInput) {
           const position = index.get(event.data.assistantMessageID)
           const existing = position === undefined ? undefined : draft[position]
           if (existing?.type === "assistant") {
+            // Retries reuse the message ID before settlement. A started event for a
+            // settled message is therefore a duplicate delivery.
+            if (existing.time.completed !== undefined) return
             existing.agent = event.data.agent
             existing.model = event.data.model
             existing.retry = undefined

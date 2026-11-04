@@ -1500,6 +1500,53 @@ test("projects background user shell metadata from durable shell data", () => {
   }
 })
 
+test("keeps a settled assistant message when session.step.started is re-delivered", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  const started = (created: number): OpenCodeEvent => ({
+    id: `evt_step_started_${created}`,
+    created,
+    type: "session.step.started",
+    durable: { aggregateID: "ses_refresh", seq: created, version: 1 },
+    data: {
+      sessionID: "ses_refresh",
+      assistantMessageID: "msg_settled",
+      agent: "build",
+      model: { providerID: "provider", id: "model" },
+      started: created,
+    },
+  })
+  try {
+    setup.emit(started(1))
+    setup.emit({
+      id: "evt_step_ended",
+      created: 2,
+      type: "session.step.ended",
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_settled",
+        finish: "stop",
+        cost: 0.5,
+        tokens: { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } },
+      },
+    })
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_settled")).toMatchObject({
+      finish: "stop",
+      time: { created: 1, completed: 2 },
+    })
+
+    setup.emit(started(3))
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_settled")).toMatchObject({
+      finish: "stop",
+      time: { created: 1, completed: 2 },
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
 function modelInfo(name: string): ModelInfo {
   return {
     id: "chat",
