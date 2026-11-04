@@ -9,5 +9,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "noUncheckedIndexedAccess": false
   },
-  "include": ["script", "parity"]
+  "include": ["script", "parity"],
+  // Oracle harnesses that import TUI sources need the TUI's Solid JSX settings; they run from packages/tui.
+  "exclude": ["parity/oracle/*/"]
 }
