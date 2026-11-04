@@ -87,7 +87,14 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       }).pipe(Effect.ensuring(Queue.shutdown(outgoing))),
     ))
 
-  const transport: Transport = {
+  // `pid` and `stderr` match the SDK's StdioClientTransport accessors. The SDK detects stdio by their
+  // presence, and only for stdio does it treat an unanswered server/discover probe as a legacy server.
+  // stderr is drained into the debug log, so no stream is handed out.
+  const transport: Transport & { readonly pid: number | null; readonly stderr: null } = {
+    get pid() {
+      return state.handle?.pid ?? null
+    },
+    stderr: null,
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"

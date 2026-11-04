@@ -984,6 +984,32 @@ test("closes a stdio process that finishes spawning after close", async () => {
   expect(signals).toEqual(["SIGTERM"])
 })
 
+test("falls back to legacy when a stdio server ignores the version probe", async () => {
+  const started = performance.now()
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "legacy-silent",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
+            protocol: "auto",
+            // The probe waits out the startup timeout before falling back.
+            timeout: new ConfigMCP.Timeout({ startup: 300 }),
+          }),
+          import.meta.dir,
+        )
+        return { modern: connection.modern, tools: yield* connection.tools() }
+      }),
+    ),
+  )
+
+  expect(result.modern).toBe(false)
+  expect(result.tools.map((tool) => tool.name)).toEqual(["echo"])
+  expect(performance.now() - started).toBeLessThan(2_000)
+})
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
