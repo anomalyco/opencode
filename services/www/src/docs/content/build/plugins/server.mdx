@@ -1029,6 +1029,16 @@ If the selected model's API lists `regex` in models.dev, the model can write `OP
 
 If you expose the same tool inside Code Mode (`codemode: true`), its JavaScript signature takes one string: `await tools.ticket("OPS-42")`. Code Mode also accepts `await tools.ticket({ id: "OPS-42" })` for existing scripts. Both forms work independently of the model's freeform support.
 
+#### Positional arguments in Code Mode
+
+Set `options: { flat: true }` to expose a tool's top-level fields as positional arguments in schema order. For example, `input: Schema.Struct({ path: Schema.String, options: Schema.Struct({ recursive: Schema.Boolean }) })` becomes:
+
+```js
+await tools.scan("src", { recursive: true })
+```
+
+The executor receives `{ path: "src", options: { recursive: true } }`. Named-object calls also work and take precedence when a single object fits both forms. Code Mode enables `flat` by default for eligible freeform tools; set `options.flat` to `false` to use the object signature.
+
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.
 

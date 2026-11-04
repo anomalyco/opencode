@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import type { Namespace } from "./namespace.js"
 import type { Tools } from "./tools.js"
-import { stringInputField } from "./tool-schema.js"
+import { flatParameters } from "./tool-schema.js"
 
 /**
  * JSON Schema subset for model-visible signatures. CodeMode does not validate values against
@@ -47,7 +47,7 @@ export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
-  readonly stringInputField?: string
+  readonly parameters?: ReturnType<typeof flatParameters>
   readonly output: SchemaType | undefined
   readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, R>
 }
@@ -60,8 +60,8 @@ type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unkno
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
-  /** Accept the value of a single required string field directly, as well as the usual input object. */
-  readonly stringInput?: boolean
+  /** Expose named top-level fields as positional arguments in schema order. The executor receives the object. */
+  readonly flat?: boolean
   readonly output?: O
   readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
@@ -82,7 +82,7 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
   _tag: "CodeModeTool",
   description: options.description,
   input: options.input,
-  stringInputField: options.stringInput ? stringInputField(options.input) : undefined,
+  parameters: options.flat ? flatParameters(options.input) : undefined,
   output: options.output,
   execute: (input) => options.execute(input as InputType<I>),
 })

@@ -38,15 +38,37 @@ test("Code Mode lists one string argument for freeform tools and executes both i
     ["echo", echo],
     ["send", { ...echo, name: "send", freeform: { type: "text" } }],
   ])
-  const sendSignature = "tools.send(input: string): Promise<string>"
+  const sendSignature = "tools.send(text: string): Promise<string>"
   expect(CodeModeTool.catalog({ tools }).tools).toContainEqual(expect.objectContaining({ signature: sendSignature }))
-  const run = (code: string) => Effect.runPromise(createCodeMode(tools).execute({ code }, context)).then((r) => r.output)
+  const run = (code: string) =>
+    Effect.runPromise(createCodeMode(tools).execute({ code }, context)).then((r) => r.output)
   expect((await run('return search({ query: "tools.send" }).items[0].signature')).output).toBe(sendSignature)
   const calls = await run('return [await tools.send("first"), await tools.send({text: "second"})]')
   expect(JSON.parse(calls.output)).toEqual(["first", "second"])
   expect(calls.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
   expect((await run('return await tools.send("")')).error).toBe(true)
   expect((await run('return await tools.echo("object required")')).error).toBe(true)
+})
+
+test("Core tools can opt into positional Code Mode calls with multiple fields", async () => {
+  const tool = {
+    name: "scan",
+    description: "Scan a path",
+    options: { flat: true },
+    input: Schema.Struct({ path: Schema.String, options: Schema.Struct({ recursive: Schema.Boolean }) }),
+    output: Schema.String,
+    execute: ({ path, options }) => Effect.succeed({ output: `${path}:${options.recursive}` }),
+  } satisfies Info
+  const tools = new Map([[tool.name, tool]])
+  const signature = "tools.scan(path: string, options: { recursive: boolean }): Promise<string>"
+  expect(CodeModeTool.catalog({ tools }).tools).toContainEqual(expect.objectContaining({ signature }))
+  const result = await Effect.runPromise(
+    createCodeMode(tools).execute({ code: 'return await tools.scan("src", {recursive:true})' }, context),
+  )
+  expect(result.output).toMatchObject({
+    output: "src:true",
+    toolCalls: [{ input: { path: "src", options: { recursive: true } } }],
+  })
 })
 
 test("execute describes invariant Code Mode behavior", () => {

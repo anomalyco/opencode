@@ -61,9 +61,13 @@ only shape the model-visible signature. Without `output`, the signature uses `Pr
 
 Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
-Set `stringInput: true` on a tool whose input is an object with one required string field to accept the string directly.
-For example, with `input: Schema.Struct({ patchText: Schema.String })`, Code Mode advertises `tools.patch(input: string)`.
-Both `tools.patch(diff)` and `tools.patch({ patchText: diff })` deliver `{ patchText: diff }` to validation, hooks, and the executor. Other input shapes keep their declared signature.
+Set `flat: true` to expose an object's declared top-level fields as positional arguments, in schema declaration order.
+For `{ path: string, options: { recursive: boolean }, tags?: string[] }`, the catalog and `search()` show
+`tools.scan(path: string, options: { recursive: boolean }, tags?: Array<string>)`. A call such as
+`tools.scan("src", { recursive: true }, ["ts"])` delivers `{ path: "src", options: { recursive: true }, tags: ["ts"] }`
+to validation, hooks, and the executor. Nested objects and arrays occupy one position each. Omit trailing optional
+fields or pass `undefined` to skip a position. Existing named-object calls still work; when a lone object matches both
+forms, the named form wins. Schemas without a fixed set of named fields, such as dictionaries, keep the object call.
 
 Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
 
