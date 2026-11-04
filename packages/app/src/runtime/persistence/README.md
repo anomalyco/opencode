@@ -62,7 +62,14 @@ desktop platform calls it before flushing its namespaces on shutdown. A real uns
 change wins over a value arriving from another window, and over a stored value that finishes
 loading after the user already edited. A remote value that arrives while the store is dirty
 is held until the save runs; if the local setter calls turned out not to change the
-serialized form, the remote value is adopted instead of being lost.
+serialized form, the remote value is adopted instead of being lost. The lifecycle is the pure
+machine in `persist-machine.ts`; a failed write restores the record of what storage holds, so the
+next save writes the value again even when it did not change.
+
+On the web, a `localStorage` write that hits the quota evicts other `opencode.*` values, largest
+first, and puts every one back when that still does not make room. A failed eviction waits out a
+backoff (5 s doubling to 60 s) before the next one, but reads, writes and removals always try storage
+again (`storage-machine.ts`). The first failed write shows a toast once per page.
 
 ## Namespaces
 

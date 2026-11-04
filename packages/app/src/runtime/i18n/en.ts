@@ -513,6 +513,9 @@ export const dict = {
   "toast.migration.progress.working": "Migrating data",
   "toast.migration.progress.working.current": "Migrating data {{current}}",
   "toast.migration.progress.working.progress": "Migrating data {{current}}/{{total}}",
+  "toast.storage.writeFailed.title": "Some changes are not being saved",
+  "toast.storage.writeFailed.description":
+    "Browser storage is full or unavailable, so settings and layout changes may be lost when you reload.",
 
   "error.page.title": "Something went wrong",
   "error.page.title.status": "Server request failed",

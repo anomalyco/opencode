@@ -449,17 +449,14 @@ test("unread state honours the old local list until its viewed state is carried 
   }
 
   const first = start()
-  // Until the stored list is read, nothing it had read can flash unread.
-  expect(unread(first.state)).toEqual([])
-  await advance(0)
-
-  // Nothing read here lights up, while a session that went idle after the list was found is new.
+  // localStorage holds the old list, so it is read at once: nothing read here lights up, while a session that went
+  // idle after the list was found is new.
   expect(unread(first.state)).toEqual(["unread-here", "new"])
 
   // The carry-over waits for startup to settle, then a failed report keeps the list for the next connection.
-  await advance(4_999)
+  await advance(4_000)
   expect(lists).toEqual([])
-  await advance(1)
+  await advance(1_000)
   expect(views).toEqual([{ sessionID: "read-here", idle: 5 }])
   expect(JSON.parse(localStorage.getItem(key) ?? "null")).toMatchObject({ started: 10 })
   first.dispose()
