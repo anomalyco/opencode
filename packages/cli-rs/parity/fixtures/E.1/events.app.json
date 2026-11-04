@@ -7,7 +7,10 @@
     "tabs": {
       "mode": "off"
     },
-    "animations": false
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
   },
   "args": {},
   "routes": [
