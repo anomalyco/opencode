@@ -1043,25 +1043,25 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             }
             let index = select.index_of(&value);
             match event.kind {
-                MouseEventKind::Moved | MouseEventKind::Down(_) => {
+                // TS also selects the row on press. Here the press leaves the rows alone: rebuilding them would
+                // detach the widget the release goes to, and the release selects the row anyway.
+                MouseEventKind::Moved => {
                     let Some(index) = index else { return };
-                    if matches!(event.kind, MouseEventKind::Moved)
-                        && index == select.0.state.borrow().selected
-                    {
+                    if index == select.0.state.borrow().selected {
                         return;
                     }
                     let app = select.0.cx.app.clone();
                     app.defer(move |_cx| select.move_index(index, false, true));
                 }
                 MouseEventKind::Up(_) => {
-                    let Some(option) = index.map(|index| {
+                    let Some(index) = index else { return };
+                    let option = {
                         let state = select.0.state.borrow();
                         state.filtered[state.flat[index]].clone()
-                    }) else {
-                        return;
                     };
                     let app = select.0.cx.app.clone();
                     app.defer(move |_cx| {
+                        select.move_index(index, false, true);
                         if let Some(run) = &option.on_select {
                             run(&select.0.cx.dialogs);
                         }

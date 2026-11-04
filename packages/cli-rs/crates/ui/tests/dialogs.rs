@@ -547,3 +547,28 @@ fn path_formatting_matches_typescript() {
         failures.join("\n")
     );
 }
+
+#[test]
+fn clicks_select_rows_and_the_backdrop_closes_the_dialog() {
+    let kit = kit(72, 30);
+    let chosen = Rc::new(RefCell::new(Vec::new()));
+    let log = chosen.clone();
+    kit.dialogs.replace(
+        |cx| {
+            let mut props = SelectProps::new("Select model", models());
+            props.on_select = Some(Rc::new(move |option| log.borrow_mut().push(option.value)));
+            select::select(cx, props).0
+        },
+        None,
+        Default::default(),
+    );
+    let screen = kit.app.render();
+    let row = (0..30u16)
+        .find(|&y| screen.row(y as u32).contains("Claude Opus"))
+        .unwrap();
+    kit.app.click(20, row);
+    assert_eq!(*chosen.borrow(), ["opus"]);
+    assert!(kit.dialogs.is_open());
+    kit.app.click(0, 0);
+    assert!(!kit.dialogs.is_open());
+}
