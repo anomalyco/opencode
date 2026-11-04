@@ -567,6 +567,23 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
     }
 
+    /// The list's scroll offset in rows.
+    pub fn scroll_top(&self) -> f64 {
+        self.0.scroll.scroll_position().1
+    }
+
+    /// Selects `value` and scrolls the list to `top` without running `on_move`, so a dialog built again shows
+    /// the rows the old one showed.
+    pub fn restore(&self, value: &T, top: f64) {
+        if let Some(index) = self.index_of(value) {
+            self.0.state.borrow_mut().selected = index;
+            self.remember_selection();
+        }
+        self.0.scroll.scroll_to(0.0, top);
+        self.update_overflow();
+        self.render();
+    }
+
     /// Replaces the options, keeping the selection on the same value where it can (the TS options effect).
     pub fn set_options(&self, options: Vec<SelectOption<T>>) {
         self.0.state.borrow_mut().options = options;
