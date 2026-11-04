@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput,
-    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
+    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput, SessionID,
+    SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
 };
 use opencode_local::cli_config::TabsScope;
 use opencode_store::SessionStatus;
@@ -21,7 +21,9 @@ use opencode_store::state::State as Store;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
-use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps, Side};
+use opencode_ui::select::{
+    self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps, Side,
+};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -108,12 +110,16 @@ pub fn show(tui: &Tui) {
                     let weak = tui.weak();
                     app.defer(move |_| {
                         let Some(tui) = weak.upgrade() else { return };
-                        tui.navigate(Route::Session { id });
+                        // Closed first, so the new view takes the focus.
                         tui.dialogs.clear();
+                        tui.navigate(Route::Session { id });
                     });
                 }
             }));
-            let tabs = list.tui.upgrade().is_some_and(|tui| tui.config.tabs.enabled);
+            let tabs = list
+                .tui
+                .upgrade()
+                .is_some_and(|tui| tui.config.tabs.enabled);
             props.actions = vec![
                 SelectAction {
                     hidden: tabs,
@@ -253,7 +259,9 @@ impl List {
 
     /// The picker location, then the project list and the first read.
     fn load(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         let directory = picker_directory(&tui);
         let client = tui.data.client().clone();
         let weak = Rc::downgrade(self);
@@ -286,7 +294,9 @@ impl List {
 
     /// Reads the list for the current search and scope (the `searchResults` resource).
     fn fetch(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         let (query, all_projects, location, request) = {
             let mut state = self.state.borrow_mut();
             state.request += 1;
@@ -305,8 +315,7 @@ impl List {
         tui.app.spawn(
             async move {
                 // TS throws "Location unavailable" here, which degrades like a failed read.
-                let Some(input) = input else { return None };
-                read(&client, &input).await
+                read(&client, &input?).await
             },
             move |_, sessions| {
                 let Some(list) = weak.upgrade() else { return };
@@ -334,23 +343,24 @@ impl List {
             app.cancel_timer(timer);
         }
         let weak = Rc::downgrade(self);
-        self.timer.set(Some(app.set_timeout(SEARCH_DEBOUNCE, move |_| {
-            let Some(list) = weak.upgrade() else { return };
-            list.timer.set(None);
-            let changed = {
-                let mut state = list.state.borrow_mut();
-                let next = state.filter.clone();
-                let changed = next.trim() != state.search.trim();
-                state.search = next;
-                changed
-            };
-            // A resource refetches only when its source changes; the trimmed query is the source.
-            if changed {
-                list.fetch();
-                return;
-            }
-            list.refresh();
-        })));
+        self.timer
+            .set(Some(app.set_timeout(SEARCH_DEBOUNCE, move |_| {
+                let Some(list) = weak.upgrade() else { return };
+                list.timer.set(None);
+                let changed = {
+                    let mut state = list.state.borrow_mut();
+                    let next = state.filter.clone();
+                    let changed = next.trim() != state.search.trim();
+                    state.search = next;
+                    changed
+                };
+                // A resource refetches only when its source changes; the trimmed query is the source.
+                if changed {
+                    list.fetch();
+                    return;
+                }
+                list.refresh();
+            })));
     }
 
     fn toggle_all_projects(self: &Rc<Self>) {
@@ -374,20 +384,21 @@ impl List {
                 }
             });
         }
-        if let Some(tui) = self.tui.upgrade() {
-            self.render_title(&dialog_theme(&tui));
-        }
         self.fetch();
     }
 
     fn toggle_pin(self: &Rc<Self>, id: &SessionID) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         pins::toggle(&tui, id);
         self.refresh();
     }
 
     fn delete(self: &Rc<Self>, id: &SessionID) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         if self.state.borrow().to_delete.as_ref() != Some(id) {
             self.state.borrow_mut().to_delete = Some(id.clone());
             self.refresh_later();
@@ -401,7 +412,11 @@ impl List {
         let toasts = tui.weak();
         let id = id.clone();
         tui.app.spawn(
-            async move { client.session_remove(&input, &RequestOptions::default()).await },
+            async move {
+                client
+                    .session_remove(&input, &RequestOptions::default())
+                    .await
+            },
             move |_, result| {
                 let Some(list) = weak.upgrade() else { return };
                 match result {
@@ -443,6 +458,9 @@ impl List {
         let select = self.select.borrow().clone();
         if let Some(select) = select {
             select.set_options(self.options());
+        }
+        if let Some(tui) = self.tui.upgrade() {
+            self.render_title(&dialog_theme(&tui));
         }
     }
 
@@ -550,7 +568,12 @@ impl List {
         }
         let all = self.state.borrow().all_projects;
         hints.push(FooterHint {
-            title: if all { "current directory" } else { "all projects" }.into(),
+            title: if all {
+                "current directory"
+            } else {
+                "all projects"
+            }
+            .into(),
             label: "ctrl+a".into(),
             side: Side::Right,
             group: None,
@@ -586,8 +609,10 @@ impl List {
                 .into_iter()
                 .filter(|session| session.parent_id.is_none())
                 .collect();
-            let by_id: HashMap<&SessionID, &SessionInfo> =
-                sessions.iter().map(|session| (&session.id, session)).collect();
+            let by_id: HashMap<&SessionID, &SessionInfo> = sessions
+                .iter()
+                .map(|session| (&session.id, session))
+                .collect();
             let pinned: Vec<&SessionID> = pinned_ids
                 .iter()
                 .filter(|id| by_id.contains_key(id))
@@ -638,10 +663,7 @@ impl List {
                     .filter(|session| !pinned_set.contains(&session.id))
                     .map(|session| {
                         let date = date_string(session.time.updated);
-                        option(
-                            session,
-                            if date == today { "Today".into() } else { date },
-                        )
+                        option(session, if date == today { "Today".into() } else { date })
                     }),
             );
             options
@@ -799,7 +821,11 @@ pub fn attention(store: &Store, id: &SessionID) -> Option<char> {
     let root = store.root(id);
     let mut members = std::iter::once(&root).chain(store.family(&root));
     members
-        .any(|member| store.permissions(member).is_some_and(|list| !list.is_empty()))
+        .any(|member| {
+            store
+                .permissions(member)
+                .is_some_and(|list| !list.is_empty())
+        })
         .then_some('!')
 }
 
@@ -862,7 +888,10 @@ pub fn basename(path: &str) -> &str {
 
 /// `path.resolve(directory, "..", …)` with `ups` parent steps (POSIX).
 fn resolve_up(directory: &str, ups: usize) -> String {
-    let mut parts: Vec<&str> = directory.split('/').filter(|part| !part.is_empty()).collect();
+    let mut parts: Vec<&str> = directory
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
     for _ in 0..ups {
         parts.pop();
     }
@@ -910,7 +939,11 @@ pub mod pins {
         tui.data.read(|state| {
             pinned
                 .into_iter()
-                .filter(|id| state.session(id).is_some_and(|session| session.parent_id.is_none()))
+                .filter(|id| {
+                    state
+                        .session(id)
+                        .is_some_and(|session| session.parent_id.is_none())
+                })
                 .take(9)
                 .collect()
         })
@@ -929,7 +962,8 @@ pub mod pins {
         PINS.with(|pins| pins.borrow_mut().insert(key.clone(), pinned.clone()));
         let Some(state) = key else { return };
         tui.app.runtime().spawn_blocking(move || {
-            let value = json!({ "pinned": pinned.iter().map(|id| id.0.clone()).collect::<Vec<_>>() });
+            let value =
+                json!({ "pinned": pinned.iter().map(|id| id.0.clone()).collect::<Vec<_>>() });
             if let Err(error) = write(&state.join("session.json"), &value) {
                 log::warn!("failed to save session.json: {error}");
             }
