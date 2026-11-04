@@ -31,7 +31,7 @@ import { SettingsProjectGeneral } from "./workspaces/project"
 import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
 import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
-import { pageIcons, pageLabels } from "./pages"
+import { pageIcons } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
 import { PluginSettingsPages } from "@/runtime/plugin/settings-page-view"
 import "@/settings/settings.css"
@@ -242,22 +242,24 @@ function RootSettings() {
       })),
     },
     {
-      items: [...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs()],
-    },
-    {
       items: [
+        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+        ...pluginTabs(),
         {
           value: "servers",
           icon: pageIcons.servers,
-          label: language.t(multiple() ? "settings.tab.servers" : pageLabels.servers),
+          label: language.t("settings.tab.servers"),
         },
       ],
     },
-    ...(experimentalSettingsAvailable
-      ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
-      : []),
     {
-      items: [...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs("about")],
+      items: [
+        ...pluginTabs("about"),
+        ...(experimentalSettingsAvailable
+          ? experimentalTab.map((item) => ({ ...item, label: language.t(item.label) }))
+          : []),
+        ...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })),
+      ],
     },
   ])
 

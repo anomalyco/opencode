@@ -400,8 +400,8 @@ test("another server's settings page survives refresh", async ({ page }) => {
 
 test("single-server settings expose scoped pages without a server picker", async ({ page }) => {
   const { settings } = await open(page, { hostname: "hailmary" })
-  await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeVisible()
-  await expect(settings.getByRole("tab", { name: "Servers", exact: true })).toHaveCount(0)
+  await expect(settings.getByRole("tab", { name: "Servers", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Server", exact: true })).toHaveCount(0)
 
   for (const name of ["Projects", "Worktrees", "Providers", "Models", "Extensions"]) {
     await settings.getByRole("tab", { name, exact: true }).click()
@@ -410,7 +410,7 @@ test("single-server settings expose scoped pages without a server picker", async
     await expect(settings.getByText(/hailmary|This computer|Local server/i)).toHaveCount(0)
   }
 
-  await settings.getByRole("tab", { name: "Server", exact: true }).click()
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
   await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()
   await settings.getByText("zsh", { exact: true }).click()
 
@@ -1922,7 +1922,7 @@ for (const viewport of [
       "Providers",
       "Models",
       "Extensions",
-      "Server",
+      "Servers",
       "About",
     ]
 
@@ -1936,9 +1936,11 @@ for (const viewport of [
 
       if (name === "About") await expect(panel.getByText("Released under the MIT License")).toBeVisible()
 
+      const title = name === "Servers" ? "Server" : name
+
       if (name !== "About")
         await expect(
-          panel.getByRole("heading", { name: name === "Shortcuts" ? "Keyboard shortcuts" : name, exact: true }),
+          panel.getByRole("heading", { name: title === "Shortcuts" ? "Keyboard shortcuts" : title, exact: true }),
         ).toBeVisible()
 
       if (name === "Worktrees") {
