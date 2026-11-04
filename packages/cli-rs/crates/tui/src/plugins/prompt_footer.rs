@@ -58,6 +58,8 @@ struct Model {
     shortcuts: bool,
     agents: String,
     commands: String,
+    /// The session pane owns the input; the hints read as disabled while a right pane has it.
+    interactive: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -174,6 +176,7 @@ impl Inner {
             shortcuts,
             agents: keymap.shortcut("agent.cycle").unwrap_or_default(),
             commands: commands.unwrap_or_default(),
+            interactive: crate::frame::session_interactive(tui),
         }
     }
 
@@ -210,6 +213,13 @@ impl Inner {
         }
         let details = self.show_details;
         let hint = |key: &str, label: &str| {
+            if !model.interactive {
+                return Text::new(app, format!("{key} {label}"))
+                    .fg(theme.text.action.primary.disabled)
+                    .dim()
+                    .wrap(WrapMode::None)
+                    .shrink(0.0);
+            }
             Text::new(
                 app,
                 vec![

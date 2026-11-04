@@ -104,6 +104,8 @@ pub struct Inner {
     /// The footer row: the location, then the `prompt.footer` slots (E.14).
     footer_row: View,
     location_box: View,
+    /// The location box's width, which the location label shortens to (`truncateFilePath`, E.14).
+    location_width: Cell<u16>,
     footer_slots: RefCell<(
         Option<opencode_plugin::SlotInput>,
         Vec<opencode_plugin::SlotMount<Tui>>,
@@ -317,6 +319,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         followed: Cell::new(false),
         footer_row,
         location_box,
+        location_width: Cell::new(app.size().0),
         footer_slots: RefCell::default(),
         hovered: Cell::new(false),
         running,
@@ -662,6 +665,10 @@ impl Inner {
             } else {
                 theme.text.muted
             };
+            let label = crate::dialogs::open::truncate_file_path(
+                &label,
+                i64::from(self.location_width.get()),
+            );
             vec![label.fg(color)]
         };
         self.footer.set_text(footer);
@@ -680,6 +687,8 @@ impl Inner {
         } else {
             theme.text.muted
         };
+        // `<Show>`: no file, no child, so the row keeps no gap for it.
+        self.editor_file.visible(!file.is_empty());
         self.editor_file.set_text(vec![file.fg(color)]);
         self.mount_footer(tui);
         self.app.request_redraw();
@@ -846,6 +855,17 @@ fn connect(inner: &Rc<Inner>) {
 /// The footer's location brightens under the pointer, and a click opens the working directory dialog (E.20,
 /// `useWorkingDirectoryActions`). While a reply runs the footer shows the interrupt hint instead.
 fn connect_location(inner: &Rc<Inner>) {
+    // `onSizeChange` of the status box: the label shortens to the room the footer plugins leave.
+    let weak = Rc::downgrade(inner);
+    inner.location_box.on_resize(move |_, rect| {
+        let Some(prompt) = weak.upgrade() else { return };
+        let width = rect.width.max(0.0) as u16;
+        if prompt.location_width.replace(width) != width
+            && let Some(tui) = prompt.tui.upgrade()
+        {
+            prompt.refresh(&tui);
+        }
+    });
     let weak = Rc::downgrade(inner);
     inner.footer.on_hover(move |_, hovered| {
         let Some(prompt) = weak.upgrade() else { return };
