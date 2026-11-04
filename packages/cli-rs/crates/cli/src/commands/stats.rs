@@ -1,7 +1,9 @@
 //! `stats`: shareable usage statistics (`packages/cli/src/commands/handlers/stats.ts`), with the
 //! activity calendar of `packages/util/src/activity-calendar.ts`.
 
+use std::future::Future;
 use std::io::IsTerminal;
+use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone};
 use opencode_api::client::{Call, RequestOptions};
@@ -36,19 +38,14 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
     let details = args.models || args.tools || args.cost || args.full;
     let stats = block_on(async {
         let server = connect(context).await?;
-        let url = server.endpoint().url.clone();
-        let reach = |error: ApiError| match error {
-            ApiError::Transport(_) => anyhow::anyhow!("Could not reach server at {url}"),
-            error => error.into(),
-        };
+        let url = &server.endpoint().url;
         let project = match args.project.as_deref() {
             Some(".") => Some(
-                get_located(&server.client, "/api/location", &[400, 401, 404])
-                    .await
-                    .map_err(|error| match error.downcast::<ApiError>() {
-                        Ok(error) => reach(error),
-                        Err(error) => error,
-                    })?["project"]["id"]
+                request(
+                    url,
+                    get_located(&server.client, "/api/location", &[400, 401, 404]),
+                )
+                .await?["project"]["id"]
                     .clone(),
             ),
             Some(project) => Some(Value::from(project)),
@@ -76,12 +73,13 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
             "summary"
         };
         call.query("tools", tools)?;
-        let response: Value = server
-            .client
-            .json(call, &RequestOptions::default())
-            .await
-            .map_err(reach)?;
-        anyhow::Ok(response)
+        request(url, async {
+            Ok(server
+                .client
+                .json::<Value>(call, &RequestOptions::default())
+                .await?)
+        })
+        .await
     })??;
     let data = &stats["data"];
     if args.json {
@@ -107,6 +105,23 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
     };
     let palette = Palette::from_colorfgbg(std::env::var("COLORFGBG").ok().as_deref());
     print(&(render_stats(&info, &options, &palette, &Local) + "\n"))
+}
+
+// `request`: each call gets 30 seconds, and a call that cannot reach the server names it.
+async fn request<T>(url: &str, call: impl Future<Output = anyhow::Result<T>>) -> anyhow::Result<T> {
+    let unreachable = || anyhow::anyhow!("Could not reach server at {url}");
+    match tokio::time::timeout(Duration::from_secs(30), call).await {
+        Err(_) => Err(unreachable()),
+        Ok(Err(error))
+            if matches!(
+                error.downcast_ref::<ApiError>(),
+                Some(ApiError::Transport(_))
+            ) =>
+        {
+            Err(unreachable())
+        }
+        Ok(result) => result,
+    }
 }
 
 // `errorMessage`: a declared error's message, else the error's own text.
@@ -976,6 +991,20 @@ mod tests {
             }
         }
         assert!(checked > 150);
+    }
+
+    #[tokio::test]
+    async fn requests_name_an_unreachable_server_and_keep_other_errors() {
+        // The cases of "stats requests" in `packages/cli/test/stats.test.ts`.
+        let url = "http://localhost:4096";
+        let failed = |error: ApiError| request::<()>(url, async { Err(error.into()) });
+        let transport = failed(ApiError::Transport("refused".to_owned())).await;
+        assert_eq!(
+            transport.unwrap_err().to_string(),
+            "Could not reach server at http://localhost:4096"
+        );
+        let status = failed(ApiError::UnexpectedStatus { status: 500 }).await;
+        assert_eq!(message(&status.unwrap_err()), "UnexpectedStatus: 500");
     }
 
     #[test]
