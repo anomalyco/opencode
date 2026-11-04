@@ -72,6 +72,8 @@ pub struct Tui {
     pub textarea: Rc<RefCell<Option<Textarea>>>,
     /// Prompt history, drafts, and catalogs, shared by every prompt (E.2).
     pub prompt: crate::prompt::editor::Shared,
+    /// The config as settings writes left it (E.18a).
+    pub settings: crate::dialogs::settings::Live,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -115,6 +117,11 @@ impl Tui {
         self.files.as_ref().map(|files| files.state.clone())
     }
 
+    /// The event connection's state while it is open.
+    pub fn connection_watch(&self) -> Option<tokio::sync::watch::Receiver<events::State>> {
+        self.connection.borrow().as_ref().map(Connection::watch)
+    }
+
     /// The page theme.
     pub fn page(&self) -> Theme {
         self.theme.borrow().theme().page()
@@ -151,7 +158,7 @@ impl Tui {
     }
 
     /// Runs `ThemeState` effects off the UI thread, shows a theme error, and repaints on a change.
-    fn theme_changed(&self) {
+    pub(crate) fn theme_changed(&self) {
         let (effects, error) = {
             let mut theme = self.theme.borrow_mut();
             (theme.take_effects(), theme.take_error())
@@ -234,6 +241,10 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page);
 
+    let settings = crate::dialogs::settings::Live::new(
+        deps.config.info.clone(),
+        files.as_ref().map(|files| files.config.clone()),
+    );
     let tui = Rc::new_cyclic(|this| Tui {
         app: app.clone(),
         data,
@@ -248,6 +259,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
             app,
             deps.roots.as_ref().map(|roots| roots.paths.state.clone()),
         ),
+        settings,
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
@@ -266,6 +278,8 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     crate::features::overlays::install(&tui);
     crate::features::title::install(&tui);
     crate::features::system_commands::install(&tui);
+    crate::dialogs::settings::install(&tui);
+    crate::features::devtools::mount(&tui, &shell);
     tui.navigate(deps.route);
     if deps.continue_ {
         continue_latest(&tui);
@@ -363,7 +377,7 @@ fn install_keys(tui: &Rc<Tui>) {
                 .palette()
                 .slash(slash("open", &["projects", "project"])),
             command(COMMAND_PALETTE_COMMAND, |tui| {
-                palette::show(&tui.dialogs, Vec::new())
+                palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui))
             }),
         ],
         ..KeymapLayer::default()
