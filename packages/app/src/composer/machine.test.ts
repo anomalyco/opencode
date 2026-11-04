@@ -124,16 +124,14 @@ const states = {
 
 describe("composer submit machine", () => {
   test("pressing Enter and then Send while image attachments resolve starts one send with one message ID", () => {
-    const sent: boolean[] = []
-    const settle = (value: boolean) => void sent.push(value)
     const first = snapshot({}, [{ type: "text", content: "ship it", start: 0, end: 7 }, image])
 
     const result = replay([
-      { type: "submit", snapshot: first, done: settle },
+      { type: "submit", snapshot: first, done },
       // Enter, then a click on Send, Mod+Enter and a quote, all while the image's URL resolves.
-      { type: "submit", snapshot: snapshot(), done: settle },
-      { type: "submit", snapshot: snapshot({ alternate: true }), done: settle },
-      { type: "quote", snapshot: quoteSnapshot(), done: settle },
+      { type: "submit", snapshot: snapshot(), done },
+      { type: "submit", snapshot: snapshot({ alternate: true }), done },
+      { type: "quote", snapshot: quoteSnapshot(), done },
       {
         type: "session.started",
         attempt: 1,
@@ -151,7 +149,13 @@ describe("composer submit machine", () => {
     expect(result.effects.filter((effect) => effect.type === "handoff")).toMatchObject([
       { attempt: 1, sendFirst: true, value: { id: first.id, images: [{ blob: { url: "blob:shot" } }] } },
     ])
-    expect(sent).toEqual([false, false, false, true])
+    // The three repeats settle as not sent; only the first submit settles as sent, once the composer clears.
+    expect(result.effects.flatMap((effect) => (effect.type === "done" ? [effect.sent] : []))).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ])
   })
 
   test.each(Object.entries(states))("ignores another submit or quote while %s", (_name, state) => {
@@ -236,7 +240,11 @@ describe("composer submit machine", () => {
     expect(held).toMatchObject({ type: "held", attempt: 1, draft: JSON.stringify(snapshot().draft.prompt) })
     expect(composerSubmitView(held)).toEqual({ held: true, busy: true, canSubmit: false })
 
-    const cancelled = { state: { type: "idle", attempt: 1 }, effects: [{ type: "done", done, sent: false }] }
+    const cancelled: ComposerSubmitTransition = {
+      state: { type: "idle", attempt: 1 },
+      effects: [{ type: "done", done, sent: false }],
+    }
+
     expect(transitionComposerSubmit(held, { type: "stop" })).toEqual(cancelled)
     expect(transitionComposerSubmit(held, { type: "unmounted" })).toEqual(cancelled)
     expect(transitionComposerSubmit(held, { type: "hold.changed", attempt: 1 })).toEqual(cancelled)
