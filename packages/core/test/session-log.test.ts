@@ -18,19 +18,33 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
-const it = testEffect(
+const layer = (persist: boolean) =>
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      Bus.node.replace(Bus.configured({ persist: true })),
+      Bus.node.replace(Bus.configured({ persist })),
       Project.node.replace(globalProjectNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
-  ),
-)
+  )
+const it = testEffect(layer(true))
+const withoutPersistence = testEffect(layer(false))
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("Session.log", () => {
+  withoutPersistence.effect("reports disabled persistence despite an advancing aggregate watermark", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+      const first = yield* session.log({ sessionID: created.id, follow: true }).pipe(Stream.take(1), Stream.runCollect)
+      expect(first).toEqual([{ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(0), persist: false }])
+
+      yield* session.rename({ sessionID: created.id, title: "not retained" })
+      const resumed = yield* Stream.runCollect(session.log({ sessionID: created.id, after: 0 }))
+      expect(resumed).toEqual([{ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1), persist: false }])
+    }),
+  )
+
   it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -40,7 +54,12 @@ describe("Session.log", () => {
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
 
       expect(items.map((item) => item.type)).toEqual(["session.created", "session.renamed", "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1) })
+      expect(items.at(-1)).toEqual({
+        type: "log.synced",
+        aggregateID: created.id,
+        seq: Event.Seq.make(1),
+        persist: true,
+      })
     }),
   )
 
@@ -89,7 +108,12 @@ describe("Session.log", () => {
       expect(
         items.map((item): number | string | undefined => (Bus.isSynced(item) ? item.type : item.durable?.seq)),
       ).toEqual([3, 4, "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(4) })
+      expect(items.at(-1)).toEqual({
+        type: "log.synced",
+        aggregateID: created.id,
+        seq: Event.Seq.make(4),
+        persist: true,
+      })
     }),
   )
 
@@ -117,7 +141,7 @@ describe("Session.log", () => {
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID })))
 
-      expect(items).toEqual([{ type: "log.synced", aggregateID: sessionID }])
+      expect(items).toEqual([{ type: "log.synced", aggregateID: sessionID, persist: true }])
     }),
   )
 })

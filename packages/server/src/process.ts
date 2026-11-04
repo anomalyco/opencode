@@ -72,7 +72,12 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* bound.http
     .serve(
       (transform ? transform(app) : app).pipe(
-        HttpMiddleware.compression(),
+        Effect.flatMap((response) =>
+          // SSE pre-response handlers may append comments; keep those bytes uncompressed.
+          response.headers["content-type"]?.split(";")[0].trim().toLowerCase() === "text/event-stream"
+            ? Effect.succeed(response)
+            : HttpMiddleware.compression()(Effect.succeed(response)),
+        ),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,

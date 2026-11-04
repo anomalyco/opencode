@@ -3976,7 +3976,7 @@
             }
           }
         },
-        "description": "Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.",
+        "description": "Experimental: may change without compatibility guarantees. Reads retained durable session events after an exclusive aggregate sequence. The log.synced marker reports whether this process currently persists event payloads; persistence is off by default, and enabling it cannot recover earlier discarded events. With follow=true, tails retained durable events and sends SSE heartbeat comments every 15 seconds. Heartbeats do not advance the cursor. Live status, permission/form requests, and usage updates are not included.",
         "summary": "Read the session log"
       }
     },
@@ -17557,11 +17557,15 @@
           },
           "seq": {
             "$ref": "#/components/schemas/Event.Seq"
+          },
+          "persist": {
+            "type": "boolean",
+            "description": "Whether this process retains newly committed durable event payloads. False means following the log cannot deliver new events from this process. True does not guarantee that earlier history was retained. Absent on older servers; treat absence as unknown."
           }
         },
         "required": ["type", "aggregateID"],
         "additionalProperties": false,
-        "description": "Marker emitted once when a log read reaches its captured watermark. The reader holds every event committed at or below seq."
+        "description": "Marker emitted once when a log read reaches its captured watermark. The reader holds retained, decodable events at or below seq; the watermark alone does not guarantee complete history."
       },
       "FileDiff.Info": {
         "type": "object",

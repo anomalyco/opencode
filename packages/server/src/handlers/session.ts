@@ -6,7 +6,7 @@ import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
-import { HttpServerResponse } from "effect/http"
+import { HttpBody, HttpEffect, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SessionMediaMessageResponse } from "@opencode/protocol/groups/message"
 import { SessionMediaInboxResponse } from "@opencode/protocol/groups/session"
@@ -599,6 +599,31 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.log",
         Effect.fn(function* (ctx) {
           yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (ctx.query.follow) {
+            // Add comments after HttpApi encodes the stream, preserving its failure frames.
+            yield* HttpEffect.appendPreResponseHandler((_, response) => {
+              if (response.body._tag !== "Stream") return Effect.succeed(response)
+              const heartbeat = Stream.tick("15 seconds").pipe(
+                Stream.drop(1),
+                Stream.map(() => ": heartbeat\n\n"),
+                Stream.encodeText,
+              )
+              return Effect.succeed(
+                response.pipe(
+                  HttpServerResponse.setBody(
+                    HttpBody.stream(
+                      response.body.stream.pipe(Stream.merge(heartbeat, { haltStrategy: "left" })),
+                      "text/event-stream",
+                    ),
+                  ),
+                  HttpServerResponse.setHeaders({
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                  }),
+                ),
+              )
+            })
+          }
           return session
             .log({ sessionID: ctx.params.sessionID, after: ctx.query.after, follow: ctx.query.follow })
             .pipe(Stream.orDie)

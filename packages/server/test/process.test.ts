@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
+import { Session } from "@opencode/schema/session"
 
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
@@ -109,6 +110,38 @@ it.live("authenticates API requests behind the frontend transform while allowing
     yield* server.updated("2.0.0")
     yield* Effect.promise(() => readUntil(reader, "installation.updated"))
     yield* Effect.promise(() => reader.cancel())
+
+    const sessionID = Session.ID.create()
+    const created = yield* Effect.promise(() =>
+      fetch(new URL("/api/session", HttpServer.formatAddress(server.address)), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Basic ${btoa("opencode:secret")}`,
+        },
+        body: JSON.stringify({ id: sessionID, title: "Log compression" }),
+      }),
+    )
+    expect(created.status).toBe(200)
+    yield* Effect.promise(() => created.arrayBuffer())
+    const log = yield* Effect.promise(() =>
+      fetch(
+        new URL(`/api/experimental/session/${sessionID}/log?follow=true`, HttpServer.formatAddress(server.address)),
+        {
+          headers: {
+            "accept-encoding": "gzip",
+            authorization: `Basic ${btoa("opencode:secret")}`,
+          },
+        },
+      ),
+    )
+    expect(log.status).toBe(200)
+    expect(log.headers.get("content-encoding")).toBeNull()
+    const logBody = log.body
+    if (!logBody) return yield* Effect.die(new Error("Log response has no body"))
+    const logReader = logBody.getReader()
+    yield* Effect.promise(() => readUntil(logReader, "log.synced"))
+    yield* Effect.promise(() => logReader.cancel())
 
     const missing = yield* Effect.promise(() =>
       fetch(new URL("/missing", HttpServer.formatAddress(server.address)), {

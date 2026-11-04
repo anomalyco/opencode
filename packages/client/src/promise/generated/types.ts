@@ -672,7 +672,7 @@ export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue 
 
 export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: JsonValue; removed: boolean }>
 
-export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
+export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq; persist?: boolean }
 
 export type LocationRef = { directory: AbsolutePath; workspaceID?: WorkspaceID }
 
