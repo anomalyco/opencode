@@ -182,9 +182,7 @@ impl Sidebar {
 impl Drop for Sidebar {
     fn drop(&mut self) {
         let layers = std::mem::take(&mut *self.inner.layers.borrow_mut());
-        self.inner
-            .app
-            .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+        self.inner.app.defer(move |_| drop(layers));
     }
 }
 

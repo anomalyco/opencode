@@ -220,8 +220,7 @@ impl Drop for Prompt {
         }
         // A command may drop the prompt while the keymap runs it, so the layers go afterwards.
         let layers = std::mem::take(&mut *inner.layers.borrow_mut());
-        tui.app
-            .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+        tui.app.defer(move |_| drop(layers));
     }
 }
 

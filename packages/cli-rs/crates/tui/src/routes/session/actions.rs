@@ -53,11 +53,10 @@ impl Actions {
 impl Drop for Actions {
     fn drop(&mut self) {
         // A command may drop the view while the keymap runs it (fork and parent navigate), so the layers go
-        // afterwards. Dropping a disposer does not unregister its layer.
+        // afterwards.
         let layers = std::mem::take(&mut *self.0.layers.borrow_mut());
         if let Some(tui) = self.0.tui.upgrade() {
-            tui.app
-                .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+            tui.app.defer(move |_| drop(layers));
         }
     }
 }
