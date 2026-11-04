@@ -10,7 +10,11 @@ import { pascal, Types } from "../rust/types.ts"
 const root = new URL("..", import.meta.url).pathname.replace(/script\/$/, "")
 const directory = `${root}crates/api/src/generated`
 const resolveEncoding = SchemaAST.resolveAt<{ readonly _tag: string }>("~httpApiEncoding")
-const resolveStatus = SchemaAST.resolveAt<number>("httpApiStatus")
+// As `resolveHttpApiStatus` in httpapi-codegen: a no-content success (204) keeps its status on the
+// context annotations.
+const resolveStatus = (ast: SchemaAST.AST) =>
+  SchemaAST.resolveAt<number>("httpApiStatus")(ast) ??
+  (ast.checks === undefined ? (ast.context?.annotations?.httpApiStatus as number | undefined) : undefined)
 
 const contract = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints, namespace: clientNamespace })
 
