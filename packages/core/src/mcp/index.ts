@@ -769,13 +769,17 @@ export const layer = (options?: Options) =>
           return yield* target.entry.connection.recovering(target.client, call).pipe(failed("server"))
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
-          return Array.from(entries)
-            .flatMap(([server, entry]) => {
-              const instructions = entry.connection.client?.instructions
-              if (!instructions) return []
-              return [{ server, instructions }]
-            })
-            .toSorted((a, b) => a.server.localeCompare(b.server))
+          const byServer = new Map<ServerName, string[]>()
+          const add = (server: ServerName, instructions: string | undefined) => {
+            if (instructions) byServer.set(server, [...(byServer.get(server) ?? []), instructions])
+          }
+          for (const [server, entry] of entries) add(server, entry.connection.client?.instructions)
+          // Like tools, an attached client's instructions come from the connection serving its name, and sit
+          // beside a configured server's of the same name since that server's other tools stay reachable.
+          for (const [server, stack] of attached) add(server, stack.at(-1)?.client.instructions)
+          return Array.from(byServer, ([server, parts]) => ({ server, instructions: parts.join("\n\n") })).toSorted(
+            (a, b) => a.server.localeCompare(b.server),
+          )
         }),
         prompts: Effect.fn("MCP.prompts")(function* () {
           return Array.from(entries)

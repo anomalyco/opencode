@@ -54,9 +54,9 @@ const it = testEffect(
 )
 
 /** Starts an in-memory client MCP server whose tools answer with `label` and record the caller's session. */
-const clientServer = (label: string, tools: ReadonlyArray<string>) =>
+const clientServer = (label: string, tools: ReadonlyArray<string>, instructions?: string) =>
   Effect.gen(function* () {
-    const server = new McpServer({ name: label, version: "1.0.0" })
+    const server = new McpServer({ name: label, version: "1.0.0" }, instructions ? { instructions } : undefined)
     const sessions: Array<unknown> = []
     for (const tool of tools)
       server.registerTool(tool, { description: `${label} ${tool}` }, (ctx) => {
@@ -146,6 +146,41 @@ it.live("attaches a client MCP server and routes its tools with the session", ()
     expect(result.status).toBe("completed")
     expect(result.output?.output).toBe("tui:open_terminal")
     expect(client.sessions).toEqual(["ses_attached"])
+  }),
+)
+
+/** Waits until the listed server instructions match `expected`, as `[server, instructions]` pairs. */
+const instructionsSettle = (expected: ReadonlyArray<readonly [string, string]>) =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const listed = (yield* mcp.instructions()).map((item) => [item.server, item.instructions])
+    if (JSON.stringify(listed) !== JSON.stringify(expected)) return yield* Effect.fail("pending")
+  }).pipe(Effect.retry({ times: 500, schedule: Schedule.spaced("2 millis") }))
+
+it.live("lists the instructions of the connection serving an attached name", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const first = yield* clientServer("first", ["shared"], "First instructions")
+    const second = yield* clientServer("second", ["shared"], "Second instructions")
+    const plain = yield* clientServer("plain", ["shared"])
+
+    yield* mcp.attach("tui", first.client)
+    expect(yield* mcp.instructions()).toEqual([
+      { server: Mcp.ServerName.make("tui"), instructions: "First instructions" },
+    ])
+
+    // The newest connection serves the name; a client without instructions adds no entry.
+    yield* mcp.attach("tui", second.client)
+    yield* mcp.attach("plain", plain.client)
+    expect(yield* mcp.instructions()).toEqual([
+      { server: Mcp.ServerName.make("tui"), instructions: "Second instructions" },
+    ])
+
+    yield* Effect.promise(() => second.server.close())
+    yield* instructionsSettle([["tui", "First instructions"]])
+
+    yield* Effect.promise(() => first.server.close())
+    yield* instructionsSettle([])
   }),
 )
 
