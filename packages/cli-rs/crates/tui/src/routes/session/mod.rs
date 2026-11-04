@@ -1,8 +1,7 @@
 //! The session route (T.1): the regions later steps fill (`routes/session/index.tsx`).
 //!
 //! ```text
-//! transcript    messages::list (E.6a), sticky to the bottom
-//! working       the spinner while the session runs
+//! transcript    messages::list (E.6a), sticky to the bottom; a running reply shows its own progress there
 //! permission    permission::Permission (E.9a); the prompt hides while it shows
 //! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
 //! prompt        prompt::editor::mount (E.2)
@@ -22,8 +21,7 @@ pub mod sidebar;
 pub mod tools;
 
 use opencode_api::generated::SessionID;
-use opencode_store::{Changes, SessionStatus, Task};
-use opencode_ui::motion::Spinner;
+use opencode_store::{Changes, Task};
 use opentui::prelude::*;
 
 use super::RouteView;
@@ -35,7 +33,6 @@ pub struct Session {
     transcript: messages::list::Transcript,
     _scroll: scroll::Controls,
     _actions: actions::Actions,
-    working: Spinner,
     permission: permission::Permission,
     form: form::SessionForms,
     location: crate::routes::location_missing::LocationMissing,
@@ -45,15 +42,9 @@ pub struct Session {
 impl Session {
     pub fn new(tui: &Tui, id: SessionID) -> Self {
         let app = &tui.app;
-        let theme = tui.page();
         let transcript = messages::list::Transcript::new(tui);
         let scroll = scroll::Controls::new(tui, &transcript);
         let actions = actions::Actions::new(tui, &id, &scroll);
-        let working = Spinner::new(app)
-            .color(theme.text.muted)
-            .label("Thinking")
-            .animations(opencode_ui::motion::enabled(tui.config.info.animations))
-            .visible(false);
         let permission = permission::Permission::new(tui, &id);
         let form = form::SessionForms::new(tui, &id);
         let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
@@ -68,7 +59,6 @@ impl Session {
             // `paddingBottom={1}` (`routes/session/index.tsx:1518`); T.1's status row used to fill it.
             .padding_edge(Edge::Bottom, 1)
             .child(transcript.root())
-            .child(&working)
             .child(permission.root())
             .child(form.root())
             .child(location.root())
@@ -83,7 +73,6 @@ impl Session {
             transcript,
             _scroll: scroll,
             _actions: actions,
-            working,
             permission,
             form,
             location,
@@ -100,10 +89,6 @@ impl RouteView for Session {
     fn sync(&self, tui: &Tui, changes: &Changes) {
         if changes.session(&self.id) {
             crate::features::location::session(tui, &self.id);
-        }
-        if changes.status(&self.id) {
-            let running = tui.data.read(|state| state.status(&self.id)) == SessionStatus::Running;
-            self.working.visible(running);
         }
         self.transcript.sync(tui, &self.id, changes);
         let prompting = self.permission.active() || self.form.active() || self.location.active();
