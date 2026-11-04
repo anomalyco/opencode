@@ -93,6 +93,7 @@ for (const fixture of [
               cacheReadInputTokens: 3,
               cacheWriteInputTokens: 2,
               reasoningTokens: 2,
+              contextTokens: 12,
             },
           },
           LLMEvent.toolCall({ id: "call-test", name: "test", input: {} }),
@@ -137,6 +138,7 @@ for (const fixture of [
       expect(message?.data).toMatchObject({
         finish: fixture.finish,
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } },
+        contextTokens: 12,
         snapshot: { start, end, files },
         content: [{ type: "tool", state: { status: fixture.toolChoice === "none" ? "error" : "completed" } }],
       })

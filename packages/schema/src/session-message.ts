@@ -235,6 +235,8 @@ export const Assistant = Schema.Struct({
   native: Native.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
+  /** Effective prompt size, which can differ from billed input totals across provider-side attempts. */
+  contextTokens: Schema.Finite.pipe(optional),
   error: SessionError.Error.pipe(optional),
   retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({

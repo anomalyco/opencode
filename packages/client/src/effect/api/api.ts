@@ -1011,6 +1011,7 @@ export type ExperimentalSessionLogOutput =
               readonly reasoning: number
               readonly cache: { readonly read: number; readonly write: number }
             }
+            readonly contextTokens?: number | undefined
             readonly snapshot?: Snapshot.ID | undefined
             readonly files?: ReadonlyArray<RelativePath> | undefined
           }
@@ -1046,6 +1047,7 @@ export type ExperimentalSessionLogOutput =
                   readonly cache: { readonly read: number; readonly write: number }
                 }
               | undefined
+            readonly contextTokens?: number | undefined
             readonly snapshot?: Snapshot.ID | undefined
             readonly files?: ReadonlyArray<RelativePath> | undefined
           }

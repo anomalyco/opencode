@@ -1046,7 +1046,7 @@ const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string
     inputTokens,
     outputTokens,
     contextTokens:
-      last?.type === "message"
+      last?.type === "message" || last?.type === "fallback_message"
         ? ProviderShared.sumTokens(
             last.input_tokens ?? undefined,
             last.cache_read_input_tokens ?? undefined,

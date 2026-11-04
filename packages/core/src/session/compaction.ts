@@ -1121,8 +1121,9 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
     }
 
   const tokens = anchor.tokens
+  const prompt = anchor.contextTokens ?? tokens.input + tokens.cache.read + tokens.cache.write
   return {
-    measured: tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning,
+    measured: prompt + tokens.output + tokens.reasoning,
     estimated: unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0),
   }
 }
@@ -1166,7 +1167,7 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   message.model.providerID === model.providerID &&
   !message.error &&
   message.tokens !== undefined &&
-  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+  (message.contextTokens ?? message.tokens.input + message.tokens.cache.read + message.tokens.cache.write) > 0
 
 /** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
 const measuredPrompt = (context: SessionContext.Loaded) => {
