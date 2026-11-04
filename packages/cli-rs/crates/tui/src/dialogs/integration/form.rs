@@ -595,6 +595,7 @@ struct Choice {
     text: RefCell<String>,
     error: RefCell<String>,
     list: ScrollBox,
+    height: Cell<usize>,
     error_line: Text,
     footer: View,
     textarea: Textarea,
@@ -646,6 +647,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             text: RefCell::new(text),
             error: RefCell::new(String::new()),
             list: list.clone(),
+            height: Cell::new(height),
             error_line: Text::new(app, "").fg(theme.text.feedback.error.base),
             footer: View::new(app),
             textarea,
@@ -842,14 +844,35 @@ impl Choice {
             });
             content.add(row);
         }
-        if let Some(row) = rows.get(selected) {
-            self.list.scroll_into_view(row);
-        }
+        self.scroll_to_selected();
         let error = self.error.borrow();
         self.error_line.set_text(error.clone());
         self.error_line.visible(!error.is_empty());
         self.render_footer();
         app.request_redraw();
+    }
+
+    // `scrollChildIntoView`, from the row heights: the rows were just rebuilt and have no layout yet. Each row is
+    // one line plus its description, with one blank line between rows.
+    fn scroll_to_selected(&self) {
+        let selected = self.selected.get();
+        let height = |index: usize| {
+            1 + usize::from(
+                self.rows
+                    .get(index)
+                    .is_some_and(|row| row.description.is_some()),
+            )
+        };
+        let top: usize = (0..selected).map(|index| height(index) + 1).sum();
+        let bottom = top + height(selected);
+        let view = self.height.get();
+        let (_, offset) = self.list.scroll_position();
+        let offset = offset.max(0.0) as usize;
+        if top < offset {
+            self.list.scroll_to(0.0, top as f64);
+        } else if bottom > offset + view {
+            self.list.scroll_to(0.0, (bottom - view) as f64);
+        }
     }
 
     fn render_footer(self: &Rc<Self>) {
