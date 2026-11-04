@@ -21,6 +21,11 @@ use std::process::ExitCode;
 use clap::FromArgMatches;
 
 fn main() -> ExitCode {
+    env::apply_no_proxy();
+    // OpenSSH runs this binary as its askpass helper; that mode skips the CLI and its logs.
+    if let Some(port) = askpass::port() {
+        return ExitCode::from(askpass::run(&port));
+    }
     let command = help::command();
     let argv = match args::normalize(&command, std::env::args_os().collect()) {
         Ok(argv) => argv,
@@ -54,19 +59,46 @@ fn main() -> ExitCode {
             if global.print_logs {
                 set_print_logs();
             }
-            commands::run(
+            telemetry::install(telemetry::Options::from_env(global.log_level));
+            signals::install();
+            let args = serde_json::to_string(
+                &std::env::args_os()
+                    .skip(1)
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap_or_default();
+            log::info!(
+                version = help::VERSION,
+                channel = telemetry::CHANNEL,
+                local = telemetry::CHANNEL == "local",
+                client = env::client().as_str(),
+                args = args.as_str();
+                "cli starting"
+            );
+            let result = commands::run(
                 &commands::Context {
                     global: global.clone(),
                     server,
                 },
                 &cli,
-            )
+            );
+            if let Some(error) = result
+                .as_ref()
+                .err()
+                .filter(|error| error.downcast_ref::<output::Exit>().is_none())
+            {
+                log::error!(cause = format!("{error:#}").as_str(), args = args.as_str(); "cli process failed");
+            }
+            result
         }
     };
-    match result {
+    let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => ExitCode::from(output::fail(error)),
-    }
+    };
+    telemetry::flush();
+    code
 }
 
 fn usage_error(message: &str) -> ExitCode {
