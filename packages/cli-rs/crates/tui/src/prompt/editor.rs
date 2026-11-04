@@ -15,6 +15,7 @@ use opencode_api::generated::{
     SessionBackgroundInput, SessionID, SessionInboxDelivery, SessionInfo, SessionInterruptInput,
 };
 use opencode_local::jsonl::empty_prompt;
+use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
@@ -27,7 +28,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::draft::{Draft, Drafts};
 use super::history::{self, History};
-use super::metadata::{self, Catalog, Catalogs, Display, Row};
+use super::metadata::{self, Catalog, Display, Preferences, Row};
 use crate::app::Tui;
 
 /// How long an armed interrupt waits for the second Escape.
@@ -50,12 +51,11 @@ impl Mode {
     }
 }
 
-/// Prompt state the whole app shares: history, drafts, and location catalogs.
+/// Prompt state the whole app shares: history, drafts, and model preferences.
 pub struct Shared {
     pub history: History,
     pub drafts: Drafts,
-    pub catalogs: Catalogs,
-    pub state: Option<PathBuf>,
+    pub preferences: Preferences,
 }
 
 impl Shared {
@@ -63,8 +63,7 @@ impl Shared {
         Self {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
-            catalogs: Catalogs::default(),
-            state,
+            preferences: Preferences::load(app, state),
         }
     }
 }
@@ -111,6 +110,9 @@ impl Prompt {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
+        if changes.location(&self.inner.location(tui)) {
+            self.inner.read_catalog(tui);
+        }
         let Some(session) = &self.inner.session else {
             return;
         };
@@ -353,12 +355,24 @@ impl Inner {
         })
     }
 
-    /// The directory the prompt's location catalog comes from.
-    pub(crate) fn directory(&self, tui: &Tui) -> String {
-        self.session_info(tui).map_or_else(
+    /// The session's location, else the default one.
+    pub(crate) fn location(&self, tui: &Tui) -> Location {
+        Location::new(self.session_info(tui).map_or_else(
             || tui.directory.clone(),
             |session| session.location.directory.0,
-        )
+        ))
+    }
+
+    /// Rebuilds the catalog from the store and repaints.
+    fn read_catalog(&self, tui: &Tui) {
+        let location = self.location(tui);
+        let catalog = tui
+            .data
+            .read(|state| Catalog::read(state, &location, &tui.prompt.preferences));
+        if let Some(catalog) = catalog {
+            *self.catalog.borrow_mut() = Some(Rc::new(catalog));
+            self.refresh(tui);
+        }
     }
 
     /// Repaints the border, the metadata row, and the footer from the current state.
@@ -433,12 +447,15 @@ impl Inner {
                 .fg(label),
             ]
         } else {
-            let location = match &session {
-                Some(session) => session.location.directory.0.clone(),
-                None => tui.directory.clone(),
-            };
             let home = std::env::var("HOME").unwrap_or_default();
-            vec![opencode_ui::path::abbreviate_home(&location, &home).fg(theme.text.muted)]
+            let directory =
+                opencode_ui::path::abbreviate_home(&self.location(tui).directory, &home);
+            let branch = catalog.as_ref().and_then(|catalog| catalog.branch.as_ref());
+            let label = match branch {
+                Some(branch) => format!("{directory}:{branch}"),
+                None => directory,
+            };
+            vec![label.fg(theme.text.muted)]
         };
         self.footer.set_text(footer);
         self.app.request_redraw();
@@ -547,34 +564,22 @@ fn connect(inner: &Rc<Inner>) {
     });
 }
 
-/// Reads the location catalog once per directory; the prompt repaints when it arrives.
+/// Reads the location's catalogs through the store; the prompt repaints as each arrives.
 fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
-    let directory = inner.directory(tui);
-    if let Some(catalog) = tui.prompt.catalogs.get(&directory) {
-        *inner.catalog.borrow_mut() = Some(catalog);
-        return;
-    }
-    let weak = Rc::downgrade(inner);
-    let future = Catalog::load(
-        tui.data.client().clone(),
-        directory.clone(),
-        tui.prompt.state.clone(),
-    );
-    tui.app.spawn(future, move |_, result| {
-        let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
-        match result {
-            Ok(catalog) => {
-                let catalog = Rc::new(catalog);
-                tui.prompt.catalogs.insert(directory, catalog.clone());
-                *prompt.catalog.borrow_mut() = Some(catalog);
-                prompt.refresh(&tui);
+    inner.read_catalog(tui);
+    for task in metadata::sync(&tui.data, &inner.location(tui)) {
+        let weak = Rc::downgrade(inner);
+        tui.app.spawn(task, move |_, result| {
+            let Some(prompt) = weak.upgrade() else { return };
+            let Some(tui) = prompt.tui.upgrade() else {
+                return;
+            };
+            match result {
+                Ok(()) => prompt.read_catalog(&tui),
+                Err(error) => log::warn!("prompt catalog: {error}"),
             }
-            Err(error) => log::warn!("prompt catalog for {directory}: {error}"),
-        }
-    });
+        });
+    }
 }
 
 /// The prompt's layers (`component/prompt/index.tsx:644-1096`).
