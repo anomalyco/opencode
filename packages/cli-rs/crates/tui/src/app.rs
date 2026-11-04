@@ -336,12 +336,24 @@ fn install_keys(tui: &Rc<Tui>) {
         ],
         ..KeymapLayer::default()
     };
-    // E.2 enables the `app.exit` layer only while the prompt is empty (`app.tsx:1329-1335`).
+    // `app.exit`'s keys work unless the focused prompt has text (`app.tsx:1329-1335`).
+    let exit = KeymapLayer {
+        enabled: {
+            let app = tui.app.clone();
+            let textarea = tui.textarea.clone();
+            Condition::when(move || {
+                textarea.borrow().as_ref().is_none_or(|textarea| {
+                    !is_focused(&app, textarea) || textarea.text().is_empty()
+                })
+            })
+        },
+        ..bindings(None, &["app.exit"])
+    };
     let layers = [
         commands,
         bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show"]),
         bindings(Some(GLOBAL_MODE), &["session.new"]),
-        bindings(None, &["app.exit"]),
+        exit,
     ];
     for layer in layers {
         match tui.keymap.layer(layer) {
@@ -473,13 +485,17 @@ fn continue_latest(tui: &Rc<Tui>) {
 fn textarea_focused(app: &App, textarea: &Rc<RefCell<Option<Textarea>>>) -> Condition {
     let app = app.clone();
     let textarea = textarea.clone();
-    Condition::When(Rc::new(move || {
-        let focused = app.focused();
+    Condition::when(move || {
         textarea
             .borrow()
             .as_ref()
-            .is_some_and(|textarea| focused.is_some_and(|widget| widget.id() == textarea.id()))
-    }))
+            .is_some_and(|textarea| is_focused(&app, textarea))
+    })
+}
+
+fn is_focused(app: &App, textarea: &Textarea) -> bool {
+    app.focused()
+        .is_some_and(|widget| widget.id() == textarea.id())
 }
 
 fn route_is_session(tui: &Weak<Tui>) -> Condition {
