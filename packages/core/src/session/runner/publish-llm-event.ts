@@ -87,7 +87,7 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * Concurrency invariant: the provider loop and each owned tool fiber call these methods
  * concurrently without a lock. Two rules keep that safe, and every method must preserve
  * them. (1) Commit state marks synchronously before the first await: never a yield
- * between a check (`tool.settled`, `stepStarted`, ...) and its mark, so check-and-mark
+ * between a check (`tool.phase`, `stepStarted`, ...) and its mark, so check-and-mark
  * stays atomic under cooperative scheduling. Provider-event publication remains
  * uninterruptible through its writes so cancellation cannot strand a mark without
  * its durable event. (2) Never require a cross-source event
@@ -96,20 +96,23 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
   const deltaBatchInterval = 100
+  type ToolPhase =
+    | { readonly status: "input" }
+    | { readonly status: "input-ended"; readonly input: InputExcerpt }
+    | { readonly status: "malformed"; readonly input: InputExcerpt }
+    | { readonly status: "called"; readonly progress?: Tool.Metadata }
+    | { readonly status: "settled"; readonly called: boolean }
   type ToolState = {
     readonly name: string
-    called: boolean
-    settled: boolean
+    /** Set by tool-input-start, then replaced by the tool-call's value. */
     providerExecuted: boolean
-    progress?: Tool.Metadata
-    input?: InputExcerpt
-    malformed?: boolean
+    phase: ToolPhase
   }
   const tools = new Map<string, ToolState>()
-  const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
-    if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
-    if (metadata === undefined) return { metadata: tool.progress }
-    return { metadata: { ...tool.progress, ...metadata } }
+  const failureSnapshot = (progress: Tool.Metadata | undefined, metadata?: Tool.Metadata) => {
+    if (progress === undefined) return metadata === undefined ? {} : { metadata }
+    if (metadata === undefined) return { metadata: progress }
+    return { metadata: { ...progress, ...metadata } }
   }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
@@ -225,7 +228,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         yield* publishDelta(id)
       }
     })
-    return { start, append, end, flush, publishPending, has: (id: string) => chunks.has(id) }
+    return { start, append, end, flush, publishPending }
   }
 
   const contentFragments = (name: string, events: typeof SessionEvent.Text | typeof SessionEvent.Reasoning) =>
@@ -259,7 +262,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       const tool = tools.get(id)
       if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${id}`))
       // Keep a bounded excerpt for recovery errors; the full argument text is persisted below.
-      tool.input = inputExcerpt(value)
+      if (tool.phase.status === "input") tool.phase = { status: "input-ended", input: inputExcerpt(value) }
       yield* bus.publish(SessionEvent.Tool.Input.Ended, {
         sessionID: input.sessionID,
         assistantMessageID,
@@ -291,9 +294,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     yield* startAssistant()
     const tool: ToolState = {
       name: event.name,
-      called: false,
-      settled: false,
       providerExecuted: event.providerExecuted === true,
+      phase: { status: "input" },
     }
     tools.set(event.id, tool)
     yield* toolInput.start(event.id)
@@ -315,7 +317,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-    if (!toolInput.has(event.id)) return yield* Effect.die(new Error(`Duplicate tool input end: ${event.id}`))
+    if (tool.phase.status !== "input") return yield* Effect.die(new Error(`Duplicate tool input end: ${event.id}`))
     yield* toolInput.end(event.id, undefined, value)
   })
 
@@ -325,41 +327,44 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly raw: string
   }) {
     const tool = tools.get(event.id) ?? (yield* startToolInput(event))
-    if (tool.called || tool.settled)
+    if (tool.phase.status === "called" || tool.phase.status === "settled")
       return yield* Effect.die(new Error(`Malformed tool input after call settlement: ${event.id}`))
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-    if (toolInput.has(event.id)) yield* endToolInput(event, event.raw)
+    if (tool.phase.status === "input") yield* endToolInput(event, event.raw)
     // The parser's final raw input may differ from streamed deltas; use it for the recovery excerpt.
-    tool.input = inputExcerpt(event.raw)
-    tool.malformed = true
+    tool.phase = { status: "malformed", input: inputExcerpt(event.raw) }
   })
 
-  const failToolInput = (id: string, tool: ToolState, reason: Exclude<InputFailureReason, "length">) =>
-    failTool(id, inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : reason))
+  const failToolInput = (
+    id: string,
+    excerpt: InputExcerpt | undefined,
+    reason: Exclude<InputFailureReason, "length">,
+  ) => failTool(id, inputFailure(excerpt, stepSettlement?.finish === "length" ? "length" : reason))
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
     yield* flushFragments()
     // The finish reason distinguishes invalid JSON from arguments cut off by the output limit.
     for (const [id, tool] of tools) {
-      if (!tool.malformed || tool.settled) continue
-      yield* failToolInput(id, tool, "malformed")
+      if (tool.phase.status !== "malformed") continue
+      yield* failToolInput(id, tool.phase.input, "malformed")
     }
   })
 
   const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
     const tool = tools.get(id)
-    if (!tool || tool.settled) return false
-    tool.settled = true
+    if (!tool || tool.phase.status === "settled") return false
+    const progress = tool.phase.status === "called" ? tool.phase.progress : undefined
+    tool.phase = { status: "settled", called: tool.phase.status === "called" }
     yield* bus.publish(SessionEvent.Tool.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
       id,
       error:
-        tool.name === "subagent" && error.type === "aborted" && typeof tool.progress?.sessionID === "string"
-          ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
+        tool.name === "subagent" && error.type === "aborted" && typeof progress?.sessionID === "string"
+          ? { ...error, message: `${error.message} (sessionID: ${progress.sessionID})` }
           : error,
-      ...failureSnapshot(tool, metadata),
+      ...failureSnapshot(progress, metadata),
       executed: tool.providerExecuted,
     })
     return true
@@ -368,7 +373,11 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
     let failed = false
     for (const [id, tool] of tools) {
-      if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
+      if (
+        tool.phase.status === "settled" ||
+        (mode === "hosted" && !tool.providerExecuted) ||
+        (mode === "uncalled" && tool.phase.status === "called")
+      )
         continue
       if (yield* failTool(id, error)) failed = true
     }
@@ -377,8 +386,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const failIncompleteTools = Effect.fn("SessionRunner.failIncompleteTools")(function* () {
     for (const [id, tool] of tools) {
-      if (tool.called || tool.settled) continue
-      yield* failToolInput(id, tool, "incomplete")
+      if (tool.phase.status === "called" || tool.phase.status === "settled") continue
+      yield* failToolInput(id, tool.phase.status === "input" ? undefined : tool.phase.input, "incomplete")
     }
   })
 
@@ -459,7 +468,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         if (!tool) return yield* Effect.die(new Error(`Tool input delta before start: ${event.id}`))
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (!toolInput.has(event.id)) return yield* Effect.die(new Error(`Tool input delta after end: ${event.id}`))
+        if (tool.phase.status !== "input")
+          return yield* Effect.die(new Error(`Tool input delta after end: ${event.id}`))
         yield* toolInput.append(event.id, event.text)
         return
       }
@@ -473,11 +483,13 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "tool-call": {
         outputStarted = true
         const tool = tools.get(event.id) ?? (yield* startToolInput(event))
-        if (toolInput.has(event.id)) yield* endToolInput(event)
+        if (tool.phase.status === "input") yield* endToolInput(event)
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool call name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (tool.called) return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
-        tool.called = true
+        if (tool.phase.status === "malformed")
+          return yield* Effect.die(new Error(`Tool call after malformed input: ${event.id}`))
+        if (tool.phase.status !== "input-ended") return yield* Effect.die(new Error(`Duplicate tool call: ${event.id}`))
+        tool.phase = { status: "called" }
         tool.providerExecuted = event.providerExecuted === true
         yield* bus.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
@@ -492,16 +504,18 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "tool-result": {
         // Provider-hosted results only; local executions publish through `toolExecution`.
         const tool = tools.get(event.id)
-        if (!tool?.called) return yield* Effect.die(new Error(`Tool result before call: ${event.id}`))
+        if (!tool || (tool.phase.status !== "called" && !(tool.phase.status === "settled" && tool.phase.called)))
+          return yield* Effect.die(new Error(`Tool result before call: ${event.id}`))
         if (tool.name !== event.name)
           return yield* Effect.die(new Error(`Tool result name changed for ${event.id}: ${tool.name} -> ${event.name}`))
-        if (tool.settled) {
+        if (tool.phase.status !== "called") {
           // A late error result is a benign straggler (e.g. after an abort
           // sweep); a late success would mean double execution, so it dies.
           if (event.result.type === "error") return
           return yield* Effect.die(new Error(`Duplicate tool result: ${event.id}`))
         }
-        tool.settled = true
+        const progress = tool.phase.progress
+        tool.phase = { status: "settled", called: true }
         const executed = event.providerExecuted === true || tool.providerExecuted
         if (event.result.type === "error") {
           yield* bus.publish(SessionEvent.Tool.Failed, {
@@ -509,7 +523,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
             assistantMessageID,
             id: event.id,
             error: { type: "tool.execution", message: stringify(event.result.value) },
-            ...failureSnapshot(tool),
+            ...failureSnapshot(progress),
             executed,
             native: native(event.providerMetadata),
           })
@@ -547,8 +561,9 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)
-    if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
-    tool.progress = update
+    if (tool?.phase.status !== "called")
+      return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
+    tool.phase = { status: "called", progress: update }
     yield* bus.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -560,11 +575,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   /** Publishes one canonical terminal event for a locally executed tool call. */
   const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.NormalizedResult) {
     const tool = tools.get(id)
-    if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${id}`))
+    if (!tool || (tool.phase.status !== "called" && !(tool.phase.status === "settled" && tool.phase.called)))
+      return yield* Effect.die(new Error(`Tool execution before call: ${id}`))
     if (tool.name !== name)
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
-    if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
-    tool.settled = true
+    if (tool.phase.status !== "called") return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
+    tool.phase = { status: "settled", called: true }
     const content = result.content
     if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {
@@ -596,7 +612,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       finish: stepSettlement,
       needsContinuation: Iterable.some(
         tools.values(),
-        (tool) => !tool.providerExecuted && (tool.called || tool.settled),
+        (tool) => !tool.providerExecuted && (tool.phase.status === "called" || tool.phase.status === "settled"),
       ),
     }),
     startAssistant,
