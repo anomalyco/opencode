@@ -1077,6 +1077,16 @@ export function createTimelineVirtualizer(input: Input) {
     document.removeEventListener("visibilitychange", releaseHiddenPointer)
   })
 
+  // The thumb is mounted in the visible-area track, outside the ScrollView root, so its pointerdown never reaches the
+  // root's capture listener. Without this a thumb drag keeps following, and every resize pulls the view to the end.
+  createEffect(() => {
+    const track = visibleArea()
+
+    if (!track) return
+    track.addEventListener("pointerdown", handleListPointerDown, { capture: true })
+    onCleanup(() => track.removeEventListener("pointerdown", handleListPointerDown, { capture: true }))
+  })
+
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const key = scrollKey(event)
 
