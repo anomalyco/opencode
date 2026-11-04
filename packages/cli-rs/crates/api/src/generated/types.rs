@@ -222,13 +222,26 @@ pub struct ModelRef {
     pub variant: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProviderSettingsTimeout {
     Number(f64),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ProviderSettingsTimeout {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Number(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -314,13 +327,26 @@ pub struct ProviderCacheWarmingObject {
 }
 
 /// `Provider.CacheWarming`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ProviderCacheWarming {
     Bool(bool),
     Object(ProviderCacheWarmingObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ProviderCacheWarming {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1943,13 +1969,26 @@ impl<'de> Deserialize<'de> for SessionMessageShellStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SessionMessageShellExit {
     Number(f64),
     String(String),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for SessionMessageShellExit {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Number(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -2021,10 +2060,64 @@ pub struct SessionMessageToolStateRunning {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ToolTextContent {
+    pub r#type: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ToolFileContent {
+    pub r#type: String,
+    pub uri: String,
+    pub mime: String,
+    #[serde(
+        default,
+        deserialize_with = "crate::de::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub name: Option<Option<String>>,
+}
+
+/// `Tool.Content`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ToolContent {
+    Text(ToolTextContent),
+    File(ToolFileContent),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ToolContent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value.get("type").and_then(serde_json::Value::as_str) {
+            Some("text") => crate::de::variant(value).map(Self::Text),
+            Some("file") => crate::de::variant(value).map(Self::File),
+            _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl ToolContent {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Text(value) => value.r#type.as_str(),
+            Self::File(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageToolStateCompleted {
     pub status: String,
     pub input: IndexMap<String, serde_json::Value>,
-    pub content: Vec<serde_json::Value>,
+    pub content: Vec<ToolContent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
 }
@@ -2056,7 +2149,7 @@ pub struct SessionMessageToolStateError {
     pub input: IndexMap<String, serde_json::Value>,
     pub error: SessionStructuredError,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content: Option<Vec<serde_json::Value>>,
+    pub content: Option<Vec<ToolContent>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
 }
@@ -2638,8 +2731,312 @@ impl From<&str> for FormID {
 /// `Form.Metadata`
 pub type FormMetadata = IndexMap<String, serde_json::Value>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FormWhenOp {
+    Eq,
+    Neq,
+    Unknown(String),
+}
+
+impl FormWhenOp {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Eq => "eq",
+            Self::Neq => "neq",
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
+impl From<&str> for FormWhenOp {
+    fn from(value: &str) -> Self {
+        match value {
+            "eq" => Self::Eq,
+            "neq" => Self::Neq,
+            _ => Self::Unknown(value.to_owned()),
+        }
+    }
+}
+
+impl Serialize for FormWhenOp {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for FormWhenOp {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from(value.as_str()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum FormWhenValue {
+    String(String),
+    Number(f64),
+    Bool(bool),
+    /// A shape this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for FormWhenValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Number(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        Ok(Self::Unknown(value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FormWhen {
+    pub key: String,
+    pub op: FormWhenOp,
+    pub value: FormWhenValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FormStringFieldFormat {
+    Email,
+    Uri,
+    Date,
+    DateTime,
+    Unknown(String),
+}
+
+impl FormStringFieldFormat {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Email => "email",
+            Self::Uri => "uri",
+            Self::Date => "date",
+            Self::DateTime => "date-time",
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
+impl From<&str> for FormStringFieldFormat {
+    fn from(value: &str) -> Self {
+        match value {
+            "email" => Self::Email,
+            "uri" => Self::Uri,
+            "date" => Self::Date,
+            "date-time" => Self::DateTime,
+            _ => Self::Unknown(value.to_owned()),
+        }
+    }
+}
+
+impl Serialize for FormStringFieldFormat {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for FormStringFieldFormat {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from(value.as_str()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormOption {
+    pub value: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormStringField {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Vec<FormWhen>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<FormStringFieldFormat>,
+    #[serde(rename = "minLength", default, skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<i64>,
+    #[serde(rename = "maxLength", default, skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<FormOption>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormNumberField {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Vec<FormWhen>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum: Option<SessionMessageShellExit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<SessionMessageShellExit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<SessionMessageShellExit>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormIntegerField {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Vec<FormWhen>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimum: Option<SessionMessageShellExit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<SessionMessageShellExit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<SessionMessageShellExit>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormBooleanField {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Vec<FormWhen>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormMultiselectField {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Vec<FormWhen>>,
+    pub r#type: String,
+    pub options: Vec<FormOption>,
+    #[serde(rename = "minItems", default, skip_serializing_if = "Option::is_none")]
+    pub min_items: Option<i64>,
+    #[serde(rename = "maxItems", default, skip_serializing_if = "Option::is_none")]
+    pub max_items: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FormExternalField {
+    pub key: String,
+    pub r#type: String,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// `Form.Field`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum FormField {
+    String(FormStringField),
+    Number(FormNumberField),
+    Integer(FormIntegerField),
+    Boolean(FormBooleanField),
+    Multiselect(FormMultiselectField),
+    External(FormExternalField),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for FormField {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value.get("type").and_then(serde_json::Value::as_str) {
+            Some("string") => crate::de::variant(value).map(Self::String),
+            Some("number") => crate::de::variant(value).map(Self::Number),
+            Some("integer") => crate::de::variant(value).map(Self::Integer),
+            Some("boolean") => crate::de::variant(value).map(Self::Boolean),
+            Some("multiselect") => crate::de::variant(value).map(Self::Multiselect),
+            Some("external") => crate::de::variant(value).map(Self::External),
+            _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl FormField {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::String(value) => value.r#type.as_str(),
+            Self::Number(value) => value.r#type.as_str(),
+            Self::Integer(value) => value.r#type.as_str(),
+            Self::Boolean(value) => value.r#type.as_str(),
+            Self::Multiselect(value) => value.r#type.as_str(),
+            Self::External(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// `Form.Fields`
-pub type FormFields = Vec<serde_json::Value>;
+pub type FormFields = Vec<FormField>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormInfo {
@@ -2681,7 +3078,7 @@ pub struct FormStatePending {
 }
 
 /// `Form.Value`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FormValue {
     String(String),
@@ -2690,6 +3087,25 @@ pub enum FormValue {
     Array(Vec<String>),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for FormValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Number(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Array(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 /// `Form.Answer`
@@ -2761,27 +3177,12 @@ pub struct FormDetail {
 /// Output of [`Client::session_form_get`].
 pub type SessionFormGetOutput = FormDetail;
 
-/// `Form.Value_1`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum FormValue1 {
-    String(String),
-    Number(f64),
-    Bool(bool),
-    Array(Vec<String>),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-/// `Form.Answer_1`
-pub type FormAnswer1 = IndexMap<String, FormValue1>;
-
 /// Input of [`Client::session_form_reply`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormReplyInput {
     pub session_id: String,
     pub form_id: FormID,
-    pub answer: FormAnswer1,
+    pub answer: FormAnswer,
 }
 
 /// Input of [`Client::session_form_cancel`].
@@ -3495,39 +3896,17 @@ pub struct SessionInboxDelivered {
     pub data: SessionInboxDeliveredData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxUserPayload1 {
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub files: Option<Vec<PromptFileAttachment>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agents: Option<Vec<PromptAgentAttachment>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skills: Option<Vec<PromptSkillAttachment>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<IndexMap<String, serde_json::Value>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemUser {
     pub r#type: String,
-    pub payload: SessionInboxUserPayload1,
+    pub payload: SessionInboxUserPayload,
     pub delivery: SessionInboxDelivery,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxSyntheticPayload1 {
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<IndexMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxItemSynthetic {
     pub r#type: String,
-    pub payload: SessionInboxSyntheticPayload1,
+    pub payload: SessionInboxSyntheticPayload,
     pub delivery: SessionInboxDelivery,
 }
 
@@ -3945,9 +4324,6 @@ pub struct SessionStepStreamed {
     pub data: SessionStepStreamedData,
 }
 
-/// `Session.Message.Native_1`
-pub type SessionMessageNative1 = IndexMap<String, serde_json::Value>;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionStepEndedData {
     #[serde(rename = "sessionID")]
@@ -3958,7 +4334,7 @@ pub struct SessionStepEndedData {
     #[serde(rename = "rawFinish", default, skip_serializing_if = "Option::is_none")]
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
     pub cost: MoneyUSD,
     pub tokens: TokenUsageInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3992,7 +4368,7 @@ pub struct SessionStepFailedData {
     #[serde(rename = "rawFinish", default, skip_serializing_if = "Option::is_none")]
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4047,7 +4423,7 @@ pub struct SessionTextEndedData {
     pub ordinal: i64,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4071,7 +4447,7 @@ pub struct SessionReasoningStartedData {
     pub assistant_message_id: SessionMessageID,
     pub ordinal: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4156,7 +4532,7 @@ pub struct SessionToolCalledData {
     pub input: IndexMap<String, serde_json::Value>,
     pub executed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4179,12 +4555,12 @@ pub struct SessionToolSuccessData {
     #[serde(rename = "assistantMessageID")]
     pub assistant_message_id: SessionMessageID,
     pub id: String,
-    pub content: Vec<serde_json::Value>,
+    pub content: Vec<ToolContent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub executed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4209,12 +4585,12 @@ pub struct SessionToolFailedData {
     pub id: String,
     pub error: SessionStructuredError,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content: Option<Vec<serde_json::Value>>,
+    pub content: Option<Vec<ToolContent>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
     pub executed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4284,7 +4660,7 @@ pub struct SessionCompactionEndedData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
+    pub native: Option<SessionMessageNative>,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
@@ -4447,111 +4823,13 @@ pub struct SessionUsageRecorded {
     pub data: SessionUsageRecordedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAssistantText1 {
-    pub r#type: String,
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAssistantReasoning1 {
-    pub r#type: String,
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub time: Option<SessionMessageShellTime>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageToolStateRunning1 {
-    pub status: String,
-    pub input: IndexMap<String, serde_json::Value>,
-    pub metadata: IndexMap<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageToolStateCompleted1 {
-    pub status: String,
-    pub input: IndexMap<String, serde_json::Value>,
-    pub content: Vec<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<IndexMap<String, serde_json::Value>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageToolStateError1 {
-    pub status: String,
-    pub input: IndexMap<String, serde_json::Value>,
-    pub error: SessionStructuredError,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content: Option<Vec<serde_json::Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<IndexMap<String, serde_json::Value>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum SessionMessageAssistantTool1State {
-    Streaming(SessionMessageToolStateStreaming),
-    Running(SessionMessageToolStateRunning1),
-    Completed(SessionMessageToolStateCompleted1),
-    Error(SessionMessageToolStateError1),
-    /// A member this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-impl<'de> Deserialize<'de> for SessionMessageAssistantTool1State {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("streaming") => crate::de::variant(value).map(Self::Streaming),
-            Some("running") => crate::de::variant(value).map(Self::Running),
-            Some("completed") => crate::de::variant(value).map(Self::Completed),
-            Some("error") => crate::de::variant(value).map(Self::Error),
-            _ => Ok(Self::Unknown(value)),
-        }
-    }
-}
-
-impl SessionMessageAssistantTool1State {
-    /// The `status` tag, also of an unknown member.
-    pub fn tag(&self) -> &str {
-        match self {
-            Self::Streaming(value) => value.status.as_str(),
-            Self::Running(value) => value.status.as_str(),
-            Self::Completed(value) => value.status.as_str(),
-            Self::Error(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SessionMessageAssistantTool1 {
-    pub r#type: String,
-    pub id: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub executed: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
-    pub state: SessionMessageAssistantTool1State,
-    pub time: SessionMessageAssistantToolTime,
-}
-
 /// `Session.Message.AssistantContent.Encoded`, tagged by `type`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SessionMessageAssistantContentEncoded {
-    Text(SessionMessageAssistantText1),
-    Reasoning(SessionMessageAssistantReasoning1),
-    Tool(SessionMessageAssistantTool1),
+    Text(SessionMessageAssistantText),
+    Reasoning(SessionMessageAssistantReasoning),
+    Tool(SessionMessageAssistantTool),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
@@ -4840,14 +5118,87 @@ pub struct EventLogSynced {
     pub seq: Option<EventSeq>,
 }
 
-/// `SessionLogItem`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// `SessionLogItem`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SessionLogItem {
     Durable(SessionEventDurable),
-    Synced(EventLogSynced),
-    /// A shape this client does not know, kept as it arrived.
+    LogSynced(EventLogSynced),
+    /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for SessionLogItem {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value.get("type").and_then(serde_json::Value::as_str) {
+            Some("session.created")
+            | Some("session.agent.selected")
+            | Some("session.model.selected")
+            | Some("session.moved")
+            | Some("session.renamed")
+            | Some("session.metadata.updated")
+            | Some("session.permissions")
+            | Some("session.viewed")
+            | Some("session.archived")
+            | Some("session.unarchived")
+            | Some("session.deleted")
+            | Some("session.forked")
+            | Some("session.inbox.delivered")
+            | Some("session.inbox.enqueued")
+            | Some("session.inbox.cancelled")
+            | Some("session.inbox.delivery.changed")
+            | Some("session.execution.started")
+            | Some("session.execution.succeeded")
+            | Some("session.execution.failed")
+            | Some("session.execution.interrupted")
+            | Some("session.instructions.updated")
+            | Some("session.synthetic")
+            | Some("session.skill.activated")
+            | Some("session.shell.started")
+            | Some("session.shell.ended")
+            | Some("session.step.started")
+            | Some("session.step.streamed")
+            | Some("session.step.ended")
+            | Some("session.step.failed")
+            | Some("session.text.started")
+            | Some("session.text.ended")
+            | Some("session.reasoning.started")
+            | Some("session.reasoning.ended")
+            | Some("session.tool.input.started")
+            | Some("session.tool.input.ended")
+            | Some("session.tool.called")
+            | Some("session.tool.success")
+            | Some("session.tool.failed")
+            | Some("session.retry.scheduled")
+            | Some("session.compaction.started")
+            | Some("session.compaction.ended")
+            | Some("session.compaction.failed")
+            | Some("session.revert.staged")
+            | Some("session.revert.cleared")
+            | Some("session.revert.committed")
+            | Some("session.usage.recorded")
+            | Some("session.message.content.updated") => {
+                crate::de::variant(value).map(Self::Durable)
+            }
+            Some("log.synced") => crate::de::variant(value).map(Self::LogSynced),
+            _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionLogItem {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Durable(value) => value.tag(),
+            Self::LogSynced(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
 }
 
 /// Output of [`Client::experimental_session_log`].
@@ -5536,13 +5887,26 @@ pub struct GeneratePredicateQuestion {
 }
 
 /// `Generate.ChoiceValue`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum GenerateChoiceValue {
     String(String),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for GenerateChoiceValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -6357,7 +6721,7 @@ pub struct IntegrationConnectKeyInput {
     pub integration_id: IntegrationID,
     pub location: Option<LocationQueryInput>,
     pub key: String,
-    pub answer: Option<FormAnswer1>,
+    pub answer: Option<FormAnswer>,
     pub label: Option<String>,
 }
 
@@ -6367,7 +6731,7 @@ pub struct IntegrationConnectExternalInput {
     pub integration_id: IntegrationID,
     pub location: Option<LocationQueryInput>,
     pub method_id: IntegrationMethodID,
-    pub answer: Option<FormAnswer1>,
+    pub answer: Option<FormAnswer>,
     pub label: Option<String>,
 }
 
@@ -6377,7 +6741,7 @@ pub struct IntegrationOauthConnectInput {
     pub integration_id: IntegrationID,
     pub location: Option<LocationQueryInput>,
     pub method_id: IntegrationMethodID,
-    pub answer: Option<FormAnswer1>,
+    pub answer: Option<FormAnswer>,
     pub label: Option<String>,
 }
 
@@ -6919,13 +7283,26 @@ pub struct ExperimentalMcpAddInputConfigRemoteOauthObject {
     pub auth_server_metadata_url: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ExperimentalMcpAddInputConfigRemoteOauth {
     Object(ExperimentalMcpAddInputConfigRemoteOauthObject),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfigRemoteOauth {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8436,26 +8813,9 @@ pub struct ShellDeleted {
     pub data: ShellDeletedData,
 }
 
-/// `Form.Metadata_1`
-pub type FormMetadata1 = IndexMap<String, serde_json::Value>;
-
-/// `Form.Fields_1`
-pub type FormFields1 = Vec<serde_json::Value>;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FormInfo1 {
-    pub id: FormID,
-    #[serde(rename = "sessionID")]
-    pub session_id: String,
-    pub title: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<FormMetadata1>,
-    pub fields: FormFields1,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormCreatedData {
-    pub form: FormInfo1,
+    pub form: FormInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8475,7 +8835,7 @@ pub struct FormRepliedData {
     pub id: FormID,
     #[serde(rename = "sessionID")]
     pub session_id: String,
-    pub answer: FormAnswer1,
+    pub answer: FormAnswer,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9561,7 +9921,7 @@ pub struct ScheduleWhenInputObject4 {
 }
 
 /// `Schedule.WhenInput`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ScheduleWhenInput {
     Object(ScheduleWhenInputObject),
@@ -9570,6 +9930,25 @@ pub enum ScheduleWhenInput {
     Object4(ScheduleWhenInputObject4),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ScheduleWhenInput {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object2(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object3(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object4(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9589,13 +9968,26 @@ pub struct ScheduleConditionInputObject2 {
 }
 
 /// `Schedule.ConditionInput`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ScheduleConditionInput {
     Object(ScheduleConditionInputObject),
     Object2(ScheduleConditionInputObject2),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ScheduleConditionInput {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object2(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -10398,28 +10790,10 @@ pub struct ShellListInput {
     pub location: Option<LocationQueryInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ShellInfo1 {
-    pub id: ShellID,
-    pub status: SessionMessageShellStatus,
-    pub command: String,
-    pub cwd: String,
-    pub shell: String,
-    pub file: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pid: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exit: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal: Option<String>,
-    pub metadata: IndexMap<String, serde_json::Value>,
-    pub time: ShellInfoTime,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellListOutput {
     pub location: LocationPublicRef,
-    pub data: Vec<ShellInfo1>,
+    pub data: Vec<ShellInfo>,
 }
 
 /// Input of [`Client::shell_create`].
@@ -10435,7 +10809,7 @@ pub struct ShellCreateInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellCreateOutput {
     pub location: LocationPublicRef,
-    pub data: ShellInfo1,
+    pub data: ShellInfo,
 }
 
 /// Input of [`Client::shell_get`].
@@ -10448,7 +10822,7 @@ pub struct ShellGetInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellGetOutput {
     pub location: LocationPublicRef,
-    pub data: ShellInfo1,
+    pub data: ShellInfo,
 }
 
 /// Input of [`Client::shell_output`].
@@ -11265,13 +11639,26 @@ pub struct ConfigEntryDocumentInfoModelObject {
     pub variant: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoModel {
     String(String),
     Object(ConfigEntryDocumentInfoModelObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoModel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11521,13 +11908,26 @@ pub struct ConfigEntryDocumentInfoFormatterObjectValue {
     pub extensions: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoFormatter {
     Bool(bool),
     Object(IndexMap<String, ConfigEntryDocumentInfoFormatterObjectValue>),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoFormatter {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11548,7 +11948,7 @@ pub struct ConfigEntryDocumentInfoLspObjectValueObject2 {
     pub initialization: Option<IndexMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoLspObjectValue {
     Object(ConfigEntryDocumentInfoLspObjectValueObject),
@@ -11557,13 +11957,41 @@ pub enum ConfigEntryDocumentInfoLspObjectValue {
     Unknown(serde_json::Value),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLspObjectValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("disabled") == Some(&serde_json::json!(true)) {
+            if let Ok(member) = serde_json::from_value(value.clone()) {
+                return Ok(Self::Object(member));
+            }
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object2(member));
+        }
+        Ok(Self::Unknown(value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoLsp {
     Bool(bool),
     Object(IndexMap<String, ConfigEntryDocumentInfoLspObjectValue>),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLsp {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11635,13 +12063,26 @@ impl From<&str> for ConfigCompactionPercent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoCompactionBuffer {
     String(ConfigCompactionPercent),
     Number(i64),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoCompactionBuffer {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Number(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11689,7 +12130,7 @@ pub struct ConfigEntryDocumentInfoReferencesValueObject2 {
     pub hidden: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoReferencesValue {
     String(String),
@@ -11699,18 +12140,47 @@ pub enum ConfigEntryDocumentInfoReferencesValue {
     Unknown(serde_json::Value),
 }
 
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoReferencesValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object2(member));
+        }
+        Ok(Self::Unknown(value))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoWebsearchObject {
     pub provider: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoWebsearch {
     Bool(bool),
     Object(ConfigEntryDocumentInfoWebsearchObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWebsearch {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11720,13 +12190,26 @@ pub struct ConfigEntryDocumentInfoPluginsItemObject {
     pub options: Option<IndexMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoPluginsItem {
     String(String),
     Object(ConfigEntryDocumentInfoPluginsItemObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoPluginsItem {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11744,13 +12227,26 @@ pub struct ConfigEntryDocumentInfoWarmingObject {
     pub duration: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoWarming {
     Bool(bool),
     Object(ConfigEntryDocumentInfoWarmingObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWarming {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11891,13 +12387,26 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObject {
     pub cache: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoProvidersValueModelsValueCost {
     Object(ConfigEntryDocumentInfoProvidersValueModelsValueCostObject),
     Array(Vec<ConfigEntryDocumentInfoProvidersValueModelsValueCostObject>),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoProvidersValueModelsValueCost {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Array(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11976,13 +12485,26 @@ pub struct ConfigEntryDocumentInfoExperimentalImageGenerateObject {
     pub model: Option<ConfigEntryDocumentInfoModel>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoExperimentalImageGenerate {
     Bool(bool),
     Object(ConfigEntryDocumentInfoExperimentalImageGenerateObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalImageGenerate {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Bool(member));
+        }
+        if let Ok(member) = serde_json::from_value(value.clone()) {
+            return Ok(Self::Object(member));
+        }
+        Ok(Self::Unknown(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12152,11 +12674,19 @@ pub struct InvalidRequestError {
     pub field: Option<String>,
 }
 
+impl crate::error::TaggedError for InvalidRequestError {
+    const TAG: &'static str = "InvalidRequestError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct UnauthorizedError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for UnauthorizedError {
+    const TAG: &'static str = "UnauthorizedError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12165,6 +12695,10 @@ pub struct LocationNotFoundError {
     pub tag: String,
     pub location: LocationPublicRef,
     pub message: String,
+}
+
+impl crate::error::TaggedError for LocationNotFoundError {
+    const TAG: &'static str = "LocationNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12176,6 +12710,10 @@ pub struct ServiceUnavailableError {
     pub service: Option<String>,
 }
 
+impl crate::error::TaggedError for ServiceUnavailableError {
+    const TAG: &'static str = "ServiceUnavailableError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentNotFoundError {
     #[serde(rename = "_tag")]
@@ -12183,6 +12721,10 @@ pub struct AgentNotFoundError {
     #[serde(rename = "agentID")]
     pub agent_id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for AgentNotFoundError {
+    const TAG: &'static str = "AgentNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12194,11 +12736,19 @@ pub struct PluginNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for PluginNotFoundError {
+    const TAG: &'static str = "PluginNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InvalidCursorError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for InvalidCursorError {
+    const TAG: &'static str = "InvalidCursorError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12208,6 +12758,10 @@ pub struct SessionNotFoundError {
     #[serde(rename = "sessionID")]
     pub session_id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for SessionNotFoundError {
+    const TAG: &'static str = "SessionNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12221,6 +12775,10 @@ pub struct MessageNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for MessageNotFoundError {
+    const TAG: &'static str = "MessageNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConflictError {
     #[serde(rename = "_tag")]
@@ -12228,6 +12786,10 @@ pub struct ConflictError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource: Option<String>,
+}
+
+impl crate::error::TaggedError for ConflictError {
+    const TAG: &'static str = "ConflictError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12238,12 +12800,20 @@ pub struct CommandNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for CommandNotFoundError {
+    const TAG: &'static str = "CommandNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CommandExecutionError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub command: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for CommandExecutionError {
+    const TAG: &'static str = "CommandExecutionError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12255,6 +12825,10 @@ pub struct SessionBusyError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for SessionBusyError {
+    const TAG: &'static str = "SessionBusyError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct UnknownError {
     #[serde(rename = "_tag")]
@@ -12262,6 +12836,10 @@ pub struct UnknownError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#ref: Option<String>,
+}
+
+impl crate::error::TaggedError for UnknownError {
+    const TAG: &'static str = "UnknownError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12272,12 +12850,20 @@ pub struct FormNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for FormNotFoundError {
+    const TAG: &'static str = "FormNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormInvalidAnswerError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for FormInvalidAnswerError {
+    const TAG: &'static str = "FormInvalidAnswerError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12288,12 +12874,20 @@ pub struct FormAlreadySettledError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for FormAlreadySettledError {
+    const TAG: &'static str = "FormAlreadySettledError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub skill: SkillID,
     pub message: String,
+}
+
+impl crate::error::TaggedError for SkillNotFoundError {
+    const TAG: &'static str = "SkillNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12307,6 +12901,10 @@ pub struct InstructionEntryValueTooLargeError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for InstructionEntryValueTooLargeError {
+    const TAG: &'static str = "InstructionEntryValueTooLargeError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderNotFoundError {
     #[serde(rename = "_tag")]
@@ -12314,6 +12912,10 @@ pub struct ProviderNotFoundError {
     #[serde(rename = "providerID")]
     pub provider_id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for ProviderNotFoundError {
+    const TAG: &'static str = "ProviderNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12327,6 +12929,10 @@ pub struct ModelNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for ModelNotFoundError {
+    const TAG: &'static str = "ModelNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct UnsupportedModelError {
     #[serde(rename = "_tag")]
@@ -12337,6 +12943,10 @@ pub struct UnsupportedModelError {
     pub model_id: String,
     pub capability: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for UnsupportedModelError {
+    const TAG: &'static str = "UnsupportedModelError";
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -12409,6 +13019,10 @@ pub struct ProviderRequestError {
     pub retry_after_ms: Option<i64>,
 }
 
+impl crate::error::TaggedError for ProviderRequestError {
+    const TAG: &'static str = "ProviderRequestError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationNotFoundError {
     #[serde(rename = "_tag")]
@@ -12416,6 +13030,10 @@ pub struct IntegrationNotFoundError {
     #[serde(rename = "integrationID")]
     pub integration_id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for IntegrationNotFoundError {
+    const TAG: &'static str = "IntegrationNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12429,6 +13047,10 @@ pub struct IntegrationAttemptNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for IntegrationAttemptNotFoundError {
+    const TAG: &'static str = "IntegrationAttemptNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationMethodNotFoundError {
     #[serde(rename = "_tag")]
@@ -12440,6 +13062,10 @@ pub struct IntegrationMethodNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for IntegrationMethodNotFoundError {
+    const TAG: &'static str = "IntegrationMethodNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpServerNotFoundError {
     #[serde(rename = "_tag")]
@@ -12448,11 +13074,19 @@ pub struct McpServerNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for McpServerNotFoundError {
+    const TAG: &'static str = "McpServerNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ForbiddenError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for ForbiddenError {
+    const TAG: &'static str = "ForbiddenError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12464,12 +13098,20 @@ pub struct ProjectNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for ProjectNotFoundError {
+    const TAG: &'static str = "ProjectNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionSavedNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for PermissionSavedNotFoundError {
+    const TAG: &'static str = "PermissionSavedNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12481,12 +13123,20 @@ pub struct PermissionNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for PermissionNotFoundError {
+    const TAG: &'static str = "PermissionNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FileNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub path: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for FileNotFoundError {
+    const TAG: &'static str = "FileNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12497,6 +13147,10 @@ pub struct RpcError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+}
+
+impl crate::error::TaggedError for RpcError {
+    const TAG: &'static str = "RpcError";
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -12549,6 +13203,10 @@ pub struct RpcInternalError {
     pub data: Option<serde_json::Value>,
 }
 
+impl crate::error::TaggedError for RpcInternalError {
+    const TAG: &'static str = "RpcInternalError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PtyNotFoundError {
     #[serde(rename = "_tag")]
@@ -12558,12 +13216,20 @@ pub struct PtyNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for PtyNotFoundError {
+    const TAG: &'static str = "PtyNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PtyFeatureUnsupportedError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub feature: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for PtyFeatureUnsupportedError {
+    const TAG: &'static str = "PtyFeatureUnsupportedError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12575,6 +13241,10 @@ pub struct ScheduleNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for ScheduleNotFoundError {
+    const TAG: &'static str = "ScheduleNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactNotFoundError {
     #[serde(rename = "_tag")]
@@ -12584,12 +13254,20 @@ pub struct ArtifactNotFoundError {
     pub message: String,
 }
 
+impl crate::error::TaggedError for ArtifactNotFoundError {
+    const TAG: &'static str = "ArtifactNotFoundError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
     pub id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for ShellNotFoundError {
+    const TAG: &'static str = "ShellNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12611,6 +13289,10 @@ pub struct WorktreeError {
     pub data: WorktreeErrorData,
 }
 
+impl crate::error::TaggedError for WorktreeError {
+    const TAG: &'static str = "WorktreeError";
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VcsInitNotSupportedError {
     #[serde(rename = "_tag")]
@@ -12618,4 +13300,8 @@ pub struct VcsInitNotSupportedError {
     #[serde(rename = "providerID")]
     pub provider_id: String,
     pub message: String,
+}
+
+impl crate::error::TaggedError for VcsInitNotSupportedError {
+    const TAG: &'static str = "VcsInitNotSupportedError";
 }
