@@ -216,6 +216,57 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("captures and restores a Location opened through a symlinked path", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        const link = path.join(tmp.path, "link")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(project, "scope"), { recursive: true })
+          await fs.writeFile(path.join(project, "scope", "tracked.txt"), "one\n")
+          await initGit(project)
+          // A junction needs no privilege on Windows; other platforms ignore the type.
+          await fs.symlink(project, link, "junction")
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          yield* Effect.promise(() => fs.writeFile(path.join(link, "scope", "tracked.txt"), "two\n"))
+          const after = yield* snapshot.capture()
+          expect(before).toBeDefined()
+          expect(after).toBeDefined()
+          if (!before || !after) return
+          expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("scope/tracked.txt")])
+          yield* snapshot.restore({ files: new Map([[RelativePath.make("scope/tracked.txt"), before]]) })
+          expect(yield* read(path.join(project, "scope", "tracked.txt"))).toBe("one\n")
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, path.join(link, "scope"))))
+      }),
+    ),
+  )
+
+  testEffect(Layer.empty).live("captures a Location opened with different letter case", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(project, "scope"), { recursive: true })
+          await fs.writeFile(path.join(project, "scope", "tracked.txt"), "one\n")
+          await initGit(project)
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          yield* Effect.promise(() => fs.writeFile(path.join(project, "scope", "tracked.txt"), "two\n"))
+          const after = yield* snapshot.capture()
+          expect(before).toBeDefined()
+          expect(after).toBeDefined()
+          if (!before || !after) return
+          expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("scope/tracked.txt")])
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, path.join(project, "SCOPE"))))
+      }),
+    ),
+  )
+
   testEffect(Layer.empty).live("restores many files from several trees and removes paths absent from them", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
