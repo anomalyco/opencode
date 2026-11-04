@@ -1,0 +1,1618 @@
+[
+ {
+  "source": "\\frac{x+1}{y-1}",
+  "text": " x + 1\n───────\n y - 1",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "E = mc^2",
+  "text": "E = mc²",
+  "width": 7,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "a_n",
+  "text": "aₙ",
+  "width": 2,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x_i^2",
+  "text": "x²ᵢ",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x^{}",
+  "text": "x",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x_{}",
+  "text": "x",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x^{}_{}",
+  "text": "x",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x^m_1",
+  "text": " m\nx\n 1",
+  "width": 2,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "x^2_q",
+  "text": " 2\nx\n q",
+  "width": 2,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "x^{\\frac{1}{2}}_1",
+  "text": "  1\n ───\n  2\nx\n 1",
+  "width": 4,
+  "height": 5,
+  "baseline": 3,
+  "styled": []
+ },
+ {
+  "source": "\\sum_1^n",
+  "text": "n\n∑\n1",
+  "width": 1,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "P = \\binom{n}{k}",
+  "text": "    ⎛ n ⎞\nP = ⎜   ⎟\n    ⎝ k ⎠",
+  "width": 9,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{x^2+y^2}",
+  "text": " ╭───────\n╰╯x² + y²",
+  "width": 9,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix}",
+  "text": "⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sum_{i=1}^{n} i^2",
+  "text": "  n\n  ∑   i²\ni = 1",
+  "width": 8,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\frac{1}{2}",
+  "text": " 1\n───\n 2",
+  "width": 3,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\mathbb{R} \\to \\mathcal{C} \\times \\mathfrak{g}",
+  "text": "ℝ → 𝒞 × 𝔤",
+  "width": 9,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\mathbf{\\mathsf{\\textcolor{red}{\\mathit{x}}}}",
+  "text": "x",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": [
+   "0,0 bi red"
+  ]
+ },
+ {
+  "source": "\\frac{1}{1+\\frac{1}{x}}",
+  "text": "    1\n─────────\n      1\n 1 + ───\n      x",
+  "width": 9,
+  "height": 5,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\left[\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\right]",
+  "text": "⎡       ╭──────── ⎤\n⎢ -b ± ╰╯b² - 4ac ⎥\n⎢─────────────────⎥\n⎣       2a        ⎦",
+  "width": 19,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\not\\rightarrow",
+  "text": "↛",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x\\in[0,1]",
+  "text": "x ∈ [0,1]",
+  "width": 9,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "[-1,1]",
+  "text": "[-1,1]",
+  "width": 6,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{x}",
+  "text": " ╭─\n╰╯x",
+  "width": 3,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{x}^{}",
+  "text": " ╭─\n╰╯x",
+  "width": 3,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{x}_{}",
+  "text": " ╭─\n╰╯x",
+  "width": 3,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{x}^{}_{}",
+  "text": " ╭─\n╰╯x",
+  "width": 3,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+  "text": "⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}^{}",
+  "text": "⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}_{}",
+  "text": "⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}^{}_{}",
+  "text": "⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{abcd}",
+  "text": "abcd\n╰┬─╯",
+  "width": 4,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{abcd}^{}",
+  "text": "abcd\n╰┬─╯",
+  "width": 4,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{abcd}_{}",
+  "text": "abcd\n╰┬─╯",
+  "width": 4,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{abcd}^{}_{}",
+  "text": "abcd\n╰┬─╯",
+  "width": 4,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{abcd}",
+  "text": "╭┴─╮\nabcd",
+  "width": 4,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{abcd}^{}",
+  "text": "╭┴─╮\nabcd",
+  "width": 4,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{abcd}_{}",
+  "text": "╭┴─╮\nabcd",
+  "width": 4,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{abcd}^{}_{}",
+  "text": "╭┴─╮\nabcd",
+  "width": 4,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sum",
+  "text": "∑",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sum^{}",
+  "text": "∑",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sum_{}",
+  "text": "∑",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sum^{}_{}",
+  "text": "∑",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{abcd}^{n}",
+  "text": " n\n╭┴─╮\nabcd",
+  "width": 4,
+  "height": 3,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{abcd}_{n}",
+  "text": "abcd\n╰┬─╯\n n",
+  "width": 4,
+  "height": 3,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}^2",
+  "text": "     2\n⎛a b⎞\n⎜   ⎟\n⎝c d⎠",
+  "width": 6,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\begin{cases}x & x>0\\\\x^2+1 & x\\le0\\end{cases}",
+  "text": "⎧x       x > 0\n⎨\n⎩x² + 1  x ≤ 0",
+  "width": 14,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{array}{l|r}\\text{a}&\\text{wide}\\\\\\text{long}&\\text{b}\\end{array}",
+  "text": "a    │ wide\n     │\nlong │    b",
+  "width": 11,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{array}{|l||r|}\\text{a}&\\text{b}\\\\\\text{long}&\\text{c}\\end{array}",
+  "text": "│ a    ││ b │\n│      ││   │\n│ long ││ c │",
+  "width": 13,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[l]{\\text{1}}{\\text{12345}}",
+  "text": " 1\n───────\n 12345",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[r]{\\text{1}}{\\text{12345}}",
+  "text": "     1\n───────\n 12345",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{a + b + c}^{n}",
+  "text": "    n\n╭───┴───╮\na + b + c",
+  "width": 9,
+  "height": 3,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{a + b + c}_{n}",
+  "text": "a + b + c\n╰───┬───╯\n    n",
+  "width": 9,
+  "height": 3,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\frac{1}{2}}]{\\textcolor{red}{x}}",
+  "text": " 1\n───\n 2 ╭─\n  ╰╯x",
+  "width": 5,
+  "height": 4,
+  "baseline": 3,
+  "styled": [
+   "1,0  blue",
+   "0,1  blue",
+   "1,1  blue",
+   "2,1  blue",
+   "1,2  blue",
+   "4,3  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\sqrt{n}}]{\\textcolor{red}{x}}",
+  "text": " ╭─\n╰╯n╭─\n  ╰╯x",
+  "width": 5,
+  "height": 3,
+  "baseline": 2,
+  "styled": [
+   "1,0  blue",
+   "2,0  blue",
+   "0,1  blue",
+   "1,1  blue",
+   "2,1  blue",
+   "4,2  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{123456789}]{\\textcolor{red}{x}}",
+  "text": "123456789╭─\n        ╰╯x",
+  "width": 11,
+  "height": 2,
+  "baseline": 1,
+  "styled": [
+   "0,0  blue",
+   "1,0  blue",
+   "2,0  blue",
+   "3,0  blue",
+   "4,0  blue",
+   "5,0  blue",
+   "6,0  blue",
+   "7,0  blue",
+   "8,0  blue",
+   "10,1  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\frac{123456789}{\\frac{n}{m}}}]{\\textcolor{red}{x}}",
+  "text": " 123456789\n───────────\n     n\n    ───\n     m     ╭─\n          ╰╯x",
+  "width": 13,
+  "height": 6,
+  "baseline": 5,
+  "styled": [
+   "1,0  blue",
+   "2,0  blue",
+   "3,0  blue",
+   "4,0  blue",
+   "5,0  blue",
+   "6,0  blue",
+   "7,0  blue",
+   "8,0  blue",
+   "9,0  blue",
+   "0,1  blue",
+   "1,1  blue",
+   "2,1  blue",
+   "3,1  blue",
+   "4,1  blue",
+   "5,1  blue",
+   "6,1  blue",
+   "7,1  blue",
+   "8,1  blue",
+   "9,1  blue",
+   "10,1  blue",
+   "5,2  blue",
+   "4,3  blue",
+   "5,3  blue",
+   "6,3  blue",
+   "5,4  blue",
+   "12,5  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{3}]{\\textcolor{red}{\\frac{a}{b}}}",
+  "text": "3╭───\n │ a\n │───\n╰╯ b",
+  "width": 5,
+  "height": 4,
+  "baseline": 2,
+  "styled": [
+   "0,0  blue",
+   "3,1  red",
+   "2,2  red",
+   "3,2  red",
+   "4,2  red",
+   "3,3  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\sqrt{\\frac{n}{m}}}]{\\textcolor{red}{\\sqrt{\\frac{a}{b}}}}",
+  "text": " ╭───\n │ n\n │───\n╰╯ m ╭─────\n     │ ╭───\n     │ │ a\n     │ │───\n    ╰╯╰╯ b",
+  "width": 11,
+  "height": 8,
+  "baseline": 6,
+  "styled": [
+   "1,0  blue",
+   "2,0  blue",
+   "3,0  blue",
+   "4,0  blue",
+   "1,1  blue",
+   "3,1  blue",
+   "1,2  blue",
+   "2,2  blue",
+   "3,2  blue",
+   "4,2  blue",
+   "0,3  blue",
+   "1,3  blue",
+   "3,3  blue",
+   "7,4  red",
+   "8,4  red",
+   "9,4  red",
+   "10,4  red",
+   "7,5  red",
+   "9,5  red",
+   "7,6  red",
+   "8,6  red",
+   "9,6  red",
+   "10,6  red",
+   "6,7  red",
+   "7,7  red",
+   "9,7  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\text{\\u6B21}}]{\\textcolor{red}{\\text{\\u754C}}}",
+  "text": "\\u6B21╭──────\n     ╰╯\\u754C",
+  "width": 13,
+  "height": 2,
+  "baseline": 1,
+  "styled": [
+   "0,0  blue",
+   "1,0  blue",
+   "2,0  blue",
+   "3,0  blue",
+   "4,0  blue",
+   "5,0  blue",
+   "7,1  red",
+   "8,1  red",
+   "9,1  red",
+   "10,1  red",
+   "11,1  red",
+   "12,1  red"
+  ]
+ },
+ {
+  "source": "\\sqrt[\\textcolor{blue}{\\frac{1}{2}}]{\\textcolor{red}{}}",
+  "text": " 1\n───\n 2 ╭\n  ╰╯",
+  "width": 4,
+  "height": 4,
+  "baseline": 3,
+  "styled": [
+   "1,0  blue",
+   "0,1  blue",
+   "1,1  blue",
+   "2,1  blue",
+   "1,2  blue"
+  ]
+ },
+ {
+  "source": "\\sqrt{\\sqrt{\\sqrt{x}}}",
+  "text": " ╭─────\n │ ╭───\n │ │ ╭─\n╰╯╰╯╰╯x",
+  "width": 7,
+  "height": 4,
+  "baseline": 3,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt{\\frac{a}{b}}",
+  "text": " ╭───\n │ a\n │───\n╰╯ b",
+  "width": 5,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt[3]{x}",
+  "text": "3╭─\n╰╯x",
+  "width": 3,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt[\\frac{1}{2}]{x}",
+  "text": " 1\n───\n 2 ╭─\n  ╰╯x",
+  "width": 5,
+  "height": 4,
+  "baseline": 3,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt[\\sqrt{n}]{x}",
+  "text": " ╭─\n╰╯n╭─\n  ╰╯x",
+  "width": 5,
+  "height": 3,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\|v\\|",
+  "text": "║v║",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left\\|v\\right\\|",
+  "text": "║v║",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left|v\\right|",
+  "text": "│v│",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left(A\\rightarrow B\\right)",
+  "text": "(A → B)",
+  "width": 7,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left\\lbrace x\\right\\rbrace",
+  "text": "{x}",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\operatorname{arg\\,max} x",
+  "text": "arg max x",
+  "width": 9,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\textrm{if }x",
+  "text": "if x",
+  "width": 4,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\displaylines{x=1\\\\y=2}",
+  "text": "x = 1\n\ny = 2",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{aligned}&=x\\\\&=y\\end{aligned}",
+  "text": "  = x\n\n  = y",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{aligned}{}&=x\\\\{}&=y\\end{aligned}",
+  "text": "  = x\n\n  = y",
+  "width": 5,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\frac{x^2+1}{y_0}",
+  "text": " x² + 1\n────────\n   y₀",
+  "width": 8,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{array}{cc}a & b \\\\ c & d\\end{array}",
+  "text": "a b\n\nc d",
+  "width": 3,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{align*}a &= b \\\\ c &= d\\end{align*}",
+  "text": "a  = b\n\nc  = d",
+  "width": 6,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\left(\\left[A\\right]\\rightharpoonup B\\right)",
+  "text": "([A] ⇀ B)",
+  "width": 9,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left(A\\rightarrow B",
+  "error": true
+ },
+ {
+  "source": "\\left(A\\rightward B\\right)",
+  "error": true
+ },
+ {
+  "source": "\\begin{matrix}a&&\\\\&b&\\end{matrix}",
+  "text": "a\n\n  b",
+  "width": 4,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{matrix}a\\\\\\end{matrix}",
+  "text": "a",
+  "width": 1,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{matrix}\\\\\\end{matrix}",
+  "text": "",
+  "width": 0,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\displaylines{\\frac{1}{2}\\\\{y}}+z",
+  "text": " 1\n───\n 2  +z\n\n y",
+  "width": 6,
+  "height": 5,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\displaylines[l]{x\\\\y}",
+  "error": true
+ },
+ {
+  "source": "\\displaylines{x\\\\y",
+  "error": true
+ },
+ {
+  "source": "\\cfrac{1}{23}",
+  "text": " 1\n────\n 23",
+  "width": 4,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[]{1}{23}",
+  "text": " 1\n────\n 23",
+  "width": 4,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[l]{1}{23}",
+  "text": " 1\n────\n 23",
+  "width": 4,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[r]{1}{23}",
+  "text": "  1\n────\n 23",
+  "width": 4,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\cfrac[c]{1}{23}",
+  "error": true
+ },
+ {
+  "source": "\\cfrac[lr]{1}{23}",
+  "error": true
+ },
+ {
+  "source": "\\cfrac[left]{1}{23}",
+  "error": true
+ },
+ {
+  "source": "\\cfrac[l{1}{23}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{ | l || c r | }a&b&c\\end{array}",
+  "text": "│ a ││ b c │",
+  "width": 12,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{array}{}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{||}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{p{2cm}}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{*{2}{c}}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{c@{}c}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{lXr}a\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}a&b\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\overbrace{a+b}^{n}",
+  "text": "  n\n╭─┴─╮\na + b",
+  "width": 5,
+  "height": 3,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{x}_{k}",
+  "text": " x\n╰┬╯\n k",
+  "width": 3,
+  "height": 3,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\lbrace x\\rbrace",
+  "text": "{x}",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left\\unknown x\\right)",
+  "error": true
+ },
+ {
+  "source": "\\left(x\\right\\unknown",
+  "error": true
+ },
+ {
+  "source": "\\big\\unknown",
+  "error": true
+ },
+ {
+  "source": "\\left(x\\middle\\unknown y\\right)",
+  "error": true
+ },
+ {
+  "source": "\\definitelyUnknown{x}",
+  "error": true
+ },
+ {
+  "source": "\\text{left \\{ only}",
+  "text": "left { only",
+  "width": 11,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\text{right \\} only}",
+  "text": "right } only",
+  "width": 12,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\operatorname*{arg\\,max}_{x}",
+  "text": "arg max\n   x",
+  "width": 7,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\int\\limits_0^1",
+  "text": "1\n∫\n0",
+  "width": 1,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sum\\nolimits_{i=1}",
+  "text": "∑ᵢ₌₁",
+  "width": 4,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\operatorname{arg\\,max}",
+  "text": "arg max",
+  "width": 7,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\textrm{ if }",
+  "text": " if",
+  "width": 4,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{matrix}]",
+  "error": true
+ },
+ {
+  "source": "\\begin{matrix}x}",
+  "error": true
+ },
+ {
+  "source": "\\begin{matrix}&}",
+  "error": true
+ },
+ {
+  "source": "{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{x}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",
+  "error": true
+ },
+ {
+  "source": "\\frac{1}{",
+  "error": true
+ },
+ {
+  "source": "\\unsupported{x}",
+  "error": true
+ },
+ {
+  "source": "\\cfrac[x]{1}{2}",
+  "error": true
+ },
+ {
+  "source": "\\begin{array}{p{2cm}}x\\end{array}",
+  "error": true
+ },
+ {
+  "source": "\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}",
+  "error": true
+ },
+ {
+  "source": "\\cfrac[l]{1}{12345}",
+  "text": " 1\n───────\n 12345",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\underbrace{a+b+c}_{n}",
+  "text": "a + b + c\n╰───┬───╯\n    n",
+  "width": 9,
+  "height": 3,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{array}{l|r}a&wide\\\\long&b\\end{array}",
+  "text": "a    │ wide\n     │\nlong │    b",
+  "width": 11,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{aligned}a&=b+c\\\\&=d\\end{aligned}",
+  "text": "a  = b + c\n\n   = d",
+  "width": 10,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\frac{a_1+b_1}{c_1+d_1}",
+  "text": " a₁ + b₁\n─────────\n c₁ + d₁",
+  "width": 9,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\frac{a_1+b_1}{c_1+d_1}+\\frac{a_",
+  "error": true
+ },
+ {
+  "source": "\\frac{a_1+b_1}{c_1+d_1}+\\frac{a_2+b_2}{c_2+d_2}",
+  "text": " a₁ + b₁     a₂ + b₂\n───────── + ─────────\n c₁ + d₁     c₂ + d₂",
+  "width": 21,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "x^2 + \\frac{1}{",
+  "error": true
+ },
+ {
+  "source": "x^2 + \\unsupported{x}",
+  "error": true
+ },
+ {
+  "source": "\\text{Start a very long formula with enough content to overflow Finish}",
+  "text": "Start a very long formula with enough content to overflow Finish",
+  "width": 64,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x=\\sqrt{\\frac{1}{2}}",
+  "text": "     ╭───\n     │ 1\nx =  │───\n    ╰╯ 2",
+  "width": 9,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\text{\\u4E2D\\u6587}=x",
+  "text": "\\u4E2D\\u6587 = x",
+  "width": 16,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\frac{\\text{\\u4E2D\\u6587}}{abcd}=x",
+  "text": " \\u4E2D\\u6587\n────────────── = x\n     abcd",
+  "width": 18,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "e^{i\\pi} + 1 = 0",
+  "text": " iπ\ne   + 1 = 0",
+  "width": 11,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}",
+  "text": "              ╭─\n ∞  -x²      ╰╯π\n∫  e   dx = ─────\n 0            2",
+  "width": 17,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1",
+  "text": "       sin x\n lim  ─────── = 1\nx → 0    x",
+  "width": 17,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "f(x) = \\sum_{n=0}^{\\infty} \\frac{f^{(n)}(a)}{n!}(x-a)^n",
+  "text": "         ∞    f⁽ⁿ⁾(a)\nf(x) =   ∑   ───────── (x - a)ⁿ\n       n = 0    n!",
+  "width": 31,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\nabla \\times \\vec{E} = -\\frac{\\partial \\vec{B}}{\\partial t}",
+  "text": "            →\n    →      ∂B\n∇ × E = - ────\n           ∂t",
+  "width": 14,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\hat{x} + \\bar{y} + \\tilde{z} + \\dot{a} + \\ddot{b} + \\widehat{abc} + \\overline{xy} + \\underline{uv}",
+  "text": "^   ─   ~   ·   ¨    ⌢    ──\nx + y + z + a + b + abc + xy + uv\n                               ──",
+  "width": 33,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overset{\\text{def}}{=} \\underset{n}{\\max} \\stackrel{?}{=}",
+  "text": "def   ?\n = max=\n    n",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix} \\begin{Bmatrix}a\\end{Bmatrix} \\begin{vmatrix}a & b \\\\ c & d\\end{vmatrix} \\begin{Vmatrix}x\\end{Vmatrix}",
+  "text": "⎡1 0⎤     │a b│\n⎢   ⎥ {a} │   │ ║x║\n⎣0 1⎦     │c d│",
+  "width": 19,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{gather}a = b \\\\ c = d\\end{gather} \\begin{smallmatrix}1&2\\end{smallmatrix}",
+  "text": "a = b\n      1 2\nc = d",
+  "width": 9,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\left\\langle u, v \\right\\rangle \\left\\lfloor x \\right\\rfloor \\left\\lceil y \\right\\rceil",
+  "text": "⟨u,v⟩⌊x⌋⌈y⌉",
+  "width": 11,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left( \\frac{a}{b} \\right) \\left\\{ \\frac{a}{b} \\right\\} \\left. \\frac{a}{b} \\right|",
+  "text": "⎛ a ⎞⎧ a ⎫ a │\n⎜───⎟⎨───⎬───│\n⎝ b ⎠⎩ b ⎭ b │",
+  "width": 14,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\alpha\\beta\\gamma\\Gamma\\epsilon\\varepsilon\\phi\\varphi \\infty \\partial \\forall \\exists \\emptyset",
+  "text": "αβγΓεϵϕφ∞∂∀∃∅",
+  "width": 13,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "a \\le b \\ge c \\ne d \\approx e \\equiv f \\sim g \\subset h \\subseteq i \\in j \\notin k",
+  "text": "a ≤ b ≥ c ≠ d ≈ e ≡ f ∼ g ⊂ h ⊆ i ∈ j ∉ k",
+  "width": 41,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\not= \\not\\in \\not\\equiv \\not<",
+  "text": "≠ ∉ ≢ ≮",
+  "width": 7,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "A \\cup B \\cap C \\setminus D \\oplus E \\otimes F \\cdot G \\times H \\div I \\pm J \\mp K",
+  "text": "A ∪ B ∩ C ∖ D ⊕ E ⊗ F · G × H ÷ I ± J ∓ K",
+  "width": 41,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\Rightarrow \\Leftarrow \\Leftrightarrow \\mapsto \\to \\gets \\longrightarrow",
+  "text": "⇒ ⇐ ⇔ ↦ → ← ⟶",
+  "width": 13,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\cdots \\ldots \\vdots \\ddots , ; :",
+  "text": "⋯…⋮⋱,;:",
+  "width": 7,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sin x + \\cos y + \\tan z + \\log w + \\ln v + \\exp u + \\det A + \\gcd(a,b)",
+  "text": "sin x + cos y + tan z + log w + ln v + exp u + det A + gcd (a,b)",
+  "width": 64,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\max_{x} f(x) \\min_{y} g(y) \\sup_n a_n \\inf_n b_n \\limsup_{n\\to\\infty} c_n",
+  "text": "max f(x) min g(y) supₙ aₙ infₙ bₙ limsup cₙ\n x        y                       n → ∞",
+  "width": 43,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\prod_{i=1}^n x_i \\coprod \\iint \\iiint \\oint \\bigcup_i A_i \\bigcap_j B_j",
+  "text": "  n\n  ∏   xᵢ ∐ ∬ ∭ ∮ ⋃ Aᵢ ⋂ Bⱼ\ni = 1            i    j",
+  "width": 26,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\mathrm{d}x \\mathbf{v} \\mathit{w} \\mathsf{S} \\mathtt{code1} \\mathbb{N}\\mathbb{Z}\\mathbb{Q}\\mathbb{C} \\mathcal{L} \\mathfrak{H}",
+  "text": "dxvw𝖲𝚌𝚘𝚍𝚎𝟷ℕℤℚℂℒℌ",
+  "width": 16,
+  "height": 1,
+  "baseline": 0,
+  "styled": [
+   "2,0 b",
+   "3,0 i"
+  ]
+ },
+ {
+  "source": "a\\quad b\\qquad c\\,d\\;e\\:f\\!g~h\\enspace i",
+  "text": "a  b    cd e fg h i",
+  "width": 19,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\text{if } x > 0 \\text{ and } y \\mbox{ or } z",
+  "text": "if x > 0 and y or z",
+  "width": 19,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\color{red} x + y",
+  "text": "x + y",
+  "width": 5,
+  "height": 1,
+  "baseline": 0,
+  "styled": [
+   "0,0  red",
+   "2,0  red",
+   "4,0  red"
+  ]
+ },
+ {
+  "source": "\\textcolor{blue}{\\frac{1}{2}}",
+  "text": " 1\n───\n 2",
+  "width": 3,
+  "height": 3,
+  "baseline": 1,
+  "styled": [
+   "1,0  blue",
+   "0,1  blue",
+   "1,1  blue",
+   "2,1  blue",
+   "1,2  blue"
+  ]
+ },
+ {
+  "source": "\\displaystyle \\frac{a}{b} \\textstyle c \\scriptstyle d",
+  "text": "  a\n ─── cd\n  b",
+  "width": 7,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\bigl( x \\bigr) \\Big[ y \\Big] \\bigg\\{ z \\bigg\\} \\Bigg| w \\Bigg|",
+  "text": "(x)[y]{z}│w│",
+  "width": 12,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\pmod{7} a \\bmod b a \\mod c",
+  "text": " (mod 7)a mod ba mod c",
+  "width": 22,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\dfrac{1}{2} \\tfrac{3}{4} \\dbinom{n}{2} \\tbinom{m}{3}",
+  "text": " 1   3  ⎛ n ⎞⎛ m ⎞\n─── ─── ⎜   ⎟⎜   ⎟\n 2   4  ⎝ 2 ⎠⎝ 3 ⎠",
+  "width": 18,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\# \\$ \\% \\& \\_ \\{ \\} \\backslash",
+  "text": "#$%&_{}\\",
+  "width": 8,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x^{2^{3}} x_{i_{j}} x^{-1} x^{n+1} x_{ij} x^{(n)}",
+  "text": " 2³\nx  x  x⁻¹xⁿ⁺¹xᵢⱼx⁽ⁿ⁾\n    iⱼ",
+  "width": 20,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "f'(x) f''(x) x^\\prime",
+  "text": "            ′\nf'(x)f''(x)x",
+  "width": 13,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "% comment\nx + y % trailing\n= z",
+  "text": "x + y = z",
+  "width": 9,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\begin{cases} 0 & \\text{if } x < 0 \\\\ \\frac{x}{2} & \\text{otherwise} \\end{cases}",
+  "text": "⎧0    if x < 0\n⎪\n⎨ x\n⎪───  otherwise\n⎩ 2",
+  "width": 15,
+  "height": 5,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\begin{pmatrix} \\frac{1}{2} & 0 \\\\ 0 & \\sqrt{2} \\end{pmatrix}",
+  "text": "⎛ 1     ⎞\n⎜───  0 ⎟\n⎜ 2     ⎟\n⎜       ⎟\n⎜     ╭─⎟\n⎝ 0  ╰╯2⎠",
+  "width": 9,
+  "height": 6,
+  "baseline": 3,
+  "styled": []
+ },
+ {
+  "source": "\\begin{aligned} f(x) &= (x+1)^2 \\\\ &= x^2 + 2x + 1 \\end{aligned}",
+  "text": "f(x)  = (x + 1)²\n\n      = x² + 2x + 1",
+  "width": 19,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{align} a &= b & c &= d \\end{align}",
+  "text": "a  = b  c  = d",
+  "width": 14,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sqrt[n]{x^n + y^n}",
+  "text": "n╭───────\n╰╯xⁿ + yⁿ",
+  "width": 9,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\frac{\\partial^2 u}{\\partial t^2} = c^2 \\nabla^2 u",
+  "text": " ∂²u\n───── = c²∇²u\n ∂t²",
+  "width": 13,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\begin{unknownenv}x\\end{unknownenv}",
+  "error": true
+ },
+ {
+  "source": "\\begin{equation}x\\end{equation}",
+  "error": true
+ },
+ {
+  "source": "x^",
+  "error": true
+ },
+ {
+  "source": "x_",
+  "error": true
+ },
+ {
+  "source": "\\frac{1}",
+  "error": true
+ },
+ {
+  "source": "\\sqrt[3",
+  "error": true
+ },
+ {
+  "source": "{x",
+  "error": true
+ },
+ {
+  "source": "x}",
+  "error": true
+ },
+ {
+  "source": "\\right)",
+  "error": true
+ },
+ {
+  "source": "\\text{unterminated",
+  "error": true
+ },
+ {
+  "source": "\\not",
+  "text": "",
+  "width": 0,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\left",
+  "error": true
+ },
+ {
+  "source": "- a",
+  "text": "-a",
+  "width": 2,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "a -",
+  "text": "a-",
+  "width": 2,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "(-a) + [-b] - \\{-c\\}",
+  "text": "(-a) + [-b] - { - c}",
+  "width": 20,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "a = -b",
+  "text": "a = -b",
+  "width": 6,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\vec{v} \\cdot \\vec{w}",
+  "text": "→   →\nv · w",
+  "width": 5,
+  "height": 2,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\overbrace{x+y}^{\\text{sum}} + \\underbrace{a \\cdot b}_{\\text{product}}",
+  "text": " sum\n╭─┴─╮\nx + y +  a · b\n         ╰─┬─╯\n        product",
+  "width": 15,
+  "height": 5,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "\\binom{n}{k} = \\frac{n!}{k!(n-k)!}",
+  "text": "⎛ n ⎞        n!\n⎜   ⎟ = ────────────\n⎝ k ⎠    k!(n - k)!",
+  "width": 20,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\left( \\sum_{k=1}^n a_k b_k \\right)^2 \\le \\left( \\sum_{k=1}^n a_k^2 \\right) \\left( \\sum_{k=1}^n b_k^2 \\right)",
+  "text": "            2\n⎛  n       ⎞    ⎛  n      ⎞⎛  n      ⎞\n⎜  ∑   aₖbₖ⎟  ≤ ⎜  ∑   a²ₖ⎟⎜  ∑   b²ₖ⎟\n⎝k = 1     ⎠    ⎝k = 1    ⎠⎝k = 1    ⎠",
+  "width": 38,
+  "height": 4,
+  "baseline": 2,
+  "styled": []
+ },
+ {
+  "source": "",
+  "text": "",
+  "width": 0,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "   ",
+  "text": "",
+  "width": 0,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x\n\ny",
+  "text": "xy",
+  "width": 2,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "x_i^2",
+  "options": {
+   "compactScripts": false
+  },
+  "text": " 2\nx\n i",
+  "width": 2,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\sum_1^n",
+  "options": {
+   "displayMode": false
+  },
+  "text": "∑ⁿ₁",
+  "width": 3,
+  "height": 1,
+  "baseline": 0,
+  "styled": []
+ },
+ {
+  "source": "\\sum_1^n",
+  "options": {
+   "compactScripts": false
+  },
+  "text": "n\n∑\n1",
+  "width": 1,
+  "height": 3,
+  "baseline": 1,
+  "styled": []
+ },
+ {
+  "source": "\\lim_{x\\to0} f",
+  "options": {
+   "displayMode": false
+  },
+  "text": "lim      f\n   x → 0",
+  "width": 10,
+  "height": 2,
+  "baseline": 0,
+  "styled": []
+ }
+]
