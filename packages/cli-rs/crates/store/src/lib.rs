@@ -13,3 +13,9 @@ pub mod sessions;
 pub mod shells;
 pub mod state;
 pub mod target;
+
+pub use changes::Changes;
+pub use inbox::{InboxExt, PendingStatus, Prompt};
+pub use messages::{LoadMore, MessageExt, Transcript};
+pub use sessions::CreateSession;
+pub use state::{Data, Error, Options, SessionStatus, State, Task};
