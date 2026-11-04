@@ -1,6 +1,4 @@
-//! `translate.test.ts`: the rows for the turn fold. Left to C.12: the tool location rows ("locates the
-//! file of an edit tool", "... write tool", "... patch tool", and the `locations` of the shell row), the
-//! compaction rows, and the replay rows.
+//! `translate.test.ts`: the rows for the turn fold, the compaction rows, and the replay rows.
 
 use opencode_acp::translate::{
     self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState,
@@ -307,6 +305,7 @@ fn turn_translation() {
                 { "sessionUpdate": "tool_call", "toolCallId": "call_ok", "name": "shell", "status": "pending", "kind": "execute" },
                 {
                     "sessionUpdate": "tool_call_update", "status": "in_progress", "title": "printf done",
+                    "locations": [{ "path": "/workspace/sub" }],
                     "rawInput": { "command": "printf done", "workdir": "sub" },
                 },
                 { "sessionUpdate": "tool_call_update", "status": "in_progress" },
@@ -342,6 +341,7 @@ fn turn_translation() {
                 { "status": "in_progress" },
                 {
                     "status": "failed", "kind": "read",
+                    "locations": [{ "path": "/workspace/missing.ts" }],
                     "content": [
                         { "type": "content", "content": { "type": "text", "text": "opening" } },
                         { "type": "content", "content": { "type": "text", "text": "not found" } },
@@ -469,4 +469,410 @@ fn reports_a_pending_retry_and_clears_it_when_the_next_step_starts() {
         translate::response(&cleared.state, ROOT, Terminal::Succeeded)["_meta"],
         json!({})
     );
+}
+
+fn compaction_started(session: &str) -> Value {
+    durable_event(
+        "session.compaction.started",
+        json!({ "sessionID": session, "reason": "manual", "inputID": "msg_compact" }),
+    )
+}
+
+fn compaction_delta(text: &str, session: &str) -> Value {
+    crate::wire::ephemeral_event(
+        "session.compaction.delta",
+        json!({ "sessionID": session, "text": text }),
+    )
+}
+
+fn compaction_ended(text: &str, session: &str) -> Value {
+    durable_event(
+        "session.compaction.ended",
+        json!({ "sessionID": session, "reason": "manual", "text": text }),
+    )
+}
+
+fn compaction_failed(error: Value, reason: &str) -> Value {
+    durable_event(
+        "session.compaction.failed",
+        json!({ "sessionID": ROOT, "reason": reason, "error": error }),
+    )
+}
+
+fn marker(value: Value) -> Value {
+    let mut marker = json!({ "messageId": "msg_compact", "reason": "manual" });
+    if let (Some(marker), Value::Object(value)) = (marker.as_object_mut(), value) {
+        marker.extend(value);
+    }
+    json!({ "sessionUpdate": "session_info_update", "_meta": { "opencode/compaction": marker } })
+}
+
+fn provider_error() -> Value {
+    json!({ "type": "provider.error", "message": "summary request failed" })
+}
+
+#[test]
+fn tool_location_and_compaction_rows() {
+    let edit = |id: &str, name: &str, input: Value, path: &str| {
+        (
+            live(vec![
+                tool_started(ROOT, id, name),
+                tool_called(ROOT, id, input),
+                tool_succeeded(ROOT, id, json!({}), "done"),
+            ]),
+            json!({ "updates": [{}, { "locations": [{ "path": path }] }, { "locations": [{ "path": path }] }] }),
+        )
+    };
+    let (edit_events, edit_expected) = edit(
+        "call_edit",
+        "edit",
+        json!({ "path": "/workspace/a.ts", "oldString": "a", "newString": "b" }),
+        "/workspace/a.ts",
+    );
+    let (write_events, write_expected) = edit(
+        "call_write",
+        "write",
+        json!({ "path": "/workspace/b.ts", "content": "b" }),
+        "/workspace/b.ts",
+    );
+    let (patch_events, patch_expected) = edit(
+        "call_patch",
+        "patch",
+        json!({ "patchText": "*** Begin Patch\n*** Update File: /workspace/c.ts\n@@\n-one\n+two\n*** End Patch" }),
+        "/workspace/c.ts",
+    );
+    let child = |compaction: Value| {
+        let mut meta = child_meta("ses_child", ROOT, 1, "Explore");
+        meta["opencode/compaction"] = compaction;
+        json!({ "_meta": meta })
+    };
+    // (name, compaction, child updates, events, expected)
+    let rows: Vec<(&str, bool, bool, Vec<Value>, Value)> = vec![
+        (
+            "locates the file of an edit tool",
+            false,
+            false,
+            edit_events,
+            edit_expected,
+        ),
+        (
+            "locates the file of a write tool",
+            false,
+            false,
+            write_events,
+            write_expected,
+        ),
+        (
+            "locates the files of a patch tool",
+            false,
+            false,
+            patch_events,
+            patch_expected,
+        ),
+        (
+            "cancels the compaction a cancelled turn left open",
+            true,
+            false,
+            live(vec![compaction_started(ROOT)]),
+            json!({ "abandoned": [{ "sessionUpdate": "compaction_update", "compactionId": "msg_compact", "status": "cancelled" }] }),
+        ),
+        (
+            "streams a compaction's summary and completes it with the full summary",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_delta("Sum", ROOT),
+                compaction_delta("mary", ROOT),
+                compaction_ended("Summary", ROOT),
+            ]),
+            json!({ "updates": [
+                { "sessionUpdate": "compaction_update", "compactionId": "msg_compact", "status": "in_progress" },
+                { "sessionUpdate": "compaction_summary_chunk", "compactionId": "msg_compact", "content": { "text": "Sum" } },
+                { "sessionUpdate": "compaction_summary_chunk", "compactionId": "msg_compact", "content": { "text": "mary" } },
+                { "status": "completed", "summary": [{ "type": "text", "text": "Summary" }] },
+            ] }),
+        ),
+        (
+            "clears the summary of a compaction that completes without a readable one",
+            true,
+            false,
+            live(vec![compaction_started(ROOT), compaction_ended("", ROOT)]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "completed", "summary": null }] }),
+        ),
+        (
+            "fails a compaction with its error and clears the partial summary",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_delta("partial", ROOT),
+                compaction_failed(provider_error(), "manual"),
+            ]),
+            json!({ "updates": [
+                { "status": "in_progress" },
+                { "sessionUpdate": "compaction_summary_chunk" },
+                { "status": "failed", "summary": null, "error": "summary request failed" },
+            ] }),
+        ),
+        (
+            "keeps core's own compaction failure messages",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_failed(
+                    json!({ "type": "compaction.failed", "message": "Output limit" }),
+                    "manual",
+                ),
+            ]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "failed", "error": "Output limit" }] }),
+        ),
+        (
+            "reports a compaction defect as a generic failure",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_failed(
+                    json!({ "type": "compaction.failed", "message": "Error: locked\n    at run (compaction.ts:1:1)" }),
+                    "manual",
+                ),
+            ]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "failed", "error": "Compaction failed" }] }),
+        ),
+        (
+            "reports an interrupted compaction as cancelled",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_failed(
+                    json!({ "type": "compaction.interrupted", "message": "interrupted" }),
+                    "manual",
+                ),
+            ]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "cancelled", "summary": null }] }),
+        ),
+        (
+            "reports an aborted compaction as cancelled",
+            true,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_failed(
+                    json!({ "type": "aborted", "message": "Compaction cancelled" }),
+                    "manual",
+                ),
+            ]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "cancelled", "summary": null }] }),
+        ),
+        (
+            "opens a compaction that fails before it starts before settling it",
+            true,
+            false,
+            live(vec![compaction_failed(
+                json!({ "type": "compaction.unavailable", "message": "Nothing to compact yet" }),
+                "auto",
+            )]),
+            json!({ "updates": [
+                { "compactionId": "msg_2", "status": "in_progress" },
+                { "compactionId": "msg_2", "status": "failed", "error": "Nothing to compact yet" },
+            ] }),
+        ),
+        (
+            "drops summary chunks outside an open compaction",
+            true,
+            false,
+            live(vec![
+                compaction_delta("early", ROOT),
+                compaction_started(ROOT),
+                compaction_ended("Summary", ROOT),
+                compaction_delta("late", ROOT),
+            ]),
+            json!({ "updates": [{ "status": "in_progress" }, { "status": "completed" }] }),
+        ),
+        (
+            "drops a compaction end without a start",
+            true,
+            false,
+            live(vec![compaction_ended("Summary", ROOT)]),
+            json!({ "updates": [] }),
+        ),
+        (
+            "marks a compaction without forwarding its summary when the client lacks the capability",
+            false,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_delta("Summary", ROOT),
+                compaction_ended("Summary", ROOT),
+            ]),
+            json!({ "updates": [marker(json!({ "status": "started" })), marker(json!({ "status": "completed" }))] }),
+        ),
+        (
+            "marks a failed compaction with the full error",
+            false,
+            false,
+            live(vec![
+                compaction_started(ROOT),
+                compaction_failed(provider_error(), "manual"),
+            ]),
+            json!({ "updates": [
+                marker(json!({ "status": "started" })),
+                marker(json!({ "status": "failed", "error": provider_error() })),
+            ] }),
+        ),
+        (
+            "marks a compaction that fails before it starts without opening it",
+            false,
+            false,
+            live(vec![compaction_failed(provider_error(), "auto")]),
+            json!({ "updates": [{ "_meta": { "opencode/compaction": {
+                "status": "failed", "messageId": "msg_2", "reason": "auto", "error": provider_error(),
+            } } }] }),
+        ),
+        (
+            "keeps a child's compaction projected onto the parent as a marker",
+            true,
+            false,
+            live(vec![
+                child_created("ses_child", ROOT, "Explore"),
+                compaction_started("ses_child"),
+                compaction_ended("Summary", "ses_child"),
+            ]),
+            json!({ "updates": [child(json!({ "status": "started" })), child(json!({ "status": "completed" }))] }),
+        ),
+        (
+            "sends a child's compaction as standard updates through the extension",
+            true,
+            true,
+            live(vec![
+                child_created("ses_child", ROOT, "Explore"),
+                compaction_started("ses_child"),
+                compaction_ended("Summary", "ses_child"),
+            ]),
+            json!({
+                "updates": [],
+                "children": [
+                    { "status": "created" },
+                    { "type": "update", "update": { "sessionUpdate": "compaction_update", "status": "in_progress" } },
+                    { "type": "update", "update": { "sessionUpdate": "compaction_update", "status": "completed" } },
+                ],
+            }),
+        ),
+    ];
+    for (name, compaction, child_updates, events, expected) in rows {
+        let mut context = ctx(child_updates);
+        context.compaction = compaction;
+        let actual = translated(&events, &context);
+        assert!(
+            crate::wire::matches(&actual, &expected),
+            "{name}\n  actual:   {actual}\n  expected: {expected}"
+        );
+    }
+}
+
+fn compaction_message(status: &str, extra: Value) -> Value {
+    let mut message = json!({ "id": "msg_compaction", "type": "compaction", "reason": "auto", "time": { "created": 1 }, "status": status });
+    if let (Some(message), Value::Object(extra)) = (message.as_object_mut(), extra) {
+        message.extend(extra);
+    }
+    message
+}
+
+#[test]
+fn replay_rows() {
+    // (name, compaction, messages, expected updates)
+    let rows: Vec<(&str, bool, Vec<Value>, Value)> = vec![
+        (
+            "replays a completed compaction as one terminal update",
+            true,
+            vec![compaction_message(
+                "completed",
+                json!({ "summary": "Summary" }),
+            )],
+            json!([{ "compactionId": "msg_compaction", "status": "completed", "summary": [{ "type": "text", "text": "Summary" }] }]),
+        ),
+        (
+            "replays a compaction without a summary as cleared",
+            true,
+            vec![compaction_message("completed", json!({ "summary": "" }))],
+            json!([{ "status": "completed", "summary": null }]),
+        ),
+        (
+            "replays a failed compaction with its error",
+            true,
+            vec![compaction_message(
+                "failed",
+                json!({ "error": provider_error() }),
+            )],
+            json!([{ "status": "failed", "summary": null, "error": "summary request failed" }]),
+        ),
+        (
+            "replays a cancelled compaction as cancelled",
+            true,
+            vec![compaction_message(
+                "failed",
+                json!({ "error": { "type": "aborted", "message": "Compaction cancelled" } }),
+            )],
+            json!([{ "status": "cancelled", "summary": null }]),
+        ),
+        (
+            "skips a running compaction on replay",
+            true,
+            vec![compaction_message("running", json!({ "summary": "" }))],
+            json!([]),
+        ),
+        (
+            "replays a compaction as a marker when the client lacks the capability",
+            false,
+            vec![compaction_message(
+                "completed",
+                json!({ "summary": "Summary" }),
+            )],
+            json!([{
+                "sessionUpdate": "session_info_update",
+                "_meta": { "opencode/compaction": { "status": "completed", "messageId": "msg_compaction", "reason": "auto" } },
+            }]),
+        ),
+        (
+            "replays reasoning with the same message IDs as live reasoning ordinals",
+            false,
+            vec![crate::wire::assistant_message(
+                "msg_a",
+                json!([
+                    { "type": "reasoning", "text": "think" },
+                    { "type": "text", "text": "answer" },
+                    { "type": "reasoning", "text": "more" },
+                ]),
+            )],
+            json!([
+                { "sessionUpdate": "agent_thought_chunk", "messageId": "msg_a:reasoning:0" },
+                { "sessionUpdate": "agent_message_chunk", "messageId": "msg_a" },
+                { "sessionUpdate": "agent_thought_chunk", "messageId": "msg_a:reasoning:1" },
+            ]),
+        ),
+    ];
+    for (name, compaction, messages, expected) in rows {
+        let capabilities = opencode_acp::capabilities::Capabilities {
+            child_session_updates: false,
+            form_elicitation: false,
+            compaction,
+        };
+        let actual = json!(
+            messages
+                .iter()
+                .flat_map(|message| opencode_acp::replay::updates(
+                    message,
+                    "/workspace",
+                    &capabilities
+                ))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            crate::wire::matches(&actual, &expected),
+            "{name}\n  actual:   {actual}\n  expected: {expected}"
+        );
+    }
 }
