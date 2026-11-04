@@ -10,6 +10,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{PairingCode, ServerInfo};
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use qrcode::bits::Bits;
 use qrcode::{EcLevel, QrCode, Version};
@@ -47,7 +48,7 @@ pub fn install(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("pair keymap layer: {error}");
         }
     }

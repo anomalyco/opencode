@@ -473,7 +473,7 @@ fn palette_commands(kit: &Kit) -> Rc<RefCell<Vec<String>>> {
         ],
         ..KeymapLayer::default()
     });
-    std::mem::forget(layer);
+    layer.unwrap().forget();
     ran
 }
 

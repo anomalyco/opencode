@@ -21,7 +21,7 @@ use opencode_api::generated::{
 use opencode_local::storage::Storage;
 use opencode_store::{Changes, SessionStatus, State};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
+use opentui::keymap::{Condition, Disposer};
 use serde::{Deserialize, Serialize};
 
 use crate::app::Tui;
@@ -336,7 +336,7 @@ fn install_commands(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("tab keymap layer: {error}");
         }
     }

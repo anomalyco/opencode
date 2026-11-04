@@ -94,7 +94,7 @@ pub fn install(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("integration keymap layer: {error}");
         }
     }
