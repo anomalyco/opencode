@@ -264,7 +264,7 @@ impl Catalog {
 
     /// `agent.color(id)`: the agent's own color, else a categorical step by its index among the
     /// visible agents.
-    pub fn color(&self, theme: &Theme, id: &str, new_designs: bool) -> Option<Color> {
+    pub fn color(&self, theme: &Theme, id: &str) -> Option<Color> {
         let visible: Vec<_> = self.agents.iter().filter(|agent| !agent.hidden).collect();
         let index = visible.iter().position(|agent| agent.id.as_str() == id);
         if let Some(color) = index
@@ -273,7 +273,8 @@ impl Catalog {
         {
             return Some(color);
         }
-        let step = if new_designs { 400 } else { 200 };
+        // The new designs palette keeps its vivid accent at 400; 200 there is a muted tint.
+        let step = 400;
         let mut colors: Vec<Color> = Vec::new();
         for scale in theme.categorical() {
             let color = scale.step(step);

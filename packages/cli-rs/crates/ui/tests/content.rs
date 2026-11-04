@@ -20,7 +20,7 @@ fn corpus(name: &str) -> String {
 }
 
 fn theme(name: &str, mode: ThemeMode) -> Theme {
-    Catalog::default().load(name, mode, false).unwrap().theme
+    Catalog::default().load(name, mode).unwrap().theme
 }
 
 #[test]

@@ -62,7 +62,6 @@ struct Inner {
     conceal: bool,
     tps: bool,
     turn_tokens: Option<TurnTokens>,
-    new_designs: bool,
     image_preview: bool,
     hide_thinking: Cell<bool>,
     groups: Rc<grouping::Settings>,
@@ -155,7 +154,6 @@ impl Transcript {
                 .as_ref()
                 .and_then(|debug| debug.turn_tokens)
                 .filter(|tokens| *tokens != TurnTokens::Enabled(false)),
-            new_designs: tui.config.info.experiment("new-designs"),
             image_preview,
             hide_thinking: Cell::new(
                 session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
@@ -505,7 +503,6 @@ impl Inner {
                 groups: &self.groups,
                 tps: self.tps,
                 verbose_tokens: self.turn_tokens == Some(TurnTokens::Verbose),
-                new_designs: self.new_designs,
                 animations: opencode_ui::motion::enabled(tui.config.info.animations),
                 mode,
                 width,
@@ -740,7 +737,6 @@ pub struct Context<'a> {
     pub tps: bool,
     /// `debug.turn_tokens` is `verbose`.
     pub verbose_tokens: bool,
-    pub new_designs: bool,
     /// `session.image_preview`.
     pub image_preview: bool,
     /// The session's directory.
@@ -781,7 +777,8 @@ impl Context<'_> {
     /// `local.agent.color`: the agent's own color, else the categorical color at its position among
     /// the visible agents; an agent the location does not list takes the first.
     pub fn agent_color(&self, agent: &str) -> Color {
-        let step = if self.new_designs { 400 } else { 200 };
+        // The new designs palette keeps its vivid accent at 400; 200 there is a muted tint.
+        let step = 400;
         let mut colors: Vec<Color> = Vec::new();
         for scale in self.theme.categorical() {
             let color = scale.step(step);

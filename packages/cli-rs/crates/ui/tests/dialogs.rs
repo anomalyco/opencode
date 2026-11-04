@@ -23,7 +23,7 @@ struct Kit {
 
 fn theme() -> Theme {
     Catalog::default()
-        .load("opencode", ThemeMode::Dark, false)
+        .load("opencode", ThemeMode::Dark)
         .unwrap()
         .theme
 }
