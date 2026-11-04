@@ -20,6 +20,8 @@ export type Step =
   | { paste: string }
   // A left press and release at a cell, `[x, y]`.
   | { click: [number, number] }
+  // A right press and release at a cell, `[x, y]`.
+  | { rightClick: [number, number] }
   // One `/api/event` event.
   | { event: Record<string, unknown> }
   // A left-button drag from one cell to another, `[[x, y], [x, y]]`; TS moves in five steps, Rust one cell at a

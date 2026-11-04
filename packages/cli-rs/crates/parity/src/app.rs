@@ -96,6 +96,11 @@ pub enum Step {
     Click {
         click: [u16; 2],
     },
+    /// A right press and release at `[x, y]` (E.15b).
+    RightClick {
+        #[serde(rename = "rightClick")]
+        right_click: [u16; 2],
+    },
     Event {
         event: Value,
     },
