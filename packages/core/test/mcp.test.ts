@@ -34,6 +34,7 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
+import { McpConnection } from "@opencode/core/mcp/connection"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -1172,6 +1173,123 @@ test("reconnects and retries a tool call after the MCP session expires", async (
           })
         }).pipe(Effect.provide(resourceMcpLayer(server.url)))
       }),
+    ),
+  )
+})
+
+test("a tool call during a reconnect waits for it instead of failing", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const gate = { closed: false }
+        const server = yield* resourceServer({
+          modern: true,
+          respond: (request) =>
+            !gate.closed || request.method !== "POST"
+              ? undefined
+              : Effect.runPromise(
+                  Deferred.succeed(started, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.as(undefined),
+                  ),
+                ),
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          // The prompt refresh after connecting also POSTs, so let it finish before gating the handshake.
+          yield* service.prompts().pipe(
+            Effect.filterOrFail((prompts) => prompts.length > 0),
+            Effect.retry(Schedule.spaced("10 millis")),
+          )
+          gate.closed = true
+          const reconnect = yield* service.connect("resources").pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(started)
+          expect((yield* service.servers())[0]?.status).toEqual({ status: "pending" })
+
+          const call = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 1 } })
+            .pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Effect.yieldNow
+          expect(call.pollUnsafe()).toBeUndefined()
+
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(reconnect)
+          expect((yield* Fiber.join(call)).isError).toBe(false)
+          expect(server.state.toolCalls).toHaveLength(1)
+        }).pipe(
+          Effect.ensuring(Deferred.succeed(release, undefined)),
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).effect(
+  "a disabled MCP server never holds up startup or a tool call",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      // The test clock never advances, so any wait on the disabled server would hang here.
+      yield* service.awaitStartup()
+      const error = yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.flip)
+      expect(error.message).toBe('MCP server "resources" is disabled.')
+    }),
+)
+
+test("starting an MCP connection again closes the one it replaces", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const terminated: Array<string | null> = []
+        const server = yield* resourceServer({
+          respond: (request) => {
+            if (request.method === "DELETE") terminated.push(request.headers.get("mcp-session-id"))
+            return undefined
+          },
+        })
+        const connection = McpConnection.make({
+          name: "resources",
+          config: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          started: 0,
+          directory: import.meta.dir,
+          authProvider: Effect.succeed(undefined),
+          elicitation: { create: () => Effect.die("unused"), complete: () => Effect.void },
+          environment: yield* Environment.Service,
+          fetch: globalThis.fetch,
+          scope: yield* Effect.scope,
+          lock: (effect) => effect,
+          handshake: (effect) => effect,
+          callbacks: (effect) => Effect.runFork(effect),
+          fork: (effect) => Effect.runFork(effect),
+          events: {
+            connecting: Effect.void,
+            connected: Effect.void,
+            failed: () => Effect.void,
+            stopped: Effect.void,
+            closed: () => Effect.void,
+            toolsChanged: Effect.void,
+            promptsChanged: Effect.void,
+            resourcesChanged: Effect.void,
+          },
+        })
+        yield* connection.start
+        const first = connection.client
+        // The fixture serves one legacy session per transport, so the second connection needs a fresh one.
+        yield* Effect.promise(server.restart)
+        yield* connection.start
+
+        expect(terminated).toEqual([server.state.sessions[0]])
+        expect(connection.client).not.toBe(first)
+        expect(connection.state.status).toBe("connected")
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
     ),
   )
 })
