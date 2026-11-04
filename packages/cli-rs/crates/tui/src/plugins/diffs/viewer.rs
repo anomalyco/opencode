@@ -13,8 +13,8 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, SessionDiffInput, SessionID, VcsBaseInput, VcsDiffInput,
-    VcsMode,
+    FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, SessionDiffInput, SessionID,
+    VcsBaseInput, VcsDiffInput, VcsMode,
 };
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
 use opencode_plugin::{Definition, Setup, Slotted};
@@ -42,7 +42,8 @@ const FILE_TREE_MIN_WIDTH: i64 = 30;
 const FILE_TREE_MAX_WIDTH: i64 = 40;
 const FULL_INSET: u16 = 2;
 /// The full layout keeps its tree and inset cards only while its patches stay as wide as the narrowest docked panel.
-const FULL_LAYOUT_MIN_WIDTH: i64 = FILE_TREE_MIN_WIDTH + FULL_INSET as i64 * 2 + SESSION_PANEL_SPLIT_MIN_WIDTH / 2;
+const FULL_LAYOUT_MIN_WIDTH: i64 =
+    FILE_TREE_MIN_WIDTH + FULL_INSET as i64 * 2 + SESSION_PANEL_SPLIT_MIN_WIDTH / 2;
 const VCS_DIFF_CONTEXT_LINES: i64 = 12;
 /// Frames the passes run after a change: the rebuilt layout, the scroll it asks for, and the headers pinned to it.
 const PASSES: u32 = 4;
@@ -135,7 +136,10 @@ impl From<FileDiffInfo> for File {
 enum Load {
     Loading,
     Failed,
-    Ready { base: Option<Base>, files: Vec<File> },
+    Ready {
+        base: Option<Base>,
+        files: Vec<File>,
+    },
 }
 
 /// The plugin's memory, kept until the TUI exits (`storage.memory("review")`): the last source and the chosen base
@@ -188,10 +192,18 @@ pub fn plugin() -> Definition<Tui> {
                 session: data.session,
                 back: data.back,
             };
-            Box::new(RouteSlot(Viewer::mount(tui, &route, place, i64::from(tui.app.size().0))))
+            Box::new(RouteSlot(Viewer::mount(
+                tui,
+                &route,
+                place,
+                i64::from(tui.app.size().0),
+            )))
         });
         let open = shared.clone();
-        setup.layer(keys::open_layer(&tui, Rc::new(move |tui| self::open(tui, &open))));
+        setup.layer(keys::open_layer(
+            &tui,
+            Rc::new(move |tui| self::open(tui, &open)),
+        ));
         let weak = tui.weak();
         setup.on_dispose(move || {
             if let Some(viewer) = shared.current.take()
@@ -252,7 +264,10 @@ enum Place {
     /// In the session's panel host, which takes the focus.
     Panel { host: View, session: SessionID },
     /// The full-screen route; closing goes back to `back`.
-    Route { session: Option<SessionID>, back: Route },
+    Route {
+        session: Option<SessionID>,
+        back: Route,
+    },
 }
 
 struct State {
@@ -324,7 +339,11 @@ impl Viewer {
             .or(preferences.source.map(Mode::from_config))
             .unwrap_or(Mode::Branch);
         let sources = sources(session.is_some());
-        let mode = if sources.contains(&initial) { initial } else { Mode::Branch };
+        let mode = if sources.contains(&initial) {
+            initial
+        } else {
+            Mode::Branch
+        };
         let (location, branch) = tui.data.read(|state| {
             let location = session
                 .as_ref()
@@ -375,8 +394,7 @@ impl Viewer {
         });
         // The previous viewer's keys go with it.
         let previous = shared.current.replace(Some(viewer.clone()));
-        if let Some(layer) = previous.and_then(|previous| previous.layer.borrow_mut().take())
-        {
+        if let Some(layer) = previous.and_then(|previous| previous.layer.borrow_mut().take()) {
             layer.dispose();
         }
         viewer.install(tui);
@@ -453,7 +471,13 @@ impl Viewer {
     /// The chosen base, else the one the location reported (`sourceBase`).
     pub fn source_base(&self) -> Option<Base> {
         let state = self.state.borrow();
-        let chosen = self.shared.memory.borrow().bases.get(&state.base_key).cloned();
+        let chosen = self
+            .shared
+            .memory
+            .borrow()
+            .bases
+            .get(&state.base_key)
+            .cloned();
         chosen
             .map(|reference| Base {
                 name: reference.clone(),
@@ -544,7 +568,11 @@ impl Viewer {
     }
 
     fn patch_pane_width(&self) -> i64 {
-        let tree = if self.show_tree() { self.tree_width() } else { 0 };
+        let tree = if self.show_tree() {
+            self.tree_width()
+        } else {
+            0
+        };
         self.state.borrow().width - tree - i64::from(self.inset()) * 2
     }
 
@@ -556,7 +584,10 @@ impl Viewer {
         if !self.split_available() {
             return DiffView::Unified;
         }
-        let preferred = self.tui.upgrade().and_then(|tui| tui.settings.info().diffs?.view);
+        let preferred = self
+            .tui
+            .upgrade()
+            .and_then(|tui| tui.settings.info().diffs?.view);
         self.state
             .borrow()
             .view_override
@@ -581,12 +612,19 @@ impl Viewer {
     // Loading.
 
     fn load(&self) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         let (generation, mode, location, key) = {
             let mut state = self.state.borrow_mut();
             state.generation += 1;
             state.load = Load::Loading;
-            (state.generation, state.mode, state.location.clone(), state.base_key.clone())
+            (
+                state.generation,
+                state.mode,
+                state.location.clone(),
+                state.base_key.clone(),
+            )
         };
         self.reset();
         self.refresh();
@@ -619,10 +657,14 @@ impl Viewer {
                         let input = VcsBaseInput {
                             location: query(&location),
                         };
-                        let base = client.vcs_base(&input, &options).await?.data.map(|base| Base {
-                            name: base.name,
-                            reference: base.r#ref,
-                        });
+                        let base = client
+                            .vcs_base(&input, &options)
+                            .await?
+                            .data
+                            .map(|base| Base {
+                                name: base.name,
+                                reference: base.r#ref,
+                            });
                         reported = Some(base.clone());
                         base
                     }
@@ -692,14 +734,21 @@ impl Viewer {
             (Load::Failed, _) => Some("Base or diff unavailable".to_owned()),
             (Load::Loading, _) => Some("Resolving diff…".to_owned()),
             (Load::Ready { base: None, .. }, _) => Some("Base not reported".to_owned()),
-            (Load::Ready { base: Some(base), .. }, _) => Some(format!("vs {}", base.name)),
+            (
+                Load::Ready {
+                    base: Some(base), ..
+                },
+                _,
+            ) => Some(format!("vs {}", base.name)),
         }
     }
 
     // Commands.
 
     pub(super) fn run(&self, action: Action) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         match action {
             Action::Close => {
                 tui.dialogs.clear();
@@ -762,7 +811,11 @@ impl Viewer {
                     state.selected_hunk = None;
                     state.view_override = Some(next);
                 }
-                let name = if next == DiffView::Split { "split" } else { "unified" };
+                let name = if next == DiffView::Split {
+                    "split"
+                } else {
+                    "unified"
+                };
                 preference(&tui, "view", json!(name));
                 self.refresh();
             }
@@ -834,7 +887,8 @@ impl Viewer {
     }
 
     fn viewport_height(&self) -> i64 {
-        self.scroll().map_or(0, |scroll| scroll.rect().height as i64)
+        self.scroll()
+            .map_or(0, |scroll| scroll.rect().height as i64)
     }
 
     fn scroll_to(&self, top: i64) {
@@ -947,7 +1001,8 @@ impl Viewer {
             })
             .collect();
         let top = self.scroll_top();
-        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset) else {
+        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset)
+        else {
             return;
         };
         self.select_file(next.file);
@@ -972,7 +1027,12 @@ impl Viewer {
         let current = self.state.borrow().selected.or_else(|| self.current_file());
         let offset = current.and_then(|current| {
             let parts = self.parts.borrow();
-            let node = parts.cards.iter().find(|card| card.file == current)?.node.clone();
+            let node = parts
+                .cards
+                .iter()
+                .find(|card| card.file == current)?
+                .node
+                .clone();
             let viewport = parts.scroll.as_ref()?.rect();
             Some((viewport.screen_y - node.rect().screen_y).round() as i64)
         });
@@ -1026,14 +1086,18 @@ impl Viewer {
     /// Runs [`Self::pass`] before each of the next [`PASSES`] frames.
     fn passes(&self) {
         let running = self.passes.replace(PASSES) > 0;
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         tui.app.request_redraw();
         if running {
             return;
         }
         let weak = self.this.clone();
         tui.app.animate(move |_, _| {
-            let Some(viewer) = weak.upgrade() else { return false };
+            let Some(viewer) = weak.upgrade() else {
+                return false;
+            };
             viewer.pass();
             let left = viewer.passes.get().saturating_sub(1);
             viewer.passes.set(left);
@@ -1046,7 +1110,9 @@ impl Viewer {
 
     /// The work TS does in lifecycle passes: the pending scroll, the sticky headers, and the top edge's color.
     fn pass(&self) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         let pending = self.state.borrow().pending;
         if let Some((file, offset)) = pending
             && let Some(y) = self.card_y(file)
@@ -1085,7 +1151,9 @@ impl Viewer {
 
     /// Rebuilds what changed: everything when the cards change, else the tree.
     fn refresh(&self) {
-        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
         let key = self.render_key(&tui);
         let same = self.parts.borrow().key.as_ref() == Some(&key);
         if same {
@@ -1137,7 +1205,11 @@ impl Viewer {
         if !show_tree {
             self.root.add(&self.header(app, &theme, docked, compact));
         }
-        let body = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0);
+        let body = View::new(app)
+            .column()
+            .grow(1.0)
+            .basis(Length::Auto)
+            .min_height(0);
         self.root.add(&body);
         let message = |text: &str, color: Color| {
             View::new(app)
@@ -1180,7 +1252,8 @@ impl Viewer {
             }
         };
         if compact {
-            self.root.add(&self.footer(tui, &theme, docked, help.clone()));
+            self.root
+                .add(&self.footer(tui, &theme, docked, help.clone()));
         }
         if !show_tree && !compact && help.is_some() {
             self.root.add(
@@ -1231,7 +1304,9 @@ impl Viewer {
             }
         });
         let files = self.files();
-        let reviewed = (0..files.len()).filter(|&file| self.is_reviewed(file)).count();
+        let reviewed = (0..files.len())
+            .filter(|&file| self.is_reviewed(file))
+            .count();
         View::new(app)
             .row()
             .gap(1)
@@ -1250,7 +1325,14 @@ impl Viewer {
     }
 
     /// The fixed top edge and the scrolled cards.
-    fn patches(&self, tui: &Tui, theme: &Theme, files: &[File], surface: Color, previous: Option<f64>) -> View {
+    fn patches(
+        &self,
+        tui: &Tui,
+        theme: &Theme,
+        files: &[File],
+        surface: Color,
+        previous: Option<f64>,
+    ) -> View {
         let app = &tui.app;
         let inset = self.inset();
         let compact = self.compact();
@@ -1268,8 +1350,10 @@ impl Viewer {
             .focusable(false);
         let weak = self.this.clone();
         scroll.on_mouse(move |_, event| {
-            if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown)
-                && let Some(viewer) = weak.upgrade()
+            if matches!(
+                event.kind,
+                MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+            ) && let Some(viewer) = weak.upgrade()
             {
                 viewer.clear_patch_selection();
                 viewer.passes();
@@ -1281,7 +1365,9 @@ impl Viewer {
         let pane_width = self.patch_pane_width();
         let mut cards = Vec::new();
         for (index, file) in self.visible().into_iter().enumerate() {
-            let Some(entry) = files.get(file) else { continue };
+            let Some(entry) = files.get(file) else {
+                continue;
+            };
             let reviewed = self.state.borrow().reviewed.contains(&entry.file);
             let background = if reviewed {
                 theme.background.raised.high
@@ -1296,9 +1382,14 @@ impl Viewer {
             let counts = if image {
                 6
             } else {
-                entry.additions.to_string().len() as i64 + entry.deletions.to_string().len() as i64 + 5
+                entry.additions.to_string().len() as i64
+                    + entry.deletions.to_string().len() as i64
+                    + 5
             } + if reviewed { 2 } else { 0 };
-            let path = crate::dialogs::open::truncate_file_path(&entry.file, (pane_width - counts - 2).max(1));
+            let path = crate::dialogs::open::truncate_file_path(
+                &entry.file,
+                (pane_width - counts - 2).max(1),
+            );
             let split = path.rfind('/').map_or(0, |at| at + 1);
             let line = View::new(app)
                 .row()
@@ -1308,22 +1399,26 @@ impl Viewer {
                 .padding_edge(Edge::Left, if compact { 2 } else { 1 })
                 .padding_edge(Edge::Right, 1)
                 .child(
-                    &View::new(app).grow(1.0).basis(Length::Auto).min_width(0).child(
-                        &Text::new(
-                            app,
-                            vec![
-                                path[..split].to_owned().fg(theme.text.muted),
-                                path[split..].to_owned().fg(if reviewed {
-                                    theme.text.muted
-                                } else {
-                                    theme.text.base
-                                }),
-                            ],
-                        )
-                        .fg(theme.text.muted)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
-                    ),
+                    &View::new(app)
+                        .grow(1.0)
+                        .basis(Length::Auto)
+                        .min_width(0)
+                        .child(
+                            &Text::new(
+                                app,
+                                vec![
+                                    path[..split].to_owned().fg(theme.text.muted),
+                                    path[split..].to_owned().fg(if reviewed {
+                                        theme.text.muted
+                                    } else {
+                                        theme.text.base
+                                    }),
+                                ],
+                            )
+                            .fg(theme.text.muted)
+                            .wrap(WrapMode::None)
+                            .truncate(true),
+                        ),
                 );
             if reviewed {
                 line.add(&Text::new(app, "✓").fg(theme.text.muted).shrink(0.0));
@@ -1336,8 +1431,14 @@ impl Viewer {
                         .fg(if reviewed { theme.text.muted } else { color })
                         .shrink(0.0)
                 };
-                line.add(&count(format!("+{}", entry.additions), theme.diff.text.added));
-                line.add(&count(format!("-{}", entry.deletions), theme.diff.text.removed));
+                line.add(&count(
+                    format!("+{}", entry.additions),
+                    theme.diff.text.added,
+                ));
+                line.add(&count(
+                    format!("-{}", entry.deletions),
+                    theme.diff.text.removed,
+                ));
             }
             let weak = self.this.clone();
             line.on_mouse(move |cx, event| {
@@ -1371,7 +1472,9 @@ impl Viewer {
                     .bg(background)
                     .child(&line);
                 card.add(&header);
-                card.add(&self.body(tui, theme, &syntax, entry, mode, view, compact, image, &mut rows));
+                card.add(&self.body(
+                    tui, theme, &syntax, entry, mode, view, compact, image, &mut rows,
+                ));
                 Some(header)
             };
             cards.push(Card {
@@ -1469,7 +1572,10 @@ impl Viewer {
         let app = &tui.app;
         let focused = self.focused(tui);
         let surface = theme.background.raised.base;
-        let footer = View::new(app).column().shrink(0.0).bg(theme.background.base);
+        let footer = View::new(app)
+            .column()
+            .shrink(0.0)
+            .bg(theme.background.base);
         if docked {
             footer.add(
                 &View::new(app)
@@ -1503,7 +1609,11 @@ impl Viewer {
         } else {
             theme.text.action.primary.disabled
         })
-        .attributes(if focused { Attributes::default() } else { Attributes::DIM })
+        .attributes(if focused {
+            Attributes::default()
+        } else {
+            Attributes::DIM
+        })
         .wrap(WrapMode::None)
         .truncate(true)
         .grow(1.0)
@@ -1545,7 +1655,11 @@ impl Viewer {
             } else {
                 theme.text.base
             })
-            .attributes(if muted { Attributes::DIM } else { Attributes::default() })
+            .attributes(if muted {
+                Attributes::DIM
+            } else {
+                Attributes::default()
+            })
             .wrap(WrapMode::None)
             .shrink(0.0);
             let weak = self.this.clone();
@@ -1588,9 +1702,17 @@ impl Viewer {
                 state.reviewed.clone(),
             )
         };
-        let selected = selected.or_else(|| self.single().then(|| self.visible().first().copied()).flatten());
+        let selected = selected.or_else(|| {
+            self.single()
+                .then(|| self.visible().first().copied())
+                .flatten()
+        });
         let detail = self.source_detail();
-        let is_reviewed = |file: usize| files.get(file).is_some_and(|file| reviewed.contains(&file.file));
+        let is_reviewed = |file: usize| {
+            files
+                .get(file)
+                .is_some_and(|file| reviewed.contains(&file.file))
+        };
         let weak = self.this.clone();
         let on_row: tree::OnRow = Rc::new(move |row| {
             let Some(viewer) = weak.upgrade() else { return };
@@ -1640,8 +1762,19 @@ impl Viewer {
 
 /// A half-row of page between cards: the card's color over its width, the pane's surface over the insets
 /// (`CardGap`).
-fn card_gap(app: &App, theme: &Theme, glyph: char, card: Color, surface: Color, inset: u16) -> View {
-    let side = if glyph == '▄' { Sides::TOP } else { Sides::BOTTOM };
+fn card_gap(
+    app: &App,
+    theme: &Theme,
+    glyph: char,
+    card: Color,
+    surface: Color,
+    inset: u16,
+) -> View {
+    let side = if glyph == '▄' {
+        Sides::TOP
+    } else {
+        Sides::BOTTOM
+    };
     let half = |color: Color| {
         View::new(app)
             .height(1)
@@ -1721,7 +1854,10 @@ mod tests {
     #[test]
     fn the_full_layout_needs_room_for_a_docked_panel_of_patches() {
         assert_eq!(FULL_LAYOUT_MIN_WIDTH, 88);
-        assert_eq!(sources(false), [Mode::Branch, Mode::Committed, Mode::Working]);
+        assert_eq!(
+            sources(false),
+            [Mode::Branch, Mode::Committed, Mode::Working]
+        );
         assert_eq!(sources(true).last(), Some(&Mode::Turn));
     }
 }
