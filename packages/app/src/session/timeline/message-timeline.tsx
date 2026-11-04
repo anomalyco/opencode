@@ -407,7 +407,8 @@ function MessageTimelineView(
   // The working row tracks the active turn from its user prompt, so it keeps counting until the turn finishes.
   // Pending steers still project under the previous response until delivery, so anchor on the latest
   // user input instead of the turn's original prompt: otherwise a follow-up sent seconds ago would
-  // immediately read minutes old.
+  // immediately read minutes old. Delivered inputs briefly have neither pending nor active status
+  // while the projection catches up, so also anchor on the newest delivered prompt.
   const workingTime = createMemo(() => {
     const id = projection.activeMessageID()
 
@@ -417,15 +418,18 @@ function MessageTimelineView(
 
     if (message?.type !== "user") return undefined
 
+    let start = message.time.created
+
+    for (const item of messageByID().values()) {
+      if (item.type === "user" && item.time.created > start) start = item.time.created
+    }
+
     const session = sessionID()
     const pending = session ? data.session.pending.list(session) : []
 
-    const latest = pending.reduce<number | undefined>(
-      (max, item) => (item.type === "user" ? Math.max(max ?? Number.NEGATIVE_INFINITY, item.time.created) : max),
-      undefined,
-    )
-
-    const start = latest === undefined ? message.time.created : Math.max(message.time.created, latest)
+    for (const item of pending) {
+      if (item.type === "user" && item.time.created > start) start = item.time.created
+    }
 
     return { created: start, ran: start }
   })
