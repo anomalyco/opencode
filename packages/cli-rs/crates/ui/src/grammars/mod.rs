@@ -9,12 +9,13 @@
 //! Swift are not linked (`parity/deviations/H06-highlight-queries.md`).
 
 use opentui::syntax::tree_sitter::{Language, QueryErrorKind};
-use opentui::syntax::{self, Grammar, GrammarError};
+use opentui::syntax::{self, CompiledGrammar, Grammar, GrammarError};
 use std::borrow::Cow;
 use std::sync::Once;
 
 /// One grammar: its filetype, language, query file under `assets/queries`, and the aliases `parsers-config.ts` gives
 /// it.
+#[derive(Clone, Copy)]
 struct Entry {
     filetype: &'static str,
     language: fn() -> Language,
@@ -117,41 +118,36 @@ fn entries() -> Vec<Entry> {
 }
 
 /// Registers every linked grammar with its TypeScript query, once per process. The code, Markdown, and diff wrappers
-/// call it before they highlight. A grammar whose query does not compile is left out and logged, as Core skips it.
+/// call it before they highlight. Registering compiles nothing: each query compiles the first time its filetype is
+/// highlighted, so showing code does not wait for every grammar. A grammar whose query does not compile is logged then
+/// and stays plain, as Core skips it.
 pub fn register() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        for (filetype, error) in register_all() {
-            log::warn!("grammar {filetype}: {error}");
+        for entry in entries() {
+            syntax::register_lazy(entry.filetype, move || {
+                #[cfg(test)]
+                tests::loaded(entry.filetype);
+                compile(&entry)
+                    .inspect_err(|error| log::warn!("grammar {}: {error}", entry.filetype))
+                    .ok()
+            });
+            for alias in entry.aliases {
+                syntax::register_alias(alias, entry.filetype);
+            }
         }
     });
 }
 
-/// Registers every entry and returns the ones that failed.
-fn register_all() -> Vec<(&'static str, GrammarError)> {
-    entries()
-        .into_iter()
-        .filter_map(|entry| {
-            if let Err(error) = register_entry(&entry) {
-                return Some((entry.filetype, error));
-            }
-            for alias in entry.aliases {
-                syntax::register_alias(alias, entry.filetype);
-            }
-            None
-        })
-        .collect()
-}
-
-/// Registers one entry. tree-sitter 0.27 rejects a pattern it proves can never match, where Core's web-tree-sitter
+/// Compiles one entry. tree-sitter 0.27 rejects a pattern it proves can never match, where Core's web-tree-sitter
 /// 0.25 compiles it; such a pattern is dropped, since it captures nothing in either.
-fn register_entry(entry: &Entry) -> Result<(), GrammarError> {
+fn compile(entry: &Entry) -> Result<CompiledGrammar, GrammarError> {
     let mut query = Cow::Borrowed(entry.query);
     loop {
         let grammar = Grammar::new((entry.language)(), query.clone())
             .injections(entry.injections)
             .core_captures();
-        match syntax::register(entry.filetype, grammar) {
+        match grammar.compile() {
             Err(GrammarError::Query(error)) if error.kind == QueryErrorKind::Structure => {
                 let Some(rest) = without_pattern(&query, error.offset) else {
                     return Err(GrammarError::Query(error));
@@ -206,6 +202,8 @@ fn without_pattern(query: &str, offset: usize) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
 
     /// The table against the generator's manifest: every TypeScript filetype the build links, with its aliases.
     #[test]
@@ -237,11 +235,46 @@ mod tests {
 
     #[test]
     fn every_query_compiles() {
-        let failed: Vec<String> = register_all()
-            .into_iter()
-            .map(|(filetype, error)| format!("{filetype}: {error}"))
+        let failed: Vec<String> = entries()
+            .iter()
+            .filter_map(|entry| Some(format!("{}: {}", entry.filetype, compile(entry).err()?)))
             .collect();
         assert!(failed.is_empty(), "{failed:#?}");
+    }
+
+    /// How often each filetype's query compiled through [`register`].
+    static LOADS: Mutex<BTreeMap<&str, usize>> = Mutex::new(BTreeMap::new());
+
+    pub(super) fn loaded(filetype: &'static str) {
+        *LOADS.lock().unwrap().entry(filetype).or_default() += 1;
+    }
+
+    fn loads(filetype: &str) -> usize {
+        LOADS
+            .lock()
+            .unwrap()
+            .get(filetype)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Registering the whole set compiles no query; highlighting a filetype compiles its query once.
+    #[test]
+    fn register_compiles_on_first_highlight_only() {
+        register();
+        // TypeScript is left out: another test highlights it, maybe already.
+        let compiled: Vec<&str> = entries()
+            .iter()
+            .map(|entry| entry.filetype)
+            .filter(|filetype| *filetype != "typescript" && loads(filetype) > 0)
+            .collect();
+        assert!(compiled.is_empty(), "{compiled:?}");
+        assert!(syntax::has_grammar("zig"));
+        for _ in 0..2 {
+            assert!(syntax::highlights("const a = 1;\n", "zig").is_some());
+        }
+        assert_eq!(loads("zig"), 1);
+        assert_eq!(loads("rust"), 0);
     }
 
     #[test]
