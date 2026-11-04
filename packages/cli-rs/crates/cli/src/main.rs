@@ -6,6 +6,7 @@ mod commands;
 mod env;
 mod help;
 mod output;
+mod panic;
 mod prompt;
 mod signals;
 mod telemetry;
