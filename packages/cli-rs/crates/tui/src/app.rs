@@ -413,6 +413,8 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
         crate::features::system_commands::mouse_tracking(&launch.deps.config);
     let app = App::new(options)?;
     let tui = mount_with(&app, launch.deps, launch.args);
+    // Tests start the editor context with their own source; the real TUI reads the environment.
+    crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
     let epilogue = crate::features::epilogue::text(&tui);
     drop(tui);
