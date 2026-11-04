@@ -10,7 +10,9 @@ import {
 } from "./machine"
 
 const openai = { id: "openai" }
+
 const opencode = { id: "opencode" }
+
 const consoleGoogle = { id: "console-google" }
 
 const disconnectOpenAI: ProviderDisconnectEvent = {
@@ -60,6 +62,7 @@ test("a disconnect with no stored credentials returns the provider to the Connec
 
 test("a failed request restores every Console provider with one toast", () => {
   const error = new Error("offline")
+
   const result = replay([
     disconnectConsole,
     { type: "disconnect.failed", attempt: 1, reason: { kind: "request", error } },
