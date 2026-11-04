@@ -59,9 +59,8 @@ over broken math turns back into the source. opentui-rust skipped unchanged bloc
 `rs-plugin-latex` (`markdown: run code-block renderers again when streaming ends`) reruns the renderers of
 custom blocks with their widgets. Mermaid's last-good diagram needs the same change.
 
-TS also checks that the fence is still open. The Rust `CodeBlock` does not say whether the fence closed, so a
-closed fence with a broken formula keeps the preview until the message completes. This is deviation
-`F13-latex-closed-fence`.
+TS also checks that the fence is still open. The renderer reads that from `CodeBlock::closed`, so a closing fence
+over broken math shows the source while the message still streams, as in TS.
 
 ## Proof
 
