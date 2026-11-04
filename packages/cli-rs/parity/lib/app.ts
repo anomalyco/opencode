@@ -31,7 +31,17 @@ export type AppScenario = {
   height?: number
   // cli.json `Info`; both sides add `animations: false`.
   config?: Record<string, unknown>
-  args?: { sessionID?: string; continue?: boolean }
+  args?: {
+    sessionID?: string
+    continue?: boolean
+    fork?: boolean
+    prompt?: string
+    model?: string
+    agent?: string
+    newSessionID?: string
+  }
+  // Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
+  env?: Record<string, string>
   routes?: Route[]
   steps: Step[]
   // A deviation that allows the request comparison (P-REQ) to differ.

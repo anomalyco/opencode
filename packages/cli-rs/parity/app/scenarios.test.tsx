@@ -42,6 +42,11 @@ async function record(name: string, file: string) {
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
   const log: Logged[] = []
+  const env = scenario.env ?? {}
+  Object.assign(process.env, env)
+  await using _env = {
+    [Symbol.asyncDispose]: async () => Object.keys(env).forEach((key) => delete process.env[key]),
+  }
   await using setup = await createAppFixture({
     width: scenario.width ?? 100,
     height: scenario.height ?? 30,
@@ -99,6 +104,7 @@ async function record(name: string, file: string) {
     directory,
     config,
     args: scenario.args ?? {},
+    ...(scenario.env ? { env: scenario.env } : {}),
     routes,
     steps,
     ...(scenario.requests ? { deviation: scenario.requests.deviation } : {}),

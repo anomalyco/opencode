@@ -1,9 +1,9 @@
 // The session list over the home (DLG16): opened with <leader>l, the first delete press marks the row, the
 // second deletes the session. The masks keep the comparison to the dialog panel (x 6-93, y 8-18 at 100x30):
-// the home and the footer around it are E.1's (T17-home-session-list, T04-connection-footer).
+// the home's prompt behind it is E.2's (T17-home-prompt).
 import { defineApp, session } from "../../lib/app"
 
-const reason = "outside the dialog panel: the home behind it differs (T17-home-session-list, T04-connection-footer)"
+const reason = "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
 // The panel's rows: 11 with two sessions, 10 once one is deleted.
 const panel = (rows: number) => [
   { x: 0, y: 0, width: 100, height: 8, reason },
