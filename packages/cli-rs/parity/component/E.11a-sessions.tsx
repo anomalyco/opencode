@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the session list (packages/tui/src/component/dialog-session-list.tsx) and the open
-// dialog (component/dialog-open.tsx). crates/tui/tests/sessions.rs mounts the Rust TUI over the same
+// dialog (component/dialog-open.tsx). crates/tui/tests/all/sessions.rs mounts the Rust TUI over the same
 // responses (`E11A` below; keep both in step), hides the screen behind the dialog, sends the same keys, and
 // compares the cells. Tabs are off, so pins and the quick switch hint show; `ses_b` is pinned.
 import { mkdtemp, rm } from "fs/promises"

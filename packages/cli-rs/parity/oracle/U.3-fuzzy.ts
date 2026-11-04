@@ -1,6 +1,6 @@
 // P-ORACLE for crates/ui/src/select.rs `fuzzy`: runs fuzzysort.go exactly as DialogSelect calls it
 // (packages/tui/src/ui/dialog-select.tsx:214-229) over a corpus built from the 244 keybind definitions, for a list of
-// queries and both thresholds the TUI uses. Writes parity/fixtures/U.3/fuzzy.json; crates/ui/tests/dialogs.rs
+// queries and both thresholds the TUI uses. Writes parity/fixtures/U.3/fuzzy.json; crates/ui/tests/all/dialogs.rs
 // expects the same order.
 import fuzzysort from "../../../tui/node_modules/fuzzysort"
 import { Definitions } from "../../../tui/src/config/keybind"

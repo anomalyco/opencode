@@ -1,7 +1,7 @@
 // The config toggles (T19): `app.toggle.animations`, `app.toggle.diffwrap`, `app.toggle.file_context`,
 // `app.toggle.paste_summary`, and `terminal.title.toggle`, bound to F5 to F9 here (all are `none` by default and
 // not in the palette). Each writes `cli.json`; the settings dialog then shows the new values, one filtered row
-// per checkpoint. P-FILE in `crates/tui/tests/system_commands.rs` checks the file bytes against TS.
+// per checkpoint. P-FILE in `crates/tui/tests/all/system_commands.rs` checks the file bytes against TS.
 import { defineApp } from "../../lib/app"
 
 const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }
