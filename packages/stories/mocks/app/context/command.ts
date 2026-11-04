@@ -11,6 +11,10 @@ const keybinds: Record<string, string> = {
 
 export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
 
+export function commandPaletteOptions() {
+  return []
+}
+
 export function parseKeybind(config: string) {
   if (!config || config === "none") return []
   return config.split(",").map((combo) => {
