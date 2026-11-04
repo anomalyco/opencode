@@ -1,4 +1,4 @@
-//! Transcript rows. T.1's plain transcript is in `list` until E.6a replaces it.
+//! Transcript rows. `list` holds the transcript and dispatches each row to its module.
 
 pub mod assistant;
 pub mod background;
