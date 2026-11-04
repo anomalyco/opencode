@@ -129,15 +129,6 @@
     {
       "checkpoint": "dock",
       "until": "2 queued",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/dock"
     },
     {
@@ -149,15 +140,6 @@
     {
       "checkpoint": "queued",
       "until": "Search queued prompts",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/queued"
     },
     {
@@ -168,15 +150,6 @@
     {
       "checkpoint": "second",
       "until": "2 of 2",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/second"
     },
     {
@@ -186,15 +159,6 @@
     },
     {
       "checkpoint": "steered",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/steered"
     },
     {
@@ -206,15 +170,6 @@
     {
       "checkpoint": "dock-click",
       "until": "Search queued prompts",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/dock-click"
     },
     {
@@ -224,15 +179,6 @@
     },
     {
       "checkpoint": "dock-closed",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/dock-closed"
     },
     {
@@ -244,15 +190,6 @@
     {
       "checkpoint": "pending-steer",
       "until": "Pending steer",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/pending-steer"
     },
     {
@@ -262,15 +199,6 @@
     },
     {
       "checkpoint": "moved",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/moved"
     },
     {
@@ -282,15 +210,6 @@
     {
       "checkpoint": "message",
       "until": "Message Actions",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/message"
     },
     {
@@ -300,15 +219,6 @@
     },
     {
       "checkpoint": "closed",
-      "masks": [
-        {
-          "x": 50,
-          "y": 28,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.10b/queue/closed"
     }
   ],
