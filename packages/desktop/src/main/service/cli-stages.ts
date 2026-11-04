@@ -1,11 +1,10 @@
 import { Effect, FileSystem, Path } from "effect"
 
-// Each version and architecture stages its own copy of the CLI, and only the current one (plus any adopted
-// beta server still running) is kept: a downgrade stages its copy anew. Windows refuses to delete an executable
-// that has not exited yet, so a failed removal is logged and retried on the next launch.
+// Keep the current copy and possible stages of an adopted server.
+// Windows locks running executables; failed removals retry on the next launch.
 export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (
   binary: string,
-  options?: { readonly keep?: ReadonlyArray<string> },
+  options?: { readonly keep?: ReadonlyArray<string>; readonly keepPrefix?: string },
 ) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -16,7 +15,7 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (
   yield* Effect.forEach(
     entries,
     Effect.fnUntraced(function* (entry) {
-      if (keep.has(entry)) return
+      if (keep.has(entry) || (options?.keepPrefix && entry.startsWith(options.keepPrefix))) return
       const target = path.join(root, entry)
       const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
 

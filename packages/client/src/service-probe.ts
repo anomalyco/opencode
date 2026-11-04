@@ -1,6 +1,6 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, Info } from "./service.js"
+import { registrationFilename, type DiscoverOptions, type Endpoint, type Info } from "./service.js"
 import { defaultEnsureTiming } from "./service-timing.js"
 import { matchesVersion } from "./service-version.js"
 
@@ -35,9 +35,13 @@ function fail(message: string) {
   return { _tag: "fail" as const, error: new Error(message) }
 }
 
-/** The default registration file. */
-export function fallback() {
-  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
+/** Registration path for a CLI release channel. */
+export function fallback(channel = "latest") {
+  return join(
+    process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
+    "opencode",
+    registrationFilename(channel),
+  )
 }
 
 /** Whether two registrations describe the same service instance. */
