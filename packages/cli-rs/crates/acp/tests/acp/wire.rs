@@ -165,6 +165,61 @@ pub fn permission_asked(session_id: &str, id: &str, input: Value) -> Value {
     ephemeral_event("permission.asked", data)
 }
 
+/// A `FileDiff.Info` with a unified patch from `before` to `after` (`createTwoFilesPatch`).
+pub fn file_diff(file: &str, before: &str, after: &str, status: &str) -> Value {
+    let patch = similar::TextDiff::from_lines(before, after)
+        .unified_diff()
+        .context_radius(4)
+        .header(file, file)
+        .to_string();
+    let patch =
+        format!("===================================================================\n{patch}");
+    json!({ "file": file, "patch": patch, "additions": 1, "deletions": 1, "status": status })
+}
+
+/// `file_diff` with the common indentation of the hunk lines removed, as core trims patch-tool diffs.
+pub fn trimmed(file: &str, before: &str, after: &str) -> Value {
+    let mut recorded = file_diff(file, before, after, "modified");
+    let body = |line: &str| {
+        line.starts_with([' ', '+', '-']) && !line.starts_with("---") && !line.starts_with("+++")
+    };
+    let patch = recorded["patch"].as_str().unwrap().to_owned();
+    let indent = patch
+        .split('\n')
+        .filter(|line| body(line))
+        .map(|line| &line[1..])
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.len() - value.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    if indent == 0 {
+        return recorded;
+    }
+    let lines: Vec<String> = patch
+        .split('\n')
+        .map(|line| {
+            if body(line) {
+                format!(
+                    "{}{}",
+                    &line[..1],
+                    line.get(1 + indent..).unwrap_or_default()
+                )
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect();
+    recorded["patch"] = json!(lines.join("\n"));
+    recorded
+}
+
+pub fn assistant_message(id: &str, content: Value) -> Value {
+    json!({
+        "id": id, "type": "assistant", "agent": "build", "model": { "providerID": "test", "id": "test-model" },
+        "content": content, "finish": "stop", "tokens": tokens(1), "time": { "created": 1, "completed": 2 },
+    })
+}
+
 // ---------------------------------------------------------------------------------------------------
 // Catalog fixtures
 
@@ -212,8 +267,22 @@ pub fn make_session(id: &str, cwd: &str) -> Value {
 // ---------------------------------------------------------------------------------------------------
 // Server
 
-/// Answers a `session/request_permission`.
-pub type Answer = Arc<dyn Fn(&Value) -> Value + Send + Sync>;
+/// How the client answers a request from the agent.
+pub enum Reply {
+    Result(Value),
+    /// An error response, as a client handler that throws.
+    Error(String),
+    /// Held until the agent sends `$/cancel_request` for it, then answered with the value.
+    UntilCancelled(Value),
+}
+
+/// Answers a `session/request_permission` or `elicitation/create`.
+pub type Answer = Arc<dyn Fn(&Value) -> Reply + Send + Sync>;
+
+/// Answers a request in place of the fake server's routes (`fetch`). Gets the server and the recorded
+/// request (`method`, `path`, `query`, `body`).
+pub type Fetch =
+    Arc<dyn Fn(&Arc<Server>, &Value) -> Option<BoxFuture<'static, Response>> + Send + Sync>;
 
 pub type Hook<I> = Arc<dyn Fn(I) -> BoxFuture<'static, Vec<Value>> + Send + Sync>;
 
@@ -232,7 +301,10 @@ pub struct WireOptions {
     pub on_prompt: Option<Hook<PromptCall>>,
     pub on_interrupt: Option<Hook<String>>,
     pub on_form_cancel: Option<Hook<(String, String)>>,
+    pub on_form_reply: Option<Hook<Value>>,
     pub permission: Option<Answer>,
+    pub elicitation: Option<Answer>,
+    pub fetch: Option<Fetch>,
     pub drain_timeout: Option<Duration>,
 }
 
@@ -244,12 +316,17 @@ pub struct State {
     pub interrupts: Vec<String>,
     pub replies: Vec<Value>,
     pub cancelled_forms: Vec<Value>,
+    pub replied_forms: Vec<Value>,
     pub mcp: Vec<Value>,
     /// Method and path of every request.
     pub requests: Vec<(String, String)>,
+    /// Every request as `{ method, path, query, body }`.
+    pub recorded: Vec<Value>,
+    pub messages: HashMap<String, Vec<Value>>,
     pub models: Vec<Value>,
     pub agents: Vec<Value>,
     pub commands: Vec<Value>,
+    pub plugins: Vec<Value>,
 }
 
 impl State {
@@ -282,6 +359,10 @@ impl Server {
                     agent("plan", "Plan", Some("Plan first")),
                 ],
                 commands: vec![review_command()],
+                plugins: vec![json!({
+                    "id": "opencode.models.dev", "source": { "type": "builtin" },
+                    "features": { "server": true }, "state": { "status": "active" },
+                })],
                 ..State::default()
             }),
             streams: Mutex::default(),
@@ -348,10 +429,23 @@ impl Server {
             .as_ref()
             .and_then(|body| serde_json::from_slice(body).ok())
             .unwrap_or(Value::Null);
-        self.state()
-            .requests
-            .push((request.method.to_owned(), path.clone()));
+        let recorded =
+            json!({ "method": request.method, "path": path, "query": query, "body": body });
+        {
+            let mut state = self.state();
+            state
+                .requests
+                .push((request.method.to_owned(), path.clone()));
+            state.recorded.push(recorded.clone());
+        }
         self.changed();
+        if let Some(fetch) = &self.options.fetch
+            && let Some(response) = fetch(&self, &recorded)
+        {
+            let response = response.await;
+            self.changed();
+            return Ok(response);
+        }
         let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         let response = match (request.method, segments.as_slice()) {
             ("GET", ["api", "event"]) => return Ok(self.events_stream()),
@@ -362,13 +456,7 @@ impl Server {
             ),
             ("GET", ["api", "agent"]) => catalog(&query, json!(self.state().agents)),
             ("GET", ["api", "command"]) => catalog(&query, json!(self.state().commands)),
-            ("GET", ["api", "plugin"]) => catalog(
-                &query,
-                json!([{
-                    "id": "opencode.models.dev", "source": { "type": "builtin" },
-                    "features": { "server": true }, "state": { "status": "active" },
-                }]),
-            ),
+            ("GET", ["api", "plugin"]) => catalog(&query, json!(self.state().plugins)),
             ("GET", ["api", "session"]) => {
                 let sessions: Vec<Value> = self
                     .state()
@@ -426,11 +514,32 @@ impl Server {
                         let forked =
                             format!("ses_{}", self.sessions.fetch_add(1, Ordering::SeqCst) + 1);
                         session["id"] = json!(forked);
-                        self.state().sessions.insert(forked, session.clone());
+                        let mut state = self.state();
+                        let messages = state.messages.get(*id).cloned().unwrap_or_default();
+                        state.messages.insert(forked.clone(), messages);
+                        state.sessions.insert(forked, session.clone());
                         json_response(200, json!({ "data": session }))
                     }
                     None => not_found(id),
                 }
+            }
+            ("GET", ["api", "session", id, "message"]) => {
+                let items = self.state().messages.get(*id).cloned().unwrap_or_default();
+                let start: usize = query
+                    .get("cursor")
+                    .and_then(|cursor| cursor.parse().ok())
+                    .unwrap_or(0);
+                let limit: usize = query
+                    .get("limit")
+                    .and_then(|limit| limit.parse().ok())
+                    .unwrap_or(200);
+                let data: Vec<Value> = items.iter().skip(start).take(limit).cloned().collect();
+                let cursor = if start + limit < items.len() {
+                    json!({ "next": (start + limit).to_string() })
+                } else {
+                    json!({})
+                };
+                json_response(200, json!({ "data": data, "cursor": cursor }))
             }
             ("POST", ["api", "session", id, "model"]) => {
                 self.state()
@@ -534,6 +643,16 @@ impl Server {
                 self.send(&events);
                 no_content()
             }
+            ("POST", ["api", "session", id, "form", form_id, "reply"]) => {
+                let reply = json!({ "sessionID": id, "formID": form_id, "answer": body["answer"] });
+                self.state().replied_forms.push(reply.clone());
+                let events = match &self.options.on_form_reply {
+                    Some(hook) => hook(reply).await,
+                    None => Vec::new(),
+                };
+                self.send(&events);
+                no_content()
+            }
             ("PUT", ["api", "experimental", "mcp", name]) => {
                 self.state().mcp.push(json!({
                     "name": name,
@@ -577,7 +696,7 @@ fn merge(target: &mut Value, source: &Value) {
     }
 }
 
-fn json_response(status: u16, body: Value) -> Response {
+pub fn json_response(status: u16, body: Value) -> Response {
     let bytes = Bytes::from(body.to_string());
     Response {
         status,
@@ -586,7 +705,7 @@ fn json_response(status: u16, body: Value) -> Response {
     }
 }
 
-fn no_content() -> Response {
+pub fn no_content() -> Response {
     Response {
         status: 204,
         headers: Vec::new(),
@@ -613,7 +732,7 @@ fn catalog(query: &HashMap<String, String>, data: Value) -> Response {
 }
 
 /// The response to a submission the server admitted to the session inbox.
-fn enqueued(session_id: &str, id: &str, kind: &str, payload: Value) -> Response {
+pub fn enqueued(session_id: &str, id: &str, kind: &str, payload: Value) -> Response {
     json_response(
         200,
         json!({ "data": { "id": id, "sessionID": session_id, "time": { "created": 0 }, "type": kind, "payload": payload, "delivery": "steer" } }),
@@ -729,6 +848,8 @@ pub async fn start_wire(options: WireOptions) -> Wire {
         elicitations: wire.elicitations.clone(),
         changed: wire.changed.clone(),
         permission: options.permission.clone(),
+        elicitation: options.elicitation.clone(),
+        held: Mutex::default(),
     };
     tokio::spawn(async move {
         let mut lines = BufReader::new(client_read).lines();
@@ -763,9 +884,26 @@ struct Reader {
     elicitations: Arc<Mutex<Vec<Value>>>,
     changed: Arc<Notify>,
     permission: Option<Answer>,
+    elicitation: Option<Answer>,
+    /// Answers held until the agent cancels their request, by request ID.
+    held: Mutex<Vec<(Value, Value)>>,
 }
 
 impl Reader {
+    fn reply(&self, id: &Value, reply: Reply, answers: &mpsc::UnboundedSender<Value>) {
+        let message = match reply {
+            Reply::Result(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            Reply::Error(message) => {
+                json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32603, "message": message } })
+            }
+            Reply::UntilCancelled(result) => {
+                lock(&self.held).push((id.clone(), result));
+                return;
+            }
+        };
+        let _ = answers.send(message);
+    }
+
     fn receive(&self, message: Value, answers: &mpsc::UnboundedSender<Value>) {
         lock(&self.received).push(message.clone());
         let params = message.get("params").cloned().unwrap_or(Value::Null);
@@ -776,17 +914,27 @@ impl Reader {
             (Some("session/update"), None) => lock(&self.updates).push(params),
             (Some("opencode/session/child_update"), None) => lock(&self.child_updates).push(params),
             (Some("session/request_permission"), Some(id)) => {
-                let result = self.permission.as_ref().map_or_else(
-                    || json!({ "outcome": { "outcome": "cancelled" } }),
+                lock(&self.permissions).push(params.clone());
+                let reply = self.permission.as_ref().map_or_else(
+                    || Reply::Result(json!({ "outcome": { "outcome": "cancelled" } })),
                     |answer| answer(&params),
                 );
-                lock(&self.permissions).push(params);
-                let _ = answers.send(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+                self.reply(id, reply, answers);
             }
             (Some("elicitation/create"), Some(id)) => {
-                lock(&self.elicitations).push(params);
-                let _ = answers
-                    .send(json!({ "jsonrpc": "2.0", "id": id, "result": { "action": "cancel" } }));
+                lock(&self.elicitations).push(params.clone());
+                let reply = self.elicitation.as_ref().map_or_else(
+                    || Reply::Result(json!({ "action": "cancel" })),
+                    |answer| answer(&params),
+                );
+                self.reply(id, reply, answers);
+            }
+            (Some("$/cancel_request"), None) => {
+                let mut held = lock(&self.held);
+                if let Some(index) = held.iter().position(|(id, _)| *id == params["requestId"]) {
+                    let (id, result) = held.remove(index);
+                    let _ = answers.send(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+                }
             }
             (None, Some(id)) => {
                 let Some(sender) = id.as_u64().and_then(|id| lock(&self.pending).remove(&id))
