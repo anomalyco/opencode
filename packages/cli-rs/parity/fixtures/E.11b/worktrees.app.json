@@ -1,0 +1,519 @@
+{
+  "scenario": "E.11b/worktrees",
+  "width": 100,
+  "height": 30,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "animations": false,
+    "experimental": {
+      "new-designs": true
+    }
+  },
+  "args": {},
+  "routes": [
+    {
+      "path": "/api/worktree",
+      "json": [
+        {
+          "directory": "/tmp/opencode"
+        },
+        {
+          "directory": "/tmp/opencode-spike",
+          "strategy": "git"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/worktree/refresh",
+      "status": 204
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "home",
+      "until": "Ask anything",
+      "masks": [
+        {
+          "x": 16,
+          "y": 16,
+          "width": 74,
+          "height": 1,
+          "reason": "random placeholder example"
+        }
+      ],
+      "fixture": "E.11b/worktrees/home"
+    },
+    {
+      "type": "/worktrees"
+    },
+    {
+      "checkpoint": "slash",
+      "until": "Manage workspaces",
+      "fixture": "E.11b/worktrees/slash"
+    },
+    {
+      "keys": [
+        "enter"
+      ]
+    },
+    {
+      "checkpoint": "list",
+      "until": "opencode-spike",
+      "fixture": "E.11b/worktrees/list"
+    },
+    {
+      "keys": [
+        "down",
+        "ctrl+d"
+      ]
+    },
+    {
+      "checkpoint": "marked",
+      "until": "again to confirm",
+      "fixture": "E.11b/worktrees/marked"
+    },
+    {
+      "keys": [
+        "down",
+        "ctrl+a"
+      ]
+    },
+    {
+      "checkpoint": "name",
+      "until": "Name worktree",
+      "deviation": [
+        "T17-home-prompt"
+      ],
+      "fixture": "E.11b/worktrees/name"
+    },
+    {
+      "type": "My Spike"
+    },
+    {
+      "keys": [
+        "enter"
+      ]
+    },
+    {
+      "checkpoint": "staged",
+      "until": "(new worktree)",
+      "masks": [
+        {
+          "x": 16,
+          "y": 16,
+          "width": 74,
+          "height": 1,
+          "reason": "random placeholder example"
+        }
+      ],
+      "fixture": "E.11b/worktrees/staged"
+    }
+  ],
+  "requests": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/api/worktree/refresh",
+        "query": {},
+        "body": {
+          "projectID": "proj_test"
+        },
+        "status": 204
+      }
+    ],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/worktree",
+        "query": {
+          "projectID": [
+            "proj_test"
+          ]
+        },
+        "status": 200,
+        "json": [
+          {
+            "directory": "/tmp/opencode"
+          },
+          {
+            "directory": "/tmp/opencode-spike",
+            "strategy": "git"
+          }
+        ]
+      }
+    ]
+  }
+}

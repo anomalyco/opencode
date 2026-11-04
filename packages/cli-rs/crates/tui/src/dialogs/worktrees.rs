@@ -229,7 +229,7 @@ impl Workspaces {
                             state.directories = Some(directories);
                             state.load_error = None;
                         }
-                        Err(error) => state.load_error = Some(error.to_string()),
+                        Err(error) => state.load_error = Some(error_message(&error)),
                     }
                     let refresh = state.directories.is_some() && !state.refreshed;
                     state.refreshed |= refresh;
@@ -262,7 +262,7 @@ impl Workspaces {
             },
             move |_, result| {
                 if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
-                    tui.toasts.error(error.to_string());
+                    tui.toasts.error(error_message(&error));
                 }
             },
         );
@@ -796,7 +796,7 @@ impl Workspaces {
     fn failed(&self, error: &opencode_api::error::Error) {
         if let Some(tui) = self.tui() {
             tui.toasts.show(
-                ToastOptions::new(Variant::Error, error.to_string())
+                ToastOptions::new(Variant::Error, error_message(error))
                     .title("Failed to delete worktree"),
             );
         }
@@ -890,7 +890,7 @@ impl Workspaces {
             },
             move |_, result| {
                 if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                    tui.toasts.error(error.to_string());
+                    tui.toasts.error(error_message(&error));
                 }
             },
         );
@@ -952,6 +952,18 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
         |workspaces| workspaces.refresh_worktrees(true),
     ));
     actions
+}
+
+/// `errorMessage`: a declared error's message, else the error.
+pub(crate) fn error_message(error: &opencode_api::error::Error) -> String {
+    match error.declared() {
+        Some(declared) => declared
+            .message
+            .clone()
+            .or_else(|| declared.tag.clone())
+            .unwrap_or_else(|| error.to_string()),
+        None => error.to_string(),
+    }
 }
 
 /// The server marks a delete that would lose file changes (`WorktreeError` with `data.forceRequired`).
