@@ -1182,10 +1182,12 @@ dependencies = [
  "opencode-store",
  "opencode-ui",
  "opentui",
+ "regex",
  "serde_json",
  "tempfile",
  "tokio",
  "unicode-width",
+ "url",
  "uuid",
 ]
 
