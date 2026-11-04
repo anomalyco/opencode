@@ -84,6 +84,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       return dispatch({ type: "submit", snapshot: snapshot(input, effect.alternate), done: effect.done })
 
     if (effect.type === "command.run") {
+      input.adapter.beforeSubmit?.()
       void runClientCommand(input, effect.prompt, effect.run).then(
         () => dispatch({ type: "run.settled", attempt: effect.attempt, sent: true }),
         (error) => {
@@ -96,6 +97,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     }
 
     if (effect.type === "quote.send") {
+      input.adapter.beforeSubmit?.()
       const target = input.adapter.state
 
       void dispatchPrompt(input, effect.session, effect.value)
@@ -119,6 +121,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     }
 
     if (effect.type === "session.start") {
+      input.adapter.beforeSubmit?.()
       void startSession(input, effect.value, {
         target: () => composerSubmitTarget(state(), effect.attempt) ?? effect.target,
         retarget: (target, options) =>

@@ -1,10 +1,9 @@
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { useTabs } from "@/shell/tabs/tabs"
+import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
-import { createEffect, createMemo, startTransition } from "solid-js"
-import type { SessionInfo } from "@opencode/client/promise"
+import { createEffect, createMemo } from "solid-js"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
 
@@ -12,7 +11,7 @@ export function createHomeController() {
   const layout = useLayout()
   const global = useGlobal()
   const servers = useServers()
-  const tabs = useTabs()
+  const sessions = createProjectSessionActions()
   const selection = layout.home.selection
 
   const focusedServer = createMemo<ServerConnection.Any | undefined>(
@@ -66,24 +65,6 @@ export function createHomeController() {
     layout.home.setSelection(next)
   }
 
-  function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
-    global.serverCtx(ServerConnection.key(conn))?.projects.touch(directory)
-    void tabs.newDraft({ server: ServerConnection.key(conn), directory })
-  }
-
-  function openProjectSession(conn: ServerConnection.Any, directory: string, session: SessionInfo) {
-    const ctx = global.serverCtx(ServerConnection.key(conn))
-
-    if (!ctx) return
-    void ctx.data.session.message.sync(session.id).catch(() => undefined)
-    void startTransition(() => {
-      const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
-      tabs.select(tab)
-      ctx.data.session.remember(session)
-      ctx.projects.touch(directory)
-    })
-  }
-
   return {
     selection: {
       value: selection,
@@ -132,10 +113,10 @@ export function createHomeController() {
         const project = newSessionProject()
 
         if (!conn || !project) return
-        openProjectNewSession(conn, project.worktree)
+        sessions.openProjectNewSession(conn, project.worktree)
       },
-      openProjectNewSession,
-      openProjectSession,
+      openProjectNewSession: sessions.openProjectNewSession,
+      openProjectSession: sessions.openProjectSession,
     },
   }
 }
