@@ -50,20 +50,23 @@ test("Code Mode lists one string argument for freeform tools and executes both i
   expect((await run('return await tools.echo("object required")')).error).toBe(true)
 })
 
-test("Core tools can opt into positional Code Mode calls with multiple fields", async () => {
+test("a freeform declaration on a multi-field Core tool keeps the named input", async () => {
   const tool = {
     name: "scan",
     description: "Scan a path",
-    options: { flat: true },
+    freeform: { type: "text" },
     input: Schema.Struct({ path: Schema.String, options: Schema.Struct({ recursive: Schema.Boolean }) }),
     output: Schema.String,
     execute: ({ path, options }) => Effect.succeed({ output: `${path}:${options.recursive}` }),
   } satisfies Info
   const tools = new Map([[tool.name, tool]])
-  const signature = "tools.scan(path: string, options: { recursive: boolean }): Promise<string>"
-  expect(CodeModeTool.catalog({ tools }).tools).toContainEqual(expect.objectContaining({ signature }))
+  const codeMode = createCodeMode(tools)
+  const positional = await Effect.runPromise(
+    codeMode.execute({ code: 'return await tools.scan("src", {recursive:true})' }, context),
+  )
+  expect(positional.output.error).toBe(true)
   const result = await Effect.runPromise(
-    createCodeMode(tools).execute({ code: 'return await tools.scan("src", {recursive:true})' }, context),
+    codeMode.execute({ code: 'return await tools.scan({path:"src", options:{recursive:true}})' }, context),
   )
   expect(result.output).toMatchObject({
     output: "src:true",

@@ -47,13 +47,10 @@ export type Options = BaseOptions &
     | {
         readonly codemode?: true
         readonly pinned?: boolean
-        /** Offer top-level fields as positional arguments in Code Mode. */
-        readonly flat?: boolean
       }
     | {
         readonly codemode: boolean
         readonly pinned?: never
-        readonly flat?: never
       }
   )
 

@@ -305,9 +305,7 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
-      flat:
-        registration.options?.flat ??
-        (child.freeform !== undefined && ToolDefinition.freeformField(child.inputSchema) !== undefined),
+      flat: child.freeform !== undefined && ToolDefinition.freeformField(child.inputSchema) !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
