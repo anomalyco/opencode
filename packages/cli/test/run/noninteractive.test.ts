@@ -618,4 +618,165 @@ describe("runNonInteractivePrompt", () => {
     expect(events[0].part.state.metadata.content).toBeUndefined()
     expect(output.stderr).toBe("")
   })
+
+  test("waits for background subagents and streams the resumed parent reply before exiting", async () => {
+    const childID = "ses_0123456789abcdef0123456789"
+    const wakeID = "msg_0123456789abcdef0123456789"
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [
+        prompted(messageID),
+        stepStarted(),
+        {
+          id: "evt_sub_in_start",
+          created: 2,
+          type: "session.tool.input.started",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", id: "call_sub", name: "subagent" },
+        },
+        {
+          id: "evt_sub_called",
+          created: 3,
+          type: "session.tool.called",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_assistant",
+            id: "call_sub",
+            input: { agent: "explore", description: "find port", prompt: "find port" },
+            executed: false,
+          },
+        },
+        {
+          id: "evt_sub_done",
+          created: 4,
+          type: "session.tool.success",
+          durable: { aggregateID: "ses_1", seq: 4, version: 2 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_assistant",
+            id: "call_sub",
+            executed: false,
+            metadata: { sessionID: childID, status: "running" },
+            content: [{ type: "text", text: `Subagent running (${childID})` }],
+          },
+        },
+        // Turn 1 ends while the subagent is still running in the background.
+        settled("success"),
+        {
+          id: "evt_sub_wake_enqueued",
+          created: 5,
+          type: "session.inbox.enqueued",
+          durable: { aggregateID: "ses_1", seq: 5, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: wakeID,
+            item: {
+              type: "synthetic",
+              delivery: "steer",
+              payload: {
+                text: `<subagent sessionID="${childID}" state="completed">\nPORT=8491\n</subagent>`,
+                description: "find port",
+                metadata: { source: "subagent", childID, agent: "explore", state: "completed" },
+              },
+            },
+          },
+        },
+        {
+          id: "evt_sub_wake_delivered",
+          created: 6,
+          type: "session.inbox.delivered",
+          durable: { aggregateID: "ses_1", seq: 6, version: 1 },
+          data: { sessionID: "ses_1", inboxID: wakeID },
+        },
+        {
+          id: "evt_step2_started",
+          created: 7,
+          type: "session.step.started",
+          durable: { aggregateID: "ses_1", seq: 7, version: 1 },
+          data: {
+            started: 7,
+            sessionID: "ses_1",
+            assistantMessageID: "msg_assistant_2",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+          },
+        },
+        {
+          id: "evt_text2_ended",
+          created: 8,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 8, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_assistant_2",
+            ordinal: 0,
+            text: "Final answer using PORT=8491",
+          },
+        },
+        {
+          id: "evt_turn2_succeeded",
+          created: 9,
+          type: "session.execution.succeeded",
+          durable: { aggregateID: "ses_1", seq: 9, version: 1 },
+          data: { sessionID: "ses_1" },
+        },
+      ],
+    })
+    const events = output.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    expect(events.some((event) => event.type === "text" && event.part.text === "Final answer using PORT=8491")).toBe(
+      true,
+    )
+  })
+
+  test("exits cleanly if a background subagent goes idle without emitting a completion notice", async () => {
+    const childID = "ses_fedcba9876543210fedcba9876"
+    const output = await capture({
+      format: "json",
+      wait: () => Promise.resolve(),
+      turn: (messageID) => [
+        prompted(messageID),
+        stepStarted(),
+        {
+          id: "evt_sub_lost_start",
+          created: 2,
+          type: "session.tool.input.started",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", id: "call_sub_lost", name: "subagent" },
+        },
+        {
+          id: "evt_sub_lost_done",
+          created: 3,
+          type: "session.tool.success",
+          durable: { aggregateID: "ses_1", seq: 3, version: 2 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_assistant",
+            id: "call_sub_lost",
+            executed: false,
+            metadata: { sessionID: childID, status: "running" },
+            content: [{ type: "text", text: `Subagent running (${childID})` }],
+          },
+        },
+        settled("success"),
+      ],
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "Delegated work" }],
+          finish: "stop",
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stdout).toContain("Delegated work")
+  })
 })
