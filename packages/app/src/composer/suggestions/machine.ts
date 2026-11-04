@@ -143,13 +143,21 @@ function inputChanged(
     ])
   }
 
-  return changed(
-    { ...state, popover: state.popover.type === "command-menu" ? state.popover : { type: "closed" }, focus: "editor" },
-    setText,
-  )
+  // Typing in the editor leaves the command menu, whose own search field takes its input.
+  return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, setText)
 }
 
 function openCommands(state: ComposerInteractionState, persisted: ComposerPersistedState): ComposerEditorTransition {
+  // A second press closes the commands, taking back the slash the first one typed.
+  if (state.popover.type === "command-inline" || state.popover.type === "command-menu") {
+    const typed = state.popover.type === "command-inline" && promptText(persisted) === "/"
+
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [
+      ...(typed ? [{ type: "draft.setText" as const, value: "" }] : []),
+      { type: "focus.editor" },
+    ])
+  }
+
   if (!populated(persisted)) {
     return changed({ ...state, popover: { type: "command-inline", query: "" }, focus: "editor" }, [
       { type: "draft.addText", value: "/" },
@@ -268,6 +276,13 @@ function keyDown(
     }
 
     return unchanged(state)
+  }
+
+  // Backspace on an empty search backs out of the command menu, as it closes inline commands by deleting their slash.
+  // iOS does not move the keyboard to the search field the menu focuses, so the key can arrive from the editor; it is
+  // handled there too, so backing out never also deletes from the draft.
+  if (event.key === "Backspace" && state.popover.type === "command-menu" && !state.popover.query) {
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [{ type: "focus.editor" }], true)
   }
 
   if (event.key === "Escape" || (state.popover.type === "history" && event.key === "Tab")) {
