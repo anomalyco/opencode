@@ -1,6 +1,11 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, untrack } from "solid-js"
-import { createServerProjects, ServerConnection, useServers } from "./registry"
+import {
+  adoptServerDirectory,
+  createServerProjects,
+  ServerConnection,
+  useServers,
+} from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
@@ -75,6 +80,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
           server.scope(key),
           () => server.local(conn),
           server.projects.forServer(key),
+          server.hydrated,
           notificationCoordinator,
         )
       }, owner)
@@ -193,6 +199,7 @@ function createServerController(
   scope: ServerScope,
   isLocal: Accessor<boolean>,
   projects: ReturnType<typeof createServerProjects>,
+  hydrated: () => boolean,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
 ) {
   const language = useLanguage()
@@ -251,6 +258,16 @@ function createServerController(
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
+
+  // Show the folder `opencode serve` was started in. Desktop sidecars are started by
+  // the app, not from a project folder.
+  if (conn.type !== "sidecar")
+    adoptServerDirectory({
+      hydrated,
+      connected: () => sdk.connection.status() === "connected",
+      location: () => sdk.api.location.get(),
+      adopt: projects.adopt,
+    })
 
   // Projects whose repository has no root commit share the `global` ID; their name and icon stay local to the
   // directory because the server cannot tell them apart.

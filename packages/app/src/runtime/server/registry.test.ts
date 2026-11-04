@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import {
+  adoptable,
   canRemoveServer,
   createServerProjects,
   resolveServerList,
@@ -153,4 +154,42 @@ test("used and last projects follow dynamic server scopes, and migration consume
   expect(store.projects).toEqual({ other: [{ worktree: "/b" }] })
   expect(store.lastProjectID).toEqual({ local: "a", [props.server]: "remote-project" })
   expect(store.usedProjectIDs).toEqual({ local: ["a"], [props.server]: ["remote-project"] })
+})
+
+function projectsFor(scope: string) {
+  const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+  const at = (key: string) =>
+    createServerProjects({ store, setStore, scope: () => ServerScope.fromServerKey(ServerConnection.Key.make(key)) })
+
+  return { store, setStore, projects: at(scope), at }
+}
+
+test("adopt opens a directory only when no project is open", () => {
+  const { store, projects } = projectsFor("https://a.example")
+
+  projects.adopt("/srv/repo")
+  expect(store.projects["https://a.example"]).toEqual([{ worktree: "/srv/repo" }])
+  expect(projects.last()).toBe("/srv/repo")
+
+  projects.adopt("/srv/other")
+  expect(store.projects["https://a.example"]).toEqual([{ worktree: "/srv/repo" }])
+  expect(projects.last()).toBe("/srv/repo")
+})
+
+test("adopt is scoped per server", () => {
+  const { store, setStore, at } = projectsFor("https://a.example")
+  const other = at("https://b.example")
+
+  setStore("projects", "https://a.example", [{ worktree: "/repo" }])
+  other.adopt("/srv/repo")
+  expect(store.projects["https://b.example"]).toEqual([{ worktree: "/srv/repo" }])
+  expect(store.projects["https://a.example"]).toEqual([{ worktree: "/repo" }])
+})
+
+test("adoptable skips filesystem roots and empty paths", () => {
+  expect(adoptable("/srv/repo")).toBe(true)
+  expect(adoptable("C:\\Users\\u\\repo")).toBe(true)
+  expect(adoptable("/")).toBe(false)
+  expect(adoptable("C:\\")).toBe(false)
+  expect(adoptable("")).toBe(false)
 })
