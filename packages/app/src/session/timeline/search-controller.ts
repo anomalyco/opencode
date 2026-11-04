@@ -231,9 +231,6 @@ export function createTimelineSearchController(input: {
       onSelect: () => open(),
     },
   ])
-  const onOpenRequest = () => open()
-  document.addEventListener("opencode:timeline-search-open", onOpenRequest)
-  onCleanup(() => document.removeEventListener("opencode:timeline-search-open", onOpenRequest))
 
   function open() {
     setState("visible", true)
