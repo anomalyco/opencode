@@ -426,12 +426,19 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
         ),
       "session.compaction.ended": (event) =>
         Effect.gen(function* () {
+          const metadata =
+            event.data.pendingUserIDs === undefined
+              ? event.metadata
+              : {
+                  ...event.metadata,
+                  pendingUserIDs: event.data.pendingUserIDs,
+                }
           const current = yield* adapter.getCompaction()
           if (current?.status === "running") {
             yield* adapter.updateCompaction({
               ...current,
               status: "completed",
-              metadata: event.metadata ? { ...current.metadata, ...event.metadata } : current.metadata,
+              metadata: metadata ? { ...current.metadata, ...metadata } : current.metadata,
               reason: event.data.reason,
               model: event.data.model,
               native: event.data.native,
@@ -446,7 +453,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               id: SessionMessage.ID.fromEvent(event.id),
               type: "compaction",
               status: "completed",
-              metadata: event.metadata,
+              metadata,
               reason: event.data.reason,
               model: event.data.model,
               native: event.data.native,

@@ -156,7 +156,7 @@ const input = (tokens: number) => {
       type: "assistant",
       agent: Agent.defaultID,
       model: { id: "test-model", providerID: "test-provider" },
-      content: [],
+      content: [{ type: "text", text: "Earlier answer" }],
       tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, completed: 0 },
     }),

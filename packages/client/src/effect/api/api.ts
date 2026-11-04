@@ -1303,6 +1303,7 @@ export type ExperimentalSessionLogOutput =
             readonly model?: Model.Ref | undefined
             readonly native?: SessionMessage.Native | undefined
             readonly text: string
+            readonly pendingUserIDs?: ReadonlyArray<SessionMessage.ID> | undefined
             readonly cost?: Money.USD | undefined
             readonly tokens?:
               | {
