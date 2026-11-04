@@ -166,6 +166,7 @@ test.each(
     createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: {
           listen: (listener: (event: OpenCodeEvent) => void) => {
             listeners.push(listener)
@@ -264,6 +265,7 @@ test.each([
     createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: {
           listen: (listener: (event: OpenCodeEvent) => void) => {
             listeners.push(listener)
@@ -315,6 +317,7 @@ test("unread state and viewing follow the server's idle and viewed watermarks", 
     const state = createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: { listen: () => () => {} },
         api: {
           session: {
@@ -368,11 +371,21 @@ test("unread state and viewing follow the server's idle and viewed watermarks", 
   setStore("sessions", "root", "time", "idle", 6)
   expect(state.session.unread("root")).toBe(true)
   state.project.markViewed("/project")
+  expect(views.slice(2)).toEqual([{ sessionID: "root", idle: 6 }])
+
+  // Menu and Inbox actions mark sessions viewed from event handlers, with nothing to re-run them: a failed report
+  // still retries on its own, and a sibling's success does not cancel that retry.
+  setStore("viewing", undefined)
+  setStore("sessions", "root", "time", "idle", 8)
+  failures.remaining = 1
+  state.project.markViewed("/project")
   state.project.markViewed("/other")
-  expect(views.slice(2)).toEqual([
-    { sessionID: "root", idle: 6 },
+  expect(views.slice(3)).toEqual([
+    { sessionID: "root", idle: 8 },
     { sessionID: "other", idle: 4 },
   ])
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  expect(views.slice(5)).toEqual([{ sessionID: "root", idle: 8 }])
   dispose.dispose()
 })
 
