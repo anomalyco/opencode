@@ -1,6 +1,8 @@
 export * as ManagedPolicy from "./managed-policy.js"
 
 import { Document, type Entry } from "@opencode/schema/config"
+import { Mcp } from "@opencode/schema/mcp"
+import { Schema } from "effect"
 import { ConfigIntegration } from "./config/integration.js"
 import { Wildcard } from "./util/wildcard.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -37,6 +39,52 @@ export function match<Policy extends ConfigPolicy.Info>(
 export function decision(policies: readonly ConfigPolicy.Info[], action: ConfigPolicy.Action, resource: string) {
   return match(policies, action, resource)?.effect ?? "allow"
 }
+
+/**
+ * The decision on an MCP server. A resource starting with `http://` or `https://` matches the server's URL, so it
+ * holds whatever local config names the server; any other resource matches the name. Local servers have no URL.
+ */
+export function mcpDecision(
+  policies: readonly ConfigPolicy.Info[],
+  action: Extract<ConfigPolicy.Action, `mcp.${string}`>,
+  server: { readonly name: string; readonly url?: string },
+) {
+  return (
+    policies.findLast(
+      (policy) =>
+        policy.action === action &&
+        (/^https?:\/\//i.test(policy.resource)
+          ? Mcp.matchUrl(server.url, policy.resource)
+          : Wildcard.match(server.name, policy.resource)),
+    )?.effect ?? "allow"
+  )
+}
+
+/**
+ * The `tool.use` statement deciding a permission check. `mcp:<url>#<tool>` matches an MCP tool by its server's URL
+ * and its own name; any other resource matches `<action>:<resource>`.
+ */
+export function toolMatch<Policy extends ConfigPolicy.Info>(
+  policies: readonly Policy[],
+  check: { readonly action: string; readonly resource: string; readonly mcp?: McpIdentity },
+) {
+  return policies.findLast((policy) => {
+    if (policy.action !== "tool.use") return false
+    if (!policy.resource.startsWith("mcp:")) return Wildcard.match(`${check.action}:${check.resource}`, policy.resource)
+    const target = policy.resource.slice(4)
+    const separator = target.indexOf("#")
+    return (
+      check.mcp !== undefined &&
+      separator !== -1 &&
+      Mcp.matchUrl(check.mcp.url, target.slice(0, separator)) &&
+      Wildcard.match(check.mcp.tool, target.slice(separator + 1))
+    )
+  })
+}
+
+/** What an MCP tool's permission check carries so `tool.use` can match it by URL: the tool and its server's URL. */
+export const McpIdentity = Schema.Struct({ tool: Schema.String, url: Schema.optional(Schema.String) })
+export type McpIdentity = typeof McpIdentity.Type
 
 /**
  * The `integration.use` resource for what an integration supplies: `<integration>#<account>` when a connection with

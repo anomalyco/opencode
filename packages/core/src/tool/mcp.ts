@@ -64,7 +64,10 @@ export const layer = Layer.effect(
                       action: name(tool.server, tool.name),
                       resources: ["*"],
                       save: ["*"],
-                      metadata: { input: input ?? {} },
+                      metadata: {
+                        input: input ?? {},
+                        mcp: tool.url === undefined ? { tool: tool.name } : { tool: tool.name, url: tool.url },
+                      },
                       ...Permission.invocation(context),
                     })
                     const result = yield* mcp

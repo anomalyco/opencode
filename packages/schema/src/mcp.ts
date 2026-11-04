@@ -66,6 +66,54 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
 export type ServerConfig = typeof ServerConfig.Type
 
+/**
+ * A remote MCP server's identity for policy: lowercase origin without a default port, then the path without
+ * trailing or repeated slashes and with unreserved characters decoded. The query and fragment are dropped.
+ * Undefined unless `raw` is an `http:` or `https:` URL without credentials.
+ */
+export function normalizeUrl(raw: string) {
+  const url = parseUrl(raw)
+  return url && `${url.protocol}//${url.host}${url.path}`
+}
+
+/**
+ * Whether a server URL matches a policy pattern. `*` matches every server, including local ones without a URL.
+ * Otherwise the pattern is a URL compared component by component: the scheme exactly, the host (with any port)
+ * as a `*` wildcard, then the path. A pattern without a path covers the whole host, a path with `*` must match
+ * the whole path, and a literal path matches itself and the paths below it.
+ */
+export function matchUrl(serverUrl: string | undefined, pattern: string) {
+  if (pattern.trim() === "*") return true
+  const server = serverUrl === undefined ? undefined : parseUrl(serverUrl)
+  const expected = parseUrl(pattern)
+  if (!server || !expected || server.protocol !== expected.protocol) return false
+  if (!wildcard(expected.host).test(server.host)) return false
+  if (expected.path === "") return true
+  if (expected.path.includes("*")) return wildcard(expected.path).test(server.path)
+  return server.path === expected.path || server.path.startsWith(`${expected.path}/`)
+}
+
+function parseUrl(raw: string) {
+  const url = URL.parse(raw.trim())
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) return undefined
+  return {
+    protocol: url.protocol,
+    host: url.host,
+    path: url.pathname
+      .replace(/%[0-9a-f]{2}/gi, (code) => {
+        const char = String.fromCharCode(Number.parseInt(code.slice(1), 16))
+        return /[\w.~-]/.test(char) ? char : code.toUpperCase()
+      })
+      .replace(/\/{2,}/g, "/")
+      .replace(/\/$/, ""),
+  }
+}
+
+function wildcard(pattern: string) {
+  const parts = pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+  return new RegExp(`^${parts.join(".*")}$`)
+}
+
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",
 })

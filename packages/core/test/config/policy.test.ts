@@ -70,16 +70,27 @@ const addPlugin = Effect.fn(function* (entries: Entry[]) {
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
-const evaluate = Effect.fn(function* (action: string, resources: string[], effect: Permission.Effect = "allow") {
+const evaluate = Effect.fn(function* (
+  action: string,
+  resources: string[],
+  effect: Permission.Effect = "allow",
+  metadata?: Record<string, unknown>,
+) {
   const hooks = yield* PluginHooks.Service
   const event = yield* hooks.trigger("permission", "evaluate", {
     sessionID: Session.ID.make("ses_policy"),
     action,
     resources,
+    metadata,
     effect,
   })
   return { effect: event.effect, message: event.message }
 })
+
+// An MCP tool's permission check as McpTool makes it; local servers have no URL.
+const github = "https://api.githubcopilot.com/mcp"
+const call = (server: string, name: string, url?: string) =>
+  evaluate(`${server}_${name}`, ["*"], "allow", { input: {}, mcp: url ? { tool: name, url } : { tool: name } })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
   it.effect("preserves last-match precedence for tool.use without granting approvals", () =>
@@ -190,6 +201,40 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       expect((yield* evaluate("question", ["*"])).effect).toBe("deny")
       expect((yield* evaluate("read", ["/tmp/notes.txt"])).effect).toBe("deny")
       expect((yield* evaluate("github_delete_repository", ["*"])).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("matches mcp:<url>#<tool> against an MCP tool's server URL, whatever its local name", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", `mcp:${github}#delete_*`))])
+
+      expect((yield* call("gh", "delete_repo", github)).effect).toBe("deny")
+      expect((yield* call("gh", "delete_repo", `${github}/readonly`)).effect).toBe("deny")
+      expect((yield* call("gh", "get_issue", github)).effect).toBe("allow")
+      expect((yield* call("github", "delete_repo", "https://mcp.example.com/mcp")).effect).toBe("allow")
+      expect((yield* call("github", "delete_repo")).effect).toBe("allow")
+      // Without MCP identity, as for any other tool, the resource matches only as `<action>:<resource>`.
+      expect((yield* evaluate("gh_delete_repo", ["*"])).effect).toBe("allow")
+    }),
+  )
+
+  it.effect("lets mcp:<url>#<tool> lift a broad deny only for the server at that URL", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", "*"), tool("allow", `mcp:${github}#get_*`))])
+
+      expect((yield* call("gh", "get_issue", github)).effect).toBe("allow")
+      expect((yield* call("github", "get_issue", "https://evil.example/mcp")).effect).toBe("deny")
+      expect((yield* call("github", "get_issue")).effect).toBe("deny")
+      expect((yield* call("gh", "delete_repo", github)).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("still matches MCP tools by <server>_<tool> name", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(tool("deny", "github_delete_*:*"))])
+
+      expect((yield* call("github", "delete_repo", github)).effect).toBe("deny")
+      expect((yield* call("gh", "delete_repo", github)).effect).toBe("allow")
     }),
   )
 

@@ -36,8 +36,8 @@ export interface ServerInstructions {
   readonly instructions: string
 }
 
-/** Checked MCP tool definition tagged with the server that owns it. */
-export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
+/** Checked MCP tool definition tagged with the server that owns it and, for a remote server, its normalized URL. */
+export type Tool = McpClient.Tool & { readonly server: ServerName; readonly url?: string; readonly codemode?: boolean }
 export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
@@ -430,6 +430,7 @@ export const layer = (options?: Options) =>
               (tool): Tool => ({
                 ...tool,
                 server: name,
+                url: entry.config.type === "remote" ? Mcp.normalizeUrl(entry.config.url) : undefined,
                 codemode: entry.config.codemode,
               }),
             ),

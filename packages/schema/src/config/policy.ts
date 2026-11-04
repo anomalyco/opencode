@@ -7,12 +7,15 @@ export type Effect = typeof Effect.Type
 
 /**
  * - `provider.use`: resource is a provider ID.
- * - `tool.use`: resource is `<tool>:<input>`, such as `shell:git *`.
+ * - `tool.use`: resource is `<tool>:<input>`, such as `shell:git *`, or `mcp:<url>#<tool>` for an MCP tool by its
+ *   server's URL (see `Mcp.matchUrl`).
  * - `integration.connect`: resource is an integration ID; controls which integrations can be listed and connected.
  * - `integration.use`: resource is `<integration>#<account>`, or the bare integration ID when the providers, models,
  *   web search, MCP servers, or config an integration supplies come from no account (env keys, local config, the
  *   signed-out free tier).
- * - `mcp.use`, `skill.use`, `plugin.use`: resource is an MCP server name, skill ID, or plugin target.
+ * - `mcp.use`: resource is an `http://` or `https://` URL pattern matched against the server's URL (see
+ *   `Mcp.matchUrl`), or else a server name.
+ * - `skill.use`, `plugin.use`: resource is a skill ID or plugin target.
  * - `websearch.use`: resource is a web search provider ID, such as `opencode` or `exa`.
  */
 export const Action = Schema.Literals([

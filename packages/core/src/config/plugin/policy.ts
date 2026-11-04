@@ -1,16 +1,17 @@
 export * as ConfigPolicyPlugin from "./policy.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
 import { ManagedPolicy } from "../../managed-policy.js"
 import { State } from "../../state.js"
-import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigIntegration } from "../integration.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
+
+const decodeMcpIdentity = Schema.decodeUnknownOption(ManagedPolicy.McpIdentity)
 
 export const Plugin = define({
   id: "opencode.config.policy",
@@ -85,8 +86,9 @@ export const Plugin = define({
     })
     yield* ctx.mcp.transform((servers) => {
       const statements = policies()
-      for (const [name] of servers.list()) {
-        if (ManagedPolicy.decision(statements, "mcp.use", name) === "deny") servers.remove(name)
+      for (const [name, server] of servers.list()) {
+        const url = server.type === "remote" ? server.url : undefined
+        if (ManagedPolicy.mcpDecision(statements, "mcp.use", { name, url }) === "deny") servers.remove(name)
       }
     })
     yield* ctx.skill.transform((skills) => {
@@ -98,13 +100,9 @@ export const Plugin = define({
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
         const statements = policies()
+        const mcp = Option.getOrUndefined(decodeMcpIdentity(event.metadata?.mcp))
         const denied = event.resources
-          .map((resource) =>
-            statements.findLast(
-              (policy) =>
-                policy.action === "tool.use" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
-            ),
-          )
+          .map((resource) => ManagedPolicy.toolMatch(statements, { action: event.action, resource, mcp }))
           .find((policy) => policy?.effect === "deny")
         if (!denied) return
         event.effect = "deny"

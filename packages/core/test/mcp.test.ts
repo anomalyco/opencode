@@ -442,6 +442,7 @@ const mcp = Layer.mock(Mcp.Service, {
       {
         server: Mcp.ServerName.make("demo"),
         name: "search",
+        url: "https://mcp.demo.example/mcp",
         description: "Search",
         inputSchema: { type: "object", properties: {} },
         outputSchema: {
@@ -2915,7 +2916,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       action: "demo_search",
       resources: ["*"],
       save: ["*"],
-      metadata: { input: { query: "open issues" } },
+      metadata: { input: { query: "open issues" }, mcp: { tool: "search", url: "https://mcp.demo.example/mcp" } },
       sessionID: Session.ID.make("ses_mcp_permission"),
       agent: toolIdentity.agent,
       source: {
@@ -3047,6 +3048,86 @@ for (const modern of [false, true]) {
         ),
       )
     }),
+  )
+}
+
+const policyDocument = (servers: Record<string, typeof ConfigMCP.Server.Type>, policies: ConfigPolicy.Info[]) =>
+  new Document({ type: "document", info: new Info({ mcp: new ConfigMCP.Info({ servers }), policies }) })
+
+testEffect(Layer.empty).live("connects an MCP server allowed by URL whatever its local name", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    const document = policyDocument(
+      {
+        // Disabled servers stay listed unless policy removes them, and never connect.
+        github: new ConfigMCP.Local({ type: "local", command: ["opencode-test-unused-mcp"], disabled: true }),
+        evil: new ConfigMCP.Remote({ type: "remote", url: "https://evil.example/mcp", disabled: true }),
+        gh: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      },
+      [
+        { action: "mcp.use", resource: "*", effect: "deny" },
+        { action: "mcp.use", resource: server.url.toUpperCase(), effect: "allow" },
+      ],
+    )
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect(yield* settled(service, "gh")).toEqual({ status: "connected" })
+      expect((yield* service.servers()).map((item) => item.name)).toEqual(["gh"])
+      // Tools carry the normalized URL so `tool.use` can match them by it.
+      expect((yield* service.tools()).map((tool) => tool.url)).toContain(server.url.replace(/\/$/, ""))
+    }).pipe(
+      Effect.provide(resourceMcpLayer(server.url, undefined, undefined, { entries: () => Effect.succeed([document]) })),
+    )
+  }),
+)
+
+for (const input of [
+  {
+    name: "denies a URL under any local name",
+    policies: [{ action: "mcp.use", resource: "https://api.githubcopilot.com/mcp", effect: "deny" }],
+    servers: ["github", "linear"],
+  },
+  {
+    name: "denies local servers under a deny-all with URL exceptions",
+    policies: [
+      { action: "mcp.use", resource: "*", effect: "deny" },
+      { action: "mcp.use", resource: "https://mcp.linear.app/mcp", effect: "allow" },
+    ],
+    servers: ["linear"],
+  },
+  {
+    name: "matches resources that are not URLs by server name",
+    policies: [
+      { action: "mcp.use", resource: "*", effect: "deny" },
+      { action: "mcp.use", resource: "github", effect: "allow" },
+    ],
+    servers: ["github"],
+  },
+] satisfies { name: string; policies: ConfigPolicy.Info[]; servers: string[] }[]) {
+  // Disabled servers stay listed unless policy removes them, and never connect.
+  const document = policyDocument(
+    {
+      github: new ConfigMCP.Local({ type: "local", command: ["opencode-test-unused-mcp"], disabled: true }),
+      my_octocat: new ConfigMCP.Remote({
+        type: "remote",
+        url: "https://api.githubcopilot.com/mcp/readonly",
+        disabled: true,
+      }),
+      linear: new ConfigMCP.Remote({ type: "remote", url: "https://mcp.linear.app/mcp", disabled: true }),
+    },
+    input.policies,
+  )
+  testEffect(Layer.empty).live(`mcp.use ${input.name}`, () =>
+    Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect((yield* service.servers()).map((item) => item.name)).toEqual(input.servers)
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer("https://unused.example/mcp", undefined, undefined, {
+          entries: () => Effect.succeed([document]),
+        }),
+      ),
+    ),
   )
 }
 
