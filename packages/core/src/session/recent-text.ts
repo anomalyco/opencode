@@ -1,5 +1,6 @@
 export * as SessionRecentText from "./recent-text.js"
 
+import { MessageContext } from "./message-context.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionStored } from "./stored.js"
 
@@ -30,7 +31,7 @@ export const messageToText = (message: SessionMessage.Info | SessionStored.User)
           const name = file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
           return `[Attached ${file.mime}: ${name}]`
         }) ?? []
-      return [...skills, `[User]: ${message.text}`, ...files].join("\n")
+      return [...skills, `[User]: ${MessageContext.withText(message.metadata, message.text)}`, ...files].join("\n")
     }
 
     case "location-switched":

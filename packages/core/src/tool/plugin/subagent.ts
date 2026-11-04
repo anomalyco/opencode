@@ -10,6 +10,7 @@ import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { MessageContext } from "../../session/message-context.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
@@ -209,6 +210,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
+                  metadata: MessageContext.fromSession(context.sessionID),
                   ...(background && existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(

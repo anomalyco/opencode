@@ -16709,6 +16709,9 @@
               "artifacts": {
                 "type": "boolean"
               },
+              "message_context": {
+                "type": "boolean"
+              },
               "subagent_depth": {
                 "type": "integer",
                 "minimum": 0,

@@ -2546,7 +2546,8 @@ export type ConfigEntry =
           media_blob?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
-          artifacts?: boolean
+          artifacts?: boolean;
+          message_context?: boolean
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
