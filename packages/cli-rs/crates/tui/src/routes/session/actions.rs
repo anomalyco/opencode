@@ -554,7 +554,7 @@ fn last_reply(messages: &[SessionMessageInfo]) -> Option<String> {
 
 /// `appendToSessionPrompt`: the restored text after the composer's own, with a blank line between, or into the
 /// session's draft when its composer is not mounted. Only the text comes back (see `fork::restored`).
-fn append_prompt(tui: &Tui, session: &SessionID, text: &str) {
+pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, text: &str) {
     let join = |current: &str| {
         if current.is_empty() {
             text.to_owned()
