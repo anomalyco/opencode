@@ -106,14 +106,18 @@ describe("Config", () => {
             fs.mkdir(project, { recursive: true }),
             fs.mkdir(path.join(home, ".claude"), { recursive: true }),
             fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+            fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
           ]),
         ).pipe(
           Effect.andThen(
             Effect.gen(function* () {
-              // The fixture is real: with global enabled the walk finds both.
+              // Discovery also sees ancestors above the fixture, which may have host config.
               const config = yield* Config.Service
               const compatibility = yield* config.compatibility!()
-              expect([...compatibility.claude, ...compatibility.agents]).toHaveLength(2)
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toHaveLength(2)
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
           Effect.andThen(
@@ -122,7 +126,11 @@ describe("Config", () => {
             // project walk enabled.
             Effect.gen(function* () {
               const config = yield* Config.Service
-              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+              const compatibility = yield* config.compatibility!()
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toEqual([])
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
               const watcher = yield* Watcher.Test
               expect(
                 (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
@@ -1508,8 +1516,12 @@ describe("Config", () => {
             Effect.provide(testLayer(project, global)),
           )
 
-          expect(compatibility.claude).toEqual([AbsolutePath.make(path.join(home, ".claude"))])
-          expect(compatibility.agents).toEqual([AbsolutePath.make(path.join(home, ".agents"))])
+          expect(compatibility.claude.filter((directory) => inFixture(tmp.path, directory))).toEqual([
+            AbsolutePath.make(path.join(home, ".claude")),
+          ])
+          expect(compatibility.agents.filter((directory) => inFixture(tmp.path, directory))).toEqual([
+            AbsolutePath.make(path.join(home, ".agents")),
+          ])
         }),
       ),
     ),
