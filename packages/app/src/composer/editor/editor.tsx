@@ -476,7 +476,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             <ComposerEditorSubmitButton
               mode={state.mode}
               stopping={view.submit.stopping()}
-              held={view.submit.held?.() ?? false}
+              busy={view.submit.busy?.() ?? false}
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
@@ -1429,7 +1429,7 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
 function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
-  held?: boolean
+  busy?: boolean
   disabled: boolean
   sendLabel: string
   stopLabel: string
@@ -1448,13 +1448,13 @@ function ComposerEditorSubmitButton(props: {
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={
-          props.held && !props.stopping ? (
+          props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
             <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
           )
         }
-        aria-busy={props.held && !props.stopping}
+        aria-busy={props.busy && !props.stopping}
         variant="submit"
         class="size-7 rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
