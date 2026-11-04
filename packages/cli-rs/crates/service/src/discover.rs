@@ -32,11 +32,16 @@ pub struct Found {
     pub channel: String,
 }
 
-/// Why no candidate was usable: the first registration that answered but could not be used, if
-/// any (such as "Background service failed to start").
+/// Why no candidate was usable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Missing {
+    /// Why the first registration that answered or timed out could not be used, if any (such as
+    /// "Background service failed to start").
     pub reason: Option<String>,
+    /// The first registration of a live service that is not ready yet: it answered that it is
+    /// starting, or it did not answer in time. A client waits on it instead of starting a service
+    /// beside it. When this is `None`, a `reason` is final: the service failed or is incompatible.
+    pub pending: Option<PathBuf>,
 }
 
 /// Discovers a ready, compatible service. `env_channel` is `OPENCODE_CHANNEL`.
@@ -46,22 +51,40 @@ pub async fn discover(
     env_channel: Option<&str>,
 ) -> Result<Found, Missing> {
     let preferred = preferred(paths, env_channel);
-    let mut reason = None;
+    let mut missing = Missing {
+        reason: None,
+        pending: None,
+    };
     for file in &preferred {
         match usable(transport, file).await {
             Ok(found) => return Ok(found),
-            Err(why) => reason = reason.or(why),
+            Err(unusable) => missing.add(file, unusable),
         }
     }
     let scanned = scan(&paths.state, &preferred);
     // Probes run together so that unresponsive registrations cost one timeout, not one each.
-    for result in join_all(scanned.iter().map(|file| usable(transport, file))).await {
+    let results = join_all(scanned.iter().map(|file| usable(transport, file))).await;
+    for (file, result) in scanned.iter().zip(results) {
         match result {
             Ok(found) => return Ok(found),
-            Err(why) => reason = reason.or(why),
+            Err(unusable) => missing.add(file, unusable),
         }
     }
-    Err(Missing { reason })
+    Err(missing)
+}
+
+impl Missing {
+    fn add(&mut self, file: &Path, unusable: Unusable) {
+        let reason = match unusable {
+            Unusable::Gone => return,
+            Unusable::Pending(reason) => {
+                self.pending.get_or_insert_with(|| file.to_owned());
+                reason
+            }
+            Unusable::Failed(reason) => reason,
+        };
+        self.reason.get_or_insert(reason);
+    }
 }
 
 /// The registration files of `OPENCODE_CHANNEL` and of the default channel, without duplicates.
@@ -113,25 +136,38 @@ pub fn channel_of(file: &Path) -> String {
     }
 }
 
-// The service registered in `file` when it is ready and compatible. Otherwise the reason it cannot
-// be used, when it answered.
-async fn usable(transport: &dyn Transport, file: &Path) -> Result<Found, Option<String>> {
-    let registration = registration::read(file).ok_or(None)?;
-    let service = probe::probe(transport, &registration, REQUEST_TIMEOUT)
-        .await
-        .service
-        .ok_or(None)?;
+// Why a registration is not usable.
+enum Unusable {
+    /// No registration, or no process answers for it.
+    Gone,
+    /// Starting, or registered and not answering in time.
+    Pending(String),
+    /// Failed to start, or incompatible.
+    Failed(String),
+}
+
+// The service registered in `file` when it is ready and compatible.
+async fn usable(transport: &dyn Transport, file: &Path) -> Result<Found, Unusable> {
+    let registration = registration::read(file).ok_or(Unusable::Gone)?;
+    let probe = probe::probe(transport, &registration, REQUEST_TIMEOUT).await;
+    if probe.timed_out {
+        return Err(Unusable::Pending(format!(
+            "Background service at {} is not responding",
+            registration.url
+        )));
+    }
+    let service = probe.service.ok_or(Unusable::Gone)?;
     match probe::decide(&service, None) {
         Decision::Reuse => Ok(Found {
             service,
             file: file.to_owned(),
             channel: channel_of(file),
         }),
-        Decision::Wait => Err(Some(format!(
+        Decision::Wait => Err(Unusable::Pending(format!(
             "Background service at {} is still starting",
             service.endpoint.url
         ))),
-        Decision::Fail(reason) => Err(Some(reason)),
+        Decision::Fail(reason) => Err(Unusable::Failed(reason)),
         Decision::Replace { .. } => unreachable!("no version requirement"),
     }
 }
@@ -234,7 +270,10 @@ mod tests {
         let paths = paths(dir.path());
         assert_eq!(
             found(&Server::default(), &paths, None).await,
-            Err(Missing { reason: None })
+            Err(Missing {
+                reason: None,
+                pending: None
+            })
         );
         register(&paths, "service.json", 1001, 0);
         let failed = server([(
@@ -244,9 +283,55 @@ mod tests {
         assert_eq!(
             found(&failed, &paths, None).await,
             Err(Missing {
-                reason: Some("Background service failed to start".to_owned())
+                reason: Some("Background service failed to start".to_owned()),
+                pending: None
             })
         );
+    }
+
+    // Paused time: the hanging probe times out without waiting.
+    #[tokio::test(start_paused = true)]
+    async fn a_starting_or_unresponsive_registration_is_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths(dir.path());
+        register(&paths, "service-oc-x.json", 1002, 0);
+        let starting = server([(
+            "http://127.0.0.1:1002/api/info".to_owned(),
+            Reply::json(503, r#"{"version":"1.0.0","pid":1002}"#),
+        )]);
+        assert_eq!(
+            found(&starting, &paths, None).await,
+            Err(Missing {
+                reason: Some(
+                    "Background service at http://127.0.0.1:1002 is still starting".to_owned()
+                ),
+                pending: Some(paths.state.join("service-oc-x.json"))
+            })
+        );
+        let hanging = server([("http://127.0.0.1:1002/api/info".to_owned(), Reply::Hang)]);
+        assert_eq!(
+            found(&hanging, &paths, None).await,
+            Err(Missing {
+                reason: Some(
+                    "Background service at http://127.0.0.1:1002 is not responding".to_owned()
+                ),
+                pending: Some(paths.state.join("service-oc-x.json"))
+            })
+        );
+        // A starting service anywhere wins over a failed one in a preferred registration.
+        register(&paths, "service.json", 1001, 0);
+        let both = server([
+            (
+                "http://127.0.0.1:1001/api/info".to_owned(),
+                Reply::json(500, r#"{"version":"1.0.0","pid":1001}"#),
+            ),
+            (
+                "http://127.0.0.1:1002/api/info".to_owned(),
+                Reply::json(503, r#"{"version":"1.0.0","pid":1002}"#),
+            ),
+        ]);
+        let missing = found(&both, &paths, None).await.unwrap_err();
+        assert_eq!(missing.pending, Some(paths.state.join("service-oc-x.json")));
     }
 
     #[test]
