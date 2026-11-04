@@ -20185,6 +20185,9 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "pool": {
+            "type": "boolean"
           }
         },
         "required": ["type", "command"],
@@ -20277,6 +20280,9 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "pool": {
+            "type": "boolean"
           }
         },
         "required": ["type", "url"],
