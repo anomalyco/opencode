@@ -14,7 +14,7 @@ const CORPUS: &str = include_str!("../../../parity/fixtures/U.4b/corpus.json");
 fn default_grammars_match_typescript() {
     let corpus: serde_json::Map<String, serde_json::Value> = serde_json::from_str(CORPUS).unwrap();
     let theme = Catalog::default()
-        .load("opencode", ThemeMode::Dark, false)
+        .load("opencode", ThemeMode::Dark)
         .unwrap()
         .theme;
     let syntax = code::syntax_theme(&theme);

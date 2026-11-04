@@ -442,13 +442,9 @@ impl Inner {
         let selection = catalog.as_ref().and_then(|catalog| {
             crate::dialogs::model::prompt_selection(tui, catalog, session.as_ref())
         });
-        let agent_color = selection.as_ref().and_then(|selection| {
-            catalog.as_ref()?.color(
-                &theme,
-                selection.agent.id.as_str(),
-                tui.config.info.experiment("new-designs"),
-            )
-        });
+        let agent_color = selection
+            .as_ref()
+            .and_then(|selection| catalog.as_ref()?.color(&theme, selection.agent.id.as_str()));
         let mode = self.mode.get();
         let highlight = match mode {
             Mode::Shell => theme.text.action.primary.selected,
