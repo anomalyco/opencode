@@ -226,6 +226,17 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     return items.slice(first, first + count)
   })
 
+  // OpenTUI reports the Kitty file transport's state without an event, and its probe or a fallback changes it, so read
+  // it again every second while the info shows.
+  const [fileState, setFileState] = createSignal(renderer.kittyImageTransportStatus.fileState)
+  createEffect(() => {
+    if (!info()) return
+    const read = () => setFileState(renderer.kittyImageTransportStatus.fileState)
+    read()
+    const timer = renderer.clock.setInterval(read, 1_000)
+    onCleanup(() => renderer.clock.clearInterval(timer))
+  })
+
   const infoRows = () => {
     const area = layout()
     return [
@@ -242,7 +253,9 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
         : []),
       [
         "protocol",
-        media.protocol() === "kitty" ? `kitty · ${renderer.kittyImageTransportStatus.effective}` : media.protocol(),
+        media.protocol() === "kitty"
+          ? `kitty · ${fileState() === "ready" ? "file" : fileState() === "probing" ? "probing" : "raw"}`
+          : media.protocol(),
       ],
       [
         "zoom",

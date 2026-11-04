@@ -14,11 +14,15 @@ export function createTransport(start: MediaPlayback) {
   const [time, setTime] = createSignal(start.time ?? 0)
   const [playing, setPlaying] = createSignal(false)
   const [tier, setTier] = createSignal(0)
+  const [scrubTime, setScrubTime] = createSignal<number>()
   return {
     player,
     metadata,
     time,
     playing,
+    /** Where the seek bar is dragged to while it is, shown ahead of the throttled seeks that follow it. */
+    scrubTime,
+    setScrubTime,
     /** OpenTUI's quality tier on Kitty: 0 is full size; higher tiers shrink frames to keep up. */
     tier,
     seek(target: number) {
@@ -60,7 +64,7 @@ export function createTransport(start: MediaPlayback) {
 /** The play button, the elapsed time (with `total`, also the duration) and the seek bar of a transport row. */
 export function TransportControls(props: { transport: Transport; total?: boolean; preview?: boolean }) {
   const theme = useTheme()
-  const time = () => formatTimecode(props.transport.time())
+  const time = () => formatTimecode(props.transport.scrubTime() ?? props.transport.time())
   return (
     <>
       <Toggle id="media-play" on={props.transport.playing()} run={props.transport.toggle}>
@@ -105,7 +109,7 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
   const theme = useTheme()
   const [width, setWidth] = createSignal(0)
   const [hover, setHover] = createSignal<number>()
-  const [scrubbing, setScrubbing] = createSignal(false)
+  const scrubbing = () => props.transport.scrubTime() !== undefined
   const duration = () => props.transport.metadata()?.duration ?? 0
   const seek = createSeekThrottle(props.transport.seek)
   let bar: BoxRenderable | undefined
@@ -117,12 +121,14 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
   const scrub = (event: MouseEvent) => {
     event.stopPropagation()
     setHover(column(event))
+    props.transport.setScrubTime(timeAt(column(event)))
     seek.push(timeAt(column(event)))
   }
   // The playhead's column, so the runs below change only when it moves, not with every time update.
-  const head = createMemo(() =>
-    duration() > 0 ? Math.round((Math.min(duration(), props.transport.time()) / duration()) * (width() - 1)) : 0,
-  )
+  const head = createMemo(() => {
+    const time = props.transport.scrubTime() ?? props.transport.time()
+    return duration() > 0 ? Math.round((Math.min(duration(), time) / duration()) * (width() - 1)) : 0
+  })
   // A few colour runs, not a span per cell.
   const runs = createMemo(() => {
     if (width() < 1) return []
@@ -157,17 +163,16 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
         if (event.button !== 0 || !video || duration() <= 0) return
         resume = video.playing
         video.pause()
-        setScrubbing(true)
-        seek.cancel()
+        // Playback or the keys may have moved the player since the last drag.
+        seek.reset()
         scrub(event)
       }}
       onMouseDrag={(event: MouseEvent) => scrubbing() && scrub(event)}
       onMouseUp={(event: MouseEvent) => {
         if (!scrubbing()) return
         event.stopPropagation()
-        setScrubbing(false)
-        seek.cancel()
-        props.transport.seek(timeAt(hover() ?? 0))
+        seek.flush(props.transport.scrubTime()!)
+        props.transport.setScrubTime(undefined)
         if (resume) props.transport.player()?.play()
         if (event.y !== bar?.y) setHover(undefined)
       }}
@@ -207,7 +212,8 @@ function SeekPreview(props: {
   const media = useMedia()
   const theme = useTheme()
   let player: VideoRenderable | undefined
-  const [ready, setReady] = createSignal(false)
+  // Each open, of a new source or the same one again, shows its first frame, so it seeks again even to the last time.
+  const [ready, setReady] = createSignal(false, { equals: false })
   const [failed, setFailed] = createSignal(false)
   const width = () => Math.max(12, Math.min(28, props.barWidth))
   const height = () => Math.max(3, Math.min(10, Math.round((width() - 2) / (props.aspect * media.cellAspect()))))
@@ -241,7 +247,10 @@ function SeekPreview(props: {
           fit="fit"
           width="100%"
           height={height()}
-          onReady={() => setReady(true)}
+          onReady={() => {
+            seek.reset()
+            setReady(true)
+          }}
           onError={() => setFailed(true)}
         />
       </Show>
@@ -260,25 +269,27 @@ export function formatTimecode(seconds: number) {
 /**
  * Calls `run` with the latest value `rest` ms after the last push, and at most once per interval: SEEK_INTERVAL_MS, or
  * twice the time the last call took. A paused seek decodes on the JS thread, so slow seeks keep it at least half free.
+ * It never calls `run` twice in a row with the same time, since OpenTUI decodes even an unchanged seek again.
  */
 function createSeekThrottle(run: (time: number) => void, rest = 0) {
   const clock = useRenderer().clock
   let timer: TimerHandle | undefined
   let pending: number | undefined
+  let last: number | undefined
   let next = -Infinity
-  const flush = () => {
-    timer = undefined
-    if (pending === undefined) return
-    const time = pending
-    pending = undefined
-    const started = clock.now()
-    run(time)
-    next = started + Math.max(SEEK_INTERVAL_MS, 2 * (clock.now() - started))
-  }
   const cancel = () => {
     if (timer) clock.clearTimeout(timer)
     timer = undefined
     pending = undefined
+  }
+  /** Calls `run` with `time` now, dropping a pending call. */
+  const flush = (time: number) => {
+    cancel()
+    if (time === last) return
+    last = time
+    const started = clock.now()
+    run(time)
+    next = started + Math.max(SEEK_INTERVAL_MS, 2 * (clock.now() - started))
   }
   onCleanup(cancel)
   return {
@@ -288,9 +299,15 @@ function createSeekThrottle(run: (time: number) => void, rest = 0) {
       if (timer && !rest) return
       if (timer) clock.clearTimeout(timer)
       const wait = Math.max(rest, next - clock.now())
-      if (wait <= 0) return flush()
-      timer = clock.setTimeout(flush, wait)
+      if (wait <= 0) return flush(time)
+      timer = clock.setTimeout(() => flush(pending!), wait)
     },
+    flush,
     cancel,
+    /** Drops a pending call and forgets the last time, once something else may have moved the player. */
+    reset() {
+      cancel()
+      last = undefined
+    },
   }
 }

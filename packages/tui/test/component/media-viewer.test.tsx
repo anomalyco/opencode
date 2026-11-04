@@ -241,14 +241,116 @@ test("scrubbing seeks the main player at most every 120 ms, lands on release, an
   expect(viewer.find("media-seek-preview")!.visible).toBe(false)
   expect(previewSeeks).toBe(0)
 
+  // The throttle already sought where the drag ends, so the release does not decode it again.
   await viewer.app.mockMouse.release(bar.x + 25, bar.y)
-  expect(playerSeeks).toBe(4)
+  expect(playerSeeks).toBe(3)
   expect(player.currentTime).toBeCloseTo((25 / (bar.width - 1)) * 2, 1)
   // Still over the bar, the preview shows again and catches up once.
   clock.advance(1_000)
   expect(viewer.find("media-seek-preview")!.visible).toBe(true)
   expect(previewSeeks).toBe(1)
-  expect(playerSeeks).toBe(4)
+  expect(playerSeeks).toBe(3)
+})
+
+test("a click seeks once, a release lands at once, and the next press waits out the interval", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  const timeAt = (column: number) => (column / (bar.width - 1)) * 2
+  let seeks = 0
+  player.onSeek = () => seeks++
+
+  // The press seeks; the release at the same column has nothing new to decode.
+  await viewer.app.mockMouse.click(bar.x + 5, bar.y)
+  expect(seeks).toBe(1)
+
+  clock.advance(120)
+  await viewer.app.mockMouse.pressDown(bar.x + 10, bar.y)
+  expect(seeks).toBe(2)
+  await viewer.app.mockMouse.moveTo(bar.x + 30, bar.y)
+  expect(seeks).toBe(2)
+  // Released before the throttle's timer fires, the drag still lands where it ends.
+  await viewer.app.mockMouse.release(bar.x + 30, bar.y)
+  expect(seeks).toBe(3)
+  expect(player.currentTime).toBeCloseTo(timeAt(30), 1)
+
+  // That seek counts toward the interval, so a press right after it waits.
+  await viewer.app.mockMouse.pressDown(bar.x + 40, bar.y)
+  expect(seeks).toBe(3)
+  clock.advance(119)
+  expect(seeks).toBe(3)
+  clock.advance(1)
+  expect(seeks).toBe(4)
+  expect(player.currentTime).toBeCloseTo(timeAt(40), 1)
+  await viewer.app.mockMouse.release(bar.x + 40, bar.y)
+  expect(seeks).toBe(4)
+})
+
+test("a slow seek makes the next one wait twice as long as it took", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  let seeks = 0
+  let decodeMs = 100
+  // The first seek takes 100 ms of the renderer's clock, like a slow 1080p decode.
+  player.onSeek = () => {
+    seeks++
+    clock.advance(decodeMs)
+    decodeMs = 0
+  }
+
+  await viewer.app.mockMouse.pressDown(bar.x + 5, bar.y)
+  expect(seeks).toBe(1)
+  await viewer.app.mockMouse.moveTo(bar.x + 20, bar.y)
+  // 120 ms after the slow seek started would be 20 ms from now; twice its 100 ms is another 100.
+  clock.advance(99)
+  expect(seeks).toBe(1)
+  clock.advance(1)
+  expect(seeks).toBe(2)
+  await viewer.app.mockMouse.release(bar.x + 20, bar.y)
+})
+
+test("while dragged, the playhead and time follow the pointer ahead of the throttled seeks", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  const player = await openVideo(viewer)
+  await viewer.press(" ")
+  await viewer.press("0")
+  const bar = seekBar(viewer)!
+  const end = bar.width - 1
+
+  await viewer.app.mockMouse.pressDown(bar.x + 2, bar.y)
+  await viewer.app.mockMouse.moveTo(bar.x + end, bar.y)
+  await viewer.app.renderOnce()
+  expect(player.currentTime).toBeLessThan(0.5)
+  expect(bar.plainText.indexOf("●")).toBe(end)
+  expect(viewer.frame()).toContain("0:02 / 0:02")
+
+  await viewer.app.mockMouse.release(bar.x + end, bar.y)
+  await viewer.app.renderOnce()
+  expect(player.currentTime).toBeCloseTo(2, 0)
+})
+
+test("leaving the bar drops the preview's pending seek", async () => {
+  const clock = new ManualClock()
+  await using viewer = await renderMedia(() => null, false, clock)
+  await openVideo(viewer)
+  await viewer.press(" ")
+  const bar = seekBar(viewer)!
+  await viewer.app.mockMouse.moveTo(bar.x + 5, bar.y)
+  await viewer.until(() => viewer.videos("media-seek-preview")[0]?.ready === true)
+  clock.advance(1_000)
+  const idleTimers = clock.pendingTimerCount
+
+  await viewer.app.mockMouse.moveTo(bar.x + 20, bar.y)
+  expect(clock.pendingTimerCount).toBe(idleTimers + 1)
+  await viewer.app.mockMouse.moveTo(bar.x + 20, bar.y - 2)
+  expect(viewer.find("media-seek-preview")).toBeUndefined()
+  expect(clock.pendingTimerCount).toBe(idleTimers)
 })
 
 test("the seek bar keeps its text while time passes within the playhead's column", async () => {
@@ -289,6 +391,13 @@ test("the filmstrip names videos instead of opening players for them", async () 
   expect(viewer.frame()).toContain("▶ second.mp4")
   const tiles = viewer.find("media-viewer-filmstrip")!
   expect(descendants(tiles).filter((node) => node instanceof ImageRenderable)).toHaveLength(1)
+
+  // Hovering a named video does not make it the one inline tile allowed to play.
+  for (const tile of tiles.getChildren().slice(0, 2)) {
+    await viewer.app.mockMouse.moveTo(tile.x + 1, tile.y + 1)
+    await viewer.app.renderOnce()
+    expect(viewer.media().activeTile()).toBeUndefined()
+  }
 })
 
 test("clicking the current filmstrip tile keeps the video playing", async () => {
