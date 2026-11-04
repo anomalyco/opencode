@@ -5,6 +5,7 @@
 use opencode_parity::assert_fixture;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Keybinds, Options};
+use opencode_ui::select::{self, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::{Catalog, Theme, ThemeError, ThemeMode};
 use opencode_ui::{alert, confirm, toast};
 use opentui::prelude::*;
@@ -240,4 +241,121 @@ fn toasts_time_out_queue_while_paused_and_run_their_action() {
     kit.app.advance(Duration::from_millis(5000));
     assert!(toasts.current().is_none());
     assert!(kit.app.render().text().trim().is_empty());
+}
+
+fn models() -> Vec<SelectOption<&'static str>> {
+    let mut disabled = SelectOption::new("Disabled", "off").category("Anthropic");
+    disabled.disabled = true;
+    let mut gpt5 = SelectOption::new("GPT-5", "gpt5").category("OpenAI");
+    gpt5.details = vec!["/a/very/long/path/that/gets/cut/in/the/middle/model.json".into()];
+    vec![
+        SelectOption::new("Claude Sonnet", "sonnet")
+            .category("Anthropic")
+            .footer("Free"),
+        SelectOption::new("Claude Opus", "opus")
+            .category("Anthropic")
+            .description("best"),
+        SelectOption::new("Claude Haiku", "haiku").category("Anthropic"),
+        disabled,
+        gpt5,
+        SelectOption::new("GPT-5 mini", "gpt5-mini")
+            .category("OpenAI")
+            .footer("$0.25"),
+        SelectOption::new("o4", "o4").category("OpenAI"),
+        SelectOption::new("Codex", "codex")
+            .category("OpenAI")
+            .search_text("code"),
+    ]
+}
+
+fn open_models(kit: &Kit) -> Rc<RefCell<Option<select::Select<&'static str>>>> {
+    let handle = Rc::new(RefCell::new(None));
+    let slot = handle.clone();
+    kit.dialogs.replace(
+        |cx| {
+            let mut props = SelectProps::new("Select model", models());
+            props.current = Some("haiku");
+            props.actions = vec![SelectAction::new(
+                "model.dialog.favorite",
+                "favorite",
+                |_| {},
+            )];
+            let (view, select) = select::select(cx, props);
+            *slot.borrow_mut() = Some(select);
+            view
+        },
+        None,
+        Default::default(),
+    );
+    kit.app.render();
+    handle
+}
+
+#[test]
+fn select_matches_typescript_when_opened_moved_and_filtered() {
+    let kit = self::kit(72, 30);
+    let handle = open_models(&kit);
+    assert_fixture(&kit.app.render(), "U.3/select");
+    kit.app.press("down");
+    kit.app.press("down");
+    assert_fixture(&kit.app.render(), "U.3/select-down");
+    assert_eq!(
+        handle.borrow().as_ref().unwrap().selected().unwrap().value,
+        "gpt5-mini"
+    );
+
+    let kit = self::kit(72, 30);
+    open_models(&kit);
+    kit.app.type_text("gpt");
+    assert_fixture(&kit.app.render(), "U.3/select-filter");
+
+    let kit = self::kit(72, 30);
+    open_models(&kit);
+    kit.app.type_text("zzz");
+    assert_fixture(&kit.app.render(), "U.3/select-empty");
+}
+
+/// P-ORACLE: `parity/fixtures/U.3/fuzzy.json` holds fuzzysort's order for DialogSelect's call over the keybind
+/// corpus (`parity/oracle/U.3-fuzzy.ts`); the port must give the same order, ties included.
+#[test]
+fn fuzzy_order_matches_fuzzysort() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../parity/fixtures/U.3/fuzzy.json")).unwrap();
+    let options: Vec<[String; 3]> = fixture["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|option| {
+            ["title", "category", "searchText"].map(|key| option[key].as_str().unwrap().to_owned())
+        })
+        .collect();
+    let mut failures = Vec::new();
+    for case in fixture["cases"].as_array().unwrap() {
+        let query = case["query"].as_str().unwrap();
+        let threshold = case["threshold"].as_f64().unwrap();
+        let expected: Vec<usize> = case["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|index| index.as_u64().unwrap() as usize)
+            .collect();
+        let actual = select::fuzzy::go(
+            &query.to_lowercase(),
+            &options,
+            |option| option.each_ref().map(|key| Some(key.as_str())),
+            |scores| scores[0] * 2.0 + scores[1] + scores[2],
+            threshold,
+        );
+        if actual != expected {
+            failures.push(format!(
+                "{query:?} @ {threshold}: expected {expected:?}\n  actual {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} cases differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
