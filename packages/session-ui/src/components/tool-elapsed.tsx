@@ -1,6 +1,23 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor } from "solid-js"
 import { useI18n } from "@opencode/ui/context/i18n"
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+
+/**
+ * The moment a live timer should count from. Displayed content can predate the newest user prompt:
+ * a follow-up sent while the previous turn still streams leaves the old reasoning on screen until
+ * the new turn produces its own. Counting from the prompt keeps a seconds-old follow-up from
+ * reading minutes old, and the new content taking over later lands within milliseconds of the
+ * same anchor instead of jumping the clock backwards.
+ */
+export function anchorElapsedStart(created: number, messages: Iterable<SessionMessageInfo>) {
+  let start = created
+
+  for (const message of messages) {
+    if (message.type === "user" && message.time.created > start) start = message.time.created
+  }
+
+  return start
+}
 
 export function createToolElapsed(
   time: Accessor<SessionMessageAssistantTool["time"] | undefined>,
