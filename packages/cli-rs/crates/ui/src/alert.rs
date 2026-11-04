@@ -2,7 +2,6 @@
 
 use crate::dialog::{
     DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout,
-    legacy_button,
 };
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
@@ -38,8 +37,6 @@ pub fn alert(cx: &Rc<DialogCx>, props: AlertProps) -> View {
         ..KeymapLayer::default()
     });
     let run = confirm.clone();
-    let legacy = legacy_button(cx, "ok", 3, move || run());
-    let run = confirm.clone();
     layout(
         cx,
         &header(
@@ -58,7 +55,6 @@ pub fn alert(cx: &Rc<DialogCx>, props: AlertProps) -> View {
             ],
             ..FooterProps::default()
         }),
-        Some(legacy),
     )
 }
 
