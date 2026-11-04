@@ -8,7 +8,7 @@
 // The provider loads <state>/prompt-history.jsonl first, which rewrites the file as TypeScript
 // serializes it. Prints one JSON array of results.
 
-import { statSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 
 const [root, state] = process.argv.slice(2)
 if (!root || !state) throw new Error("usage: E.2-history.ts <ts-root> <state>")
@@ -22,7 +22,8 @@ const { PromptHistoryProvider, usePromptHistory } = await load("./prompt/history
 const ops = await Bun.stdin.json()
 
 let history: { move(direction: 1 | -1, input: string): { text: string } | undefined; append(item: unknown): void }
-const mounted = Date.now()
+// File times come from a coarse clock that can trail `Date.now()`, so the rewrite is told by a changed time.
+const written = existsSync(`${state}/prompt-history.jsonl`) ? statSync(`${state}/prompt-history.jsonl`).mtimeMs : 0
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd: state, home: state, state, worktree: state },
@@ -38,22 +39,25 @@ const app = await testRender(() =>
 )
 await app.renderOnce()
 // Waits for a condition, up to 30 s: a loaded machine can take seconds to read or write the file.
-const until = async (done: () => Promise<boolean> | boolean) => {
+const until = async (what: string, done: () => Promise<boolean> | boolean) => {
   const deadline = Date.now() + 30_000
-  while (!(await done()) && Date.now() < deadline) await Bun.sleep(5)
+  while (!(await done())) {
+    if (Date.now() >= deadline) return console.error(`timed out waiting for ${what}`)
+    await Bun.sleep(5)
+  }
 }
 // The provider reads the file on mount; wait until an existing file's entries are in.
 const file = Bun.file(`${state}/prompt-history.jsonl`)
 if ((await file.exists()) && (await file.text()).trim()) {
   let newest = history!.move(-1, "")
-  await until(() => {
+  await until("the load", () => {
     newest ??= history!.move(-1, "")
     return newest !== undefined
   })
   // Back to the end, where the ops start.
   if (newest) history!.move(1, newest.text)
   // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
-  await until(() => statSync(file.name!).mtimeMs >= mounted)
+  await until("the load's rewrite", () => statSync(file.name!).mtimeMs !== written)
 }
 
 const output: unknown[] = []
@@ -64,7 +68,7 @@ for (const op of ops) {
 // Appends write asynchronously: wait until the file ends with them.
 const appended: string[] = ops.flatMap((op: { append?: { text: string } }) => (op.append ? [op.append.text] : []))
 if (appended.length > 0) {
-  await until(async () => {
+  await until("the appends", async () => {
     // A fresh handle: a `BunFile` can keep the size it first saw.
     const lines = (await Bun.file(file.name!).text()).split("\n").filter(Boolean)
     const last = lines.slice(-appended.length).map((line) => JSON.parse(line).text)
