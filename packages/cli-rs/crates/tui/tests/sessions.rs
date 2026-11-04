@@ -298,12 +298,36 @@ impl Kit {
             state,
             _home: home,
         };
-        // The home reads the scoped sessions into the store, as the TS script remembers them.
+        // The scoped sessions go into the store, as the TS script remembers them. The read names the
+        // `directory`, so `dialog_reads` leaves it out.
         let ids: Vec<&str> = match mode {
             Mode::List => vec!["ses_a", "ses_b", "ses_c"],
             Mode::Open => vec!["ses_r1", "ses_r2", "ses_r3"],
         };
         let tui = kit.tui.clone();
+        let client = tui.data.client().clone();
+        let remember = tui.weak();
+        tui.app.spawn(
+            async move {
+                client
+                    .session_list(
+                        &opencode_api::generated::SessionListInput {
+                            limit: Some(50),
+                            parent_id: Some(None),
+                            directory: Some(DIRECTORY.to_owned().into()),
+                            ..Default::default()
+                        },
+                        &opencode_api::client::RequestOptions::default(),
+                    )
+                    .await
+            },
+            move |_, result| {
+                let tui = remember.upgrade().unwrap();
+                for session in result.unwrap().data {
+                    tui.data.remember(session);
+                }
+            },
+        );
         assert!(
             kit.app.wait_until(Duration::from_secs(5), || {
                 tui.data.read(|state| {

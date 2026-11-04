@@ -27,6 +27,9 @@ pub struct Recording {
     /// `cli.json` `Info`, with `animations: false`.
     pub config: Value,
     pub args: Args,
+    /// Environment variables the TUI reads at startup, such as `OPENCODE_ROUTE`.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
     pub routes: Vec<RouteSpec>,
     pub steps: Vec<Step>,
     /// A deviation that allows the request comparison to differ.
@@ -40,6 +43,14 @@ pub struct Args {
     pub session_id: Option<String>,
     #[serde(rename = "continue", default)]
     pub continue_: bool,
+    /// Fork the `sessionID` or `continue` session.
+    #[serde(default)]
+    pub fork: bool,
+    pub prompt: Option<String>,
+    pub model: Option<String>,
+    pub agent: Option<String>,
+    #[serde(rename = "newSessionID")]
+    pub new_session_id: Option<String>,
 }
 
 /// A scenario route, in H.3's shape (`parity/lib/fake-server.ts`).

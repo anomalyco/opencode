@@ -12,7 +12,7 @@ use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_local::cli_config::{self, Resolved};
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
-use opencode_tui::{Deps, Route};
+use opencode_tui::{Args, Deps, Route};
 use opentui::testing::TestApp;
 
 /// How long a checkpoint waits for its `until` text. Longer than any MS1 screen takes; a screen the Rust TUI
@@ -54,20 +54,37 @@ fn run(recording: &Recording) -> (bool, String) {
     let client =
         Client::with_transport("http://opencode.local", Arc::new(memory.clone())).expect("client");
     let config = cli_config::decode_text(&recording.config.to_string()).unwrap_or_default();
-    let tui = opencode_tui::mount(
+    let args = &recording.args;
+    // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
+    let session = args.session_id.clone().map(SessionID);
+    let tui = opencode_tui::mount_with(
         &app,
         Deps {
             client,
             directory: recording.directory.clone(),
             config: Resolved::new(config, |_| None),
             roots: None,
-            route: recording
-                .args
-                .session_id
-                .clone()
-                .map_or(Route::Home, |id| Route::Session { id: SessionID(id) }),
-            continue_: recording.args.continue_,
+            route: match &session {
+                Some(id) if !args.fork => Route::Session { id: id.clone() },
+                _ => recording
+                    .env
+                    .get("OPENCODE_ROUTE")
+                    .and_then(|value| opencode_tui::features::startup::env_route(value))
+                    .unwrap_or(Route::Home),
+            },
+            continue_: args.continue_,
             events: true,
+        },
+        Args {
+            // The TS fixture's `app.version`.
+            version: "test".to_owned(),
+            prompt: args.prompt.clone(),
+            new_session_id: args.new_session_id.clone().map(SessionID),
+            session,
+            fork: args.fork,
+            agent: args.agent.clone(),
+            model: args.model.clone(),
+            ..Args::default()
         },
     );
 
