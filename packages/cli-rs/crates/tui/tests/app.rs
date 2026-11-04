@@ -5,13 +5,17 @@
 #[path = "support/ide.rs"]
 mod ide;
 
+use std::collections::BTreeMap;
 use std::fmt::Write;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use base64::Engine;
 use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
+use opencode_api::pty;
 use opencode_local::cli_config::{self, Resolved};
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
@@ -122,10 +126,13 @@ fn run(recording: &Recording) -> (bool, String) {
             },
         );
     }
+    let sockets = Arc::new(Sockets::new(recording));
+    tui.terminals.set_connector(sockets.clone());
 
     let mut passed = true;
     let mut report = String::new();
-    for step in &recording.steps {
+    for (index, step) in recording.steps.iter().enumerate() {
+        sockets.step.store(index, Ordering::SeqCst);
         match step {
             Step::Keys { keys } => keys.iter().for_each(|key| app.press(key)),
             Step::Type { text } => app.type_text(text),
@@ -139,6 +146,8 @@ fn run(recording: &Recording) -> (bool, String) {
                 app.wait_until(UNTIL, || ide.initialized());
                 ide.send(message);
             }
+            // The recorded socket sends what the step made the TS fake send.
+            Step::Pty { .. } => {}
             Step::Checkpoint(checkpoint) => {
                 let capture = settle(&app, &memory, checkpoint.until.as_deref());
                 let result = match app::compare_checkpoint(checkpoint, capture) {
@@ -214,6 +223,23 @@ fn run(recording: &Recording) -> (bool, String) {
         passed &= ok;
         let _ = writeln!(report, "  ide: {line}");
     }
+    if !recording.sockets.is_empty() {
+        let opened = sockets.opened.lock().unwrap().clone();
+        let sent: Vec<Vec<Vec<u8>>> = sockets
+            .sent
+            .iter()
+            .map(|frames| frames.lock().unwrap().clone())
+            .collect();
+        match app::compare_sockets(recording, &opened, &sent) {
+            Ok(()) => {
+                let _ = writeln!(report, "  sockets: equal");
+            }
+            Err(differences) => {
+                passed = false;
+                let _ = writeln!(report, "  sockets: differ\n{}", indent(&differences));
+            }
+        }
+    }
     drop(tui);
     (passed, report)
 }
@@ -232,6 +258,84 @@ fn handshake(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
         }
     }
     unique
+}
+
+/// Replays the recorded fake PTY sockets (E.13a): each socket sends the TS fake's messages once the scenario reached
+/// the same step and the TUI sent as many frames, and keeps the frames the TUI sent.
+struct Sockets {
+    recorded: Vec<app::SocketRecording>,
+    step: Arc<AtomicUsize>,
+    opened: Mutex<Vec<(String, BTreeMap<String, String>)>>,
+    sent: Vec<Arc<Mutex<Vec<Vec<u8>>>>>,
+}
+
+impl Sockets {
+    fn new(recording: &Recording) -> Self {
+        Self {
+            recorded: recording.sockets.clone(),
+            step: Arc::default(),
+            opened: Mutex::default(),
+            sent: recording.sockets.iter().map(|_| Arc::default()).collect(),
+        }
+    }
+}
+
+impl pty::Connector for Sockets {
+    fn open(&self, url: url::Url) -> pty::BoxFuture<Result<pty::Socket, String>> {
+        let query = url
+            .query_pairs()
+            .map(|(key, value)| {
+                let value = if key == "attachment_id" {
+                    "<attachment>".to_owned()
+                } else {
+                    value.into_owned()
+                };
+                (key.into_owned(), value)
+            })
+            .collect();
+        let index = {
+            let mut opened = self.opened.lock().unwrap();
+            opened.push((url.path().to_owned(), query));
+            opened.len() - 1
+        };
+        let Some(recorded) = self.recorded.get(index).cloned() else {
+            return Box::pin(async { Err("no recorded socket".to_owned()) });
+        };
+        let (socket, mut remote) = pty::pair();
+        let step = self.step.clone();
+        let sent = self.sent[index].clone();
+        Box::pin(async move {
+            tokio::spawn(async move {
+                for received in recorded.received {
+                    while sent.lock().unwrap().len() < received.after {
+                        let Some(frame) = remote.sent.recv().await else {
+                            return;
+                        };
+                        sent.lock().unwrap().push(frame);
+                    }
+                    while step.load(Ordering::SeqCst) < received.step {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                    let message = match received.message {
+                        app::SocketMessage::Text { text } => pty::Incoming::Text(text),
+                        app::SocketMessage::Binary { binary } => pty::Incoming::Binary(
+                            base64::engine::general_purpose::STANDARD
+                                .decode(binary)
+                                .unwrap_or_default(),
+                        ),
+                        app::SocketMessage::Close { .. } => pty::Incoming::Closed,
+                    };
+                    if remote.deliver.send(message).await.is_err() {
+                        return;
+                    }
+                }
+                while let Some(frame) = remote.sent.recv().await {
+                    sent.lock().unwrap().push(frame);
+                }
+            });
+            Ok(socket)
+        })
+    }
 }
 
 /// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`.

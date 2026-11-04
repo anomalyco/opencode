@@ -11,6 +11,7 @@ import { createAppFixture } from "../../../tui/test/fixture/app"
 import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
 import { applyMasks, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
 import { readCells, writeFixture, type Fixture } from "../lib/cells"
+import { installFakePty } from "../lib/pty-socket"
 
 // Session lists group by local date; UTC keeps the recorded cells the same on every machine.
 process.env.TZ = "UTC"
@@ -62,6 +63,9 @@ async function record(name: string, file: string) {
         value === undefined ? delete process.env[key] : (process.env[key] = value),
       ),
   }
+  let index = 0
+  const pty = scenario.pty ? installFakePty(scenario.pty, () => index) : undefined
+  await using _pty = { [Symbol.asyncDispose]: async () => pty?.restore() }
   await using setup = await createAppFixture({
     width: scenario.width ?? 100,
     height: scenario.height ?? 30,
@@ -91,7 +95,9 @@ async function record(name: string, file: string) {
   await setup.ready
   const started = Date.now()
   const steps: (Step & { fixture?: string })[] = []
-  for (const step of scenario.steps) {
+  for (const [stepIndex, step] of scenario.steps.entries()) {
+    index = stepIndex
+    if ("pty" in step) pty?.step(step.pty)
     if ("keys" in step) step.keys.forEach((key) => press(setup, key))
     if ("type" in step) await setup.mockInput.typeText(step.type)
     if ("click" in step) await setup.mockMouse.click(...step.click)
@@ -130,6 +136,7 @@ async function record(name: string, file: string) {
     ...(ide ? { ide: ide.received } : {}),
     ...(scenario.zed ? { zed: scenario.zed } : {}),
     steps,
+    ...(pty ? { sockets: pty.recordings } : {}),
     ...(scenario.requests ? { deviation: scenario.requests.deviation } : {}),
     requests: {
       writes: log.filter((entry) => !isRead(entry)),
