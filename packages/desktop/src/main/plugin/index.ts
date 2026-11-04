@@ -10,7 +10,6 @@ const LEVELS = { debug: "Debug", info: "Info", warn: "Warn", error: "Error" } as
 
 import { DesktopCli } from "../service/desktop-cli"
 import { DesktopStorage } from "../storage"
-import { setAppQuitting } from "../windows"
 import type { PluginHost } from "./host"
 
 /** The host once it loaded, and its load while one is in flight. */
@@ -45,26 +44,6 @@ export const layer = Layer.effect(
     const servers = new Map<number, readonly PluginEndpoint[]>()
     const current: LoadedHost = {}
 
-    // Disposes every plugin but the caller (the host keeps it), then hands off (e.g. quitAndInstall) or relaunches.
-    const restart = async (handoff?: () => void | Promise<void>) => {
-      setAppQuitting()
-      await runPromise(lifecycle.prepareToRestart)
-
-      if (!handoff) {
-        app.relaunch()
-        app.quit()
-
-        return
-      }
-
-      await Promise.resolve()
-        .then(handoff)
-        .catch((cause: unknown) => {
-          setAppQuitting(false)
-          throw cause
-        })
-    }
-
     const host = () => {
       current.loading ??= Promise.all([import("./host"), runPromise(desktopCli.resolve)]).then(([module, cli]) => {
         current.host = module.createHost({
@@ -78,7 +57,8 @@ export const layer = Layer.effect(
           },
           subscriptions,
           servers,
-          restart,
+          appState: lifecycle.state,
+          restart: lifecycle.restart,
           log: (message, data) => runFork(Effect.logError(message, data)),
           write: (level, message, data) => runFork(Effect.logWithLevel(LEVELS[level])(message, data)),
         })
@@ -89,15 +69,20 @@ export const layer = Layer.effect(
       return current.loading
     }
 
-    const stop = Effect.promise(async () => {
-      if (current.loading)
-        await current.loading.then(
-          (loaded) => loaded.dispose(),
-          () => undefined,
-        )
+    // Plugins run only once the host loaded; until then there is nothing to stop or resume.
+    const remove = yield* shutdown.add({
+      stop: Effect.promise(async () => {
+        if (current.loading)
+          await current.loading.then(
+            (loaded) => loaded.stop(),
+            () => undefined,
+          )
+      }),
+      resume: Effect.tryPromise(async () => {
+        if (current.loading) await current.loading.then((loaded) => loaded.resume())
+      }).pipe(Effect.catch((error) => Effect.logError("plugins failed to resume", { error }))),
     })
 
-    const remove = yield* shutdown.add(stop)
     yield* Effect.addFinalizer(() => Effect.sync(remove))
 
     return Service.of({
