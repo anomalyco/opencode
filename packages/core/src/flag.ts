@@ -7,7 +7,14 @@ import { App } from "./app.js"
 import { Config } from "./config.js"
 
 export type Key = ConfigFlag.Key
-export type State = ConfigFlag.State
+
+export interface State {
+  readonly key: Key
+  readonly description: string
+  readonly enabled: boolean
+  /** Where `enabled` came from, highest priority first. */
+  readonly source: "env" | "config" | "default"
+}
 
 /** `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`; a leading `-` turns a flag off. */
 export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/Overrides", {
@@ -38,7 +45,7 @@ export function resolve(input: {
   return Record.map(ConfigFlag.registry, (description, key): State => {
     const override = env.get(key)
     const configured = experimental?.[key]
-    const [enabled, source]: [boolean, ConfigFlag.Source] =
+    const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]
         : configured !== undefined

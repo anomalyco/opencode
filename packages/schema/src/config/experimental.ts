@@ -14,8 +14,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
   }),
-  ...Record.map(ConfigFlag.registry, (_, key) =>
-    Schema.Boolean.pipe(optional).annotate({ description: ConfigFlag.describe(key) }),
+  ...Record.map(ConfigFlag.registry, (description) =>
+    Schema.Boolean.pipe(optional).annotate({
+      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+    }),
   ),
   image_generate: Schema.Union([
     Schema.Boolean,

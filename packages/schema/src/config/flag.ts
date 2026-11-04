@@ -13,15 +13,3 @@ export const registry = {
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
-
-/** Where a flag's value came from, highest priority first. */
-export type Source = "env" | "config" | "default"
-
-export interface State {
-  readonly key: Key
-  readonly description: string
-  readonly enabled: boolean
-  readonly source: Source
-}
-
-export const describe = (key: Key) => `${registry[key]} Defaults to on in local and dev builds and off in releases.`
