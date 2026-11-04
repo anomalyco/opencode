@@ -33,10 +33,6 @@ import { holdLandingWidth } from "@/shell/panel-motion"
 
 const fallbackItemSize = 60
 
-// Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then a 32px
-// activity pill and its 10px composer gap. Both come and go inside it, so neither moves the rows above.
-const tailSize = 92
-
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 // Distance from the bottom that counts as "at the end". Deliberately tight: a collapse clamps
@@ -113,6 +109,11 @@ export function createTimelineVirtualizer(input: Input) {
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
+  // Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then the
+  // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
+  // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
+  const touch = createMediaQuery("(hover: none)")
+  const tailSize = () => (touch() ? 104 : 92)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
@@ -411,7 +412,9 @@ export function createTimelineVirtualizer(input: Input) {
       // Empty projections still need the bottom spacer for running status.
       return rows().length > 0 ? topOffset() : 0
     },
-    paddingEnd: tailSize,
+    get paddingEnd() {
+      return tailSize()
+    },
     // Revealed prompts sit below the solid header and its 16px fade.
     get scrollPaddingStart() {
       return input.showHeader() ? headerHeight() + 16 : 0
@@ -1182,8 +1185,8 @@ export function createTimelineVirtualizer(input: Input) {
               data-timeline-row="bottom-spacer"
               class="absolute top-0 left-0 w-full"
               style={{
-                height: `${tailSize}px`,
-                transform: `translateY(${virtualizer.getTotalSize() - tailSize - rendering.scrollAdjustment}px)`,
+                height: `${tailSize()}px`,
+                transform: `translateY(${virtualizer.getTotalSize() - tailSize() - rendering.scrollAdjustment}px)`,
               }}
             >
               {props.bottomSpacer}
