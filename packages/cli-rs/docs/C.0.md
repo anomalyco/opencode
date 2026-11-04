@@ -50,4 +50,5 @@ reports the errors above. It leaves every other token alone.
 - Parse errors go to stderr and exit 1, as in the TypeScript CLI (clap exits 2 by default).
 - Handler errors print to stderr and exit 1. Handlers that are not built yet say so and exit 1.
 - Writes to stdout ignore a closed pipe (EPIPE), like `packages/cli/src/node/index.ts:4-7`.
-- `--wizard` is accepted and reports that it is not supported yet (O-11).
+- `--wizard` runs Effect CLI's command wizard (`src/wizard.rs`, step C.15). Required arguments are not
+  checked on a line with `--wizard`, so the wizard can ask for them.

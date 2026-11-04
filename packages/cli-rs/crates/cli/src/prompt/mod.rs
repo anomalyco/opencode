@@ -19,8 +19,9 @@
 //! prompt whose input ends is cancelled.
 
 // What no command uses yet: `note`, the box-drawing symbols, the spinner's options and `message`, and builder
-// options (`output`, `max_items`, `placeholder`, `default_value`, `mask`, `cursor_at`, ...) that C.8, C.9 and
-// C.15 may need. The builder types and `limit_options` are not re-exported until a caller names them.
+// options (`output`, `max_items`, `placeholder`, `default_value`, `mask`, `cursor_at`, ...) that C.8 and C.9
+// may need. The builder types and `limit_options` are not re-exported until a caller names them. The wizard
+// (C.15) draws Effect CLI's prompts and uses only `with_keys`, `Keys`, `Press`, and `stdout_size`.
 #![allow(dead_code)]
 
 mod autocomplete;
@@ -36,9 +37,11 @@ mod wrap;
 
 pub use autocomplete::{View, autocomplete};
 pub use confirm::confirm;
+pub use core::with_keys;
 pub use select::{Choice, multiselect, select};
 pub use spinner::spinner;
 pub use style::*;
+pub use term::{Keys, Press};
 pub use text::{password, text};
 
 /// The user cancelled a prompt.
