@@ -37,6 +37,13 @@ import {
   type MarkdownCacheEntry,
 } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import {
+  INITIAL_CODE_DECORATION_STATE,
+  transitionCodeDecoration,
+  viewCodeDecoration,
+  type CodeDecorationEffect,
+  type CodeDecorationEvent,
+} from "./markdown-code-machine"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
@@ -208,18 +215,7 @@ function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
   host.removeAttribute("data-copied")
 }
 
-// The Solid roots a code block holds besides its Copy button: plugin content and action buttons.
-const codeHostDisposers = new WeakMap<HTMLElement, () => void>()
-
-const codeHostSelector =
-  '[data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"], [data-slot="markdown-code-content"]'
-
-function disposeCodeHost(host: HTMLElement) {
-  copyButtonState.get(host)?.dispose()
-  copyButtonState.delete(host)
-  codeHostDisposers.get(host)?.()
-  codeHostDisposers.delete(host)
-}
+const codeHostSelector = '[data-slot="markdown-copy-button"], [data-component="markdown-code"]'
 
 function disposeCodeHosts(root: Element) {
   const hosts = [
@@ -227,7 +223,12 @@ function disposeCodeHosts(root: Element) {
     ...Array.from(root.querySelectorAll(codeHostSelector)).filter((el): el is HTMLElement => el instanceof HTMLElement),
   ]
 
-  hosts.forEach(disposeCodeHost)
+  hosts.forEach((host) => {
+    copyButtonState.get(host)?.dispose()
+    copyButtonState.delete(host)
+    codeDrivers.get(host)?.dispatch({ type: "disposed" })
+    codeDrivers.delete(host)
+  })
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -263,114 +264,29 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   else delete wrapper.dataset.codeKind
 }
 
-function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
-  if (!code.classList.contains("language-mermaid")) {
-    clearMermaid(wrapper)
-
-    return
-  }
-
-  const source = code.textContent ?? ""
-
-  if (!source) return
-  const diagram = wrapper.querySelector('[data-component="markdown-mermaid"]') ?? document.createElement("div")
-  diagram.setAttribute("data-component", "markdown-mermaid")
-
-  if (!diagram.parentElement) wrapper.appendChild(diagram)
-  wrapper.dataset.mermaidPending = "true"
-  const input = complete ? source : source.slice(0, source.lastIndexOf("\n") + 1)
-
-  if (!input) return
-  const attempt = `${complete ? "complete" : "streaming"}:${input.length}`
-
-  if (wrapper.dataset.mermaidAttempt === attempt) return
-  wrapper.dataset.mermaidAttempt = attempt
-  void renderMermaidSvg(input)
-    .then((svg) => {
-      if (!svg) {
-        if (complete && code.textContent === source) clearMermaid(wrapper)
-
-        return
-      }
-
-      if (!(code.textContent ?? "").startsWith(input)) return
-      diagram.innerHTML = svg
-      delete wrapper.dataset.mermaidPending
-      wrapper.dataset.mermaidReady = "true"
-    })
-    .catch(() => {
-      if (!complete || code.textContent !== source) return
-      clearMermaid(wrapper)
-    })
-}
-
-function clearMermaid(wrapper: HTMLElement) {
-  delete wrapper.dataset.mermaidAttempt
-  delete wrapper.dataset.mermaidPending
-  delete wrapper.dataset.mermaidReady
-  wrapper.querySelector('[data-component="markdown-mermaid"]')?.remove()
-}
-
 type CodePlugins = { blocks: MarkdownCodeBlocks; match: MarkdownCodeBlockMatch }
 
-type CodeMount = { match: MarkdownCodeBlockMatch; source: string; content?: HTMLElement }
+// The plugins are the driver's input for mounting; the block's phase lives only in the machine's state.
+type CodeDriver = { plugins: CodePlugins | undefined; dispatch: (event: CodeDecorationEvent) => void }
 
-const codeMounts = new WeakMap<HTMLElement, CodeMount>()
+const codeDrivers = new WeakMap<HTMLElement, CodeDriver>()
+
+// Plugin content mounted into a block; `dispose` arrives once the plugin's render returns.
+type CodeContent = { host: HTMLElement; dispose?: () => void }
 
 // Content for a block's language replaces its code only once the closing fence arrived, so it never receives half a
 // block; until then, and when the content declines or fails, the block shows its code (or the built-in diagram).
-// Blocks of other languages take the plain path.
+// Blocks of other languages take the plain path and never get a driver.
 function decorateCode(wrapper: HTMLElement, code: HTMLElement, complete: boolean, plugins: CodePlugins | undefined) {
-  const previous = codeMounts.get(wrapper)
-
-  if (!plugins && !previous) return decorateMermaid(wrapper, code, complete)
-
   const language = codeLanguage(wrapper.dataset.language)
-  const claimed = !!plugins?.match.render.has(language)
-  const acted = complete && !!plugins?.match.actions.has(language)
+  const existing = codeDrivers.get(wrapper)
 
-  if (!previous && !acted && !(claimed && complete))
-    return claimed ? clearMermaid(wrapper) : decorateMermaid(wrapper, code, complete)
+  if (!existing && !plugins && language !== "mermaid") return
+  const driver = existing ?? createCodeDriver(wrapper)
 
-  const source = (code.textContent ?? "").replace(/\n$/, "")
-
-  if (previous?.match === plugins?.match && previous?.source === source) return
-
-  if (previous) clearCodeMount(wrapper, previous)
-
-  if (!plugins || (!claimed && !acted)) return decorateMermaid(wrapper, code, complete)
-
-  if (!complete) return clearMermaid(wrapper)
-
-  const block = { code: source, language }
-  const mount: CodeMount = { match: plugins.match, source }
-  codeMounts.set(wrapper, mount)
-
-  if (acted)
-    wrapper.insertBefore(
-      createCodeActions(plugins.blocks, block),
-      wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]'),
-    )
-
-  if (!claimed) return decorateMermaid(wrapper, code, complete)
-
-  clearMermaid(wrapper)
-  const content = document.createElement("div")
-  content.dataset.slot = "markdown-code-content"
-  mount.content = content
-  wrapper.dataset.codeContent = ""
-  wrapper.appendChild(content)
-
-  const dispose = plugins.blocks.render(content, block, () => {
-    if (mount.content === content) showCode(wrapper, code, mount)
-  })
-
-  // The content already failed while it rendered.
-  if (mount.content !== content) return dispose?.()
-
-  if (!dispose) return showCode(wrapper, code, mount)
-
-  codeHostDisposers.set(content, dispose)
+  if (!existing) codeDrivers.set(wrapper, driver)
+  driver.plugins = plugins
+  driver.dispatch({ type: "sync", language, source: code.textContent ?? "", complete, match: plugins?.match })
 }
 
 // Matches the language the worker's parser puts in a block's class, so streamed and completed blocks agree.
@@ -378,61 +294,126 @@ function codeLanguage(language: string | undefined) {
   return (language ?? "").toLowerCase().replace(/[^\w#+.-]/g, "")
 }
 
-function showCode(wrapper: HTMLElement, code: HTMLElement, mount: CodeMount) {
-  const content = mount.content
-  mount.content = undefined
-  delete wrapper.dataset.codeContent
+function createCodeDriver(wrapper: HTMLElement): CodeDriver {
+  let state = INITIAL_CODE_DECORATION_STATE
+  let actions: { host: HTMLElement; dispose: () => void } | undefined
+  let content: CodeContent | undefined
 
-  if (content) {
-    disposeCodeHost(content)
-    content.remove()
+  const dispatch = (event: CodeDecorationEvent) => {
+    const previous = state
+    const next = transitionCodeDecoration(state, event)
+
+    if (next.state === previous) return
+    state = next.state
+    showCodeDecoration(wrapper, viewCodeDecoration(previous), viewCodeDecoration(state))
+    next.effects.forEach(run)
   }
 
-  decorateMermaid(wrapper, code, true)
+  const run = (effect: CodeDecorationEffect) => {
+    if (effect.type === "clear-actions") {
+      actions?.dispose()
+      actions?.host.remove()
+      actions = undefined
+
+      return
+    }
+
+    if (effect.type === "clear-plugin") {
+      content?.dispose?.()
+      content?.host.remove()
+      content = undefined
+
+      return
+    }
+
+    if (effect.type === "render-mermaid") {
+      void renderMermaidSvg(effect.input).then(
+        (svg) => dispatch({ type: "mermaid.resolved", attempt: effect.attempt, svg }),
+        () => dispatch({ type: "mermaid.failed", attempt: effect.attempt }),
+      )
+
+      return
+    }
+
+    const blocks = driver.plugins?.blocks
+
+    if (effect.type === "mount-actions") {
+      if (!blocks) return
+      actions = createCodeActions(blocks, effect.block)
+      wrapper.insertBefore(actions.host, wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]'))
+
+      return
+    }
+
+    const host = document.createElement("div")
+    host.dataset.slot = "markdown-code-content"
+    wrapper.appendChild(host)
+    const mounted: CodeContent = { host }
+    content = mounted
+    const fallback = () => dispatch({ type: "plugin.failed", attempt: effect.attempt })
+    const dispose = blocks?.render(host, effect.block, fallback)
+
+    // The content already failed while it rendered.
+    if (content !== mounted) return dispose?.()
+
+    if (!dispose) return fallback()
+    mounted.dispose = dispose
+  }
+
+  const driver: CodeDriver = { plugins: undefined, dispatch }
+
+  return driver
 }
 
-function clearCodeMount(wrapper: HTMLElement, mount: CodeMount) {
-  codeMounts.delete(wrapper)
-  mount.content = undefined
-  delete wrapper.dataset.codeContent
-  wrapper
-    .querySelectorAll<HTMLElement>(
-      ':scope > [data-slot="markdown-code-actions"], :scope > [data-slot="markdown-code-content"]',
-    )
-    .forEach((host) => {
-      disposeCodeHost(host)
-      host.remove()
-    })
+function showCodeDecoration(
+  wrapper: HTMLElement,
+  previous: ReturnType<typeof viewCodeDecoration>,
+  view: ReturnType<typeof viewCodeDecoration>,
+) {
+  if (view.pending) wrapper.dataset.mermaidPending = "true"
+  else delete wrapper.dataset.mermaidPending
+
+  if (view.svg !== undefined) wrapper.dataset.mermaidReady = "true"
+  else delete wrapper.dataset.mermaidReady
+  wrapper.toggleAttribute("data-code-content", view.content)
+  const existing = wrapper.querySelector(':scope > [data-component="markdown-mermaid"]')
+
+  if (!view.diagram) return existing?.remove()
+  const diagram = existing ?? document.createElement("div")
+
+  if (!existing) {
+    diagram.setAttribute("data-component", "markdown-mermaid")
+    wrapper.appendChild(diagram)
+  }
+
+  if (!existing || view.svg !== previous.svg) diagram.innerHTML = view.svg ?? ""
 }
 
 function createCodeActions(blocks: MarkdownCodeBlocks, block: MarkdownCodeBlock) {
   const host = document.createElement("div")
   host.setAttribute("data-slot", "markdown-code-actions")
 
-  codeHostDisposers.set(
-    host,
-    render(
-      () => (
-        <For each={blocks.actions(block.language)}>
-          {(action) => (
-            <Tooltip placement="top" value={action.title}>
-              <IconButton
-                type="button"
-                size="normal"
-                variant="ghost-muted"
-                aria-label={action.title}
-                icon={<Icon name={action.icon} />}
-                onClick={() => action.run(block)}
-              />
-            </Tooltip>
-          )}
-        </For>
-      ),
-      host,
+  const dispose = render(
+    () => (
+      <For each={blocks.actions(block.language)}>
+        {(action) => (
+          <Tooltip placement="top" value={action.title}>
+            <IconButton
+              type="button"
+              size="normal"
+              variant="ghost-muted"
+              aria-label={action.title}
+              icon={<Icon name={action.icon} />}
+              onClick={() => action.run(block)}
+            />
+          </Tooltip>
+        )}
+      </For>
     ),
+    host,
   )
 
-  return host
+  return { host, dispose }
 }
 
 function markCodeLinks(root: HTMLDivElement) {
