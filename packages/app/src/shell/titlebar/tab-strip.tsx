@@ -18,7 +18,7 @@ import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { adjacentTabKey, mergeVisibleTabOrder, pinnedFirst } from "./tab-order"
+import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -48,8 +48,6 @@ function SessionTabSlot(props: {
   fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
   onDelete: () => void
-  pinned: boolean
-  onTogglePin: () => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
   onIntent: (hovered: boolean) => void
@@ -95,8 +93,6 @@ function SessionTabSlot(props: {
         fallbackDirectory={props.fallbackDirectory}
         onRename={props.onRename}
         onDelete={props.onDelete}
-        pinned={props.pinned}
-        onTogglePin={props.onTogglePin}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active}
@@ -117,8 +113,6 @@ function SessionTabEntry(props: {
   serverCtx: ServerCtx | undefined
   onVisibleChange: (visible: boolean) => void
   onUnreadChange: (unread: boolean) => void
-  pinned: boolean
-  onTogglePin: () => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
@@ -329,8 +323,6 @@ function SessionTabEntry(props: {
         fallbackDirectory={pending()?.draft.directory ?? persisted()?.directory}
         onRename={rename}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
-        pinned={props.pinned}
-        onTogglePin={props.onTogglePin}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
         onIntent={hover}
@@ -401,9 +393,6 @@ export function TitlebarTabStrip(props: {
   const language = useLanguage()
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
-  const tabPins = useTabs()
-  // Pinned tabs render above the rest; the stored order decides each section's own order.
-  const tabs = createMemo(() => pinnedFirst(props.tabs, tabKey, (key) => tabPins.pinned(key)))
   let listRef!: HTMLDivElement
   let scrollRef!: HTMLDivElement
   // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
@@ -423,13 +412,13 @@ export function TitlebarTabStrip(props: {
   })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-  const visibleTabs = createMemo(() => tabs().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
   createEffect(() => {
     if (!vertical()) return
-    setSidebarUnread(tabs().some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]))
+    setSidebarUnread(props.tabs.some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]))
     onCleanup(() => setSidebarUnread(false))
   })
 
@@ -498,7 +487,7 @@ export function TitlebarTabStrip(props: {
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
-    const next = tabs().find((tab) => tabKey(tab) === key)
+    const next = props.tabs.find((tab) => tabKey(tab) === key)
 
     if (next) props.onNavigate(next)
   }
@@ -554,7 +543,7 @@ export function TitlebarTabStrip(props: {
             const source = event.operation.source
 
             if (!source) return
-            const tab = tabs().find((item) => tabKey(item) === source.id.toString())
+            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
 
             if (!tab) return
 
@@ -573,7 +562,7 @@ export function TitlebarTabStrip(props: {
             if (initialIndex !== index) {
               props.onReorder(
                 mergeVisibleTabOrder(
-                  tabs().map(tabKey),
+                  props.tabs.map(tabKey),
                   current,
                   arrayMove(current, source.initialIndex, source.index),
                 ),
@@ -588,7 +577,7 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={tabs()}>
+            <For each={props.tabs}>
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
@@ -614,8 +603,6 @@ export function TitlebarTabStrip(props: {
                       index={visibleIndex()}
                       active={props.currentTab === tab}
                       orientation={vertical() ? "vertical" : "horizontal"}
-                      pinned={tabPins.pinned(id)}
-                      onTogglePin={() => tabPins.togglePin(id)}
                       serverCtx={serverCtx()}
                       onVisibleChange={(visible) => setVisibility(id, visible)}
                       onUnreadChange={(value) => setUnread(id, value)}

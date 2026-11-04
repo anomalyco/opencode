@@ -34,8 +34,6 @@ export function TabNavItem(props: {
   onRename: (title: string) => Promise<void>
   onClose: () => void
   onDelete: () => void
-  pinned?: boolean
-  onTogglePin?: () => void
   onNavigate: () => void
   active?: boolean
   suppressNavigation?: boolean
@@ -419,11 +417,6 @@ export function TabNavItem(props: {
           <Menu.Item disabled={!props.session} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
           </Menu.Item>
-          <Show when={props.onTogglePin}>
-            <Menu.Item onSelect={() => props.onTogglePin?.()}>
-              {language.t(props.pinned ? "common.unpin" : "common.pin")}
-            </Menu.Item>
-          </Show>
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
           <Menu.Separator />
           <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
