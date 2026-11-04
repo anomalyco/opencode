@@ -156,7 +156,6 @@
       "checkpoint": "list",
       "until": "Write docs",
       "deviation": [
-        "DLG14-session-list-dialog",
         "T17-home-session-list",
         "T04-connection-footer"
       ],
