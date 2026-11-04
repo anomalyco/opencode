@@ -109,7 +109,9 @@ impl Compaction {
                 "Compaction"
             },
             // The compaction request's own usage; the context it leaves shows on the next step.
-            usage: (status != Status::Running).then(|| tokens.and_then(usage)).flatten(),
+            usage: (status != Status::Running)
+                .then(|| tokens.and_then(usage))
+                .flatten(),
             content: text.trim().to_owned(),
         };
         if self.rendered.borrow().as_ref() == Some(&rendered) {
@@ -126,11 +128,8 @@ impl Compaction {
         self.label.clear();
         match status {
             Status::Running => {
-                self.label.add(
-                    &Spinner::new(cx.app)
-                        .color(color)
-                        .animations(cx.animations),
-                );
+                self.label
+                    .add(&Spinner::new(cx.app).color(color).animations(cx.animations));
             }
             Status::Failed => {
                 self.label.add(&Text::new(cx.app, "✗").fg(color));
