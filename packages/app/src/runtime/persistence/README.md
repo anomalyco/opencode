@@ -78,8 +78,13 @@ until then neither the initial load, a change from another window (`accept`), no
 of an older failed batch can replace the key. The host also stamps every update with a
 monotonic revision, returned in the ack and carried by change events and loads, so an event
 that reaches a window after a newer ack or load for the same key is recognised as stale and
-dropped; an event held back during an in-flight write is applied after the ack when the host
-ordered it later.
+dropped; an event held back during an in-flight write, or a snapshot that finishes during
+one, is applied after the ack when the host ordered it later. A failed batch puts its
+unsuperseded keys back in the queue and retries on its own, doubling the delay up to about
+26 s; a failed load resolves the waiting reads from memory and the next read loads again.
+`clear()` raises the revision floor to the newest revision the window knows, so neither a late
+snapshot nor an older event brings a cleared key back. The phases and ordering rules live in
+the pure machine in `namespace-machine.ts`.
 
 ## Migrations
 
