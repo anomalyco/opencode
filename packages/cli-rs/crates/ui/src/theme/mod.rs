@@ -175,10 +175,12 @@ impl Theme {
     /// reference into the theme: a token field (on any surface) or a step of [`Theme::hues`] or
     /// [`Theme::categorical`]. A copy, a literal token, or a foreign color has no source.
     pub fn source(&self, color: &Color) -> Option<HueSource<'_>> {
-        self.identity(color).flatten().map(|(hue, position)| HueSource {
-            hue: &self.views.hue[hue].0,
-            step: STEPS[position],
-        })
+        self.identity(color)
+            .flatten()
+            .map(|(hue, position)| HueSource {
+                hue: &self.views.hue[hue].0,
+                step: STEPS[position],
+            })
     }
 
     /// `color` moved `amount` steps toward 900 on its hue, clamped. See [`Theme::decrease`].
