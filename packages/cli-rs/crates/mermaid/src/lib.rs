@@ -6,7 +6,10 @@
 
 pub mod core;
 pub mod flowchart;
+pub mod gantt;
+pub mod gitgraph;
 pub mod sequence;
+pub mod timeline;
 mod palette;
 mod plugin;
 mod render;
@@ -69,8 +72,17 @@ pub fn detect(content: &str) -> Option<Kind> {
     if flowchart::parser::is_flowchart(content) {
         return Some(Kind::Flowchart);
     }
+    if gantt::is_gantt(content) {
+        return Some(Kind::Gantt);
+    }
+    if gitgraph::is_gitgraph(content) {
+        return Some(Kind::GitGraph);
+    }
     if sequence::parser::is_sequence(content) {
         return Some(Kind::Sequence);
+    }
+    if timeline::is_timeline(content) {
+        return Some(Kind::Timeline);
     }
     None
 }
