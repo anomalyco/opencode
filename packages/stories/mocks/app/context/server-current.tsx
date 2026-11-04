@@ -1,4 +1,4 @@
-import { createContext, createMemo, Show, useContext, type ParentProps } from "solid-js"
+import { createContext, Show, useContext, type ParentProps } from "solid-js"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 
@@ -79,10 +79,7 @@ export function ServerProvider(props: ParentProps<{ conn?: ServerConnection.Any 
 
   const key = ServerConnection.key(conn)
 
-  const ctx = createMemo<ServerCtx>(
-    (previous) => (global.servers.health[key]?.healthy ? global.serverCtx(key) : undefined) ?? previous,
-    global.ensureServerCtx(conn),
-  )
+  const ctx = () => global.serverCtx(key)
 
   return (
     <Show when={ctx()} keyed>
