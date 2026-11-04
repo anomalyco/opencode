@@ -47,6 +47,7 @@ pub struct Terminals {
     pending: RefCell<HashMap<String, Vec<Vec<u8>>>>,
     connector: RefCell<Arc<dyn Connector>>,
     picker: RefCell<Option<Picker>>,
+    listener: RefCell<Option<Picker>>,
     layer: RefCell<Option<(bool, bool, Disposer)>>,
 }
 
@@ -62,6 +63,7 @@ impl Default for Terminals {
             pending: RefCell::default(),
             connector: RefCell::new(Arc::new(Tungstenite)),
             picker: RefCell::default(),
+            listener: RefCell::default(),
             layer: RefCell::default(),
         }
     }
@@ -111,6 +113,18 @@ impl Terminals {
     /// Sets how `terminal.select` shows the composer's terminal list (E.13b).
     pub fn set_picker(&self, picker: Option<Picker>) {
         *self.picker.borrow_mut() = picker;
+    }
+
+    /// Sets what runs after a session's terminal list or selection changed (E.13b's composer list).
+    pub fn set_listener(&self, listener: Option<Picker>) {
+        *self.listener.borrow_mut() = listener;
+    }
+
+    fn changed(&self, tui: &Tui) {
+        let listener = self.listener.borrow().clone();
+        if let Some(listener) = listener {
+            listener(tui);
+        }
     }
 
     /// Whether the pane of `pty` should take focus when it mounts; clears the wish.
@@ -260,7 +274,7 @@ fn check(tui: &Tui) {
 
 /// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
 /// is logged; for a command (`toast`) it also shows "Unable to load terminal", as the TS commands do.
-fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
+pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
     tui.terminals
         .lists
         .borrow_mut()
@@ -303,6 +317,7 @@ fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) 
             }
             crate::frame::refresh(&tui);
             update_layer(&tui);
+            tui.terminals.changed(&tui);
             then(&tui);
         },
     );
@@ -338,10 +353,17 @@ pub fn select(tui: &Tui, session: &str, pty: Option<&str>, focus: bool) {
     }
     crate::frame::refresh(tui);
     update_layer(tui);
+    tui.terminals.changed(tui);
 }
 
-/// `newTerminal`: creates a terminal in the session's directory, then selects it.
-fn create(tui: &Tui, session: &SessionID) {
+/// `newTerminal`: creates a terminal in the session's directory, then selects it (`focus: false` shows it without
+/// focus). `then` gets its ID, or `None` after the failure toast.
+pub(crate) fn create(
+    tui: &Tui,
+    session: &SessionID,
+    focus: bool,
+    then: impl FnOnce(&Tui, Option<String>) + 'static,
+) {
     let directory = tui.data.read(|state| {
         state
             .session(session)
@@ -371,12 +393,14 @@ fn create(tui: &Tui, session: &SessionID) {
                 Ok(terminal) => {
                     let id = session.0.clone();
                     refresh(&tui, &session, true, move |tui| {
-                        select(tui, &id, Some(&terminal.id.0), true);
+                        select(tui, &id, Some(&terminal.id.0), focus);
+                        then(tui, Some(terminal.id.0));
                     });
                 }
                 Err(error) => {
                     log::error!("Failed to create a terminal: {error}");
                     tui.toasts.error("Unable to load terminal");
+                    then(&tui, None);
                 }
             }
         },
@@ -403,7 +427,7 @@ fn toggle(tui: &Tui) {
     refresh(tui, &id, true, move |tui| {
         match tui.terminals.list(&session.0).last() {
             Some(terminal) => select(tui, &session.0, Some(&terminal.id.0), true),
-            None => create(tui, &session),
+            None => create(tui, &session, true, |_, _| {}),
         }
     });
 }
@@ -435,7 +459,7 @@ fn close(tui: &Tui) {
 fn new_terminal(tui: &Tui) {
     let Some(id) = session(tui) else { return };
     tui.dialogs.clear();
-    create(tui, &id);
+    create(tui, &id, true, |_, _| {});
 }
 
 /// Registers the commands again, after the running command returns, when their titles or `terminal.close`'s enabled
