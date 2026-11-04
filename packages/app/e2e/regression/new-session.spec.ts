@@ -179,19 +179,32 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
   const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
 
   await menu.hover()
+  await expect(thumb).toHaveCSS("opacity", "0")
+  await page.mouse.wheel(0, 100)
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await expect(thumb).toHaveCSS("opacity", "1")
-  await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+  await expect(thumb).toHaveCSS("opacity", "0")
+
+  await page.mouse.wheel(0, 100)
+  await expect(thumb).toHaveCSS("opacity", "1")
+  await thumb.hover()
+  await expect(menu).not.toHaveAttribute("data-scrolling")
+  await expect(thumb).toHaveCSS("opacity", "1")
 
   const track = (await menu.boundingBox())!
 
   const handle = (await thumb.boundingBox())!
 
-  await thumb.hover()
   await page.mouse.down()
   await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4)
   await page.mouse.up()
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
   await expect(page.getByRole("option", { name: /^worktree-23 / })).toBeInViewport()
+  await thumb.hover()
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, track.y + 4)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(0)
 })
 
 for (const row of [
