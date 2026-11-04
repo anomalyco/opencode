@@ -8,7 +8,7 @@ import type { StepFailedError } from "./error.js"
 type Gate = Effect.Effect<void, StepFailedError>
 
 /**
- * Conditions every model request waits on before its context is selected, so its instructions, tools and policies
+ * Conditions every session model request waits on before its context is selected, so its instructions, tools and policies
  * are read only once they hold. Internal plugins register them; a failure fails the execution before the request is
  * built.
  */

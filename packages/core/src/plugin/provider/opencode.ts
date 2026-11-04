@@ -1,4 +1,4 @@
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
+import { Clock, Duration, Effect, Equal, Fiber, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -170,6 +170,7 @@ export const OpencodePlugin = define<
   | HttpClient.HttpClient
   | Bus.Service
   | Config.Service
+  | Credential.Service
   | InstructionDiscovery.Service
   | SessionGate.Service
   | SharedCache.Service
@@ -184,6 +185,7 @@ export const OpencodePlugin = define<
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const config = yield* Config.Service
+    const credentials = yield* Credential.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
@@ -197,11 +199,10 @@ export const OpencodePlugin = define<
       remote: typeof ConsoleConfig.Type | undefined
       connection: ActiveConnection
       organization: string | undefined
-      // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
-      access: string | undefined
-      // Whether the Console answered for this connection, rather than a failed load leaving it empty.
-      loaded: boolean
-    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined, loaded: false }
+      // The sign-in the Console answered for (see `workspaceKey`), so a switch or a key replaced in place counts as
+      // a new one. Unset while no Console answer is in place: signed out, an external credential, or a failed load.
+      workspace: string | undefined
+    } = { remote: undefined, connection: undefined, organization: undefined, workspace: undefined }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
@@ -209,8 +210,20 @@ export const OpencodePlugin = define<
       `${IntegrationConnection.key(from.connection) ?? ""}:${from.organization ?? ""}`
     // A newer config's skill download replaces one still in flight.
     const skillDownload = yield* FiberHandle.make<void, never>()
-    // Status last reported for the active connection, so inference failures can name the fix.
-    let reported: IntegrationConnection.Status | undefined
+    // Status last reported and the connection it was reported for, so inference failures can name the fix.
+    let reported: { readonly connection: string | undefined; readonly status: IntegrationConnection.Status } | undefined
+    const reportedFor = (connection: ActiveConnection) =>
+      reported && reported.connection === IntegrationConnection.key(connection) ? reported.status : undefined
+    // The workspace a connection's stored credential signs in to. Never refreshes it: an OAuth refresh is a network
+    // call, which only `load` makes.
+    const stored = Effect.fnUntraced(function* (connection: NonNullable<ActiveConnection>) {
+      if (connection.type === "env") {
+        const key = process.env[connection.name]
+        return key ? workspaceKey(connection, Credential.Key.make({ type: "key", key })) : undefined
+      }
+      const value = (yield* credentials.get(Credential.ID.make(connection.id)))?.value
+      return value && value.type !== "external" ? workspaceKey(connection, value) : undefined
+    })
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
@@ -227,22 +240,21 @@ export const OpencodePlugin = define<
         reported = undefined
         return {
           _tag: "Loaded",
-          next: { remote: undefined, connection, organization: undefined, access: undefined, loaded: true },
+          next: { remote: undefined, connection, organization: undefined, workspace: undefined },
         }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
-        reported = status
+        reported = status && { connection: IntegrationConnection.key(connection), status }
         return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
       }
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({
+            return Effect.succeed<typeof snapshot>({
               remote: undefined,
               connection,
               organization: undefined,
-              access: undefined,
-              loaded: true,
+              workspace: undefined,
             })
           return cache
             .get({
@@ -265,8 +277,7 @@ export const OpencodePlugin = define<
                 remote,
                 connection,
                 organization: organizationName(credential),
-                access: accessFingerprint(credential),
-                loaded: true,
+                workspace: workspaceKey(connection, credential),
               })),
             )
         }),
@@ -288,7 +299,7 @@ export const OpencodePlugin = define<
     const fallback = (connection: ActiveConnection): typeof snapshot =>
       IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
         ? { ...snapshot, connection }
-        : { remote: undefined, connection, organization: undefined, access: undefined, loaded: false }
+        : { remote: undefined, connection, organization: undefined, workspace: undefined }
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
@@ -433,8 +444,13 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    const initial = yield* load()
-    snapshot = initial._tag === "Loaded" ? initial.next : fallback(initial.connection)
+    // With `console.required`, activation doesn't wait on the Console: the gate below bounds the wait, and the load
+    // starts once `check` exists.
+    const initial = settings.required ? undefined : yield* load()
+    snapshot =
+      initial?._tag === "Loaded"
+        ? initial.next
+        : fallback(initial?.connection ?? (yield* ctx.integration.connection.active("opencode")))
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
@@ -501,10 +517,12 @@ export const OpencodePlugin = define<
         if (!outcome) return
         yield* loading.withPermit(
           Effect.gen(function* () {
-            // A switch while this load ran makes it stale; the switch's own check applies the new connection.
+            // A switch or a key replaced while this load ran makes it stale; the change's own check applies it.
             const loaded = outcome._tag === "Loaded" ? outcome.next.connection : outcome.connection
             const active = yield* ctx.integration.connection.active("opencode")
             if (IntegrationConnection.key(loaded) !== IntegrationConnection.key(active)) return
+            const workspace = outcome._tag === "Loaded" ? outcome.next.workspace : undefined
+            if (workspace && (!active || workspace !== (yield* stored(active)))) return
             const next = outcome._tag === "Loaded" ? outcome.next : fallback(outcome.connection)
             if (!Equal.equals(snapshot, next)) yield* apply(next)
           }),
@@ -518,7 +536,7 @@ export const OpencodePlugin = define<
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
         yield* check(Duration.seconds(30))
-        const status = reported
+        const status = reportedFor(yield* ctx.integration.connection.active("opencode"))
         if (!status) return
         void event.response.body?.cancel()
         event.response = Response.json(
@@ -542,37 +560,43 @@ export const OpencodePlugin = define<
     yield* guard(snapshot)
     // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
     // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
-    // 3 seconds; the turn then runs on the config it has.
-    yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
+    // 3 seconds; the turn then runs on the config it has. With `console.required` the gate below waits instead.
+    if (!settings.required) yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
 
-    // With the `console.required` server option, no model request is built on another credential's config or on
-    // none: each waits until the active credential's config is loaded and applied, or fails. Until then every request
-    // loads again rather than reusing a failure; once applied, a stale config refreshes as a prompt's does and stays
-    // in effect if the Console doesn't answer.
+    // With the `console.required` server option, no session model request is built on another sign-in's config or
+    // on none: each waits until the active credential's config is loaded and applied, or fails. Until then every
+    // request loads again rather than reusing a failure, waiting up to 10 seconds. Once applied, the first request
+    // each minute refreshes stale config, waiting up to 3 seconds, and the config stays in effect if the Console
+    // doesn't answer; a sign-in the Console rejects is never applied. A load that outlasts its wait still applies.
     const applied = Effect.gen(function* () {
       const active = yield* ctx.integration.connection.active("opencode")
-      if (!active || !snapshot.loaded) return false
-      if (IntegrationConnection.key(active) !== IntegrationConnection.key(snapshot.connection)) return false
-      const credential = Option.getOrUndefined(yield* ctx.integration.connection.resolve(active).pipe(Effect.option))
-      if (!credential) return false
-      return snapshot.access === (credential.type === "external" ? undefined : accessFingerprint(credential))
+      if (!active || !snapshot.workspace || reportedFor(active)?.status === "needs_auth") return false
+      return (
+        IntegrationConnection.key(active) === IntegrationConnection.key(snapshot.connection) &&
+        snapshot.workspace === (yield* stored(active))
+      )
     })
-    if (settings.required)
+    let refreshed = Number.NEGATIVE_INFINITY
+    if (settings.required) {
       yield* gate.register(
         Effect.gen(function* () {
-          yield* (yield* applied)
-            ? check(Duration.minutes(1), Duration.seconds(3))
-            : check(Duration.zero, Duration.seconds(10))
+          const now = yield* Clock.currentTimeMillis
+          const current = yield* applied
+          if (current && now - refreshed < Duration.toMillis(Duration.minutes(1))) return
+          refreshed = now
+          const refresh = yield* check(current ? Duration.minutes(1) : Duration.zero).pipe(Effect.forkIn(scope))
+          yield* Fiber.join(refresh).pipe(Effect.timeoutOption(current ? Duration.seconds(3) : Duration.seconds(10)))
           if (yield* applied) return
+          const active = yield* ctx.integration.connection.active("opencode")
           // A status the Console reported, such as an expired SSO sign-in, names the fix.
-          const reason =
-            reported?.message ??
-            (snapshot.connection
-              ? "Couldn't load the OpenCode Console config for the connected account"
-              : "Connect OpenCode Console to continue")
+          const reason = !active
+            ? "Connect OpenCode Console to continue"
+            : (reportedFor(active)?.message ?? "Couldn't load the OpenCode Console config")
           return yield* new StepFailedError({ error: { type: "console.config-unavailable", message: `${reason}.` } })
         }),
       )
+      yield* check().pipe(Effect.forkIn(scope))
+    }
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.

@@ -7,7 +7,8 @@ import type { Credential } from "./credential.js"
 /**
  * How the host uses a connected Console's config. `poll` re-checks it every minute in the background; without it,
  * the config refreshes only when a prompt starts, so a host that suspends between prompts stays idle. `required`
- * holds every model request until the active credential's config is loaded and applied, and fails it otherwise.
+ * holds every session model request until the active credential's config is loaded and applied, and fails it
+ * otherwise.
  */
 export const Options = Context.Reference<{ readonly poll: boolean; readonly required: boolean }>(
   "@opencode/ConsoleAccess/Options",

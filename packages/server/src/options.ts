@@ -34,9 +34,9 @@ export const ServerOptions = Schema.Struct({
   /**
    * How a connected OpenCode Console's config is used. `poll` (default `true`) re-checks it every minute in the
    * background. With `poll: false` it refreshes only when a prompt starts, so a host that suspends between prompts,
-   * such as a Durable Object, can stay idle. `required` (default `false`) holds every model request, including resumed
-   * ones, until the active credential's config is loaded and applied, and fails the execution with a
-   * `console.config-unavailable` error when that doesn't happen within about 10 seconds.
+   * such as a Durable Object, can stay idle. `required` (default `false`) holds every session model request, including
+   * resumed ones, until the active credential's config is loaded and applied, and fails the execution with a
+   * `console.config-unavailable` error when that doesn't happen within 10 seconds.
    */
   console: Schema.optional(
     Schema.Struct({ poll: Schema.optional(Schema.Boolean), required: Schema.optional(Schema.Boolean) }),

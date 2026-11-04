@@ -49,8 +49,8 @@ export interface Options {
   /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
   readonly fetch?: ServerOptions["fetch"]
   /**
-   * Console config refresh. `poll` defaults to `false` here, so an idle Durable Object can hibernate. `required` holds
-   * each model request until the active credential's config is applied.
+   * Console config options. `poll` defaults to `false` here, so an idle Durable Object can hibernate. `required` holds
+   * each session model request until the active credential's config is applied.
    */
   readonly console?: ServerOptions["console"]
 }

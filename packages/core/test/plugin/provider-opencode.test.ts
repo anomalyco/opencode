@@ -1000,7 +1000,13 @@ describe("OpencodePlugin", () => {
   describe("requiring Console config", () => {
     // Answers each key with an instruction naming it, so the applied config shows which credential it came from.
     const consoleApi = () => {
-      const state = { status: 200, body: undefined as unknown, hang: new Set<string>(), requests: [] as string[] }
+      const state = {
+        status: 200,
+        body: undefined as unknown,
+        answer: new Map<string, () => Response>(),
+        hang: new Set<string>(),
+        requests: [] as string[],
+      }
       const hanging: (() => void)[] = []
       return {
         state,
@@ -1009,6 +1015,7 @@ describe("OpencodePlugin", () => {
           const key = request.headers.get("authorization")?.replace("Bearer ", "") ?? ""
           state.requests.push(key)
           const response = () =>
+            state.answer.get(key)?.() ??
             Response.json(
               state.body ?? { providers: {}, library: { instructions: [{ id: key, content: `Use ${key}` }] } },
               { status: state.status },
@@ -1026,59 +1033,64 @@ describe("OpencodePlugin", () => {
         integrationID: Integration.ID.make("opencode"),
         value: key("one"),
       })
-      // Startup waits out the Console's retries when it fails.
       const started = yield* addPlugin().pipe(
         inProcess(api),
         Effect.provideService(ConsoleAccess.Options, { poll: false, required }),
         Effect.forkChild({ startImmediately: true }),
       )
-      yield* advance(() => started.pollUnsafe() !== undefined)
+      // Activation never waits on the Console when the config is required; otherwise it waits out its retries.
+      if (!required) yield* advance(() => started.pollUnsafe() !== undefined)
       yield* Fiber.join(started)
       return credential
     })
-    // What every model request waits on before its instructions and tools are read.
-    const request = Effect.fn(function* () {
-      const gate = yield* SessionGate.Service
-      return yield* gate.wait.pipe(Effect.forkChild({ startImmediately: true }))
-    })
-    const settled = Effect.fn(function* (fiber: Fiber.Fiber<void, unknown>) {
-      const started = yield* Clock.currentTimeMillis
-      yield* advance(() => fiber.pollUnsafe() !== undefined)
-      return { exit: yield* Fiber.await(fiber), elapsed: (yield* Clock.currentTimeMillis) - started }
-    })
-    const failure = (exit: Exit.Exit<void, unknown>) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)
-    const unavailable = { _tag: "Session.StepFailedError", error: { type: "console.config-unavailable" } }
     const instructions = Effect.gen(function* () {
       const discovery = yield* InstructionDiscovery.Service
       const files = yield* discovery.list()
       return Array.isArray(files) ? files.map((file) => file.content) : []
     })
+    // What every session model request waits on before its instructions and tools are read. Records what was applied
+    // when it returned.
+    const request = Effect.fn(function* () {
+      const gate = yield* SessionGate.Service
+      return yield* Effect.gen(function* () {
+        const started = yield* Clock.currentTimeMillis
+        const exit = yield* gate.wait.pipe(Effect.exit)
+        return { exit, elapsed: (yield* Clock.currentTimeMillis) - started, instructions: yield* instructions }
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+    })
+    type Pending = Effect.Success<ReturnType<typeof request>>
+    const settled = (fiber: Pending) =>
+      advance(() => fiber.pollUnsafe() !== undefined).pipe(Effect.andThen(Fiber.join(fiber)))
+    const failure = (exit: Exit.Exit<void, unknown>) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)
+    const unavailable = (message: string) => ({
+      _tag: "Session.StepFailedError",
+      error: { type: "console.config-unavailable", message },
+    })
+    const sso = () => Response.json({ _tag: "SsoRequired", orgId: "org", connectionId: "sso" }, { status: 403 })
 
     it.effect("fails a request on a cold start whose Console keeps answering 503", () =>
       Effect.gen(function* () {
         const api = consoleApi()
         api.state.status = 503
         yield* connect(api)
-        const sent = api.state.requests.length
 
         const result = yield* settled(yield* request())
-        expect(failure(result.exit)).toMatchObject(unavailable)
-        // A fresh load with its retries, not the failure startup left in the cache.
-        expect(api.state.requests.length).toBe(sent * 2)
+        expect(failure(result.exit)).toMatchObject(unavailable("Couldn't load the OpenCode Console config."))
+        // Startup's load and its 3 retries, which the request waited out rather than starting its own.
+        expect(api.state.requests).toHaveLength(4)
         expect(result.elapsed).toBeGreaterThanOrEqual(7_000)
       }),
     )
 
-    it.effect("fails a request after 10 seconds when the Console doesn't answer", () =>
+    it.effect("fails a request after exactly 10 seconds when the Console doesn't answer a cold start", () =>
       Effect.gen(function* () {
         const api = consoleApi()
-        api.state.status = 503
+        api.state.hang.add("one")
         yield* connect(api)
 
-        api.state.hang.add("one")
         const result = yield* settled(yield* request())
-        expect(failure(result.exit)).toMatchObject(unavailable)
-        expect(result.elapsed).toBeGreaterThanOrEqual(10_000)
+        expect(failure(result.exit)).toMatchObject(unavailable("Couldn't load the OpenCode Console config."))
+        expect(result.elapsed).toBe(10_000)
         api.release()
       }),
     )
@@ -1089,12 +1101,14 @@ describe("OpencodePlugin", () => {
         api.state.body = "not a config"
         yield* connect(api)
 
-        expect(failure((yield* settled(yield* request())).exit)).toMatchObject(unavailable)
-        expect(yield* instructions).toEqual([])
+        const malformed = yield* settled(yield* request())
+        expect(failure(malformed.exit)).toMatchObject(unavailable("Couldn't load the OpenCode Console config."))
+        expect(malformed.instructions).toEqual([])
 
         api.state.body = undefined
-        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
-        expect(yield* instructions).toEqual(["Use one"])
+        const valid = yield* settled(yield* request())
+        expect(Exit.isSuccess(valid.exit)).toBe(true)
+        expect(valid.instructions).toEqual(["Use one"])
       }),
     )
 
@@ -1103,20 +1117,19 @@ describe("OpencodePlugin", () => {
         const credentials = yield* Credential.Service
         const api = consoleApi()
         yield* connect(api)
-        yield* Fiber.join(yield* request())
-        expect(yield* instructions).toEqual(["Use one"])
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use one"])
 
         api.state.hang.add("two")
         yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("two") })
         const held = yield* request()
-        // Past the 3 seconds a prompt waits on an applied config's refresh.
-        yield* TestClock.adjust("4 seconds")
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
-        expect(held.pollUnsafe()).toBeUndefined()
-
+        // 4 seconds, past the 3 an applied config's refresh waits.
+        yield* drain
+        yield* drain
         api.release()
-        yield* Fiber.join(held)
-        expect(yield* instructions).toEqual(["Use two"])
+        const result = yield* Fiber.join(held)
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use two"])
+        expect(result.elapsed).toBeGreaterThanOrEqual(4_000)
       }),
     )
 
@@ -1125,18 +1138,119 @@ describe("OpencodePlugin", () => {
         const credentials = yield* Credential.Service
         const api = consoleApi()
         const credential = yield* connect(api)
-        yield* Fiber.join(yield* request())
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use one"])
 
         api.state.hang.add("rotated")
         yield* credentials.update(credential.id, { value: key("rotated") })
         const held = yield* request()
-        yield* TestClock.adjust("4 seconds")
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
-        expect(held.pollUnsafe()).toBeUndefined()
-
+        yield* drain
+        yield* drain
         api.release()
-        yield* Fiber.join(held)
+        const result = yield* Fiber.join(held)
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual(["Use rotated"])
+        expect(result.elapsed).toBeGreaterThanOrEqual(4_000)
+      }),
+    )
+
+    it.effect("waits on a stale config's refresh at most once a minute, and not when a prompt starts", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        yield* connect(api)
+        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+        const sent = api.state.requests.length
+
+        api.state.hang.add("one")
+        yield* TestClock.adjust("2 minutes")
+        yield* prompt()
+        expect(api.state.requests).toHaveLength(sent)
+
+        const first = yield* settled(yield* request())
+        expect(Exit.isSuccess(first.exit)).toBe(true)
+        expect(first.elapsed).toBe(3_000)
+        const next = yield* settled(yield* request())
+        expect(Exit.isSuccess(next.exit)).toBe(true)
+        expect(next.elapsed).toBe(0)
+        api.release()
+      }),
+    )
+
+    it.effect("drops a load for a key replaced while it ran", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        const credential = yield* connect(api)
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use one"])
+
+        // A stale config's refresh outlasts the 3 seconds it's waited for and keeps running.
+        api.state.hang.add("one")
+        yield* TestClock.adjust("2 minutes")
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use one"])
+
+        yield* credentials.update(credential.id, { value: key("rotated") })
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use rotated"])
+        api.release()
+        yield* drain
         expect(yield* instructions).toEqual(["Use rotated"])
+      }),
+    )
+
+    it.effect("applies a credential without Console config in place of the last one's", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        yield* connect(api)
+        expect((yield* settled(yield* request())).instructions).toEqual(["Use one"])
+
+        api.state.answer.set("two", () => new Response(null, { status: 404 }))
+        yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("two") })
+        const result = yield* settled(yield* request())
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.instructions).toEqual([])
+      }),
+    )
+
+    for (const rejection of [
+      {
+        name: "an expired SSO sign-in",
+        answer: sso,
+        message: "Sign in with SSO again to use your OpenCode Console organization.",
+      },
+      {
+        name: "a revoked session",
+        answer: () => Response.json({ _tag: "Unauthorized" }, { status: 401 }),
+        message: "Reconnect OpenCode Console to continue.",
+      },
+    ])
+      it.effect(`fails a request with the Console's message after ${rejection.name} mid-session`, () =>
+        Effect.gen(function* () {
+          const api = consoleApi()
+          yield* connect(api)
+          expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+
+          api.state.answer.set("one", rejection.answer)
+          // Past the minute an applied config is reused for.
+          yield* TestClock.adjust("2 minutes")
+          expect(failure((yield* settled(yield* request())).exit)).toMatchObject(unavailable(rejection.message))
+        }),
+      )
+
+    it.effect("doesn't carry one connection's Console message into another's failure", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        api.state.answer.set("one", sso)
+        yield* connect(api)
+        expect(failure((yield* settled(yield* request())).exit)).toMatchObject(
+          unavailable("Sign in with SSO again to use your OpenCode Console organization."),
+        )
+
+        api.state.hang.add("two")
+        yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("two") })
+        expect(failure((yield* settled(yield* request())).exit)).toMatchObject(
+          unavailable("Couldn't load the OpenCode Console config."),
+        )
+        api.release()
       }),
     )
 
