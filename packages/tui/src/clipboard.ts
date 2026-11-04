@@ -6,7 +6,7 @@ import {
   type ClipboardService as CoreClipboardService,
   type RendererClipboardBoundary,
 } from "@opentui/core"
-import type { ClipboardContent, ClipboardService } from "./context/clipboard"
+import type { ClipboardContent, ClipboardService, ClipboardWriteOutcome } from "./context/clipboard"
 
 export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
 
@@ -50,13 +50,16 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       }
       throw new Error(`Unexpected clipboard MIME type: ${result.representation.mimeType}`)
     },
-    async write(text) {
+    async write(text): Promise<ClipboardWriteOutcome> {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
       const result = await clipboard.writeText(text.replaceAll("\0", ""), {
         destination: "all-available",
         selection: "clipboard",
       })
-      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      if (result.host.status === "written") return "copied"
+      if (result.terminal.status === "attempted") {
+        return result.terminal.capability === "supported" ? "copied" : "attempted"
+      }
       if (result.host.status === "failed") throw result.host.error
       throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
     },
