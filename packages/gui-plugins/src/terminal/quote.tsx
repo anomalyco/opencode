@@ -232,6 +232,7 @@ export function TerminalQuote(props: {
               })
             }}
             data-component="terminal-quote"
+            data-floating
             data-prevent-autofocus
             role="toolbar"
             aria-label={plugin.t("quote.actions")}
