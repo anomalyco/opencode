@@ -1,6 +1,0 @@
-{ 
-  "type": "module",
-  "main": "./index.cjs",
-  "module": "./index.js",
-  "types": "./index.d.cts" 
-}

@@ -144,6 +144,32 @@ export async function validateWorkflowScript(content: string): Promise<Validatio
     }
   }
 
+  // ---- C0b：运行时编译器预检（bun transpile 静态拒绝项，语法诊断覆盖不到）----
+  // bun 在模块 transpile 阶段即静态拒绝部分**语义**错误（典型：const 重复赋值
+  // "This assignment will throw because \"x\" is a constant"）——TS parser 的纯语法
+  // 诊断不覆盖此类错误，坏脚本会通过 C0 落盘、运行时 import() 才炸且错误被笼统包装。
+  // 此处用与运行时 import() **同一编译器**做写盘前预检（纯静态 transform，不执行代码），
+  // 错误信息直接进入 violations 供模型自修循环定位修正。非 bun 环境（Bun 全局不可用）
+  // 跳过该校验（transformer 缺席时行为与既有版本一致）。
+  if (typeof Bun !== "undefined" && typeof Bun.Transpiler === "function") {
+    try {
+      new Bun.Transpiler({ loader: "js" }).transformSync(src)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return {
+        passed: false,
+        violations: [
+          {
+            contract: "C0",
+            name: "JS 语法完整性",
+            detail: `脚本无法被运行时编译器加载（写盘前预检）：${detail}`,
+            fix: "按错误信息修正脚本后重新调用本工具。常见案例：修正结果会回写的变量须用 let 声明（如 `let artifact = ...; if (fixed != null) artifact = fixed`），const 声明的变量不可重复赋值。",
+          },
+        ],
+      }
+    }
+  }
+
   // ---- C1：配置读取路径 ----
   if (FLAT_CONFIG_RE.test(src)) {
     violations.push({

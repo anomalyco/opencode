@@ -1,1 +1,0 @@
-{"version":3,"file":"index-cjs.js","sourceRoot":"","sources":["../../src/index-cjs.ts"],"names":[],"mappings":";;;;AAAA,0DAA6B;AAE7B,iBAAS,MAAM,CAAC,MAAM,CAAC,kBAAI,EAAE,EAAE,OAAO,EAAE,kBAAI,EAAE,IAAI,EAAJ,kBAAI,EAAE,CAAC,CAAA","sourcesContent":["import glob from './index.js'\n\nexport = Object.assign(glob, { default: glob, glob })\n"]}

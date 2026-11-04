@@ -1,1 +1,0 @@
-{"version":3,"file":"index-cjs.js","sourceRoot":"","sources":["../../src/index-cjs.ts"],"names":[],"mappings":";;;;AAAA,0DAAkC;AAElC,iBAAS,MAAM,CAAC,MAAM,CAAC,kBAAS,EAAE,EAAE,OAAO,EAAE,kBAAS,EAAE,SAAS,EAAT,kBAAS,EAAE,CAAC,CAAA","sourcesContent":["import minimatch from './index.js'\n\nexport = Object.assign(minimatch, { default: minimatch, minimatch })\n"]}

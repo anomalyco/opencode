@@ -1,8 +1,0 @@
-{
-  "name": "solid-js/h",
-  "main": "./dist/h.cjs",
-  "module": "./dist/h.js",
-  "types": "./types/index.d.ts",
-  "type": "module",
-  "sideEffects": false
-}

@@ -1,0 +1,40 @@
+{
+  "name": "opencode-workflows",
+  "version": "0.1.6",
+  "description": "OpenCode Workflows - 基于 OpenCode Plugin SDK 的通用多 Agent 编排框架（OpenCode 版 Claude Code Workflows）",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    },
+    "./tui": {
+      "import": "./tui.tsx",
+      "types": "./tui.tsx"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --timeout 60000"
+  },
+  "engines": {
+    "opencode": ">=1.15.13"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "dependencies": {
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.3.9",
+    "@opencode-ai/sdk": "1.3.9",
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "fast-check": "^3.22.0",
+    "solid-js": "1.9.12"
+  }
+}
