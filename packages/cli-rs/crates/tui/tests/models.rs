@@ -36,6 +36,8 @@ use serde_json::{Value, json};
 struct Server {
     routes: Value,
     seen: Mutex<Vec<(String, String)>>,
+    /// The bodies of mutating requests, by path.
+    writes: Mutex<Vec<(String, Value)>>,
     /// Holds the usage limits back, as OpenCode Console can.
     slow_usage: std::sync::atomic::AtomicBool,
 }
@@ -47,6 +49,7 @@ impl Server {
         Arc::new(Self {
             routes: server["routes"].clone(),
             seen: Mutex::default(),
+            writes: Mutex::default(),
             slow_usage: Default::default(),
         })
     }
@@ -68,7 +71,34 @@ impl Transport for Server {
             .unwrap()
             .push((request.method.to_owned(), format!("{path}{query}")));
         let location = json!({ "directory": "/project" });
+        let sent = request
+            .body
+            .as_deref()
+            .and_then(|body| serde_json::from_slice::<Value>(body).ok())
+            .unwrap_or(Value::Null);
+        if request.method != "GET" {
+            self.writes
+                .lock()
+                .unwrap()
+                .push((path.clone(), sent.clone()));
+        }
         let (status, body) = match (request.method, path.as_str()) {
+            // A prompt from home creates its session, then sends to it.
+            ("POST", "/api/session") => (
+                200,
+                json!({ "data": {
+                    "id": sent["id"], "projectID": "project", "cost": 0,
+                    "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "time": { "created": 1, "updated": 1 }, "location": location,
+                } }),
+            ),
+            ("POST", path) if path.ends_with("/prompt") => (
+                200,
+                json!({ "data": {
+                    "id": sent["id"], "sessionID": path.split('/').nth(3), "time": { "created": 1 },
+                    "type": "user", "payload": { "text": sent["text"] }, "delivery": "steer",
+                } }),
+            ),
             ("GET", "/api/config") => (200, json!([])),
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", path) if self.routes.get(path).is_some() => (
@@ -316,13 +346,17 @@ fn mount() -> Harness {
             && !local.agents().is_empty()
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
-    Harness {
+    // Keys go to the home prompt once it shows its agent and model.
+    let harness = Harness {
         app,
         tui,
         fixture,
         state,
         _home: home,
-    }
+    };
+    harness.wait_for("Build · Claude Sonnet");
+    harness.app.wait_until(Duration::from_millis(100), || false);
+    harness
 }
 
 impl Harness {
@@ -405,6 +439,41 @@ fn a_filter_typed_before_the_limits_arrive_stays() {
         !screen.contains("Claude Haiku"),
         "the filter was lost:\n{screen}"
     );
+}
+
+#[test]
+fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Select model");
+    h.app.type_text("mini");
+    h.wait_for("GPT-5 mini");
+    h.app.press("return");
+    // The home prompt's metadata row follows the choice.
+    h.wait_for("GPT-5 mini");
+    h.app.type_text("hello");
+    h.app.press("return");
+    let created = h.app.wait_until(Duration::from_secs(5), || {
+        h.fixture
+            .writes
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(path, _)| path == "/api/session")
+    });
+    let writes = h.fixture.writes.lock().unwrap().clone();
+    assert!(created, "no session was created: {writes:?}");
+    let (_, body) = writes
+        .iter()
+        .find(|(path, _)| path == "/api/session")
+        .unwrap();
+    assert_eq!(
+        body["model"],
+        json!({ "providerID": "openai", "id": "gpt-5-mini" }),
+        "{body}"
+    );
+    assert_eq!(body["agent"], "build", "{body}");
 }
 
 #[test]
