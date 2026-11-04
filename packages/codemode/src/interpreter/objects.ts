@@ -12,7 +12,7 @@ import {
   Throw,
   typeError,
 } from "./model.js"
-import type { Enter, Eval, GeneratorRequest, Push } from "./signals.js"
+import { type Convert, type Enter, type Eval, type GeneratorRequest, Invoke, type Push } from "./signals.js"
 import type { Frame } from "../machine/frame.js"
 import type { Reaction, Resolving } from "../machine/scheduler.js"
 import { OrderedTable, type TableCursor } from "./table.js"
@@ -209,14 +209,10 @@ export class Arguments extends Obj {
  * A native function body: a value, interpreter work for bodies that call program code or the host, or machine frames
  * that run as the call: saved ones put back on the stack (`Enter`, a generator's body) or a fresh one (`Push`).
  */
-export type NativeResult = Value | Eval<Value> | Enter | Push
+export type NativeResult = Value | Eval<Value> | Enter | Push | Invoke | Convert
 /** `site` is the call running the built-in, where a failure it reports later (a rejection) is located. */
 export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | undefined) => NativeResult
-export type NativeConstruct = (
-  args: Array<Value>,
-  newTarget: Callable,
-  site: AstNode | undefined,
-) => Value | Eval<Value>
+export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult
 
 export type NativeOptions = {
   /**
@@ -246,11 +242,6 @@ export const nativeRule: { check: boolean; sealed: WeakSet<Obj>; observe?: (nati
   sealed: new WeakSet(),
 }
 
-/** What a built-in whose state is data needs from the running interpreter. */
-export interface Realm {
-  call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value>
-}
-
 /**
  * A built-in function: a `Native` made with the intrinsics, or a data kind such as `BoundFn` or `Resolver` whose state
  * is plain fields and whose behaviour lives on its class.
@@ -260,7 +251,7 @@ export abstract class Builtin extends Callable {
   abstract readonly construct: NativeConstruct | undefined
   /** Whether callback sites (array methods, replacers, promise reactions) admit this function. */
   abstract readonly callback: boolean
-  abstract invoke(realm: Realm, thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult
+  abstract invoke(thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult
 }
 
 export class Native extends Builtin {
@@ -279,7 +270,7 @@ export class Native extends Builtin {
     this.callback = options.callback ?? true
   }
 
-  invoke(_: Realm, thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
+  invoke(thisValue: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
     return this.call(thisValue, args, site)
   }
 }
@@ -297,8 +288,8 @@ export class BoundFn extends Builtin {
     super(proto, `bound ${coerceToString(get(target, "name"))}`, Math.max(0, target.length - boundArgs.length))
   }
 
-  invoke(realm: Realm, _: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
-    return realm.call(this.target, this.boundThis, [...this.boundArgs, ...args], site)
+  invoke(_: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
+    return new Invoke(this.target, this.boundThis, [...this.boundArgs, ...args], site)
   }
 }
 
@@ -315,7 +306,7 @@ export class Resolver extends Builtin {
     super(proto, name, 1)
   }
 
-  invoke(_: Realm, __: Value, args: Array<Value>): NativeResult {
+  invoke(_: Value, args: Array<Value>): NativeResult {
     if (this.kind === "resolve") this.resolving.resolve(args[0])
     else this.resolving.reject(new Throw(args[0]))
     return undefined
@@ -377,10 +368,39 @@ export class GeneratorObj extends Opaque {
 /** One pull from an iterator, as `for...of` sees it. */
 export type Step = { readonly done: boolean; readonly value: Value }
 
-/** How the interpreter drives any iterator: pull the next step, or close it early. */
-export type Cursor = {
-  readonly next: () => Eval<Step>
-  readonly close: () => Eval<void>
+/**
+ * An iterator the interpreter drives, as data: a built-in cursor over a collection (`Position`), an iterator helper
+ * (`Helper`), or a program iterator driven by its own `next` method (`CustomIterator`). The machine steps and closes
+ * each kind (see `iteratorStep` in machine/iteration.ts).
+ */
+export type Cursor = Position | Helper | CustomIterator
+
+/** A program iterator record: the iterator, its `next` method, and whether its results are awaited. */
+export type CustomIterator = {
+  readonly iterator: Obj
+  readonly next: Value
+  readonly asynchronous: boolean
+}
+
+/** What an iterator helper does with its source's values. */
+export type HelperOp = "map" | "filter" | "take" | "drop" | "flatMap"
+
+/**
+ * An iterator helper's state, as data: what it does, its source, its callback, and its counter (the next index it
+ * passes the callback, or how many values `take` and `drop` have left). Once it reports done, throws, or is closed, it
+ * stays done; a callback that re-enters its own helper is a TypeError, as for a running generator.
+ */
+export class Helper {
+  done = false
+  running = false
+  /** `flatMap`'s inner iterator, while it has one. */
+  inner: Cursor | undefined = undefined
+  constructor(
+    readonly op: HelperOp,
+    readonly source: Cursor,
+    readonly callback: Value,
+    public count: number,
+  ) {}
 }
 
 const finished: Step = { done: true, value: undefined }
@@ -404,7 +424,7 @@ export type PositionSource =
  * live, as in JS: an array iterator reads the length on every step, and a Map or Set iterator is kept in place by its
  * table. Once done it stays done. There is nothing to close.
  */
-export class Position implements Cursor, TableCursor {
+export class Position implements TableCursor {
   index = 0
   done = false
   constructor(
@@ -416,12 +436,6 @@ export class Position implements Cursor, TableCursor {
     if (source instanceof MapObj) source.map.track(this)
     if (source instanceof SetObj) source.set.track(this)
   }
-
-  *next(): Eval<Step> {
-    return this.step()
-  }
-
-  *close(): Eval<void> {}
 
   step(): Step {
     if (this.done) return finished

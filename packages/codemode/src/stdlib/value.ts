@@ -17,11 +17,11 @@ export const coerce = <R>(ctx: Interpreter<R>, name: Coercion, args: Array<Value
   const raw = args[0]
   if (name === "Boolean") return Boolean(raw)
   if (name === "parseInt") {
-    return withPrimitives(ctx, ["string", "number"], [raw, args[1]], ([text, radix]) =>
+    return withPrimitives(["string", "number"], [raw, args[1]], ([text, radix]) =>
       parseInt(coerceToString(text), coerceToNumber(radix)),
     )
   }
-  return withPrimitives(ctx, name === "String" || name === "parseFloat" ? "string" : "number", [raw], ([value]) => {
+  return withPrimitives(name === "String" || name === "parseFloat" ? "string" : "number", [raw], ([value]) => {
     if (name === "Number") return coerceToNumber(value)
     if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
     if (name === "isNaN") return Number.isNaN(coerceToNumber(value))

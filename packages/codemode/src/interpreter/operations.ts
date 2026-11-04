@@ -372,11 +372,7 @@ export const loopDeclaration = (left: VariableDeclaration | Pattern, statement: 
   }
 }
 
-export type CustomIterator = {
-  iterator: Obj
-  next: Value
-  asynchronous: boolean
-}
+export type { CustomIterator } from "./objects.js"
 
 /** A resolved member: the object to read through and the receiver that inherited accessors see. */
 export type MemberReference = {

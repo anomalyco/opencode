@@ -1,9 +1,11 @@
+import { type Consumer, STATE } from "../machine/native-kind.js"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
 import { Obj, coerceToNumber } from "../interpreter/objects.js"
-import { preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
+import { withPrimitives } from "../interpreter/callback.js"
+import { Push } from "../interpreter/signals.js"
+import { Drain, drain } from "../machine/natives.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import type { Eval } from "../interpreter/signals.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
 declare global {
@@ -20,18 +22,17 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
   const unary = (name: string, op: (a: number) => number): Method => [
     name,
     1,
-    (_, args) => withPrimitives(ctx, "number", [args[0]], ([a]) => op(coerceToNumber(a))),
+    (_, args) => withPrimitives("number", [args[0]], ([a]) => op(coerceToNumber(a))),
   ]
   const binary = (name: string, op: (a: number, b: number) => number): Method => [
     name,
     2,
-    (_, args) =>
-      withPrimitives(ctx, "number", [args[0], args[1]], ([a, b]) => op(coerceToNumber(a), coerceToNumber(b))),
+    (_, args) => withPrimitives("number", [args[0], args[1]], ([a, b]) => op(coerceToNumber(a), coerceToNumber(b))),
   ]
   const variadic = (name: string, op: (...values: Array<number>) => number): Method => [
     name,
     2,
-    (_, args) => withPrimitives(ctx, "number", args, (values) => op(...values.map(coerceToNumber))),
+    (_, args) => withPrimitives("number", args, (values) => op(...values.map(coerceToNumber))),
   ]
   constants(math, {
     PI: Math.PI,
@@ -80,29 +81,20 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
     unary("fround", Math.fround),
     unary("clz32", Math.clz32),
     binary("imul", Math.imul),
-    [
-      "sumPrecise",
-      1,
-      function* (_, args) {
-        const cursor = yield* ctx.iterate(args[0])
-        if (cursor === undefined) {
-          throw typeError("Math.sumPrecise expects a synchronous iterable.")
-        }
-        const numbers: Array<number> = []
-        while (true) {
-          const step = yield* cursor.next()
-          if (step.done) return Math.sumPrecise(numbers)
-          if (typeof step.value !== "number") {
-            yield* preserveConsumerError(cursor, rejectNonNumber())
-          }
-          numbers.push(step.value as number)
-        }
-      },
-    ],
+    ["sumPrecise", 1, (_, args) => new Push(Drain, drain(SumPrecise, args[0], [[]]))],
   ])
   return math
 }
 
-function* rejectNonNumber(): Eval<never> {
-  throw typeError("Math.sumPrecise expects an iterable of numbers.")
+// State: the numbers so far.
+const SumPrecise: Consumer = {
+  name: "Math.sumPrecise",
+  notIterable: () => {
+    throw typeError("Math.sumPrecise expects a synchronous iterable.")
+  },
+  each: (_task, frame, value) => {
+    if (typeof value !== "number") throw typeError("Math.sumPrecise expects an iterable of numbers.")
+    ;(frame.slots[STATE] as Array<number>).push(value)
+  },
+  done: (_task, frame) => Math.sumPrecise(frame.slots[STATE] as Array<number>),
 }

@@ -1,3 +1,4 @@
+import { type Consumer, STATE } from "../machine/native-kind.js"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { ToolRuntimeError } from "../tool-runtime.js"
@@ -19,8 +20,9 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
-import type { Eval } from "./signals.js"
-import { toPrimitiveString } from "./callback.js"
+import { Push } from "./signals.js"
+import { withPrimitives } from "./callback.js"
+import { Drain, drain } from "../machine/natives.js"
 import { formatValue } from "../stdlib/console.js"
 
 /**
@@ -156,32 +158,58 @@ export const createAggregateErrorValue = <R>(
   return value
 }
 
-function* constructAggregateErrorValue<R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj): Eval<ErrorObj> {
-  const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
-  const cursor = yield* ctx.iterate(args[0])
-  if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
-  const errors: Array<Value> = []
-  while (true) {
-    const step = yield* cursor.next()
-    if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
-    errors.push(step.value)
-  }
+// State: the message, the prototype, the options, and the errors so far.
+const AggregateErrors: Consumer = {
+  name: "new AggregateError",
+  notIterable: () => {
+    throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
+  },
+  take: (frame, value) => {
+    ;(frame.slots[STATE + 3] as Array<Value>).push(value)
+  },
+  done: (task, frame) => {
+    const slots = frame.slots
+    const created = createAggregateErrorValue(
+      task.ctx,
+      slots[STATE + 3] as Array<Value>,
+      slots[STATE] as string,
+      slots[STATE + 1] as Obj,
+    )
+    return withCause(created, slots[STATE + 2] as Value)
+  },
+}
+
+// ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
+const withCause = (created: ErrorObj, options: Value) => {
+  if (options instanceof Obj && has(options, "cause")) define(created, "cause", get(options, "cause"), hidden)
+  return created
 }
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
 export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const prototype = builtins[type]
-  const construct = function* (args: Array<Value>, newTarget: Callable): Eval<Value> {
+  const construct = (args: Array<Value>, newTarget: Callable) => {
     const proto = prototypeFrom(newTarget, prototype)
-    const created =
-      type === "AggregateError"
-        ? yield* constructAggregateErrorValue(ctx, args, proto)
-        : createErrorValue(proto, args[0] === undefined ? undefined : yield* toPrimitiveString(ctx, args[0]))
-    // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
-    const options = args[type === "AggregateError" ? 2 : 1]
-    if (options instanceof Obj && has(options, "cause")) define(created, "cause", get(options, "cause"), hidden)
-    return created
+    if (type === "AggregateError") {
+      const message = args[1]
+      return withPrimitives(
+        "string",
+        message === undefined ? [] : [message],
+        ([text]) => {
+          const state = [message === undefined ? "" : coerceToString(text), proto, args[2], []]
+          return new Push(Drain, drain(AggregateErrors, args[0], state))
+        },
+        true,
+      )
+    }
+    const message = args[0]
+    return withPrimitives(
+      "string",
+      message === undefined ? [] : [message],
+      ([text]) => withCause(createErrorValue(proto, message === undefined ? undefined : coerceToString(text)), args[1]),
+      true,
+    )
   }
   const ctor: Native = constructor(builtins, prototype, {
     name: type,

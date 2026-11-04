@@ -1,4 +1,6 @@
-import type { Eval } from "../interpreter/signals.js"
+import { nativeKind } from "../machine/native-kind.js"
+import { type Hint, Push } from "../interpreter/signals.js"
+import { PENDING } from "../machine/frame.js"
 import { constructor, fn, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
@@ -14,16 +16,11 @@ import {
   coerceToInteger,
   coerceToNumber,
   coerceToString,
+  type NativeResult,
   type Value,
 } from "../interpreter/objects.js"
 import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
-import {
-  applyCollectionCallback,
-  type Hint,
-  isSupportedCallback,
-  toPrimitiveString,
-  withPrimitives,
-} from "../interpreter/callback.js"
+import { isSupportedCallback, requireCallback, withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { matchToValue, withHostRegex } from "./regexp.js"
 import { coerce } from "./value.js"
@@ -44,15 +41,16 @@ const replaceAllNeedsGlobal = (pattern: RegExp) => {
   }
 }
 
-function* replaceWithCallback<R>(
+// The matches are found first, as the host replaces; then the callback runs for each in order.
+const replaceWithCallback = <R>(
   ctx: Interpreter<R>,
   value: string,
   name: "replace" | "replaceAll",
   args: Array<Value>,
-): Eval<Value> {
+): Push => {
   const builtins = ctx.builtins
-  const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
-  const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<Value> }> = []
+  const callback = requireCallback(args[1], `String.${name}`)
+  const matches: Array<Match> = []
   // The host calls back with (match, ...captures, offset, string, groups?); only groups is not already a Value.
   const collect = (
     ...callbackArgs: Array<string | number | undefined | Record<string, string | undefined>>
@@ -80,17 +78,39 @@ function* replaceWithCallback<R>(
     if (name === "replace") value.replace(search, collect)
     else value.replaceAll(search, collect)
   }
-
-  const output: Array<string> = []
-  let end = 0
-  for (const match of matches) {
-    const replacement = yield* apply(match.args)
-    output.push(value.slice(end, match.offset), coerceToString(replacement))
-    end = match.offset + match.match.length
-  }
-  output.push(value.slice(end))
-  return output.join("")
+  return new Push(ReplaceWithCallback, [value, matches, callback, 0, []])
 }
+
+type Match = { readonly match: string; readonly offset: number; readonly args: Array<Value> }
+
+// Slots: the string, its matches, the callback, the next match, and the output so far.
+const ReplaceWithCallback = nativeKind("String.prototype.replace callback", (task, frame, input) => {
+  const slots = frame.slots
+  const value = slots[0] as string
+  const matches = slots[1] as Array<Match>
+  const output = slots[4] as Array<string>
+  let index = slots[3] as number
+  if (frame.phase === 1) {
+    output.push(coerceToString(input as Value))
+    index++
+  }
+  for (; index < matches.length; index++) {
+    const match = matches[index]!
+    output.push(
+      value.slice(index === 0 ? 0 : matches[index - 1]!.offset + matches[index - 1]!.match.length, match.offset),
+    )
+    const replacement = task.call(slots[2] as Value, undefined, match.args, frame.node)
+    if (replacement === PENDING) {
+      slots[3] = index
+      frame.phase = 1
+      return PENDING
+    }
+    output.push(coerceToString(replacement))
+  }
+  const last = matches.at(-1)
+  output.push(value.slice(last === undefined ? 0 : last.offset + last.match.length))
+  return output.join("")
+})
 
 export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -110,7 +130,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "raw",
       1,
-      function* (_, args) {
+      (_, args) => {
         const template = args[0]
         const raw = template instanceof Obj ? get(template, "raw") : undefined
         if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
@@ -120,11 +140,16 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
         const parts = Array.from({ length: count }, (_, index) =>
           index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
         ).flat()
-        const strings: Array<string> = []
-        for (const part of parts) strings.push(yield* toPrimitiveString(ctx, part))
-        const output = strings.join("")
-        checkStringLength(output.length)
-        return output
+        return withPrimitives(
+          "string",
+          parts,
+          (strings) => {
+            const output = strings.map(coerceToString).join("")
+            checkStringLength(output.length)
+            return output
+          },
+          true,
+        )
       },
     ],
   ])
@@ -150,7 +175,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const simple = (
     name: string,
     length: number,
-    op: (value: string, args: Array<Value>) => Value | Eval<Value>,
+    op: (value: string, args: Array<Value>) => NativeResult,
     hints: ReadonlyArray<Hint> = [],
   ): Method => [
     name,
@@ -160,7 +185,6 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
         throw typeError(`String.prototype.${name} called on null or undefined.`)
       }
       return withPrimitives(
-        ctx,
         ["string", ...hints],
         [thisValue, ...args.slice(0, hints.length)],
         ([value, ...primitives]) => op(coerceToString(value), [...primitives, ...args.slice(hints.length)]),
@@ -175,20 +199,19 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
           `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
         )
       }
-      return withPrimitives(ctx, ["string", "number"], args.slice(0, 2), (primitives) =>
+      return withPrimitives(["string", "number"], args.slice(0, 2), (primitives) =>
         op(value, str(name, primitives, 0), optNum(name, primitives, 1)),
       )
     })
   // match, matchAll, and search read a RegExp as is and convert anything else to its pattern text.
   const withPattern = (args: Array<Value>, op: (pattern: Value) => Value) =>
-    args[0] instanceof RegExpObj ? op(args[0]) : withPrimitives(ctx, "string", [args[0]], ([text]) => op(text))
+    args[0] instanceof RegExpObj ? op(args[0]) : withPrimitives("string", [args[0]], ([text]) => op(text))
   const replace = (name: "replace" | "replaceAll") =>
     simple(name, 2, (value, args) => {
       const pattern = args[0]
       const replacer = args[1]
       // A RegExp pattern is used as is; a plain one converts to its search string, then a non-callable replacement.
       return withPrimitives(
-        ctx,
         "string",
         [pattern instanceof RegExpObj ? undefined : pattern, isSupportedCallback(replacer) ? undefined : replacer],
         ([search, replacement]) => {
@@ -247,7 +270,6 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
       const separator = args[0]
       // A RegExp separator is used as is; the limit converts before a plain separator does, as in the spec.
       return withPrimitives(
-        ctx,
         ["number", "string"],
         [args[1], separator instanceof RegExpObj ? undefined : separator],
         ([limit, pattern]) => {
@@ -367,7 +389,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     simple("charCodeAt", 1, (value, args) => value.charCodeAt(optNum("charCodeAt", args, 0) ?? 0), ["number"]),
     simple("codePointAt", 1, (value, args) => value.codePointAt(optNum("codePointAt", args, 0) ?? 0), ["number"]),
     simple("concat", 1, (value, args) =>
-      withPrimitives(ctx, "string", args, (parts) => {
+      withPrimitives("string", args, (parts) => {
         const joined = value.concat(...parts.map((_, index) => str("concat", parts, index)))
         checkStringLength(joined.length)
         return joined

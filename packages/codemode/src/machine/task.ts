@@ -16,6 +16,7 @@ import {
   Slice,
   Yield,
 } from "../interpreter/signals.js"
+import { locate } from "../interpreter/errors.js"
 import { Frame, type Kind, PASS, PENDING, type Pending } from "./frame.js"
 import { dispatch, native, nativeFrame } from "./calls.js"
 import type { Machine } from "./machine.js"
@@ -144,6 +145,7 @@ export class MachineTask {
           }
           stack.pop()
           if (frame.kind.counts?.(frame)) machine.depth--
+          if (frame.kind.locates) error = locate(error, frame.node)
         }
         ok = true
         value = undefined

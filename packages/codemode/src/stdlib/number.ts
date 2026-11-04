@@ -41,7 +41,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     1,
     (thisValue, args) => {
       const value = self(thisValue, name)
-      return withPrimitives(ctx, "number", [args[0]], ([digits]) =>
+      return withPrimitives("number", [args[0]], ([digits]) =>
         op(value, digits === undefined ? undefined : coerceToNumber(digits)),
       )
     },

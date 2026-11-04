@@ -8,6 +8,8 @@ import {
   BoundFn,
   Builtin,
   Callable,
+  coerceToNumber,
+  coerceToString,
   DateObj,
   Fn,
   GeneratorObj,
@@ -33,7 +35,9 @@ import {
   abrupt,
   type Boundary,
   type Completion,
+  Convert,
   Enter,
+  type Hint,
   type Eval,
   Invoke,
   isEval,
@@ -42,6 +46,7 @@ import {
   Push,
   type Signal,
 } from "../interpreter/signals.js"
+import { conversions } from "../interpreter/callback.js"
 import type { Resolving } from "./scheduler.js"
 import type { StatementResult } from "../interpreter/model.js"
 import { Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
@@ -62,24 +67,24 @@ export function dispatch(
 ): Value | Pending {
   if (callable instanceof Fn) return invoke(task, callable, thisValue, args, node)
   if (callable instanceof Builtin) {
-    // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.
-    if (task.machine.tick()) task.slice = true
     // A bound function calls its target directly, so a program target runs as a frame rather than inside a native.
     if (callable instanceof BoundFn) {
+      if (task.machine.tick()) task.slice = true
       return dispatch(task, callable.target, callable.boundThis, [...callable.boundArgs, ...args], node)
     }
+    conversions.count = 0
     let result: NativeResult
     try {
-      result = callable.invoke(task.ctx, thisValue, args, node)
+      result = callable.invoke(thisValue, args, node)
     } catch (error) {
       throw locate(error, node)
     }
-    if (result instanceof Enter) {
-      task.signal = result
-      return PENDING
-    }
-    if (result instanceof Push) return task.push(result.kind, node, result.slots)
-    return isEval(result) ? native(task, result, node, true) : result
+    // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call. The
+    // host gets its turn before the caller continues, so a long loop inside a built-in still yields.
+    const out = settle(task, result, node, callable, thisValue, args, undefined)
+    if (!task.machine.tick()) return out
+    task.slice = true
+    return out === PENDING ? out : task.push(Settled, node, [out])
   }
   if (callable instanceof ToolReference) {
     if (callable.path.length === 0) throw typeError("The tools root is not callable.", callee ?? node)
@@ -87,6 +92,135 @@ export function dispatch(
   }
   throw notAFunction(callee, node)
 }
+
+/** `new` on a built-in constructor: its result, or the frames that make it. */
+export function construct(task: MachineTask, constructor: Builtin, args: Array<Value>, node: AstNode): Out<Value> {
+  conversions.count = 0
+  let result: NativeResult
+  try {
+    result = constructor.construct!(args, constructor, node)
+  } catch (error) {
+    throw locate(error, node)
+  }
+  return settle(task, result, node, constructor, undefined, args, constructor)
+}
+
+/**
+ * Carries out what a built-in returned: a value is its result, and anything else runs on the stack: frames (`Push`,
+ * `Enter`), a call it hands on (`Invoke`), or conversions it needs before running again (`Convert`). `newTarget` is
+ * set when the built-in was constructing.
+ */
+function settle(
+  task: MachineTask,
+  result: NativeResult,
+  node: AstNode | undefined,
+  callable: Builtin,
+  thisValue: Value,
+  args: Array<Value>,
+  newTarget: Builtin | undefined,
+): Value | Pending {
+  if (result instanceof Push) return task.push(result.kind, node, result.slots)
+  if (result instanceof Enter) {
+    task.signal = result
+    return PENDING
+  }
+  if (result instanceof Invoke) return dispatch(task, result.callable, result.thisValue, result.args, node)
+  if (result instanceof Convert) {
+    return task.push(Converting, node, [
+      result,
+      0,
+      [],
+      [],
+      callable,
+      newTarget === undefined ? thisValue : newTarget,
+      args,
+      newTarget !== undefined,
+    ])
+  }
+  return isEval(result) ? native(task, result, node, true) : result
+}
+
+// A built-in's result held back while the host takes its turn.
+const Settled = kind("Settled", (_task, frame: Frame) => frame.slots[0])
+
+// Slots: the conversion asked for, the next value to convert, the values converted so far, every conversion the
+// built-in received so far (by ordinal), the built-in, its receiver (or `new.target`), its arguments, and whether it
+// constructs. Once a conversion is done the built-in runs again from the start and receives them in order; it may ask
+// for another.
+const Converting = kind(
+  "Convert",
+  (task, frame: Frame, node: AstNode, input) => {
+    const slots = frame.slots
+    while (true) {
+      const request = slots[0] as Convert
+      const converted = slots[2] as Array<Value>
+      let index = slots[1] as number
+      if (frame.phase === 1) {
+        converted.push(request.coerce ? coerced(request, index, input as Value) : (input as Value))
+        index++
+        frame.phase = 0
+      }
+      const values = request.values
+      for (; index < values.length; index++) {
+        const value = values[index]
+        if (!(value instanceof Obj)) {
+          converted.push(request.coerce ? coerced(request, index, value) : value)
+          continue
+        }
+        const primitive = toPrimitive(task, value, hintAt(request, index), node)
+        if (primitive === PENDING) {
+          slots[1] = index
+          frame.phase = 1
+          return PENDING
+        }
+        converted.push(request.coerce ? coerced(request, index, primitive) : primitive)
+      }
+      const replay = slots[3] as Array<Array<Value> | undefined>
+      replay[request.ordinal] = converted
+      const callable = slots[4] as Builtin
+      const constructing = slots[7] as boolean
+      const args = slots[6] as Array<Value>
+      conversions.count = 0
+      conversions.replay = replay
+      let result: NativeResult
+      try {
+        result = constructing
+          ? callable.construct!(args, slots[5] as Builtin, node)
+          : callable.invoke(slots[5] as Value, args, node)
+      } finally {
+        conversions.replay = undefined
+      }
+      if (!(result instanceof Convert)) {
+        return task.tail(
+          frame,
+          settle(
+            task,
+            result,
+            node,
+            callable,
+            slots[5] as Value,
+            args,
+            constructing ? (slots[5] as Builtin) : undefined,
+          ),
+        )
+      }
+      slots[0] = result
+      slots[1] = 0
+      slots[2] = []
+    }
+  },
+  {
+    unwind: (_task, frame, error) => {
+      throw locate(error, frame.node)
+    },
+  },
+)
+
+const hintAt = (request: Convert, index: number): Hint =>
+  typeof request.hints === "string" ? request.hints : request.hints[index]!
+
+const coerced = (request: Convert, index: number, value: Value): Value =>
+  hintAt(request, index) === "string" ? coerceToString(value) : coerceToNumber(value)
 
 // A program call runs as a counted `Call` frame on this stack. An async function's frame is an async boundary: an
 // `await` in its body cuts the stack there and the caller receives its promise, which the body's completion settles.
@@ -347,8 +481,6 @@ export const Native = kind("Native", nativeStep, {
   cut: (frame) => (frame.slots[3] as Boundary | undefined)?.suspended(),
   counts: (frame) => frame.slots[4] === true,
 })
-
-export type Hint = "number" | "string" | "default"
 
 const stringFirst = ["toString", "valueOf"] as const
 const numberFirst = ["valueOf", "toString"] as const

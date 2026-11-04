@@ -1,6 +1,6 @@
 import type { Interpreter } from "./interpreter.js"
-import { primitivePrototype } from "./intrinsics.js"
-import { GeneratorReturn, typeError } from "./model.js"
+import { type Builtins, primitivePrototype } from "./intrinsics.js"
+import { typeError } from "./model.js"
 import {
   Callable,
   get,
@@ -9,29 +9,13 @@ import {
   Obj,
   coerceToNumber,
   coerceToString,
-  type Cursor,
+  type NativeResult,
   type Value,
 } from "./objects.js"
 import { isOpaque, typeofValue } from "./references.js"
-import { type Eval, Interruption, isEval } from "./signals.js"
+import { Convert, type Eval, type Hints, Invoke } from "./signals.js"
 
-/** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
- * return() is a return completion, so a failing close wins over it, as after `break`. */
-export function* preserveConsumerError<A>(cursor: Cursor, body: Eval<A>): Eval<A> {
-  try {
-    return yield* body
-  } catch (error) {
-    if (error instanceof Interruption) throw error
-    try {
-      yield* cursor.close()
-    } catch (closed) {
-      if (error instanceof GeneratorReturn) throw closed
-    }
-    throw error
-  }
-}
-
-export type Hint = "number" | "string" | "default"
+import type { Hint } from "./signals.js"
 
 /**
  * ToPrimitive: calls `valueOf`/`toString` in hint order and returns the first primitive result. Dates treat the
@@ -57,6 +41,13 @@ export const invoke = <R>(ctx: Interpreter<R>, value: Value, name: string, label
   return ctx.call(get(target, name), value, [])
 }
 
+/** Invoke(value, name), as the call to make: the method the value would find through its prototype. */
+export const invokeMethod = (builtins: Builtins, value: Value, name: string, label: string): Invoke => {
+  const target = value instanceof Obj ? value : primitivePrototype(builtins, value)
+  if (target === undefined) throw typeError(`${label} called on null or undefined.`)
+  return new Invoke(get(target, name), value, [], undefined)
+}
+
 export function* toPrimitiveString<R>(ctx: Interpreter<R>, value: Value): Eval<string> {
   return coerceToString(yield* toPrimitive(ctx, value, "string"))
 }
@@ -66,24 +57,44 @@ export function* toPrimitiveNumber<R>(ctx: Interpreter<R>, value: Value): Eval<n
 }
 
 /**
- * Runs a native body on its arguments after ToPrimitive, in order, with one hint for all positions or one per
- * position. Primitive arguments skip the conversion entirely.
+ * The conversions a built-in received, while it runs again after them: by ordinal, the order its `withPrimitives`
+ * calls run in. The machine resets `count` before every built-in call.
  */
-export const withPrimitives = <R>(
-  ctx: Interpreter<R>,
-  hints: Hint | ReadonlyArray<Hint>,
+export const conversions: { count: number; replay: Array<Array<Value> | undefined> | undefined } = {
+  count: 0,
+  replay: undefined,
+}
+
+/**
+ * Runs a native body on values after ToPrimitive, in order, with one hint for all positions or one per position.
+ * Primitive values skip the conversion entirely. Otherwise the built-in asks the machine for the conversions (they
+ * call program code, so they run as a frame) and runs again from the start once they are done; this call then
+ * receives them. So everything a built-in does before its last conversion must be repeatable: it reads, checks, and
+ * throws, but changes nothing. State the body needs as it was before the conversions (a Date's time) goes in `values`.
+ * With `coerce`, each value is also converted to a number or string (by its hint) before the next one is.
+ */
+export const withPrimitives = (
+  hints: Hints,
   values: Array<Value>,
-  body: (primitives: Array<Value>) => Value | Eval<Value>,
-): Value | Eval<Value> => {
+  body: (primitives: Array<Value>) => NativeResult,
+  coerce = false,
+): NativeResult => {
+  const ordinal = conversions.count++
+  const replayed = conversions.replay?.[ordinal]
+  if (replayed !== undefined) return body(replayed)
   if (!values.some((value) => value instanceof Obj)) return body(values)
-  return (function* () {
-    const primitives: Array<Value> = []
-    for (const [index, value] of values.entries()) {
-      primitives.push(yield* toPrimitive(ctx, value, typeof hints === "string" ? hints : hints[index]!))
-    }
-    const result = body(primitives)
-    return isEval(result) ? yield* result : result
-  })()
+  return new Convert(hints, values, ordinal, coerce)
+}
+
+/** Checks a callback argument: the callable it is, or the TypeError for one a callback site does not admit. */
+export const requireCallback = (callback: Value, name: string): Callable => {
+  if (isSupportedCallback(callback)) return callback
+  if (typeofValue(callback) === "function") {
+    throw typeError(
+      `${name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
+    )
+  }
+  throw typeError(`${name} expects a function callback.`)
 }
 
 // The single acceptance list for callbacks: collections, sort, string replacers,

@@ -1,11 +1,27 @@
 import { type AstNode, Throw, typeError } from "./model.js"
-import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, Resolver, type Value } from "./objects.js"
+import {
+  Callable,
+  define,
+  get,
+  hidden,
+  Arr,
+  Fn,
+  Obj,
+  PromiseObj,
+  record,
+  Resolver,
+  type Step,
+  type Value,
+} from "./objects.js"
 import { constructor, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
 import { isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
-import { type Completion, type Eval, Interruption } from "./signals.js"
+import { type Completion, Interruption, Push } from "./signals.js"
+import { type Frame, kind, type Kind, PENDING } from "../machine/frame.js"
+import { type Iter, iterate, iteratorStep } from "../machine/iteration.js"
+import type { MachineTask } from "../machine/task.js"
 import type { Combination, Reaction, Resolving } from "../machine/scheduler.js"
 import { finishAwaitReturn } from "../machine/generators.js"
 
@@ -26,12 +42,15 @@ export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined): R
 const settleWith = (resolving: Resolving, completion: Completion) =>
   completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error)
 
-/** Runs a settled promise's reaction as a job: it finishes at once, or returns the work that calls program code. */
+/**
+ * Runs a settled promise's reaction as a job: it finishes at once, or returns the frame that runs the program code it
+ * calls.
+ */
 export const react = <R>(
   ctx: Interpreter<R>,
   reaction: Exclude<Reaction, { readonly kind: "await" | "asyncFromSync" }>,
   settled: Completion,
-): Eval<void> | void => {
+): JobFrame | void => {
   switch (reaction.kind) {
     case "settle":
       return settleWith(reaction.target, settled)
@@ -50,6 +69,9 @@ export const react = <R>(
   }
 }
 
+/** A job's frame: its kind and slots. */
+export type JobFrame = { readonly kind: Kind; readonly slots: Array<unknown> }
+
 /**
  * NewPromiseResolveThenableJob: the work that calls the thenable's `then`. Adopting a native promise through the
  * intrinsic `then` takes the same jobs as calling it, and keeps the rejection as thrown so its diagnostic survives.
@@ -59,7 +81,7 @@ export const adoptThenable = <R>(
   promise: PromiseObj,
   thenable: Obj,
   then: Value,
-): Eval<void> | void => {
+): JobFrame | void => {
   const machine = ctx.machine
   const resolving = machine.resolving(promise)
   if (then === machine.intrinsicThen && thenable instanceof PromiseObj) {
@@ -69,14 +91,58 @@ export const adoptThenable = <R>(
   const proto = ctx.builtins.Function
   const resolve = new Resolver(proto, "", resolving, "resolve")
   const reject = new Resolver(proto, "", resolving, "reject")
-  return (function* (): Eval<void> {
-    try {
-      yield* ctx.call(then, thenable, [resolve, reject])
-    } catch (error) {
-      resolving.reject(error)
-    }
-  })()
+  return { kind: ThenableJob, slots: [resolving, then, thenable, [resolve, reject]] }
 }
+
+// The phase a job or a promise-returning built-in is in once what it settles has taken a failure.
+const SETTLED = -2
+
+/**
+ * A frame that calls program code once and settles `slots[0]` (a `Resolving`) with how it ends: `done` decides what a
+ * normal completion does, and a failure rejects it. As a job it counts toward the depth limit; as a built-in its
+ * result is the promise.
+ */
+const settling = (
+  name: string,
+  call: (slots: Array<unknown>) => readonly [callable: Value, thisValue: Value, args: Array<Value>],
+  done: (task: MachineTask, slots: Array<unknown>, result: Value) => void,
+  job: boolean,
+) =>
+  kind(
+    name,
+    (task, frame: Frame, _node, input) => {
+      const slots = frame.slots
+      const resolving = slots[0] as Resolving
+      if (frame.phase === SETTLED) return job ? undefined : resolving.promise
+      let result = input as Value
+      if (frame.phase === 0) {
+        frame.phase = 1
+        const [callable, thisValue, args] = call(slots)
+        const called = task.call(callable, thisValue, args, undefined)
+        if (called === PENDING) return PENDING
+        result = called
+      }
+      done(task, slots, result)
+      return job ? undefined : resolving.promise
+    },
+    {
+      unwind: (_task, frame, error) => {
+        if (frame.phase === SETTLED) return false
+        ;(frame.slots[0] as Resolving).reject(error)
+        frame.phase = SETTLED
+        return true
+      },
+      counts: () => job,
+    },
+  )
+
+// Slots: what settles the promise, `then`, the thenable, and the resolving functions.
+const ThenableJob = settling(
+  "PromiseResolveThenableJob",
+  (slots) => [slots[1] as Value, slots[2] as Value, slots[3] as Array<Value>],
+  () => undefined,
+  true,
+)
 
 // A `then`/`catch` reaction calls program code: the handler runs as a job, and its result or failure settles the
 // derived promise. A missing handler passes the outcome through.
@@ -84,34 +150,32 @@ const handle = <R>(
   ctx: Interpreter<R>,
   reaction: Extract<Reaction, { readonly kind: "handler" }>,
   settled: Completion,
-): Eval<void> | void => {
+): JobFrame | void => {
   const handler = settled.ok ? reaction.onFulfilled : reaction.onRejected
   const derived = reaction.derived
   if (handler === undefined || (!settled.ok && settled.error instanceof Interruption)) {
     return settleWith(derived, settled)
   }
   const argument = settled.ok ? (settled.value as Value) : materialize(ctx, settled.error)
-  const body = function* (): Eval<void> {
-    let result: Value
-    try {
-      result = yield* ctx.call(handler, undefined, [argument])
-    } catch (error) {
-      derived.reject(error)
-      return
-    }
-    derived.resolve(result)
-  }
-  return body()
+  return { kind: HandlerJob, slots: [derived, handler, argument] }
 }
+
+// Slots: the derived promise's resolving, the handler, and its argument.
+const HandlerJob = settling(
+  "PromiseReactionJob",
+  (slots) => [slots[1] as Value, undefined, [slots[2] as Value]],
+  (_task, slots, result) => (slots[0] as Resolving).resolve(result),
+  true,
+)
 
 const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers", "try"] as const
 
-function* invokePromiseMethod<R>(
+const invokePromiseMethod = <R>(
   ctx: Interpreter<R>,
   name: (typeof promiseStatics)[number],
   args: Array<Value>,
   site: AstNode | undefined,
-): Eval<Value> {
+) => {
   const machine = ctx.machine
   if (name === "resolve") return machine.promiseResolve(args[0])
   if (name === "reject") {
@@ -128,54 +192,78 @@ function* invokePromiseMethod<R>(
     if (typeofValue(args[0]) !== "function") {
       throw typeError(`Promise.try expects a function, received ${describeValue(args[0])}.`)
     }
-    const made = capability(ctx, site)
-    try {
-      made.resolve(yield* ctx.call(args[0], undefined, args.slice(1)))
-    } catch (error) {
-      made.reject(error)
-    }
-    return made.promise
+    return new Push(PromiseTry, [capability(ctx, site), args[0], args.slice(1)])
   }
-  return yield* combinator(ctx, name, args[0], site)
+  return new Push(Combinator, [capability(ctx, site), name, args[0], undefined, undefined])
 }
+
+// Slots: what settles the promise, the function, and its arguments.
+const PromiseTry = settling(
+  "Promise.try",
+  (slots) => [slots[1] as Value, undefined, slots[2] as Array<Value>],
+  (_task, slots, result) => (slots[0] as Resolving).resolve(result),
+  false,
+)
 
 // Promise.all, allSettled, race, and any: each element is resolved to a promise and observed through a reaction, so
 // the result settles in the job where the deciding element's reaction runs, or at once for an empty input. A failure
-// while iterating rejects the result.
-function* combinator<R>(
-  ctx: Interpreter<R>,
-  name: "all" | "allSettled" | "race" | "any",
-  iterable: Value,
-  site: AstNode | undefined,
-): Eval<Value> {
-  const machine = ctx.machine
-  const made = capability(ctx, site)
-  try {
-    const cursor = yield* ctx.iterate(iterable)
-    if (cursor === undefined) {
-      throw typeError(`Promise.${name} expects a synchronous iterable, received ${describeValue(iterable)}.`)
+// while iterating rejects the result. Slots: what settles the result, the combinator, the iterable, its iterator, and
+// the state the members' reactions share.
+const Combinator = kind(
+  "Promise combinator",
+  (task, frame: Frame, node, input) => {
+    const slots = frame.slots
+    const made = slots[0] as Resolving
+    const name = slots[1] as Combination["name"]
+    if (frame.phase === SETTLED) return made.promise
+    if (frame.phase === 0) {
+      frame.phase = 1
+      const opened = iterate(task, slots[2] as Value, node as AstNode)
+      if (opened === PENDING) return PENDING
+      input = opened
     }
-    const combination: Combination = { name, made, values: [], reasons: [], remaining: 1, attached: [] }
-    let index = 0
+    if (frame.phase === 1) {
+      if (input === undefined) {
+        throw typeError(`Promise.${name} expects a synchronous iterable, received ${describeValue(slots[2] as Value)}.`)
+      }
+      slots[3] = input
+      slots[4] = { name, made, values: [], reasons: [], remaining: 1, attached: [] } satisfies Combination
+    } else if (!take(task, slots[4] as Combination, input as Step)) return made.promise
+    frame.phase = 2
     while (true) {
-      const step = yield* cursor.next()
-      if (step.done) break
-      const item = machine.promiseResolve(step.value)
-      const reaction: Reaction = { kind: "combinator", combination, index: index++, called: false }
-      combination.values.push(undefined)
-      combination.reasons.push(undefined)
-      combination.remaining++
-      combination.attached.push([item, reaction])
-      machine.then(item, reaction)
+      const step = iteratorStep(task, slots[3] as Iter, node as AstNode)
+      if (step === PENDING) return PENDING
+      if (!take(task, slots[4] as Combination, step)) return made.promise
     }
-    if (name === "race" && index === 0) {
+  },
+  {
+    unwind: (_task, frame, error) => {
+      if (frame.phase === SETTLED) return false
+      ;(frame.slots[0] as Resolving).reject(error)
+      frame.phase = SETTLED
+      return true
+    },
+  },
+)
+
+// Observes one member; once iteration is done, settles an empty result and reports false.
+const take = (task: MachineTask, combination: Combination, step: Step): boolean => {
+  const machine = task.machine
+  if (step.done) {
+    if (combination.name === "race" && combination.attached.length === 0) {
       throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
     }
-    finishCombination(ctx, combination)
-  } catch (error) {
-    made.reject(error)
+    finishCombination(task.ctx, combination)
+    return false
   }
-  return made.promise
+  const item = machine.promiseResolve(step.value)
+  const reaction: Reaction = { kind: "combinator", combination, index: combination.values.length, called: false }
+  combination.values.push(undefined)
+  combination.reasons.push(undefined)
+  combination.remaining++
+  combination.attached.push([item, reaction])
+  machine.then(item, reaction)
+  return true
 }
 
 // One member settled. Once the result settles early, the remaining members' reactions can do nothing: they are
@@ -265,36 +353,33 @@ const chainFinally = <R>(
 }
 
 const cleanUp = <R>(
-  ctx: Interpreter<R>,
+  _ctx: Interpreter<R>,
   reaction: Extract<Reaction, { readonly kind: "finally" }>,
   settled: Completion,
-) => {
-  const machine = ctx.machine
+): JobFrame | void => {
   const made = reaction.target
   if (!settled.ok && settled.error instanceof Interruption) return made.reject(settled.error)
-  const cleanup = reaction.cleanup
-  const body = function* (): Eval<void> {
-    let result: Value
-    try {
-      result = yield* ctx.call(cleanup, undefined, [])
-    } catch (error) {
-      made.reject(error)
-      return
-    }
-    let after: PromiseObj
-    try {
-      after = machine.promiseResolve(result)
-    } catch (error) {
-      made.reject(error)
-      return
-    }
-    // The spec chains `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
-    const derived = capability(ctx, reaction.site)
-    machine.then(after, { kind: "finallyCleaned", target: derived })
-    machine.then(derived.promise, { kind: "finallyOutcome", target: made, outcome: settled })
-  }
-  return body()
+  return { kind: FinallyJob, slots: [made, reaction.cleanup, reaction.site, settled] }
 }
+
+// Slots: what settles the result, the cleanup, the call that chained it, and the original outcome. The spec chains
+// `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
+const FinallyJob = settling(
+  "PromiseFinallyJob",
+  (slots) => [slots[1] as Value, undefined, []],
+  (task, slots, result) => {
+    const machine = task.machine
+    const after = machine.promiseResolve(result)
+    const derived = capability(task.ctx, slots[2] as AstNode | undefined)
+    machine.then(after, { kind: "finallyCleaned", target: derived })
+    machine.then(derived.promise, {
+      kind: "finallyOutcome",
+      target: slots[0] as Resolving,
+      outcome: slots[3] as Completion,
+    })
+  },
+  true,
+)
 
 const reactionHandler = (value: Value, method: string): Callable | undefined => {
   if (isSupportedCallback(value)) return value
@@ -306,19 +391,22 @@ const reactionHandler = (value: Value, method: string): Callable | undefined => 
   return undefined
 }
 
-function* constructPromise<R>(ctx: Interpreter<R>, executor: Value, site: AstNode | undefined): Eval<Value> {
+const constructPromise = <R>(ctx: Interpreter<R>, executor: Value, site: AstNode | undefined) => {
   if (!(executor instanceof Fn)) {
     throw typeError("new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).")
   }
   const made = capability(ctx, site)
   const functions = resolvingFunctions(ctx, made)
-  try {
-    yield* ctx.call(executor, undefined, [functions.resolve, functions.reject])
-  } catch (error) {
-    made.reject(error)
-  }
-  return made.promise
+  return new Push(PromiseExecutor, [made, executor, [functions.resolve, functions.reject]])
 }
+
+// Slots: what settles the promise, the executor, and the resolving functions.
+const PromiseExecutor = settling(
+  "Promise executor",
+  (slots) => [slots[1] as Value, undefined, slots[2] as Array<Value>],
+  () => undefined,
+  false,
+)
 
 /**
  * Lets a synchronous object result also be awaited or chained like a Promise. It inherits non-enumerable

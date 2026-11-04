@@ -1,19 +1,26 @@
 import type { SpreadElement } from "acorn"
 import { AsyncIteratorSymbol, type AstNode, IteratorSymbol, typeError } from "../interpreter/model.js"
-import { type Cursor, get, Obj, Position, type Step, type Value } from "../interpreter/objects.js"
 import {
-  builtinCursor,
+  type Cursor,
   type CustomIterator,
-  requireIteratorMethod,
-  requireIteratorObject,
-} from "../interpreter/operations.js"
+  get,
+  Helper,
+  IteratorObj,
+  Obj,
+  Position,
+  type Step,
+  type Value,
+} from "../interpreter/objects.js"
+import { builtinCursor, requireIteratorMethod, requireIteratorObject } from "../interpreter/operations.js"
+import { describeValue } from "../interpreter/references.js"
 import { Await } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING, type Pending } from "./frame.js"
 import { ev } from "./expressions.js"
+import { HelperClose, HelperNext } from "./helpers.js"
 import type { MachineTask } from "./task.js"
 
-/** An iterator the machine drives: a built-in cursor, or a program object with its own `next`. */
-export type Iter = Cursor | CustomIterator
+/** An iterator the machine drives: a built-in cursor, a helper, or a program object with its own `next`. */
+export type Iter = Cursor
 
 export const isCustom = (iterator: Iter): iterator is CustomIterator => "iterator" in iterator
 
@@ -52,10 +59,23 @@ const IteratorOpen = kind("IteratorOpen", (_task, frame: Frame, node: AstNode, i
   opened(input, frame.slots[0] as boolean, node),
 )
 
+/** GetIteratorDirect: drive an iterator by its own `next`, without asking for `[Symbol.iterator]`. */
+export const iterateDirect = (value: Value, node: AstNode | undefined): Iter => {
+  if (value instanceof IteratorObj) return value.cursor
+  if (!(value instanceof Obj)) {
+    throw typeError(`An iterator must be an object, received ${describeValue(value)}.`, node)
+  }
+  return {
+    iterator: value,
+    next: requireIteratorMethod(get(value, "next"), "Iterator next", node),
+    asynchronous: false,
+  }
+}
+
 /** IteratorStep: the next result, as `for...of` sees it. An async iterator's result is awaited first. */
 export function iteratorStep(task: MachineTask, iterator: Iter, node: AstNode): Out<Step> {
   if (iterator instanceof Position) return iterator.step()
-  if (!isCustom(iterator)) return task.native(iterator.next(), node, false)
+  if (iterator instanceof Helper) return task.push(HelperNext, undefined, [iterator])
   return stepStep(task, undefined, node, undefined, iterator)
 }
 
@@ -88,7 +108,7 @@ const IteratorStep = kind("IteratorStep", stepStep)
 /** IteratorClose: calls the iterator's `return`, when it has one, and checks what it returned. */
 export function iteratorClose(task: MachineTask, iterator: Iter, node: AstNode): Out<undefined> {
   if (iterator instanceof Position) return undefined
-  if (!isCustom(iterator)) return task.native(iterator.close(), node, false) as Out<undefined>
+  if (iterator instanceof Helper) return task.push(HelperClose, undefined, [iterator]) as Pending
   return closeStep(task, undefined, node, undefined, iterator)
 }
 

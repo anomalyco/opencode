@@ -5,22 +5,11 @@ import type { Interpreter } from "../interpreter/interpreter.js"
 import { MAX_PENDING_PROMISES } from "../interpreter/limits.js"
 import { type AstNode, rangeError, typeError } from "../interpreter/model.js"
 import { type Callable, get, Obj, PromiseObj, type Value } from "../interpreter/objects.js"
-import { adoptThenable, react } from "../interpreter/promises.js"
+import { adoptThenable, type JobFrame, react } from "../interpreter/promises.js"
 import { typeofValue } from "../interpreter/references.js"
 import { ScopeStack } from "../interpreter/scope.js"
-import {
-  abrupt,
-  Await,
-  type Completion,
-  type Eval,
-  Host,
-  Interruption,
-  normal,
-  Slice,
-  Yield,
-} from "../interpreter/signals.js"
+import { abrupt, Await, type Completion, Host, Interruption, normal, Slice, Yield } from "../interpreter/signals.js"
 import type { Source } from "../interpreter/source.js"
-import { nativeFrame } from "./calls.js"
 import { Frame } from "./frame.js"
 import { adapterSettled } from "./generators.js"
 import { HostCall, type HostRequest, type Job, type Reaction, Resolving, type Stop } from "./scheduler.js"
@@ -295,10 +284,9 @@ export class Machine {
     this.input = input
   }
 
-  private work(body: Eval<void> | void): void {
-    if (body === undefined) return
-    this.root.enter([nativeFrame(this.root.scopes, body, undefined, true)])
-    this.input = normal(undefined)
+  private work(job: JobFrame | void): void {
+    if (job === undefined) return
+    this.resume([new Frame(job.kind, undefined, 0, this.root.scopes, job.slots)], normal(undefined))
   }
 
   // Continues the job on the root stack. It ends when the stack empties, or pauses for a slice or a blocking host call;

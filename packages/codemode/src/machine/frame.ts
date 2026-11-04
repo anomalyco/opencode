@@ -42,6 +42,8 @@ export type Kind = {
   counts?(frame: Frame): boolean
   /** A frame of this kind holds a host generator (a built-in that calls program code), so it cannot be saved. */
   readonly opaque?: boolean
+  /** A failure that unwinds past a frame of this kind is located at its node, where a built-in runs. */
+  readonly locates?: boolean
 }
 
 /** The phase of a frame that only passes its input through to the frame below: a tail position. */
@@ -61,12 +63,16 @@ export class Frame {
   ) {}
 }
 
+/** Every frame kind, by name, so a saved frame can name its kind. */
+export const kinds = new Map<string, Kind>()
+
 export const kind = (
   name: string,
   step: Kind["step"],
-  options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "opaque">,
-): Kind => ({
-  name,
-  step,
-  ...options,
-})
+  options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "opaque" | "locates">,
+): Kind => {
+  if (kinds.has(name)) throw new Error(`Frame kind "${name}" is defined twice.`)
+  const made = { name, step, ...options }
+  kinds.set(name, made)
+  return made
+}

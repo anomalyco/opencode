@@ -27,7 +27,7 @@ export class Interpreter<R> {
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
-  private readonly bridge: Bridge<R>
+  private readonly bridge: Bridge
   private readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
   private readonly namespaces = new Map<string, Obj>()
@@ -43,7 +43,7 @@ export class Interpreter<R> {
     this.logs = options.logs ?? []
     // The machine never runs host work itself, so it does not need the services that work runs with.
     this.machine = new Machine(this as Interpreter<unknown>)
-    this.bridge = new Bridge(this)
+    this.bridge = new Bridge()
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     const intrinsics = globals(this)
@@ -128,14 +128,6 @@ export class Interpreter<R> {
   /** Await: suspends the innermost async body until `value` settles. */
   awaitValue(value: Value, node?: AstNode): Eval<Value> {
     return this.bridge.awaitValue(value, node)
-  }
-
-  iterate(value: Value) {
-    return this.bridge.iterate(value)
-  }
-
-  iterateDirect(value: Value) {
-    return this.bridge.iterateDirect(value)
   }
 
   /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */

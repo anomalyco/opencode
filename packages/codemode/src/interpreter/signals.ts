@@ -44,6 +44,24 @@ export class Push {
   ) {}
 }
 
+/**
+ * A built-in needs `values` converted to primitives (ToPrimitive with `hints`, in order) before it can go on: the
+ * conversions run as a frame, then the built-in runs again from the start, and its `ordinal`-th conversion receives
+ * them. See `withPrimitives`.
+ */
+export class Convert {
+  constructor(
+    readonly hints: Hints,
+    readonly values: ReadonlyArray<Value>,
+    readonly ordinal: number,
+    /** Also apply ToNumber or ToString to each one before converting the next. */
+    readonly coerce: boolean,
+  ) {}
+}
+
+export type Hint = "number" | "string" | "default"
+export type Hints = Hint | ReadonlyArray<Hint>
+
 /** Suspend the innermost async body until `value` settles; a stall while it waits is reported at `node`. */
 export class Await {
   constructor(

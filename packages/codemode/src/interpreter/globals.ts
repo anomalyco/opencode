@@ -24,6 +24,7 @@ import { checkArrayLength } from "./limits.js"
 import { generatorGlobals } from "./generators.js"
 import { promiseGlobal } from "./promises.js"
 import type { Interpreter } from "./interpreter.js"
+import { Invoke } from "./signals.js"
 
 // Function.prototype.constructor exists so `fn.constructor === Function` holds; dynamic code is unsupported.
 const functionGlobal = <R>(ctx: Interpreter<R>) => {
@@ -32,11 +33,11 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
   }
   const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
   methods(ctx.builtins, ctx.builtins.Function, [
-    ["call", 1, (thisValue, args, site) => ctx.call(target(thisValue, "call"), args[0], args.slice(1), site)],
+    ["call", 1, (thisValue, args, site) => new Invoke(target(thisValue, "call"), args[0], args.slice(1), site)],
     [
       "apply",
       2,
-      (thisValue, args, site) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site),
+      (thisValue, args, site) => new Invoke(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site),
     ],
     [
       "bind",

@@ -23,7 +23,6 @@ import { ToolReference } from "../tool-runtime.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
 import { compoundOperators } from "../stdlib/value.js"
-import { locate } from "../interpreter/errors.js"
 import { checkStringLength } from "../interpreter/limits.js"
 import {
   AsyncIteratorSymbol,
@@ -43,7 +42,6 @@ import {
   coerceToNumber,
   coerceToString,
   define,
-  type NativeResult,
   Obj,
   remove,
   type Value,
@@ -66,9 +64,9 @@ import {
 } from "../interpreter/operations.js"
 import { capability } from "../interpreter/promises.js"
 import { isOpaque, typeofValue } from "../interpreter/references.js"
-import { Await, type GeneratorRequest, isEval, Yield } from "../interpreter/signals.js"
+import { Await, type GeneratorRequest, Yield } from "../interpreter/signals.js"
 import { type Frame, kind, type Out, PENDING } from "./frame.js"
-import { operate, toPrimitive, toPropertyKey } from "./calls.js"
+import { construct, operate, toPrimitive, toPropertyKey } from "./calls.js"
 import { delegate } from "./generators.js"
 import { spread } from "./iteration.js"
 import { assigning, bind } from "./patterns.js"
@@ -455,14 +453,7 @@ function newExpression(task: MachineTask, frame: Frame | undefined, node: NewExp
     if (evaluated === PENDING) return task.park(frame, mark, New, node, 2, [callee])
     args = evaluated
   } else args = input as Array<Value>
-  const constructor = callee as Builtin
-  let result: NativeResult
-  try {
-    result = constructor.construct!(args, constructor, node)
-  } catch (error) {
-    throw locate(error, node)
-  }
-  return isEval(result) ? task.tail(frame, task.native(result, node, true)) : result
+  return task.tail(frame, construct(task, callee as Builtin, args, node))
 }
 
 const New = kind("NewExpression", newExpression)
