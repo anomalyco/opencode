@@ -42,6 +42,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
               "public/nested/font.woff2": `font-${version}`,
               "public/nested/module.wasm": Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]),
               "public/large.bin": Buffer.alloc(2 * 1024 * 1024 + 1, version === "old" ? 1 : 2),
+              "public/notification.js": await readFile(new URL("../../public/notification.js", import.meta.url)),
               "public/_headers": "/*\n  Cache-Control: no-cache",
               "public/_redirects": "/* /index.html 200",
             }).map(([path, contents]) => writeFile(join(root, path), contents)),
