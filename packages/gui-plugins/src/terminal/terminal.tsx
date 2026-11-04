@@ -472,6 +472,18 @@ export const Terminal = (props: TerminalProps) => {
       })
       setOpened(t)
 
+      // Before autofocus, which types the keys held while the terminal was created.
+      const onData = t.onData((data) => connection.input(data))
+      cleanups.push(() => disposeIfDisposable(onData))
+
+      const onKey = t.onKey((key) => {
+        if (key.key == "Enter") {
+          props.onSubmit?.()
+        }
+      })
+
+      cleanups.push(() => disposeIfDisposable(onKey))
+
       // onAutoFocus consumes the request, which flips autoFocus, so read it once.
       const autoFocus = props.autoFocus === true
 
@@ -495,17 +507,6 @@ export const Terminal = (props: TerminalProps) => {
         const timer = setTimeout(restoreFocus, 0)
         cleanups.push(() => clearTimeout(timer))
       }
-
-      const onData = t.onData((data) => connection.input(data))
-      cleanups.push(() => disposeIfDisposable(onData))
-
-      const onKey = t.onKey((key) => {
-        if (key.key == "Enter") {
-          props.onSubmit?.()
-        }
-      })
-
-      cleanups.push(() => disposeIfDisposable(onKey))
 
       const observer = new ResizeObserver(measure)
       observer.observe(container)

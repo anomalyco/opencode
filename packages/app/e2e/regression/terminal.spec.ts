@@ -147,6 +147,48 @@ test("the New terminal shortcut creates the next numbered terminal", async ({ pa
   await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
 })
 
+test("keys typed right after the New terminal shortcut reach the new terminal's shell in order", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  await openSide(page)
+  await editor.click()
+  await page.keyboard.press("Control+Alt+T")
+  await page.keyboard.type("echo in-session-a")
+  await page.keyboard.press("Enter")
+
+  await expect.poll(() => persistentPty.created.length).toBe(1)
+  const id = persistentPty.created[0]!.id
+  await expect(terminalScreen(page, id).locator("textarea")).toBeFocused()
+  await expect.poll(() => persistentPty.sockets.flatMap((socket) => socket.input).join("")).toBe("echo in-session-a\r")
+  await expect(editor).toHaveText("")
+})
+
+test("keys typed right after creating a second terminal reach the new one, not the first", async ({ page }) => {
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_first", sessionID: SESSION, title: "Terminal 1" }] },
+  })
+
+  await openSide(page)
+  await showTerminal(page, "Terminal 1", "pty_first")
+  await page.keyboard.press("Control+Alt+T")
+  await page.keyboard.type("echo in-session-a")
+  await page.keyboard.press("Enter")
+
+  await expect.poll(() => persistentPty.created.length).toBe(1)
+  const id = persistentPty.created[0]!.id
+  await expect(terminalScreen(page, id).locator("textarea")).toBeFocused()
+
+  const input = (ptyID: string) =>
+    persistentPty.sockets
+      .filter((socket) => socket.id === ptyID)
+      .flatMap((socket) => socket.input)
+      .join("")
+
+  await expect.poll(() => input(id)).toBe("echo in-session-a\r")
+  expect(input("pty_first")).toBe("")
+})
+
 test("another client's control ends at a click, which resizes the terminal to the pane", async ({ page }) => {
   const { persistentPty } = await openSession(page, {
     name: "Terminals",

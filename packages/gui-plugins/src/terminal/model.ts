@@ -29,6 +29,9 @@ export type TerminalSession = ReturnType<TerminalModel["load"]>
 
 type FocusRequest = { key: string; request: number; id?: string; pending: boolean }
 
+/** Keys typed while the terminal of a focus request is created. */
+type HeldKeys = { request?: number; keys: KeyboardEvent[] }
+
 const importGhostty = () => import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
 
 /** The one ghostty-web load the window's terminals share; a failed load is retried by the next terminal. */
@@ -66,6 +69,8 @@ export function createTerminalModel(input: {
   const cleanups: VoidFunction[] = []
   const ghostty: Ghostty = {}
   const focus = { request: 0 }
+  // Keys typed while a terminal is created wait for it, as the TUI's pane holds input until it restores.
+  const held: HeldKeys = { keys: [] }
 
   const available = (server: ServerRef) => {
     watch(server)
@@ -212,6 +217,33 @@ export function createTerminalModel(input: {
     // Capture phase: a tab's rename field stops its focusin from bubbling.
     document.addEventListener("focusin", cancelOnOutsideFocus, true)
     cleanups.push(() => document.removeEventListener("focusin", cancelOnOutsideFocus, true))
+
+    // Until the new terminal takes focus, keys would reach whatever had it, such as the composer or another terminal.
+    // Shortcuts, input methods and a tab's rename field keep their keys.
+    const holdKey = (event: KeyboardEvent) => {
+      if (held.request === undefined || held.request !== state.focus?.request) return
+
+      if (event.ctrlKey || event.metaKey || event.isComposing || event.keyCode === 229) return
+
+      if (event.target instanceof HTMLInputElement && event.target.closest('[role="tablist"]')) return
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      held.keys.push(event)
+    }
+
+    // A click means the user moved on; the new terminal still takes focus when it opens. focusTerminalById dispatches
+    // its own pointerdown, which is not a click.
+    const releaseKeys = (event: PointerEvent) => {
+      if (!event.isTrusted) return
+      held.request = undefined
+      held.keys = []
+    }
+
+    document.addEventListener("keydown", holdKey, true)
+    cleanups.push(() => document.removeEventListener("keydown", holdKey, true))
+    document.addEventListener("pointerdown", releaseKeys, true)
+    cleanups.push(() => document.removeEventListener("pointerdown", releaseKeys, true))
   }
 
   const handle = (initial: SessionRef) => {
@@ -249,6 +281,8 @@ export function createTerminalModel(input: {
       async new() {
         const target = session()
         const request = requestFocus(key, undefined, true)
+        held.request = request
+        held.keys = []
 
         await settled(target, owner)
 
@@ -339,11 +373,24 @@ export function createTerminalModel(input: {
           })
       },
       requestFocus(id?: string) {
+        // Showing the terminal that was just created keeps its request, and the keys held for it.
+        if (id && focusRequested(id) && state.focus?.id === id) return
         requestFocus(key, id)
       },
       focusRequested,
+      /** Ends the request once the terminal has focus, and types the keys held for it there. */
       consumeFocus(id: string) {
-        if (focusRequested(id)) setState("focus", undefined)
+        if (!focusRequested(id)) return
+        const keys = held.request === state.focus?.request ? held.keys : []
+        held.request = undefined
+        held.keys = []
+        setState("focus", undefined)
+        const textarea = document.getElementById(`terminal-wrapper-${id}`)?.querySelector("textarea")
+
+        // ghostty-web reads keys from keydown events on the focused terminal.
+        if (textarea && textarea === document.activeElement) {
+          keys.forEach((event) => textarea.dispatchEvent(new KeyboardEvent(event.type, event)))
+        }
       },
       cancelFocus() {
         if (state.focus?.key === key) cancelFocus()
