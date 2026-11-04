@@ -1328,6 +1328,7 @@ dependencies = [
 name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "indexmap",
  "log",
  "opencode-api",
