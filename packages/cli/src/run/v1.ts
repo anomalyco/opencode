@@ -1,6 +1,7 @@
 import type { Endpoint } from "@opencode/client/effect/service"
 import { Effect } from "effect"
 import path from "node:path"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Standalone } from "../services/standalone"
 import { errorMessage } from "../util/error"
 import { reportRunError, runNonInteractiveWithOptions, type RunCommandInput } from "./run"
@@ -26,7 +27,7 @@ export type V1RunCommandInput = {
 }
 
 export function runV1Bridge(input: V1RunCommandInput) {
-  const root = process.env.PWD ?? process.cwd()
+  const root = FSUtil.resolve(process.env.PWD ?? process.cwd())
   const attached = input.server !== undefined
   const local = !attached && input.directory ? path.resolve(root, input.directory) : root
   try {
