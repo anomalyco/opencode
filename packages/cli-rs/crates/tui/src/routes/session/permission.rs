@@ -137,7 +137,9 @@ impl Permission {
         });
         for id in family {
             if inner.synced.borrow_mut().insert(id.clone()) {
-                super::load(tui, tui.data.permission_sync(&id));
+                // TS ignores failures (`routes/session/index.tsx:333-347`): a session still being
+                // created reads as not found.
+                super::form::quiet(tui, tui.data.permission_sync(&id));
             }
         }
         if tui.config.permissions == Permissions::Autoaccept {
