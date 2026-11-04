@@ -50,7 +50,7 @@ impl Session {
             .animations(opencode_ui::motion::enabled(tui.config.info.animations))
             .visible(false);
         let permission = permission::Permission::new(tui, &id);
-        let prompt = crate::prompt::editor::mount(tui, &id);
+        let prompt = crate::prompt::editor::mount(tui, Some(&id));
         let column = View::new(app)
             .column()
             .grow(1.0)
