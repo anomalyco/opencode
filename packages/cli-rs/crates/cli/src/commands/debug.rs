@@ -32,8 +32,8 @@ pub fn run(context: &Context, args: &DebugArgs) -> anyhow::Result<()> {
 
 fn agents(context: &Context) -> anyhow::Result<()> {
     let response = block_on(async {
-        let (_, client) = connect(context).await?;
-        get_located(&client, "/api/agent", &[400, 401, 404, 503]).await
+        let server = connect(context).await?;
+        get_located(&server.client, "/api/agent", &[400, 401, 404, 503]).await
     })??;
     let mut agents = super::models::data(&response).to_vec();
     agents.sort_by(|a, b| {
@@ -47,8 +47,8 @@ fn agents(context: &Context) -> anyhow::Result<()> {
 
 fn config(context: &Context) -> anyhow::Result<()> {
     let entries = block_on(async {
-        let (_, client) = connect(context).await?;
-        get_located(&client, "/api/config", &[400, 401, 404]).await
+        let server = connect(context).await?;
+        get_located(&server.client, "/api/config", &[400, 401, 404]).await
     })??;
     print(&pretty(&redact(&entries, false))?)
 }
