@@ -5,7 +5,8 @@ import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePluginServers } from "@/runtime/plugin/servers"
-import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
+import { createEffect, getOwner, onCleanup, startTransition, type Accessor } from "solid-js"
+import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
@@ -34,6 +35,7 @@ export type PendingSession = {
   message: SessionMessageUser
   selection: ComposerSelection
   composer: ComposerState
+  view: Accessor<NewSessionStartView>
 }
 
 export type TabInfo = typeof TabStorage.Info.Type
@@ -300,34 +302,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           }),
         )
       },
-      promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
-        // Keep the replacement and navigation atomic so /new-session never renders
-        // after its backing draft tab has been removed from the store.
-        const active = location.pathname === "/new-session" && location.query.draftId === draftID
-        const next = { type: "session" as const, ...session }
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              const index = tabs.findIndex((tab) => tab.type === "draft" && tab.draftID === draftID)
-
-              if (index !== -1) tabs[index] = next
-            }),
-          )
-
-          if (recent.key === `draft:${draftID}`) setRecentKey(tabKey(next))
-
-          if (active) navigateTab(next)
-        })
-        memory.remove(`draft:${draftID}`)
-        removeDraftPersisted(draftID)
-      },
       pendingSession(server: ServerConnection.Key, sessionID: string): PendingSession | undefined {
         return pending[tabKey({ type: "session", server, sessionId: sessionID })]
       },
       prepareSession(
         draftID: string,
         session: Omit<SessionTab, "type">,
-        preview: { message: SessionMessageUser; selection: ComposerSelection },
+        preview: Omit<PendingSession, "draft" | "composer">,
       ) {
         // Snapshot the draft before replacing its store entry; keep its composer alive for rollback.
         const draft = { ...actions.draft(draftID) }
