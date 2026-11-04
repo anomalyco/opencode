@@ -316,6 +316,81 @@ fn select_matches_typescript_when_opened_moved_and_filtered() {
     assert_fixture(&kit.app.render(), "U.3/select-empty");
 }
 
+// The list of parity/component/U.3-select-scroll.tsx: 30 options in three categories, one with a detail row.
+fn open_long(kit: &Kit) {
+    let options = ["Alpha", "Beta", "Gamma"]
+        .iter()
+        .enumerate()
+        .flat_map(|(c, category)| {
+            (0..10).map(move |i| {
+                let mut option = SelectOption::new(format!("{category} {}", i + 1), c * 10 + i)
+                    .category(*category);
+                if c == 1 && i == 3 {
+                    option.details = vec!["/a/detail/row".into()];
+                }
+                option
+            })
+        })
+        .collect();
+    kit.dialogs.replace(
+        move |cx| select::select(cx, SelectProps::new("Long list", options)).0,
+        None,
+        Default::default(),
+    );
+    kit.app.render();
+}
+
+// Sends `key` `count` times, drawing a frame after each when `frames` is set.
+fn press(kit: &Kit, key: &str, count: usize, frames: bool) {
+    for _ in 0..count {
+        kit.app.press(key);
+        if frames {
+            kit.app.render();
+        }
+    }
+}
+
+#[test]
+fn select_scrolls_as_typescript() {
+    for count in [5, 10, 20] {
+        for frames in [false, true] {
+            let kit = self::kit(72, 30);
+            open_long(&kit);
+            press(&kit, "down", count, frames);
+            let suffix = if frames { "-frames" } else { "" };
+            assert_fixture(
+                &kit.app.render(),
+                &format!("U.3/select-scroll-{count}{suffix}"),
+            );
+        }
+    }
+
+    let kit = self::kit(72, 30);
+    open_long(&kit);
+    press(&kit, "down", 20, false);
+    kit.app.render();
+    press(&kit, "up", 8, false);
+    assert_fixture(&kit.app.render(), "U.3/select-scroll-up");
+
+    let kit = self::kit(72, 30);
+    open_long(&kit);
+    press(&kit, "down", 20, true);
+    press(&kit, "up", 8, true);
+    assert_fixture(&kit.app.render(), "U.3/select-scroll-up-frames");
+}
+
+#[test]
+fn palette_scrolls_as_typescript_at_80x20() {
+    for (fixture, moves) in [("U.3/palette-20", 0), ("U.3/palette-20-end", 5)] {
+        let kit = kit(80, 20);
+        palette_commands(&kit);
+        palette::show(&kit.dialogs, Vec::new());
+        kit.app.render();
+        press(&kit, "down", moves, false);
+        assert_fixture(&kit.app.render(), fixture);
+    }
+}
+
 /// P-ORACLE: `parity/fixtures/U.3/fuzzy.json` holds fuzzysort's order for DialogSelect's call over the keybind
 /// corpus (`parity/oracle/U.3-fuzzy.ts`); the port must give the same order, ties included.
 #[test]

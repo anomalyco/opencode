@@ -10,7 +10,7 @@ use crate::dialog::{
 };
 use crate::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 /// How a long title is cut (`truncateTitle`).
@@ -301,6 +301,8 @@ struct Inner<T> {
     input: Option<Input>,
     body: View,
     scroll: ScrollBox,
+    // The unclamped top the scrolls since the last frame asked for, and that frame's number.
+    scroll_request: Cell<Option<(i64, u64)>>,
     footer_slot: View,
     rows: RefCell<Vec<View>>,
 }
@@ -362,6 +364,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         input: input.clone(),
         body,
         scroll,
+        scroll_request: Cell::new(None),
         footer_slot,
         rows: RefCell::new(Vec::new()),
     });
@@ -907,6 +910,12 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     // The list height: `min(rows, floor(height / 2) - 6)`.
     fn list_height(&self) -> u32 {
+        let (rows, limit) = self.list_rows();
+        rows.min(limit)
+    }
+
+    // The rows of the whole list and the most it shows.
+    fn list_rows(&self) -> (u32, u32) {
         let state = self.0.state.borrow();
         let headers: u32 = state
             .grouped
@@ -922,7 +931,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             .sum::<u32>()
             + headers;
         let limit = (i64::from(self.0.cx.app.size().1) / 2 - 6).max(0) as u32;
-        rows.min(limit)
+        (rows, limit)
     }
 
     // The y offset of the selected row inside the list.
@@ -945,25 +954,32 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         None
     }
 
+    // `scrollToSelection`. Its `scrollBy` calls reach OpenTUI's native scroll box, which sums the relative scrolls
+    // since the last layout before it clamps them: moves without a frame between them carry an unclamped top.
     fn scroll_to_selection(&self, center: bool) {
         let Some(y) = self.selected_y() else { return };
-        let height = self.list_height();
-        let top = self.0.scroll.scroll_position().1 as i64;
-        let y = i64::from(y);
-        let next = if center {
-            y - i64::from(height / 2)
-        } else if y >= top + i64::from(height) {
-            y - i64::from(height) + 1
-        } else if y < top {
-            if self.0.state.borrow().selected == 0 {
-                0
-            } else {
-                y
-            }
-        } else {
-            top
+        let (rows, limit) = self.list_rows();
+        let height = i64::from(rows.min(limit));
+        let max = i64::from(rows) - height;
+        let frame = self.0.cx.app.frame_number();
+        let request = match self.0.scroll_request.get() {
+            Some((top, at)) if at == frame => top,
+            _ => self.0.scroll.scroll_position().1 as i64,
         };
-        self.0.scroll.scroll_to(0.0, next.max(0) as f64);
+        let y = i64::from(y) - request.clamp(0, max);
+        let request = if center {
+            request + y - height / 2
+        } else if y >= height {
+            request + y - height + 1
+        } else if y >= 0 {
+            return;
+        } else if self.0.state.borrow().selected == 0 {
+            0
+        } else {
+            request + y
+        };
+        self.0.scroll_request.set(Some((request, frame)));
+        self.0.scroll.scroll_to(0.0, request.clamp(0, max) as f64);
     }
 
     fn render(&self) {
