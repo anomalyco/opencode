@@ -297,6 +297,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     crate::features::title::install(&tui);
     crate::features::system_commands::install(&tui);
     crate::dialogs::settings::install(&tui);
+    crate::dialogs::mcp::install(&tui);
     crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
     tui.navigate(deps.route);
