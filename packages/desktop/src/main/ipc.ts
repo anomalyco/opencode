@@ -82,6 +82,8 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
+  const stopDisconnects = handoff.onDisconnect(lifecycle.deepLinks.disconnect)
+  yield* Effect.addFinalizer(() => Effect.sync(stopDisconnects))
 
   yield* Effect.sync(() => {
     app.on("browser-window-created", onWindowCreated)

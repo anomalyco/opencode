@@ -23,7 +23,8 @@ const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
-  consumeInitialDeepLinks: () => invoke("AppConsumeInitialDeepLinks").then(mutable),
+  readyDeepLinks: () => send("AppReadyDeepLinks"),
+  acknowledgeDeepLinks: (attempt) => send("AppAcknowledgeDeepLinks", { attempt }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
@@ -54,7 +55,7 @@ export const api: ElectronAPI = {
   getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
-  onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
+  onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb({ attempt: event.attempt, urls: mutable(event.urls) })),
 
   openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),
   openFilePicker: (opts) => invoke("FilesOpenFilePicker", { options: opts }).then(mutable),
