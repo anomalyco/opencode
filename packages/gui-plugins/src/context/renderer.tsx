@@ -17,7 +17,6 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       return ctx.t("tab.title")
     },
     draggable: false,
-    closable: "compact",
     first: true,
     fallback: true,
     label: (state) => (
@@ -31,7 +30,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   ctx.add(Slot, {
     at: "session.header",
     order: 10,
-    render: (input) => <SessionContextUsage session={input.session} active={input.active} placement="bottom" />,
+    render: (input) => (
+      <SessionContextUsage session={input.session} active={input.active} placement="bottom" compact={input.compact} />
+    ),
   })
 
   ctx.add(

@@ -4,10 +4,12 @@ import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } f
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Loader } from "@opencode/ui/loader"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -46,7 +48,7 @@ const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -225,7 +227,10 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
   )
 }
 
-function HomeSessionLeadingController(props: {
+// The project avatar leads the row and never changes; a working session shows its activity ring at the row's trailing
+// edge, as session tabs do. `order-last` moves the ring past the labels from here, so one status subscription serves
+// both, and `ms-auto` pins it to the end even where the labels are `display: contents`.
+function HomeSessionIndicators(props: {
   server: HomeSessionsViewProps["server"]
   isOpenTab: HomeSessionsViewProps["isOpenTab"]
   record: HomeSessionRecord
@@ -236,18 +241,19 @@ function HomeSessionLeadingController(props: {
       record={props.record}
       isOpenTab={props.isOpenTab}
       render={(state) => (
-        <HomeSessionLeading
-          record={props.record}
-          open={state.open()}
-          unread={state.unread()}
-          loading={state.loading()}
-        />
+        <>
+          {/* A busy session shows its activity ring instead of the unread dot. */}
+          <HomeSessionLeading record={props.record} open={state.open()} unread={state.unread() && !state.loading()} />
+          <Show when={state.loading()}>
+            <ActivityRing class="order-last ms-auto" />
+          </Show>
+        </>
       )}
     />
   )
 }
 
-function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean; loading: boolean }) {
+function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean }) {
   return (
     <div class="relative shrink-0">
       <Show when={props.open}>
@@ -264,7 +270,6 @@ function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; u
         project={props.record.project}
         directory={props.record.session.location.directory}
         unread={props.unread}
-        loading={props.loading}
       />
     </div>
   )
@@ -325,7 +330,7 @@ function HomeSessionSearch(
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <div class="max-h-[min(20rem,40dvh)] overflow-y-auto" data-scrollable ref={props.onSetSearchList}>
+                      <MenuScroll class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -337,7 +342,7 @@ function HomeSessionSearch(
                             )}
                           </For>
                         </div>
-                      </div>
+                      </MenuScroll>
                     </div>
                   </Show>
                 </Show>
@@ -472,7 +477,7 @@ function HomeSessionSearchResultRow(
         props.onSearchSelect(props.record, { background: true })
       }}
     >
-      <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+      <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
       <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
@@ -622,7 +627,7 @@ function HomeSessionRow(
             class="flex h-10 min-w-0 w-full flex-1 items-center py-3 ps-1.5 pe-3 md:ps-3"
             classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           >
-            <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+            <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
             <div data-slot="home-session-labels" class="contents">
               <InlineInput
                 data-component="home-session-rename"
@@ -745,7 +750,7 @@ function HomeSessionRow(
             props.onOpenSession(props.record.session, { background: true })
           }}
         >
-          <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+          <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
           <div
             data-slot="home-session-labels"
             class="min-w-0 flex-1 items-center gap-1.5"

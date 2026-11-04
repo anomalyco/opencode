@@ -6,6 +6,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
 import {
   createTimelineProjection,
   reasoningHeading,
@@ -49,6 +50,17 @@ const part = (key: string, partID: string) =>
   })
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
+
+const diff = (files: string[]) =>
+  new TimelineRow.TurnDiff({ userMessageID: "user-1", messageID: "idle-1", from: "user-1", files })
+
+const spaced = (spacing?: "tool" | "content") =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: { key: "part:a", type: "part", ref: { messageID: "assistant-1", partID: "a" } },
+    previousAssistantPart: true,
+    spacing,
+  })
 
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
@@ -199,6 +211,29 @@ describe("reuseTimelineRows", () => {
       reused: [[0, 0]],
     },
     {
+      name: "reuses a row whose list field is equal",
+      previous: [diff(["a.ts", "b.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose list field changed",
+      previous: [diff(["a.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose optional field changed",
+      previous: [spaced("tool")],
+      rows: [spaced("content")],
+      expected: ["assistant-part:part:part:a"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
@@ -209,16 +244,70 @@ describe("reuseTimelineRows", () => {
       ],
       reused: [],
     },
-  ])("$name", ({ previous, rows, expected, reused }) => {
+  ])("$name", ({ previous, rows, expected, reused, replaced }) => {
     const result = reuseTimelineRows([...previous], [...rows])
 
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+    replaced?.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).not.toBe(previous[previousIndex]))
   })
 })
 
 describe("createTimelineProjection", () => {
+  test("keeps new tools folded into seen work above the new-messages notice", () => {
+    const messages = [
+      { id: "user", type: "user", text: "Read files", time: { created: 1 } },
+      {
+        id: "assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        time: { created: 2, completed: 3 },
+        content: [
+          ...["seen", "new"].map(
+            (id): SessionMessageAssistantTool => ({
+              type: "tool",
+              id,
+              name: "read",
+              state: {
+                status: "completed",
+                input: { filePath: `${id}.ts` },
+                content: [{ type: "text", text: id }],
+                metadata: {},
+              },
+              time: { created: 2, completed: 3 },
+            }),
+          ),
+          { type: "text", text: "The result" },
+        ],
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const folded = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      reasoningMode: "full",
+      newMessages: new Set(["new"]),
+    })
+
+    expect(folded.rows.some((row) => Predicate.isTagged(row, "NewMessages"))).toBe(false)
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "idle" },
+      reasoningMode: "full",
+      newMessages: new Set(["new", "assistant:text:0"]),
+    })
+
+    const index = result.rows.findIndex((row) => Predicate.isTagged(row, "NewMessages"))
+
+    expect(result.rows[index]).toEqual(
+      new TimelineRow.NewMessages({ userMessageID: "user", partID: "assistant:text:0", read: false }),
+    )
+    expect(result.rows[index + 1]).toEqual(folded.rows[index])
+  })
+
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef

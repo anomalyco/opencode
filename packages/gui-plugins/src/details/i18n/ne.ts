@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "कुनै प्लगइनहरू कन्फिगर गरिएको छैन",
   skills: "सीपहरू",
   "skills.empty": "कुनै सीपहरू कन्फिगर गरिएको छैन",
-  lsp: "LSP",
-  "lsp.empty": "कुनै LSP सर्भरहरू कन्फिगर गरिएको छैन",
   failed: "असफल",
   retry: "पुन: प्रयास गर्नुहोस्",
   connecting: "जडान गर्दै...",

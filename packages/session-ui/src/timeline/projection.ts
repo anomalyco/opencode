@@ -8,7 +8,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
-import { createMemo, mapArray, type Accessor } from "solid-js"
+import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
   currentToolFailed,
@@ -82,6 +82,8 @@ export type TimelineProjectionInput = {
   queuedCompactionIDs?: readonly string[]
   turnDiffs?: boolean
   previousRows?: TimelineRow.TimelineRow[]
+  newMessages?: ReadonlySet<string>
+  newMessagesRead?: boolean
 }
 
 export function createTimelineProjection(input: TimelineProjectionInput) {
@@ -100,7 +102,11 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.turnDiffs,
   )
 
-  const rows = reuseTimelineRows(input.previousRows, projection.rows)
+  const rows = reuseTimelineRows(
+    input.previousRows,
+    withNewMessages(projection.rows, input.newMessages, input.newMessagesRead),
+  )
+
   const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row] as const))
   const messageRowIndex = new Map<string, number>()
   const messageLastRowIndex = new Map<string, number>()
@@ -139,6 +145,8 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  newMessages?: Accessor<ReadonlySet<string>>
+  newMessagesRead?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -157,7 +165,15 @@ export function createReactiveTimelineProjection(input: {
         .flatMap((message) =>
           message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
         ),
-    (content) => [content, createMemo(() => !!content.text.trim())] as const,
+    (content) => {
+      // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
+      // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
+      // notifies only when visibility actually flips.
+      const [visible, setVisible] = createSignal(false)
+      createComputed(() => setVisible(!!content.text.trim()))
+
+      return [content, visible] as const
+    },
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
@@ -184,7 +200,7 @@ export function createReactiveTimelineProjection(input: {
   const activeMessageID = createMemo(() => projection().activeMessageID)
 
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
-    reuseTimelineRows(previous, projection().rows),
+    reuseTimelineRows(previous, withNewMessages(projection().rows, input.newMessages?.(), input.newMessagesRead?.())),
   )
 
   const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row] as const)))
@@ -228,6 +244,30 @@ export function createReactiveTimelineProjection(input: {
     userContextByID,
     previousSelectionByID,
   }
+}
+
+function withNewMessages(rows: TimelineRow.TimelineRow[], parts?: ReadonlySet<string>, read = false) {
+  if (!parts?.size) return rows
+
+  for (const [index, row] of rows.entries()) {
+    if (!Predicate.isTagged(row, "Thinking") && !Predicate.isTagged(row, "AssistantPart")) continue
+
+    const first = Predicate.isTagged(row, "Thinking")
+      ? row.ref
+      : row.group.type === "part"
+        ? row.group.ref
+        : row.group.refs[0]
+
+    if (!first || !parts.has(first.partID)) continue
+
+    return [
+      ...rows.slice(0, index),
+      new TimelineRow.NewMessages({ userMessageID: row.userMessageID, partID: first.partID, read }),
+      ...rows.slice(index),
+    ]
+  }
+
+  return rows
 }
 
 export namespace Timeline {
@@ -649,7 +689,7 @@ export namespace Timeline {
   }
 }
 
-const MAX_RETRY_AFTER_MS = 7 * 86_400_000
+const MAX_RETRY_AFTER_MS = 45 * 86_400_000
 
 function usageLimit(
   message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },

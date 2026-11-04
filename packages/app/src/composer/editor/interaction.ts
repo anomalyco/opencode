@@ -23,7 +23,7 @@ import {
   type ComposerInteractionEvent,
 } from "../suggestions/machine"
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
-import type { ComposerQueue } from "../adapter"
+import type { ComposerDelivery, ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 
@@ -47,8 +47,17 @@ export type ComposerEditorView = {
     stopping: Accessor<boolean>
     /** A send pressed while agents and models load, which goes through once they do. */
     held?: Accessor<boolean>
+    /** A send is held, or is preparing and handing off its draft; the submit button shows progress. */
+    busy?: Accessor<boolean>
+    /** False while a send, client command or quote is underway, so the composer cannot submit it twice. */
+    canSubmit?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
+    quote?: {
+      available: Accessor<boolean>
+      delivery: Accessor<ComposerDelivery | undefined>
+      onSubmit: (key: string, comment: string) => Promise<boolean>
+    }
     onSubmit: (options?: { alternate?: boolean }) => void
     onStop: () => void
   }
@@ -166,7 +175,7 @@ export function createComposerEditor(input: {
     )
   }
 
-  const [found, setFound] = createStore<{ files: ComposerSuggestion[] }>({ files: [] })
+  const [found, setFound] = createStore<{ query?: string; files: ComposerSuggestion[] }>({ files: [] })
   let fileQuery: string | undefined
   let fileAbort = new AbortController()
   onCleanup(() => abort(fileAbort))
@@ -181,7 +190,7 @@ export function createComposerEditor(input: {
     fileAbort = controller
 
     if (query === undefined || !query.trim() || /\s/.test(query)) {
-      if (found.files.length) setFound("files", [])
+      if (found.files.length) setFound({ query: undefined, files: [] })
 
       return
     }
@@ -189,7 +198,7 @@ export function createComposerEditor(input: {
     const timer = setTimeout(
       () =>
         void Promise.resolve(input.searchContextFiles(query, controller.signal)).then(
-          (files) => !controller.signal.aborted && setFound("files", files),
+          (files) => !controller.signal.aborted && setFound({ query, files }),
           () => undefined,
         ),
       150,
@@ -263,6 +272,12 @@ export function createComposerEditor(input: {
     })),
   )
 
+  // Files from the previous query stay listed while the next search runs, but the keyboard can't highlight or pick them.
+  const stale = (item: ComposerSuggestion) =>
+    state.popover.type === "context" && item.kind === "file" && !item.recent && found.query !== state.popover.query
+
+  const selectable = () => suggestions().flatMap((item) => (stale(item) ? [] : [item.id]))
+
   const suggestions = () => {
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
@@ -324,6 +339,8 @@ export function createComposerEditor(input: {
   }
 
   function dispatch(event: ComposerInteractionEvent) {
+    if (event.type === "popover.active" && !selectable().includes(event.id)) return false
+
     if (event.type === "popover.close") cancelFocus()
 
     if (
@@ -398,7 +415,7 @@ export function createComposerEditor(input: {
       key: event.key,
       ctrl: event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey,
       composing: event.isComposing,
-      ids: suggestions().map((item) => item.id),
+      ids: selectable(),
       empty: draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
     })
 
@@ -412,6 +429,21 @@ export function createComposerEditor(input: {
     }
 
     if (handled) return true
+
+    // The suggestion lists don't page, and a page key must not move the caret out of the query or page the timeline.
+    if (
+      state.popover.type !== "closed" &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+
+      return true
+    }
 
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
@@ -452,9 +484,9 @@ export function createComposerEditor(input: {
 
   createEffect(() => {
     if (state.popover.type === "closed") return
-    const ids = suggestions().map((item) => item.id)
+    const ids = selectable()
 
-    if (state.popover.activeID ? ids.includes(state.popover.activeID) : ids.length === 0) return
+    if (state.popover.activeID ? state.popover.chosen && ids.includes(state.popover.activeID) : ids.length === 0) return
     dispatch({ type: "popover.results", ids })
   })
 
@@ -613,6 +645,8 @@ export function createComposerEditor(input: {
     canSubmit() {
       if (input.view.submit.available?.() === false) return false
 
+      if (input.view.submit.canSubmit?.() === false) return false
+
       if (input.view.draftOnly) return false
 
       if (attachments?.pending().length) return false
@@ -717,14 +751,15 @@ export function createComposerEditor(input: {
       selection.addRange(range)
       target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: normalized }))
     },
+    // The document's dragover owns the drag state. A dragleave fires on every move between the editor's own
+    // nodes, so clearing the state here made the dropzone flicker.
     onDragEnter(event: DragEvent) {
       event.preventDefault()
-      dispatch({ type: "drag.enter" })
     },
     onDragOver(event: DragEvent) {
       event.preventDefault()
     },
-    onDragLeave() {
+    clearDrag() {
       dispatch({ type: "drag.leave" })
     },
     onDrop(event: DragEvent) {

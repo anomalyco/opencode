@@ -57,6 +57,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.spellcheck.title",
+    target: "settings-spellcheck",
+    keywords: "spelling spell check dictionary",
+    available: "desktop",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
     available: "mobile",
@@ -119,6 +126,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "question answers keyboard dock redesign",
   },
   {
+    tab: "experimental",
+    label: "settings.timeline.row.newMessagesDivider.title",
+    description: "settings.timeline.row.newMessagesDivider.description",
+    target: "settings-new-messages-divider",
+    keywords: "unread new messages divider return session",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",
@@ -174,6 +188,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.notifications.errors.title",
     target: "settings-notifications-errors",
     section: "settings.general.section.notifications",
@@ -195,6 +217,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.permissions.description",
     keywords: "sound audio permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
   },
   {
     tab: "notifications",

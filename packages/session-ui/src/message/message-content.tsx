@@ -19,6 +19,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
+import { LinkedText } from "../components/linked-text"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
@@ -52,33 +53,40 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import {
+  createMessageActionState,
+  transitionMessageAction,
+  viewMessageActions,
+  type MessageAction,
+  type MessageActionCapabilities,
+  type MessageActionEvent,
+} from "./action-machine"
 
 export async function writeClipboard(text: string): Promise<boolean> {
-  const body = typeof document === "undefined" ? undefined : document.body
-
-  if (body) {
-    const textarea = document.createElement("textarea")
-    textarea.value = text
-    textarea.setAttribute("readonly", "")
-    textarea.style.position = "fixed"
-    textarea.style.opacity = "0"
-    textarea.style.pointerEvents = "none"
-    body.appendChild(textarea)
-    textarea.select()
-    const copied = document.execCommand("copy")
-    body.removeChild(textarea)
-
-    if (copied) return true
-  }
-
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-
-  if (!clipboard?.writeText) return false
-
-  return clipboard.writeText(text).then(
+  const written = await navigator.clipboard?.writeText(text).then(
     () => true,
     () => false,
   )
+
+  if (written) return true
+  // The textarea sits beside the focused element so a focus trap, such as an open menu's, keeps its selection.
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+  const host = active && active !== document.body ? (active.parentElement ?? document.body) : document.body
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.setAttribute("readonly", "")
+  textarea.setAttribute("aria-hidden", "true")
+  textarea.tabIndex = -1
+  textarea.style.position = "fixed"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+  host.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand("copy")
+  textarea.remove()
+  active?.focus({ preventScroll: true })
+
+  return copied
 }
 
 type MetaItem = { label: string; variant?: boolean }
@@ -327,12 +335,7 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({
-    reverting: false,
-    forking: false,
-    updating: false,
-    expanded: false,
-  })
+  const [state, setState] = createStore({ expanded: false })
 
   const expanded = () => props.expanded ?? state.expanded
 
@@ -432,36 +435,44 @@ export function CurrentUserMessageDisplay(props: {
     ),
   )
 
-  const revert = async () => {
-    if (!props.actions?.revert || state.reverting) return
-    setState("reverting", true)
+  const [action, setAction] = createSignal(createMessageActionState())
 
-    try {
-      await props.actions.revert({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("reverting", false)
-    }
+  const capabilities = createMemo<MessageActionCapabilities>(() => ({
+    pending: pending(),
+    canPending: !!props.actions?.pending,
+    canRevert: !!props.actions?.revert,
+    canFork: !!props.actions?.fork,
+  }))
+
+  const actionView = createMemo(() => viewMessageActions(action(), capabilities()))
+
+  const runAction = (kind: MessageAction) => {
+    const input = { sessionID: props.sessionID, messageID: props.message.id }
+
+    if (kind === "queue") return props.actions?.pending?.queue(input)
+
+    if (kind === "remove") return props.actions?.pending?.remove(input)
+
+    if (kind === "revert") return props.actions?.revert?.(input)
+
+    return props.actions?.fork?.(input)
   }
 
-  const fork = async () => {
-    if (!props.actions?.fork || state.forking) return
-    setState("forking", true)
-
-    try {
-      await props.actions.fork({ sessionID: props.sessionID, messageID: props.message.id })
-    } finally {
-      setState("forking", false)
-    }
+  const dispatch = (event: MessageActionEvent) => {
+    const next = transitionMessageAction(action(), event)
+    setAction(next.state)
+    next.effects.forEach((effect) => {
+      // The executor turns a synchronous throw into a rejection, so every outcome settles the attempt.
+      void new Promise<void>((resolve) => resolve(runAction(effect.action))).then(
+        () => dispatch({ type: "succeeded", attempt: effect.attempt }),
+        () => dispatch({ type: "failed", attempt: effect.attempt }),
+      )
+    })
   }
 
-  const updatePending = async (action: "queue" | "remove") => {
-    const actions = props.actions?.pending
+  const request = (kind: MessageAction) => dispatch({ type: "requested", action: kind, capabilities: capabilities() })
 
-    if (!actions || state.updating) return
-    setState("updating", true)
-    await actions[action]({ sessionID: props.sessionID, messageID: props.message.id })
-    setState("updating", false)
-  }
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const renderActions = () => (
     <span data-slot="user-message-actions">
@@ -471,11 +482,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="arrow-down-to-line"
             size="small"
             label={i18n.t("ui.message.moveToQueue")}
-            disabled={state.updating}
+            disabled={actionView().disabled.queue}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void updatePending("queue")
+              request("queue")
             }}
             aria-label={i18n.t("ui.message.moveToQueue")}
           />
@@ -483,11 +494,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="outline-trash"
             size="small"
             label={i18n.t("ui.message.deletePending")}
-            disabled={state.updating}
+            disabled={actionView().disabled.remove}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void updatePending("remove")
+              request("remove")
             }}
             aria-label={i18n.t("ui.message.deletePending")}
           />
@@ -499,11 +510,11 @@ export function CurrentUserMessageDisplay(props: {
             icon="reset"
             size="small"
             label={i18n.t("ui.message.revertMessage")}
-            disabled={state.reverting}
+            disabled={actionView().disabled.revert}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
-              void revert()
+              request("revert")
             }}
             aria-label={i18n.t("ui.message.revertMessage")}
           />
@@ -529,7 +540,7 @@ export function CurrentUserMessageDisplay(props: {
               </Menu.GroupLabel>
             </Menu.Group>
             <Menu.Separator />
-            <Menu.Item disabled={!props.actions?.fork || pending() || state.forking} onSelect={() => void fork()}>
+            <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
               {i18n.t("ui.message.forkMessage")}
             </Menu.Item>
             <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
@@ -1035,7 +1046,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
         </Show>
         <Show when={error()}>
           <Card variant="error" class="error-card">
-            {error()}
+            <LinkedText text={error()} />
           </Card>
         </Show>
       </div>
@@ -1139,6 +1150,7 @@ export function AssistantTextContent(props: {
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
@@ -1197,6 +1209,17 @@ export function AssistantTextContent(props: {
     ),
   ])
 
+  const speed = createMemo(() => {
+    if (props.turnTokensPerSecond === undefined) return undefined
+
+    return i18n.t("ui.message.tokensPerSecond", {
+      value: new Intl.NumberFormat(i18n.locale(), {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(props.turnTokensPerSecond),
+    })
+  })
+
   const [copied, setCopied] = createSignal(false)
 
   const copy = async () => {
@@ -1242,6 +1265,14 @@ export function AssistantTextContent(props: {
         <Show when={meta().length > 0}>
           <span data-slot="text-part-meta">
             <MetaItems items={meta()} slot="text-part" />
+            <Show when={speed()}>
+              {(label) => (
+                <span data-slot="text-part-meta-speed">
+                  <span aria-hidden="true">{"\u00B7"}</span>
+                  <span dir="auto">{label()}</span>
+                </span>
+              )}
+            </Show>
           </span>
         </Show>
       </div>

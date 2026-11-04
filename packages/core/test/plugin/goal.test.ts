@@ -504,7 +504,7 @@ function withTools(verdicts: ReturnType<typeof reviewer>) {
     const last = JSON.stringify(request.messages.at(-1))
     return last.includes("tool") && !last.includes("untrusted_objective")
       ? TestLLM.text("Checked.", "work")
-      : TestLLM.tool(`call-${verdicts.asked()}`, "missing_tool", {})
+      : TestLLM.toolCall(`call-${verdicts.asked()}`, "missing_tool", {})
   }
 }
 

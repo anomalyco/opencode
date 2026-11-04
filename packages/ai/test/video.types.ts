@@ -1,15 +1,14 @@
 import { Effect } from "effect"
+import { Generation, Media } from "../src/effect.js"
 import {
-  Generation,
-  Media,
   Video,
   VideoClient,
   VideoModel,
   VideoResponse,
   type VideoModelOptions,
   type VideoOptions,
-  type VideoRequestFor,
-} from "../src/effect.js"
+  type VideoRequest,
+} from "../src/experimental.js"
 import type { Service } from "../src/video-client.js"
 import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 
@@ -96,7 +95,7 @@ void widenVideo
 Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
 const request = Video.request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
-const typedRequest: VideoRequestFor<VeoLikeOptions> = request
+const typedRequest: VideoRequest<VideoModel<VeoLikeOptions>> = request
 void typedRequest
 const started = VideoClient.start(request)
 type StartRequirements = Assert<Equal<Requirements<typeof started>, Service>>

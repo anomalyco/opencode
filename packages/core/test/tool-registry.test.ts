@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
-import type { Permission } from "@opencode/core/permission"
+import { Permission } from "@opencode/core/permission"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Image } from "@opencode/core/image"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -14,6 +14,7 @@ import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -39,6 +40,7 @@ const imageStore = Layer.mock(Image.Service, {
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
   Image.node.replace(imageStore),
+  Permission.node.replace(permissionLayer()),
 ])
 const it = testEffect(registryLayer)
 const identity = {
@@ -607,6 +609,7 @@ describe("Tool", () => {
           execute: () => Effect.succeed({ content: "ok" }),
           options: { codemode: false },
         } as unknown as Info)
+        editor.add({ ...make(), name: "boolean_input", input: true, options: { codemode: false } } as unknown as Info)
         editor.add({ ...make(), name: "codemode" })
       })
 
@@ -617,6 +620,14 @@ describe("Tool", () => {
             name: "phone_type",
             namespace: undefined,
             error: expect.stringContaining('Expected string\n  at ["description"]'),
+          },
+        ],
+        [
+          "Skipping invalid tool registration",
+          {
+            name: "boolean_input",
+            namespace: undefined,
+            error: "Invalid tool definition boolean_input: input must be a schema",
           },
         ],
       ])
@@ -686,10 +697,14 @@ describe("Tool", () => {
           input: undefined,
         } as unknown as Info),
       )
+      yield* service.transform((editor) =>
+        editor.add({ ...make(), name: "direct", input: null, options: { codemode: false } } as unknown as Info),
+      )
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["direct", "execute"])
       expect(codeModeListings(snapshot.codeModeCatalog!)[0]?.line).toContain("tools.echo")
+      expect((yield* snapshot.execute(call("direct"))).output).toEqual({ text: "direct" })
     }),
   )
 
@@ -719,10 +734,7 @@ describe("Tool", () => {
       expect(snapshot.codeModeCatalog).toBeUndefined()
       expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
 
-      const hidden = yield* service.snapshot([
-        ...denyExecute,
-        { action: "mcp_lookup", resource: "*", effect: "deny" },
-      ])
+      const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
     }),
@@ -1225,12 +1237,10 @@ describe("Tool", () => {
       })
 
       expect(execution).toMatchObject({ content: [{ type: "text" }] })
+      expect(execution.metadata?.toolCalls).toEqual([{ tool: "echo", status: "completed", input: { text: "request" } }])
       expect(executed).toEqual(["old:request"])
-      expect(progress).toEqual([
-        { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
-        { stage: "old" },
-        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
-      ])
+      // The inner tool's own progress would replace the call rows, so it is not published.
+      expect(progress).toEqual([{ toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] }])
     }),
   )
 })

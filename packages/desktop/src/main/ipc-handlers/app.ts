@@ -8,6 +8,7 @@ import { setForceFocus } from "../native/debug"
 import { showCliInstaller } from "../native/install-cli"
 import { DesktopLogging, scoped } from "../native/logging"
 import { createMenu, sendMenuCommand } from "../native/menu"
+import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
@@ -15,7 +16,7 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import { getLastFocusedWindow, getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -30,13 +31,25 @@ export const appHandlers = AppRpcs.toLayer(
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
-      AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
+      AppReadyDeepLinks: (_request, context) =>
+        Effect.sync(() => {
+          const contents = sender(handoff, context)
+          const win = BrowserWindow.fromWebContents(contents)
+          // Only an app window's own renderer receives deep links, not one embedded in it.
+          const id = win?.webContents === contents ? getWindowID(win) : undefined
+
+          if (id) lifecycle.deepLinks.ready(id, context.client.id)
+        }),
+      AppAcknowledgeDeepLinks: ({ attempt }, context) =>
+        Effect.sync(() => lifecycle.deepLinks.acknowledge(context.client.id, attempt)),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
       AppCheckAppExists: ({ appName }) => checkAppExists(appName).pipe(Effect.orDie),
       AppResolveAppPath: ({ appName }) => resolveAppPath(appName).pipe(Effect.orDie),
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
+      AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
+      AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

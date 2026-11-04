@@ -4,6 +4,7 @@ use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock, mpsc as std_mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -16,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::ghostty::{Format, Terminal, TerminalOptions};
 use crate::protocol::AttachmentRole;
 
+#[cfg(unix)]
+mod pipe;
 #[cfg(windows)]
 mod windows;
 
@@ -32,19 +35,49 @@ const MAX_ROWS_BYTES: usize = 1024 * 1024;
 
 pub type TerminalId = u64;
 
+/// How a process is attached. `Pty` runs under a pseudo-terminal parsed by
+/// libghostty; `Pipe` runs with stdin closed and stdout and stderr merged into
+/// one pipe, and supports only output, replay, subscription and termination.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessMode {
+    #[default]
+    Pty,
+    Pipe,
+}
+
+impl ProcessMode {
+    pub fn is_pty(&self) -> bool {
+        *self == Self::Pty
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum TerminalLifecycle {
     Running,
-    Exited { exit_code: Option<u32> },
-    Failed { message: String },
+    Exited {
+        exit_code: Option<u32>,
+        /// Signal name such as `SIGTERM` when a pipe process was killed by one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signal: Option<String>,
+    },
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TerminalInfo {
     pub id: TerminalId,
+    #[serde(default)]
+    pub mode: ProcessMode,
     pub pid: Option<u32>,
+    /// Effective title: the user title, else the latest non-empty OSC title,
+    /// else the title given at creation.
     pub title: String,
+    #[serde(default)]
+    pub user_title: Option<String>,
     pub foreground_process: Option<String>,
     pub group_id: String,
     pub command: Vec<String>,
@@ -97,6 +130,7 @@ pub enum StreamEvent {
     },
     Exited {
         exit_code: Option<u32>,
+        signal: Option<String>,
         final_offset: u64,
     },
     ControllerChanged {
@@ -144,6 +178,7 @@ pub struct CreateTerminal {
     pub env: HashMap<String, String>,
     pub cols: u16,
     pub rows: u16,
+    pub mode: ProcessMode,
 }
 
 impl CreateTerminal {
@@ -163,12 +198,14 @@ impl CreateTerminal {
             env: HashMap::new(),
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
+            mode: ProcessMode::Pty,
         })
     }
 }
 
 pub struct TerminalService {
     terminals: Mutex<HashMap<TerminalId, Arc<TerminalHandle>>>,
+    created: AtomicU64,
     replay_capacity: usize,
 }
 
@@ -182,12 +219,19 @@ impl TerminalService {
     pub fn new(replay_capacity: usize) -> Self {
         Self {
             terminals: Mutex::new(HashMap::new()),
+            created: AtomicU64::new(0),
             replay_capacity,
         }
     }
 
     pub fn create(&self, request: CreateTerminal) -> Result<TerminalInfo> {
-        validate_size(request.cols, request.rows)?;
+        match request.mode {
+            ProcessMode::Pty => validate_size(request.cols, request.rows)?,
+            #[cfg(not(unix))]
+            ProcessMode::Pipe => bail!("pipe processes are not supported on this platform"),
+            #[cfg(unix)]
+            ProcessMode::Pipe => {}
+        }
         if request.program.trim().is_empty() {
             bail!("terminal program cannot be empty");
         }
@@ -205,7 +249,8 @@ impl TerminalService {
                 break id;
             }
         };
-        let handle = TerminalHandle::spawn(id, request, self.replay_capacity)?;
+        let order = self.created.fetch_add(1, Ordering::Relaxed);
+        let handle = TerminalHandle::spawn(id, order, request, self.replay_capacity)?;
         let info = handle.info();
         self.terminals
             .lock()
@@ -214,23 +259,33 @@ impl TerminalService {
         Ok(info)
     }
 
+    /// Lists PTYs; see [`Self::list_mode`] for pipe processes.
     pub fn list(&self) -> Result<Vec<TerminalInfo>> {
-        let handles = self
+        self.list_mode(ProcessMode::Pty)
+    }
+
+    pub fn list_mode(&self, mode: ProcessMode) -> Result<Vec<TerminalInfo>> {
+        // Filter before refreshing, so a busy actor of the other mode never
+        // delays this listing.
+        let mut handles = self
             .terminals
             .lock()
             .map_err(|_| anyhow!("terminal registry lock poisoned"))?
             .values()
+            .filter(|terminal| terminal.mode == mode)
             .cloned()
             .collect::<Vec<_>>();
+        handles.sort_by_key(|terminal| terminal.order);
         let mut terminals = Vec::with_capacity(handles.len());
         for terminal in handles {
             // Windows has no foreground query; do not wait behind actor
             // backpressure just to read its already-cached metadata.
             #[cfg(not(windows))]
-            terminal.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
+            if terminal.mode.is_pty() {
+                terminal.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
+            }
             terminals.push(terminal.info());
         }
-        terminals.sort_by_key(|terminal| terminal.id);
         Ok(terminals)
     }
 
@@ -247,7 +302,7 @@ impl TerminalService {
         if bytes.len() > MAX_INPUT_BYTES {
             bail!("input exceeds {MAX_INPUT_BYTES} byte limit");
         }
-        self.get(id)?.request(|reply| ActorMessage::Write {
+        self.pty(id)?.request(|reply| ActorMessage::Write {
             attachment_id,
             bytes,
             reply,
@@ -265,8 +320,9 @@ impl TerminalService {
         cols: u16,
         rows: u16,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
-        self.get(id)?.request(|reply| ActorMessage::Resize {
+        terminal.request(|reply| ActorMessage::Resize {
             attachment_id,
             cols,
             rows,
@@ -281,8 +337,9 @@ impl TerminalService {
         cols: u16,
         rows: u16,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
-        self.get(id)?.request(|reply| ActorMessage::Control {
+        terminal.request(|reply| ActorMessage::Control {
             attachment_id,
             cols,
             rows,
@@ -299,11 +356,12 @@ impl TerminalService {
         rows: u16,
         bytes: Vec<u8>,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
         if bytes.len() > MAX_INPUT_BYTES {
             bail!("input exceeds {MAX_INPUT_BYTES} byte limit");
         }
-        self.get(id)?.request(|reply| ActorMessage::Control {
+        terminal.request(|reply| ActorMessage::Control {
             attachment_id,
             cols,
             rows,
@@ -313,13 +371,20 @@ impl TerminalService {
     }
 
     pub fn snapshot(&self, id: TerminalId) -> Result<TerminalSnapshot> {
-        self.get(id)?
+        self.pty(id)?
             .request(|reply| ActorMessage::Snapshot { reply })
     }
 
     pub fn read_rows(&self, id: TerminalId, rows: Option<u16>) -> Result<TerminalRows> {
-        self.get(id)?
+        self.pty(id)?
             .request(|reply| ActorMessage::ReadRows { rows, reply })
+    }
+
+    /// Sets or clears (`None` or empty) the user title, which takes precedence
+    /// over titles set by the terminal's programs.
+    pub fn rename(&self, id: TerminalId, title: Option<String>) -> Result<()> {
+        self.pty(id)?
+            .request(|reply| ActorMessage::Rename { title, reply })
     }
 
     pub fn replay(&self, id: TerminalId, offset: u64) -> Result<RawReplay> {
@@ -370,6 +435,15 @@ impl TerminalService {
         terminal.shutdown()
     }
 
+    /// Like `get`, but for requests that need a terminal, which pipe processes lack.
+    fn pty(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
+        let terminal = self.get(id)?;
+        if !terminal.mode.is_pty() {
+            bail!("terminal {id} is a pipe process, which has no terminal");
+        }
+        Ok(terminal)
+    }
+
     fn get(&self, id: TerminalId) -> Result<Arc<TerminalHandle>> {
         self.terminals
             .lock()
@@ -409,17 +483,114 @@ impl Drop for TerminalService {
 }
 
 struct TerminalHandle {
+    /// Creation sequence number; orders `list` results.
+    order: u64,
+    mode: ProcessMode,
     actor_tx: Sender<ActorMessage>,
     /// Disconnects when the actor thread exits; never carries a message.
     actor_done: Receiver<()>,
     shutdown_tx: Mutex<Option<Sender<()>>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+    /// Dropped at shutdown, before the joins, to cancel a pipe reader that a
+    /// surviving descendant would otherwise keep blocked.
+    cancel: Mutex<Option<Box<dyn Send>>>,
+    /// Runs after the joins; reaps a pipe process kept as a zombie until now.
+    reap: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     info: Arc<RwLock<TerminalInfo>>,
     joins: Mutex<Option<Vec<JoinHandle<()>>>>,
 }
 
+/// The actor thread and the channels other workers share with it.
+struct ActorStart {
+    actor_tx: Sender<ActorMessage>,
+    actor_done: Receiver<()>,
+    shutdown_tx: Sender<()>,
+    shutdown: Receiver<()>,
+    thread: JoinHandle<()>,
+}
+
+/// Starts the actor and waits for it to initialize. On error the actor has
+/// stopped; the caller still owns, and must stop, the child.
+fn start_actor(
+    id: TerminalId,
+    mode: ProcessMode,
+    master: ActorMaster,
+    writes: Sender<WriterMessage>,
+    info: &Arc<RwLock<TerminalInfo>>,
+    replay_capacity: usize,
+    (cols, rows): (u16, u16),
+) -> Result<ActorStart> {
+    let (actor_tx, actor_rx) = bounded(ACTOR_QUEUE_CAPACITY);
+    // Disconnecting this channel wakes every cancellable queue operation,
+    // even when the actor cannot consume an ordinary shutdown message.
+    let (shutdown_tx, shutdown) = bounded(0);
+    let (init_tx, init_rx) = std_mpsc::sync_channel(1);
+    let actor_info = Arc::clone(info);
+    let actor_shutdown = shutdown.clone();
+    let (actor_done_tx, actor_done) = bounded::<()>(0);
+    let thread = thread::Builder::new()
+        .name(format!("opencode-pty-actor-{id}"))
+        .spawn(move || {
+            let _actor_done = actor_done_tx;
+            let result = run_actor(ActorConfig {
+                mode,
+                master,
+                messages: actor_rx,
+                writes,
+                shutdown: actor_shutdown,
+                info: actor_info,
+                replay_capacity,
+                cols,
+                rows,
+                init_tx,
+            });
+            if let Err(error) = result {
+                eprintln!("terminal {id} actor failed: {error:#}");
+            }
+        })
+        .context("failed to spawn terminal actor")?;
+    let initialized = init_rx.recv();
+    match initialized
+        .map_err(|_| anyhow!("terminal actor stopped during initialization"))
+        .and_then(|result| result.map_err(|error| anyhow!(error)))
+    {
+        Ok(()) => Ok(ActorStart {
+            actor_tx,
+            actor_done,
+            shutdown_tx,
+            shutdown,
+            thread,
+        }),
+        Err(error) => {
+            drop(shutdown_tx);
+            let _ = thread.join();
+            Err(error)
+        }
+    }
+}
+
 impl TerminalHandle {
-    fn spawn(id: TerminalId, request: CreateTerminal, replay_capacity: usize) -> Result<Self> {
+    fn spawn(
+        id: TerminalId,
+        order: u64,
+        request: CreateTerminal,
+        replay_capacity: usize,
+    ) -> Result<Self> {
+        match request.mode {
+            ProcessMode::Pty => Self::spawn_pty(id, order, request, replay_capacity),
+            #[cfg(unix)]
+            ProcessMode::Pipe => Self::spawn_pipe(id, order, request, replay_capacity),
+            #[cfg(not(unix))]
+            ProcessMode::Pipe => bail!("pipe processes are not supported on this platform"),
+        }
+    }
+
+    fn spawn_pty(
+        id: TerminalId,
+        order: u64,
+        request: CreateTerminal,
+        replay_capacity: usize,
+    ) -> Result<Self> {
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -455,81 +626,41 @@ impl TerminalHandle {
             .context("failed to take PTY writer")?;
         drop(pair.slave);
 
-        let info = Arc::new(RwLock::new(TerminalInfo {
-            id,
-            pid,
-            title: request.title,
-            foreground_process: None,
-            group_id: request.group_id,
-            command: std::iter::once(request.program)
-                .chain(request.args)
-                .collect(),
-            cwd: request.cwd,
-            cols: request.cols,
-            rows: request.rows,
-            lifecycle: TerminalLifecycle::Running,
-            output_head: 0,
-            output_tail: 0,
-        }));
+        let info = new_info(id, ProcessMode::Pty, pid, &request);
 
-        let (actor_tx, actor_rx) = bounded(ACTOR_QUEUE_CAPACITY);
         let (writer_tx, writer_rx) = bounded(WRITER_QUEUE_CAPACITY);
-        // Disconnecting this channel wakes every cancellable queue operation,
-        // even when the actor cannot consume an ordinary shutdown message.
-        let (shutdown_tx, shutdown) = bounded(0);
         #[cfg(windows)]
         let (close_tx, close_rx) = bounded(1);
-        let (init_tx, init_rx) = std_mpsc::sync_channel(1);
-
-        let actor_info = Arc::clone(&info);
-        let actor_writer_tx = writer_tx.clone();
-        let actor_shutdown = shutdown.clone();
-        let (actor_done_tx, actor_done) = bounded::<()>(0);
-        let actor_thread = thread::Builder::new()
-            .name(format!("opencode-pty-actor-{id}"))
-            .spawn(move || {
-                let _actor_done = actor_done_tx;
-                let result = run_actor(ActorConfig {
-                    master: ActorMaster {
-                        pty: Some(pair.master),
-                        #[cfg(windows)]
-                        close_tx,
-                    },
-                    messages: actor_rx,
-                    writes: actor_writer_tx,
-                    shutdown: actor_shutdown,
-                    info: actor_info,
-                    replay_capacity,
-                    cols: request.cols,
-                    rows: request.rows,
-                    init_tx,
-                });
-                if let Err(error) = result {
-                    eprintln!("terminal {id} actor failed: {error:#}");
-                }
-            })
-            .context("failed to spawn terminal actor")?;
-
-        match init_rx
-            .recv()
-            .context("terminal actor stopped during initialization")?
-        {
-            Ok(()) => {}
+        let actor = start_actor(
+            id,
+            ProcessMode::Pty,
+            ActorMaster {
+                pty: Some(pair.master),
+                #[cfg(windows)]
+                close_tx,
+            },
+            writer_tx,
+            &info,
+            replay_capacity,
+            (request.cols, request.rows),
+        );
+        let actor = match actor {
+            Ok(actor) => actor,
             Err(error) => {
                 let mut killer = killer;
                 let _ = killer.kill();
-                let _ = actor_thread.join();
-                bail!(error);
+                return Err(error);
             }
-        }
+        };
 
-        let writer_actor_tx = actor_tx.clone();
+        let writer_actor_tx = actor.actor_tx.clone();
+        let writer_shutdown = actor.shutdown.clone();
         let writer_thread = thread::Builder::new()
             .name(format!("opencode-pty-writer-{id}"))
-            .spawn(move || run_writer(writer, writer_rx, writer_actor_tx, shutdown))
+            .spawn(move || run_writer(writer, writer_rx, writer_actor_tx, writer_shutdown))
             .context("failed to spawn terminal writer")?;
 
-        let reader_actor_tx = actor_tx.clone();
+        let reader_actor_tx = actor.actor_tx.clone();
         let reader_thread = thread::Builder::new()
             .name(format!("opencode-pty-reader-{id}"))
             .spawn(move || {
@@ -571,7 +702,7 @@ impl TerminalHandle {
             })
             .context("failed to spawn terminal reader")?;
 
-        let wait_actor_tx = actor_tx.clone();
+        let wait_actor_tx = actor.actor_tx.clone();
         let wait_thread = thread::Builder::new()
             .name(format!("opencode-pty-wait-{id}"))
             .spawn(move || {
@@ -589,13 +720,17 @@ impl TerminalHandle {
             .context("failed to spawn terminal child waiter")?;
 
         Ok(Self {
-            actor_tx,
-            actor_done,
-            shutdown_tx: Mutex::new(Some(shutdown_tx)),
+            order,
+            mode: ProcessMode::Pty,
+            actor_tx: actor.actor_tx,
+            actor_done: actor.actor_done,
+            shutdown_tx: Mutex::new(Some(actor.shutdown_tx)),
             killer: Mutex::new(killer),
+            cancel: Mutex::new(None),
+            reap: Mutex::new(None),
             info,
             joins: Mutex::new(Some(vec![
-                actor_thread,
+                actor.thread,
                 writer_thread,
                 reader_thread,
                 wait_thread,
@@ -635,11 +770,58 @@ impl TerminalHandle {
         if let Ok(mut killer) = self.killer.lock() {
             let _ = killer.kill();
         }
+        self.cancel
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
         for join in handles {
             let _ = join.join();
         }
+        if let Some(reap) = self
+            .reap
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        {
+            reap();
+        }
         Ok(())
     }
+}
+
+fn new_info(
+    id: TerminalId,
+    mode: ProcessMode,
+    pid: Option<u32>,
+    request: &CreateTerminal,
+) -> Arc<RwLock<TerminalInfo>> {
+    let title = match mode {
+        ProcessMode::Pipe if request.title.is_empty() => PathBuf::from(&request.program)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&request.program)
+            .to_string(),
+        _ => request.title.clone(),
+    };
+    Arc::new(RwLock::new(TerminalInfo {
+        id,
+        mode,
+        pid,
+        title,
+        user_title: None,
+        foreground_process: None,
+        group_id: request.group_id.clone(),
+        command: std::iter::once(request.program.clone())
+            .chain(request.args.iter().cloned())
+            .collect(),
+        cwd: request.cwd.clone(),
+        // Pipe processes have no terminal size.
+        cols: if mode.is_pty() { request.cols } else { 0 },
+        rows: if mode.is_pty() { request.rows } else { 0 },
+        lifecycle: TerminalLifecycle::Running,
+        output_head: 0,
+        output_tail: 0,
+    }))
 }
 
 type Reply<T> = Sender<T>;
@@ -663,6 +845,9 @@ enum ActorMessage {
     ReaderFailed(String),
     WriterFailed(String),
     ChildExited(Result<Option<u32>, String>),
+    /// A pipe process ended by a signal; the value is the signal's name.
+    #[cfg(unix)]
+    ChildKilled(String),
     #[cfg(not(windows))]
     RefreshForegroundProcess {
         reply: Reply<Result<()>>,
@@ -691,6 +876,10 @@ enum ActorMessage {
     ReadRows {
         rows: Option<u16>,
         reply: Reply<Result<TerminalRows>>,
+    },
+    Rename {
+        title: Option<String>,
+        reply: Reply<Result<()>>,
     },
     Replay {
         offset: u64,
@@ -772,6 +961,7 @@ impl Drop for ActorMaster {
 }
 
 struct ActorConfig {
+    mode: ProcessMode,
     master: ActorMaster,
     messages: Receiver<ActorMessage>,
     writes: Sender<WriterMessage>,
@@ -785,6 +975,7 @@ struct ActorConfig {
 
 fn run_actor(config: ActorConfig) -> Result<()> {
     let ActorConfig {
+        mode,
         master,
         messages,
         writes,
@@ -797,17 +988,27 @@ fn run_actor(config: ActorConfig) -> Result<()> {
     } = config;
     #[cfg(windows)]
     let mut master = master;
-    let mut terminal = Terminal::new(TerminalOptions {
-        cols,
-        rows,
-        max_scrollback: replay_capacity,
-    })?;
+    // Pipe processes have no terminal: no emulator, replies, title or size.
+    let mut terminal = match mode {
+        ProcessMode::Pty => Some(Terminal::new(TerminalOptions {
+            cols,
+            rows,
+            max_scrollback: replay_capacity,
+        })?),
+        ProcessMode::Pipe => None,
+    };
 
+    let create_title = info
+        .read()
+        .map_err(|_| anyhow!("terminal info lock poisoned"))?
+        .title
+        .clone();
+    let mut osc_title = None::<String>;
     let mut replay = ReplayBuffer::new(replay_capacity);
     let mut subscribers = HashMap::<String, Subscriber>::new();
     let mut controller = None::<String>;
     let mut controller_generation = 0_u64;
-    let mut child_exit = None::<std::result::Result<Option<u32>, String>>;
+    let mut child_exit = None::<std::result::Result<(Option<u32>, Option<String>), String>>;
     let mut reader_eof = false;
     let mut final_exit = None::<StreamEvent>;
     let mut pending_message = None;
@@ -831,18 +1032,20 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             }
             Ok(ActorMessage::Output(bytes)) => {
                 let (start, end) = replay.append(&bytes);
-                terminal.vt_write(&bytes);
-                // Once the Windows master is handed off for closing, the writer
-                // may already have stopped; replies to the closing console are
-                // discarded so final output still reaches the real EOF.
-                #[cfg(windows)]
-                let closing = master.get().is_err();
-                #[cfg(not(windows))]
-                let closing = false;
-                if closing {
-                    terminal.take_writes();
-                } else if let Err(error) = forward_replies(&mut terminal, &writes, &shutdown) {
-                    break Err(error);
+                if let Some(terminal) = terminal.as_mut() {
+                    terminal.vt_write(&bytes);
+                    // Once the Windows master is handed off for closing, the writer
+                    // may already have stopped; replies to the closing console are
+                    // discarded so final output still reaches the real EOF.
+                    #[cfg(windows)]
+                    let closing = master.get().is_err();
+                    #[cfg(not(windows))]
+                    let closing = false;
+                    if closing {
+                        terminal.take_writes();
+                    } else if let Err(error) = forward_replies(terminal, &writes, &shutdown) {
+                        break Err(error);
+                    }
                 }
                 update_offsets(&info, &replay);
                 broadcast(
@@ -852,18 +1055,11 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     &mut controller_generation,
                     StreamEvent::Output { start, end, bytes },
                 );
-                if let Some(title) = terminal.take_title() {
-                    let changed = if let Ok(mut value) = info.write() {
-                        if value.title == title {
-                            false
-                        } else {
-                            value.title = title.clone();
-                            true
-                        }
-                    } else {
-                        false
-                    };
-                    if changed {
+                if let Some(title) = terminal.as_mut().and_then(Terminal::take_title) {
+                    osc_title = Some(title).filter(|title| !title.is_empty());
+                    if let Ok(Some(title)) =
+                        refresh_title(&info, None, osc_title.as_deref(), &create_title)
+                    {
                         broadcast(
                             &shutdown,
                             &mut subscribers,
@@ -895,6 +1091,7 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             }) => {
                 let result = (|| {
                     authorize_controller(&controller, attachment_id.as_deref())?;
+                    let terminal = emulator(&mut terminal)?;
                     master.get()?.resize(PtySize {
                         rows,
                         cols,
@@ -902,14 +1099,14 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                         pixel_height: 0,
                     })?;
                     let resized = terminal.resize(cols, rows);
-                    forward_replies(&mut terminal, &writes, &shutdown)?;
+                    forward_replies(terminal, &writes, &shutdown)?;
                     resized?;
                     if let Ok(mut value) = info.write() {
                         value.cols = cols;
                         value.rows = rows;
                     }
                     let generation = controller_generation;
-                    let checkpoint = format_terminal(&terminal, Format::Vt)?.into_bytes();
+                    let checkpoint = format_terminal(terminal, Format::Vt)?.into_bytes();
                     broadcast(
                         &shutdown,
                         &mut subscribers,
@@ -966,6 +1163,7 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                         .map(|value| value.cols != cols || value.rows != rows)
                         .unwrap_or(true);
                     if changed {
+                        let terminal = emulator(&mut terminal)?;
                         master.get()?.resize(PtySize {
                             rows,
                             cols,
@@ -973,14 +1171,14 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                             pixel_height: 0,
                         })?;
                         let resized = terminal.resize(cols, rows);
-                        forward_replies(&mut terminal, &writes, &shutdown)?;
+                        forward_replies(terminal, &writes, &shutdown)?;
                         resized?;
                         if let Ok(mut value) = info.write() {
                             value.cols = cols;
                             value.rows = rows;
                         }
                         let generation = controller_generation;
-                        let checkpoint = format_terminal(&terminal, Format::Vt)?.into_bytes();
+                        let checkpoint = format_terminal(terminal, Format::Vt)?.into_bytes();
                         broadcast(
                             &shutdown,
                             &mut subscribers,
@@ -1004,12 +1202,15 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 let _ = reply.send(result);
             }
             Ok(ActorMessage::Snapshot { reply }) => {
-                let _ = reply.send(make_snapshot(&terminal, &info));
+                let _ = reply.send(
+                    emulator(&mut terminal).and_then(|terminal| make_snapshot(terminal, &info)),
+                );
             }
             Ok(ActorMessage::ReadRows { rows, reply }) => {
                 let result = (|| {
+                    let terminal = emulator(&mut terminal)?;
                     Ok(TerminalRows {
-                        lines: format_rows(&terminal, rows)?,
+                        lines: format_rows(terminal, rows)?,
                         terminal: info
                             .read()
                             .map_err(|_| anyhow!("terminal info lock poisoned"))?
@@ -1019,6 +1220,26 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     })
                 })();
                 let _ = reply.send(result);
+            }
+            Ok(ActorMessage::Rename { title, reply }) => {
+                let result = refresh_title(
+                    &info,
+                    Some(title.filter(|title| !title.is_empty())),
+                    osc_title.as_deref(),
+                    &create_title,
+                );
+                if let Ok(Some(title)) = &result {
+                    broadcast(
+                        &shutdown,
+                        &mut subscribers,
+                        &mut controller,
+                        &mut controller_generation,
+                        StreamEvent::TitleChanged {
+                            title: title.clone(),
+                        },
+                    );
+                }
+                let _ = reply.send(result.map(|_| ()));
             }
             Ok(ActorMessage::Replay { offset, reply }) => {
                 let _ = reply.send(replay.read_from(offset));
@@ -1119,8 +1340,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     );
                 }
             }
+            #[cfg(unix)]
+            Ok(ActorMessage::ChildKilled(signal)) => {
+                child_exit = Some(Ok((None, Some(signal))));
+            }
             Ok(ActorMessage::ChildExited(result)) => {
-                child_exit = Some(result);
+                child_exit = Some(result.map(|exit_code| (exit_code, None)));
                 // ConPTY keeps its output pipe open until HPCON is closed.
                 // The wait worker closes it while this actor and the reader
                 // keep processing output, including the real final EOF.
@@ -1148,15 +1373,16 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             && final_exit.is_none()
             && let Some(result) = child_exit.take()
         {
-            let exit_code = result.as_ref().ok().copied().flatten();
+            let (exit_code, signal) = result.clone().unwrap_or_default();
             if let Ok(mut value) = info.write() {
                 value.lifecycle = match result {
-                    Ok(exit_code) => TerminalLifecycle::Exited { exit_code },
+                    Ok((exit_code, signal)) => TerminalLifecycle::Exited { exit_code, signal },
                     Err(message) => TerminalLifecycle::Failed { message },
                 };
             }
             let event = StreamEvent::Exited {
                 exit_code,
+                signal,
                 final_offset: replay.tail,
             };
             broadcast(
@@ -1184,6 +1410,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
     } else {
         result
     }
+}
+
+fn emulator(terminal: &mut Option<Terminal>) -> Result<&mut Terminal> {
+    terminal
+        .as_mut()
+        .ok_or_else(|| anyhow!("pipe processes have no terminal"))
 }
 
 fn receive_actor_message(
@@ -1385,6 +1617,33 @@ fn run_writer(
             break;
         }
     }
+}
+
+/// Applies an optional user-title update and stores the effective title under
+/// one write guard, returning the title only when it changed.
+fn refresh_title(
+    info: &Arc<RwLock<TerminalInfo>>,
+    user_title: Option<Option<String>>,
+    osc_title: Option<&str>,
+    create_title: &str,
+) -> Result<Option<String>> {
+    let mut value = info
+        .write()
+        .map_err(|_| anyhow!("terminal info lock poisoned"))?;
+    if let Some(user_title) = user_title {
+        value.user_title = user_title;
+    }
+    let title = value
+        .user_title
+        .as_deref()
+        .or(osc_title)
+        .unwrap_or(create_title)
+        .to_string();
+    if value.title == title {
+        return Ok(None);
+    }
+    value.title = title.clone();
+    Ok(Some(title))
 }
 
 fn make_snapshot(
@@ -1662,8 +1921,10 @@ mod tests {
     fn test_info() -> TerminalInfo {
         TerminalInfo {
             id: 1,
+            mode: ProcessMode::Pty,
             pid: None,
             title: "test".into(),
+            user_title: None,
             foreground_process: None,
             group_id: "test".into(),
             command: vec![],
@@ -1697,6 +1958,7 @@ mod tests {
         let actor = thread::spawn(move || {
             let _actor_done = actor_done_tx;
             run_actor(ActorConfig {
+                mode: ProcessMode::Pty,
                 master: ActorMaster {
                     pty: Some(Box::new(TestMaster)),
                     #[cfg(windows)]
@@ -1716,10 +1978,14 @@ mod tests {
         init_rx.recv().unwrap().unwrap();
         (
             TerminalHandle {
+                order: 0,
+                mode: ProcessMode::Pty,
                 actor_tx,
                 actor_done,
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
                 killer: Mutex::new(Box::new(TestKiller)),
+                cancel: Mutex::new(None),
+                reap: Mutex::new(None),
                 info,
                 joins: Mutex::new(Some(vec![
                     actor,
@@ -1783,7 +2049,8 @@ mod tests {
             assert_eq!(
                 snapshot.info.lifecycle,
                 TerminalLifecycle::Exited {
-                    exit_code: Some(23)
+                    exit_code: Some(23),
+                    signal: None,
                 }
             );
             if !eof_first {
@@ -1850,6 +2117,7 @@ mod tests {
                 events.as_slice(),
                 [StreamEvent::Exited {
                     exit_code: Some(23),
+                    signal: None,
                     final_offset: 5
                 }]
             ));
@@ -1977,6 +2245,69 @@ mod tests {
         actor.shutdown().unwrap();
         assert!(replacement.is_ok());
         assert!(detached.is_err());
+    }
+
+    #[test]
+    fn user_title_overrides_osc_titles_until_cleared() {
+        let (actor, _writer) = test_actor();
+        let observer = actor
+            .request(|reply| ActorMessage::Attach {
+                offset: 0,
+                attachment_id: "observer".into(),
+                role: AttachmentRole::Observer,
+                takeover: false,
+                reply,
+            })
+            .unwrap();
+        let rename = |title: Option<&str>| {
+            actor
+                .request(|reply| ActorMessage::Rename {
+                    title: title.map(String::from),
+                    reply,
+                })
+                .unwrap()
+        };
+        let osc = |title: &str| {
+            actor
+                .actor_tx
+                .send(ActorMessage::Output(
+                    format!("\x1b]2;{title}\x07").into_bytes(),
+                ))
+                .unwrap()
+        };
+        let info = || {
+            actor
+                .request(|reply| ActorMessage::Snapshot { reply })
+                .unwrap()
+                .info
+        };
+
+        osc("shell");
+        rename(Some("mine"));
+        osc("prompt");
+        let renamed = info();
+        assert_eq!(renamed.title, "mine");
+        assert_eq!(renamed.user_title.as_deref(), Some("mine"));
+        rename(Some("mine"));
+        rename(None);
+        let cleared = info();
+        assert_eq!(cleared.title, "prompt");
+        assert_eq!(cleared.user_title, None);
+        rename(Some(""));
+        assert_eq!(info().user_title, None);
+        osc("");
+        assert_eq!(info().title, "test");
+        actor.shutdown().unwrap();
+
+        let titles = observer
+            .events
+            .try_iter()
+            .filter_map(|event| match event {
+                StreamEvent::TitleChanged { title } => Some(title),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(titles, ["shell", "mine", "prompt", "test"]);
     }
 
     #[test]

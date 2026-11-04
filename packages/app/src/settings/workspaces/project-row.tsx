@@ -1,9 +1,9 @@
-import { Show } from "solid-js"
+import { Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
@@ -16,17 +16,25 @@ export function SettingsProjectRow(props: {
   project: LocalProject
   server: ServerConnection.Any
   onOpen: (project: LocalProject) => void
+  onAdd?: () => void
+  onMount?: (button: HTMLButtonElement) => void
 }) {
   const language = useLanguage()
-  const global = useGlobal()
+  const context = useServer().ctx
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{
+    menu: boolean
+    editor?: { draft: string; saving: boolean }
+  }>({
     menu: false,
-    editor: undefined as { draft: string; saving: boolean } | undefined,
   })
 
   let button: HTMLButtonElement | undefined
   let input: HTMLInputElement | undefined
+
+  onMount(() => {
+    if (button) props.onMount?.(button)
+  })
 
   const openEditor = () => {
     setStore("editor", { draft: displayName(props.project), saving: false })
@@ -53,7 +61,6 @@ export function SettingsProjectRow(props: {
     }
 
     setStore("editor", "saving", true)
-    const context = global.ensureServerCtx(props.server)
     const value = name === getFilename(props.project.worktree) ? "" : name
 
     const saved = await (props.project.id && props.project.id !== "global"
@@ -147,6 +154,7 @@ export function SettingsProjectRow(props: {
             onOpenChange={(open) => setStore("menu", open)}
             onEdit={() => props.onOpen(props.project)}
             onRename={openEditor}
+            onAdd={props.onAdd}
           />
         </Show>
       </div>

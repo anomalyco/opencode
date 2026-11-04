@@ -16,6 +16,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useTheme } from "@opencode/ui/theme/context"
 import { toaster } from "@opencode/ui/toast"
 import { base64Encode } from "@opencode/util/encode"
+import { uuid } from "@opencode/util/uuid"
 import {
   type App,
   type Layout,
@@ -79,8 +80,10 @@ type Attached = {
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
-  layout: Omit<Layout, "narrow" | "settings" | "project" | "draft" | "command" | "stored"> & {
+  layout: Omit<Layout, "narrow" | "settings" | "project" | "draft" | "command" | "stored" | "side"> & {
     stored(plugin: string, session: SessionRef): readonly string[]
+    /** `width` and `resize` take the panel's host key, `${plugin}:${panel id}`. */
+    side: Layout["side"]
   }
   settings: (page?: string) => void
   project: (server: string, title: string) => void
@@ -410,6 +413,8 @@ export function createHostApis() {
         opened: (session) => current()?.layout.side.opened(session) ?? false,
         toggle: (session) => write((value) => value.layout.side.toggle(session)),
         menu: () => current()?.layout.side.menu() ?? [],
+        width: (panel) => current()?.layout.side.width(`${plugin}:${panel}`),
+        resize: (panel, width) => write((value) => value.layout.side.resize(`${plugin}:${panel}`, width)),
       },
       sidebar: { opened: () => current()?.layout.sidebar.opened() ?? true },
       scroll: {
@@ -492,27 +497,21 @@ export function createPluginAttachment(apis: HostApis) {
   const serverRefs = new Map<string, ServerRef>()
 
   const server = (id: string): ServerRef | undefined => {
-    const conn = connection(id)
-
-    if (!conn) return
+    if (!connection(id)) return
     const existing = serverRefs.get(id)
 
     if (existing) return existing
     const key = ServerConnection.Key.make(id)
-    // The controller starts on first use, not when the ref is made: reading `builtin` to find a server must not
-    // connect to every listed server, such as one the runtime holds back because it rejects its credentials.
-    let started: Accessor<ServerCtx> | undefined
+    const first = global.serverCtx(key)
 
-    const live = () => {
-      started ??= runWithOwner(owner, () =>
-        createMemo<ServerCtx>(
-          (previous) => global.serverCtx(key) ?? previous,
-          global.ensureServerCtx(connection(id) ?? conn),
-        ),
-      )!
+    // A server that rejected our credentials before this window used it has no controller to hand out yet.
+    if (!first) return
 
-      return started()
-    }
+    // The SDK types `client` and `data` as always present, so while the server signs in again the ref keeps the last
+    // controller; `connected` reads the live one.
+    const live = runWithOwner(owner, () =>
+      createMemo<ServerCtx>((previous) => global.serverCtx(key) ?? previous, first),
+    )!
 
     // What the app's server list already says, without a controller.
     const listed = () => connection(id) ?? live().sdk.server
@@ -535,7 +534,7 @@ export function createPluginAttachment(apis: HostApis) {
         return live().data
       },
       get local() {
-        return ServerConnection.local(listed())
+        return servers.local(listed())
       },
       get builtin() {
         return ServerConnection.builtin(listed())
@@ -544,7 +543,7 @@ export function createPluginAttachment(apis: HostApis) {
         return !global.servers.health[key]?.incompatible
       },
       get connected() {
-        return live().sdk.connection.status() === "connected"
+        return global.serverCtx(key)?.sdk.connection.status() === "connected"
       },
     }
 
@@ -599,11 +598,9 @@ export function createPluginAttachment(apis: HostApis) {
   })
 
   const scope = (id: string) => {
-    const conn = connection(id)
+    if (!connection(id)) throw new Error(`Server ${id} is unavailable`)
 
-    if (!conn) throw new Error(`Server ${id} is unavailable`)
-
-    return global.ensureServerCtx(conn).sdk.scope
+    return servers.scope(ServerConnection.Key.make(id))
   }
 
   // The registry's scope is pure: an unlisted server's sessions (e.g. a stopped WSL server, whose tabs stay open) keep
@@ -895,7 +892,7 @@ export function createPluginAttachment(apis: HostApis) {
 
             if (!directory) return
             const key = ServerConnection.key(server)
-            void global.ensureServerCtx(server).projects.add(directory)
+            void global.serverCtx(key)?.projects.add(directory)
             void tabs.newDraft({ server: key, directory })
           },
         }),
@@ -1023,7 +1020,7 @@ export function createPluginAttachment(apis: HostApis) {
       id: error ? settings.sounds.errors() : settings.sounds.agent(),
     }))
 
-    const key = `plugin:${plugin}\0${options.id ?? crypto.randomUUID()}`
+    const key = `plugin:${plugin}\0${options.id ?? uuid()}`
     const result = { notification: false, sound: false }
     const session = options.session
 
@@ -1096,6 +1093,8 @@ export function createPluginAttachment(apis: HostApis) {
         opened: sideOpened,
         toggle: (session) => tabs.setRegion(shellTab(session), "side", !sideOpened(session)),
         menu,
+        width: layout.panelWidth.get,
+        resize: layout.panelWidth.set,
       },
       // Open is the stored preference's default, which holds until a session screen shows the preference.
       sidebar: { opened: () => sidebar()?.opened() ?? true },

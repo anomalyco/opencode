@@ -231,6 +231,35 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock)
+  const interrupts: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`)) interrupts.push(request.url())
+  })
+  const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
+
+  await expect(stop).toBeVisible()
+  await view.input.click()
+  await view.input.press("Enter")
+  await view.input.press("ControlOrMeta+Enter")
+  await view.input.pressSequentially("   ")
+  await view.input.press("Enter")
+
+  const interrupted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+  )
+
+  await stop.click()
+  await interrupted
+
+  expect(interrupts).toHaveLength(1)
+  expect(mock.prompts).toEqual([])
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {
@@ -513,6 +542,25 @@ test("editing restores the existing draft and replaces only the original queue p
     { inboxID: "inb_seed_2", action: "cancel" },
   ])
   expect(mock.log[0]).toBe("prompt:queue")
+})
+
+test("a queued prompt the server delivers mid-edit returns the draft typed before the edit", async ({ page }) => {
+  const mock = createQueueMock(["first queued prompt", "tighten the error copy"])
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+
+  await view.input.fill("my in-progress draft")
+  await view.rows.getByText("tighten the error copy", { exact: true }).click()
+  await expect(view.input).toHaveText("tighten the error copy")
+  await expect(view.input).toBeFocused()
+
+  // The running turn ends and the server delivers the prompt being edited.
+  const [delivered] = mock.rows.splice(1, 1)
+  mock.emit("session.inbox.delivered", { sessionID, inboxID: delivered.id })
+
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["first queued prompt"])
+  await expect(view.input).toHaveText("my in-progress draft")
+  await expect(view.input).toBeFocused()
 })
 
 for (const delivery of ["queue", "steer"] as const) {

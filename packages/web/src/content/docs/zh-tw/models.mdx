@@ -57,7 +57,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則 GPT-6.1 Sol 對應的值為 `opencode/gpt-6.1-sol`。
+這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [OpenCode Models](https://opencode.ai/v2/docs/console/)，則 GPT-6.1 Sol 對應的值為 `opencode/gpt-6.1-sol`。
 
 如果您設定了[自訂提供商](/docs/providers#custom)，`provider_id` 是設定中 `provider` 部分的鍵名，`model_id` 是 `provider.models` 中的鍵名。
 
