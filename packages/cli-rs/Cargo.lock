@@ -1105,6 +1105,7 @@ dependencies = [
  "tokio",
  "unicode-width",
  "url",
+ "uuid",
 ]
 
 [[package]]

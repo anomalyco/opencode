@@ -173,19 +173,15 @@ pub async fn resolve(
             .await?
         }
     };
-    if env.print_logs {
-        eprintln!(
-            "INFO  service.connect channel={} file={} url={}",
-            found.channel,
-            found.file.display(),
-            found.service.endpoint.url
-        );
-    }
+    log::info!(
+        "service connected channel={} file={} url={}",
+        found.channel,
+        found.file.display(),
+        found.service.endpoint.url
+    );
     let version = found.service.version.clone().unwrap_or_default();
-    if env.print_logs
-        && let Some(warning) = mismatch(&found.service.endpoint, &version, options)
-    {
-        eprintln!("WARN  service.connect {warning}");
+    if let Some(warning) = mismatch(&found.service.endpoint, &version, options) {
+        log::warn!("{warning}");
     }
     Ok(Connection {
         endpoint: found.service.endpoint,

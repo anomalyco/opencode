@@ -20,7 +20,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         None => paths::start_directory()?,
     };
     let paths = Paths::from_env()?;
-    crate::panic::install(&paths.log);
+    crate::panic::install();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("opencode-tui")
