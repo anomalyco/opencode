@@ -19,15 +19,52 @@ type Attachment = {
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
+// The browser tools and their skill, which an attachment allows together.
+const access = [
+  { action: "browser", resource: "*" },
+  { action: "skill", resource: BrowserSkill.id },
+] as const
+
+const isAccess = (rule: { action: string; resource: string; effect: string }) =>
+  rule.effect === "allow" && access.some((allow) => rule.action === allow.action && rule.resource === allow.resource)
+
+/** Drop every persisted browser allow, leaving other permission rules untouched. */
+export const withoutAccess = (permissions: NonNullable<Session.Info["permissions"]>) =>
+  permissions.filter((rule) => !isAccess(rule))
+
+/**
+ * A crash or SIGKILL skips the attachment finalizer, so the session keeps the allow rules while the
+ * in-memory attachment is gone. No attachment survives a process restart, so every persisted allow
+ * at startup is stale: drop it before the browser namespace can be listed again.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (
+  ctx: Pick<Context, "session">,
+) {
+  const revoke = (session: Session.Info) => {
+    const current = session.permissions ?? []
+    const permissions = withoutAccess(current)
+    if (permissions.length === current.length) return Effect.void
+    return ctx.session.update({ sessionID: session.id, permissions }).pipe(Effect.ignore)
+  }
+  const page = (cursor?: Session.ListCursor): Effect.Effect<void> =>
+    ctx.session.list(cursor === undefined ? undefined : { cursor }).pipe(
+      Effect.flatMap((result) =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(result.data, revoke, { discard: true })
+          if (result.cursor.next !== undefined) yield* page(result.cursor.next)
+        }),
+      ),
+      Effect.ignore,
+    )
+
+  yield* page()
+})
+
 export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
 ) {
   const browsers = new Map<Session.ID, Attachment>()
-  // The browser tools and their skill, which an attachment allows together.
-  const access = [
-    { action: "browser", resource: "*" },
-    { action: "skill", resource: BrowserSkill.id },
-  ] as const
+  yield* reconcileStaleGrants({ session: ctx.session })
   // Appended after config, so every agent hides the browser until an attachment allows it.
   yield* ctx.agent.transform((editor) =>
     editor
@@ -53,12 +90,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         ctx.session.get({ sessionID }).pipe(
           Effect.flatMap((session) => {
             const current = session.permissions ?? []
-            const permissions = access.reduce((rules, allow) => {
-              const index = rules.findIndex(
-                (rule) => rule.action === allow.action && rule.resource === allow.resource && rule.effect === "allow",
-              )
-              return index === -1 ? rules : rules.toSpliced(index, 1)
-            }, current)
+            const permissions = withoutAccess(current)
             if (permissions.length === current.length) return Effect.void
             return ctx.session.update({ sessionID, permissions })
           }),
