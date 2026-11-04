@@ -3,7 +3,7 @@
 //! (`routes/session/index.tsx:633-758`, row V24).
 
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
@@ -14,7 +14,8 @@ use opencode_api::generated::{
 };
 use opencode_local::model_pref::Model;
 use opencode_ui::dialog::{
-    DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout,
+    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header,
+    layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -414,6 +415,8 @@ struct Connect {
     body: View,
     footer: View,
     cx: Rc<DialogCx>,
+    // For the footer actions, which outlive a render.
+    me: Weak<Connect>,
     attempt: RefCell<Option<IntegrationAttempt>>,
     started: Cell<bool>,
     settled: Cell<bool>,
@@ -423,9 +426,7 @@ struct Connect {
 
 fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let app = &cx.app;
-    let title = Text::new(app, "Connect an integration")
-        .fg(cx.theme.text.base)
-        .bold();
+    let title = Text::new(app, "Connect an integration").fg(cx.theme.text.base);
     let head = header(
         cx,
         HeaderProps {
@@ -435,13 +436,14 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     );
     let body = View::new(app).gap(1);
     let footer_slot = View::new(app);
-    let state = Rc::new(Connect {
+    let state = Rc::new_cyclic(|me| Connect {
         local: local.clone(),
         offer,
         title,
         body: body.clone(),
         footer: footer_slot.clone(),
         cx: cx.clone(),
+        me: me.clone(),
         attempt: RefCell::new(None),
         started: Cell::new(false),
         settled: Cell::new(false),
@@ -476,7 +478,7 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     cx.layer(KeymapLayer {
         enabled,
         commands: vec![
-            TuiCommand::inline(if cx.new_designs { "return" } else { "o" }, open)
+            TuiCommand::inline("return", open)
                 .title("Open authorization URL")
                 .group("Dialog"),
             TuiCommand::inline("c", copy)
@@ -489,7 +491,7 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let closing = state.clone();
     cx.on_close(opentui::keymap::Disposer::new(move || closing.close()));
     state.start();
-    layout(cx, &head, &body, None, Some(footer_slot))
+    layout_view(cx, &head, &body, Some(&footer_slot), DIALOG_INSET, 1)
 }
 
 impl Connect {
@@ -523,17 +525,37 @@ impl Connect {
                 details.add(&Text::new(app, attempt.instructions.clone()).fg(theme.text.muted));
             }
             self.body.add(&details);
-            self.footer.add(&footer(
-                &self.cx,
-                FooterProps {
-                    secondary: vec![
-                        FooterAction::new("open").key("o"),
-                        FooterAction::new("copy").key("c"),
-                    ],
-                    ..FooterProps::default()
-                },
-            ));
         }
+        let action = |title: &str, key: &str, run: fn(&Connect)| {
+            let me = self.me.clone();
+            FooterAction::new(title).key(key).on_trigger(move || {
+                if let Some(state) = me.upgrade() {
+                    run(&state);
+                }
+            })
+        };
+        let primary = match &attempt {
+            Some(attempt) => vec![
+                action(
+                    if oauth_code(&attempt.instructions).is_some() {
+                        "copy code"
+                    } else {
+                        "copy link"
+                    },
+                    "c",
+                    Connect::copy,
+                ),
+                action("open link", "enter", Connect::open),
+            ],
+            None => Vec::new(),
+        };
+        self.footer.add(&footer(
+            &self.cx,
+            FooterProps {
+                primary,
+                ..FooterProps::default()
+            },
+        ));
         self.body.add(
             &Text::new(
                 app,

@@ -37,7 +37,7 @@ pub fn show(local: &Rc<Local>, model: ModelInfo) {
             let Some(usage) = local.model_usage(&model) else {
                 let body = Text::new(app, format!("No limits apply to {}.", model.name))
                     .fg(theme.text.muted);
-                return layout(cx, &head, &body, None, None);
+                return layout(cx, &head, &body, None);
             };
             let short = matches!(level(&usage, &model), Level::Out | Level::Reached);
             let workspace = local.usage().flatten().and_then(|info| info.workspace.name);
@@ -80,7 +80,7 @@ pub fn show(local: &Rc<Local>, model: ModelInfo) {
                 limits.add(&View::new(app).child(&line).child(&scope));
             }
             let body = View::new(app).gap(1).child(&summary).child(&limits);
-            layout(cx, &head, &body, None, None)
+            layout(cx, &head, &body, None)
         },
         None,
         DialogOptions::default(),

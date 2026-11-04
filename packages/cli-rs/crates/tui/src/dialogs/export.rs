@@ -10,7 +10,7 @@ use opencode_ui::dialog::{
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::select::{
-    self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps, Side,
+    self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps,
 };
 use opentui::prelude::*;
 
@@ -84,23 +84,16 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                 tools: Cell::new(true),
                 sanitize: Cell::new(false),
             });
-            let theme = cx.theme.clone();
             let selected = Rc::new(Cell::new(Row::Format));
             // `DialogSelectChoice`: the selected row shows `‹ value ›`; the others pad the value to the same width.
             let options: Rc<dyn Fn() -> Vec<SelectOption<Row>>> = {
-                let (state, selected) = (state.clone(), selected.clone());
+                let state = state.clone();
                 Rc::new(move || {
                     let choice = |row: Row, title: &str, value: &str| {
-                        let active = selected.get() == row;
-                        let mut option = SelectOption::new(title, row).footer(if active {
-                            format!("‹ {value} ›")
-                        } else {
-                            format!("  {value}  ")
-                        });
-                        option.footer_color = Some(if active {
-                            theme.text.action.primary.focused
-                        } else {
-                            theme.text.muted
+                        let mut option = SelectOption::new(title, row);
+                        option.choice = Some(select::Choice {
+                            value: value.to_owned(),
+                            open: false,
                         });
                         option
                     };
@@ -165,6 +158,7 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
             };
             let mut props = SelectProps::new("Export session", options());
             props.render_filter = false;
+            props.footer_gap = 2;
             props.on_move = Some(Rc::new({
                 let (selected, refresh) = (selected.clone(), refresh.clone());
                 move |option: &SelectOption<Row>| {
@@ -189,7 +183,6 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
             props.footer_hints = vec![FooterHint {
                 title: "save to file".into(),
                 label: "enter".into(),
-                side: Side::Left,
                 group: Some(Group::Primary),
             }];
             props.bindings = vec![
@@ -281,7 +274,6 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
                     primary: vec![action.on_trigger(move || copy())],
                     ..FooterProps::default()
                 }),
-                None,
                 DIALOG_INSET,
                 2,
             )

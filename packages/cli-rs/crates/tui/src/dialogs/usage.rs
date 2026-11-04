@@ -322,8 +322,8 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     .flatten()
     .collect::<Vec<_>>()
     .join(" · ");
-    let _ = description; // Shown only under `new-designs`, which the select header does not take yet.
     let mut props = SelectProps::new("Usage", options(local, &None, error));
+    props.description = Some(description);
     props.placeholder = Some("Search models".into());
     let (app, muted) = (cx.app.clone(), cx.theme.text.muted);
     props.empty_view = Some(Rc::new(move || {
@@ -403,7 +403,7 @@ pub(crate) fn message(cx: &DialogCx, title: &str, text: &str, wrap: bool) -> Vie
     if wrap {
         body.wrap(WrapMode::Word);
     }
-    layout(cx, &head, &body, None, None)
+    layout(cx, &head, &body, None)
 }
 
 #[cfg(test)]

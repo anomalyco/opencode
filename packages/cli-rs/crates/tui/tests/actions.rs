@@ -233,13 +233,9 @@ impl Kit {
             Deps {
                 client,
                 directory: LOCATION.into(),
-                // The Rust TUI is the `new-designs` one.
                 config: Resolved::new(
                     Info {
                         animations: Some(false),
-                        experimental: Some(
-                            [("new-designs".to_owned(), true)].into_iter().collect(),
-                        ),
                         ..Info::default()
                     },
                     |_| None,
@@ -250,8 +246,6 @@ impl Kit {
                 events: false,
             },
         );
-        // Mounting does not hand the experiment to the dialog kit yet; `rs-new-designs` makes that the default.
-        tui.dialogs.set_new_designs(true);
         Self { app, tui, seen }
     }
 
@@ -403,7 +397,7 @@ fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
     let kit = Kit::new(session("ses_a", json!({})), messages, vec![]);
     kit.wait_for("Line 30 of msg_04.");
     kit.leader("g");
-    let screen = kit.wait_for("Timeline");
+    let screen = kit.wait_for("Search timeline");
     let (second, first) = (
         screen.find("Second question").unwrap(),
         screen.find("First question").unwrap(),
@@ -742,11 +736,8 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     );
 }
 
-/// The fixtures are the `new-designs` dialogs. Until `rs-new-designs` brings the dialog kit (`crates/ui`) to them,
-/// only `export-result` matches; the others differ in the kit's parts: the search in the title, the panel's last
-/// row, and the select's footer gap and value overhang.
+/// The fixtures are the `new-designs` dialogs, the only design the Rust TUI draws.
 #[test]
-#[ignore = "needs rs-new-designs's dialog kit"]
 fn dialogs_match_typescript() {
     let mut failed = Vec::new();
     // The TS fixtures render in UTC; the Rust footers use local time, so shift the prompts by the local offset.
@@ -782,7 +773,7 @@ fn dialogs_match_typescript() {
     };
 
     let kit = open("session.timeline");
-    kit.wait_for("Timeline");
+    kit.wait_for("Search timeline");
     kit.only_dialog();
     check(&mut failed, &kit, "E.10a/timeline");
 
