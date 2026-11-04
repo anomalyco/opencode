@@ -128,6 +128,8 @@ pub struct Inner {
     pub(crate) autocomplete: OnceCell<Autocomplete>,
     /// `--prompt`, until it is submitted (`home.tsx:68-79`, `session/index.tsx:623-630`).
     startup: RefCell<Option<String>>,
+    /// The worktree staged from `/worktrees` and its progress row (E.11b).
+    pub(crate) staging: super::r#move::Move,
     pub(crate) this: Weak<Inner>,
 }
 
@@ -282,6 +284,10 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .child(&spinner)
         .visible(false);
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
+    let staging = super::r#move::Move::new(
+        app,
+        opencode_ui::motion::enabled(tui.config.info.animations),
+    );
     let editor_file = Text::new(app, "")
         .truncate(true)
         .wrap(WrapMode::None)
@@ -293,6 +299,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .min_width(0)
         .gap(1)
         .child(&running)
+        .child(staging.root())
         .child(&footer);
     // `prompt/index.tsx:1900-1983`: the location inside `prompt.footer.status`, then `prompt.footer.file`, both
     // inside `prompt.footer`, whose plugins append their hints.
@@ -339,6 +346,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         parts: parts::Parts::default(),
         autocomplete: OnceCell::new(),
         startup: RefCell::new(None),
+        staging,
         this: this.clone(),
     });
     connect(&inner);
@@ -524,12 +532,13 @@ impl Inner {
         })
     }
 
-    /// The session's location; on home, the one `/cd` moved to, else the default one.
+    /// The session's location; on home, the current one (`location.ref`: where home was opened, or where
+    /// `/cd` moved), else the default one.
     pub(crate) fn location(&self, tui: &Tui) -> Location {
         Location::new(self.session_info(tui).map_or_else(
             || {
-                let home = tui.prompt.complete.home.borrow().clone();
-                home.unwrap_or_else(|| tui.directory.clone())
+                crate::features::location::current(tui)
+                    .map_or_else(|| tui.directory.clone(), |location| location.directory)
             },
             |session| session.location.directory.0,
         ))
@@ -637,6 +646,8 @@ impl Inner {
 
         let running = self.running(tui);
         self.running.visible(running);
+        let staged = !running && self.staging.render(&theme);
+        self.footer.visible(!staged);
         let footer: Vec<Span> = if running {
             let armed = self.interrupt.get() > 0;
             let (key, label) = if armed {
@@ -1024,6 +1035,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                     arguments: false,
                 }),
                 autocomplete::cd::command(inner.this.clone()),
+                super::r#move::command(inner.this.clone()),
                 command(
                     "prompt.editor_context.clear",
                     "Remove editor context",
@@ -1064,6 +1076,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
                 "prompt.skills",
                 "session.interrupt",
                 "session.background",
+                super::r#move::COMMAND,
             ]),
             ..KeymapLayer::default()
         },
