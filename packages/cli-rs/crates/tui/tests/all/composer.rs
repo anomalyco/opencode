@@ -2,8 +2,7 @@
 //! transport, for the paths the P-APP scenario `E.13b/composer` does not reach: the client MCP experiment and its
 //! tools, interrupting a subagent, picking a terminal, the queued dock, and the output text.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::path::PathBuf;
 use std::rc::Rc;

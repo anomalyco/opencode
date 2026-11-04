@@ -9,7 +9,7 @@ use opencode_ui::tool_info::{
 };
 use serde_json::{Value, json};
 
-const FIXTURE: &str = include_str!("../../../parity/fixtures/U.5/tool-info.json");
+const FIXTURE: &str = include_str!("../../../../parity/fixtures/U.5/tool-info.json");
 
 fn fixture() -> Value {
     serde_json::from_str(FIXTURE).unwrap()

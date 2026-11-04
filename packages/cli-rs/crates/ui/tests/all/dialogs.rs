@@ -407,7 +407,7 @@ fn palette_scrolls_as_typescript_at_80x20() {
 #[test]
 fn fuzzy_order_matches_fuzzysort() {
     let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../../../parity/fixtures/U.3/fuzzy.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../parity/fixtures/U.3/fuzzy.json")).unwrap();
     let options: Vec<[String; 3]> = fixture["options"]
         .as_array()
         .unwrap()
@@ -597,7 +597,7 @@ fn prompt_placeholder_and_busy_match_typescript() {
 #[test]
 fn path_formatting_matches_typescript() {
     let fixture: serde_json::Value =
-        serde_json::from_str(include_str!("../../../parity/fixtures/U.3/path.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../parity/fixtures/U.3/path.json")).unwrap();
     let mut failures = Vec::new();
     for case in fixture.as_array().unwrap() {
         let text = |key: &str| case[key].as_str().unwrap();

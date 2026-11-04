@@ -11,8 +11,8 @@ use opentui::style::Attributes;
 use opentui::testing::TestApp;
 use opentui::widget::DiffView;
 
-const CORPUS: &str = include_str!("../../../parity/fixtures/U.4a/corpus.json");
-const SYNTAX: &str = include_str!("../../../parity/fixtures/U.4a/syntax.json");
+const CORPUS: &str = include_str!("../../../../parity/fixtures/U.4a/corpus.json");
+const SYNTAX: &str = include_str!("../../../../parity/fixtures/U.4a/syntax.json");
 
 fn corpus(name: &str) -> String {
     let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
@@ -140,7 +140,7 @@ fn raw_markdown_matches_typescript() {
 #[test]
 fn markdown_table_matches_typescript() {
     let corpus: serde_json::Value =
-        serde_json::from_str(include_str!("../../../parity/fixtures/U.4c/corpus.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../parity/fixtures/U.4c/corpus.json")).unwrap();
     assert_parity(
         &markdown_app(corpus["table"].as_str().unwrap(), true).render(),
         "U.4c/markdown-table",

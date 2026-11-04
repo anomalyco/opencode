@@ -8,7 +8,7 @@ use opencode_ui::theme::{Catalog, ThemeMode};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 
-const CORPUS: &str = include_str!("../../../parity/fixtures/U.4b/corpus.json");
+const CORPUS: &str = include_str!("../../../../parity/fixtures/U.4b/corpus.json");
 
 #[test]
 fn default_grammars_match_typescript() {
