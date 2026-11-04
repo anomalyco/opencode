@@ -24,6 +24,8 @@ struct Inner {
     markdown: Markdown,
     state: RefCell<State>,
     expanded: Cell<bool>,
+    hover: Cell<bool>,
+    painted: RefCell<Painted>,
     animations: bool,
 }
 
@@ -44,6 +46,13 @@ struct Header {
     toggleable: bool,
     title: Option<String>,
     duration: Option<String>,
+}
+
+/// The header's widgets, recolored on hover.
+enum Painted {
+    None,
+    Done(Vec<Text>),
+    Thinking(Spinner),
 }
 
 impl Reasoning {
@@ -86,6 +95,8 @@ impl Reasoning {
             markdown,
             state: RefCell::default(),
             expanded: Cell::new(false),
+            hover: Cell::new(false),
+            painted: RefCell::new(Painted::None),
             animations: cx.animations,
         });
         let weak = Rc::downgrade(&inner);
@@ -96,6 +107,13 @@ impl Reasoning {
             }
             inner.expanded.set(!inner.expanded.get());
             inner.layout();
+        });
+        let weak = Rc::downgrade(&inner);
+        inner.header.on_hover(move |_, hovered| {
+            if let Some(inner) = weak.upgrade() {
+                inner.hover.set(hovered);
+                inner.layout();
+            }
         });
         Self(inner)
     }
@@ -152,23 +170,42 @@ impl Inner {
                 .flatten(),
             duration: state.duration.clone(),
         };
+        let warning = self.theme.text.feedback.warning.base;
+        // `RGBA.fromValues(…, 0.6)`: an open block's header, and in hide mode a collapsed one that is not
+        // hovered. Hide mode takes the reasoning group's colors (`group-view.tsx:166-177`), since TS
+        // groups every reasoning part there.
+        let dim = warning.with_alpha(153);
+        let fg = match (header.toggleable, header.done) {
+            (false, _) => dim,
+            (true, false) => self.theme.text.base,
+            (true, true) if self.hover.get() || header.open => warning,
+            (true, true) => dim,
+        };
+        // A hover only recolors: rebuilding would drop the widget a click is pressing.
         if state.header.as_ref() == Some(&header) {
+            match &*self.painted.borrow() {
+                Painted::Done(texts) => texts.iter().for_each(|text| {
+                    text.fg(fg);
+                }),
+                Painted::Thinking(spinner) => spinner.set_color(fg),
+                Painted::None => {}
+            }
             return;
         }
         self.header.clear();
-        let warning = self.theme.text.feedback.warning.base;
-        // Open blocks dim the header to 60% (`RGBA.fromValues(…, 0.6)`).
-        let fg = if open {
-            warning.with_alpha(153)
-        } else {
-            warning
-        };
         if header.done {
-            let mut text = String::new();
+            let row = View::new(&self.app).row();
+            let mut texts = Vec::new();
+            // Hide mode's header is an `InlineToolRow`: the icon in its own two cells.
             if header.toggleable {
-                text.push_str(if header.open { "- " } else { "+ " });
+                texts.push(
+                    Text::new(&self.app, if header.open { "-" } else { "+" })
+                        .width(2)
+                        .shrink(0.0)
+                        .fg(fg),
+                );
             }
-            text.push_str("Thought");
+            let mut text = "Thought".to_owned();
             if header.title.is_some() || header.duration.is_some() {
                 text.push_str(": ");
             }
@@ -181,8 +218,12 @@ impl Inner {
                 }
                 text.push_str(duration);
             }
-            self.header
-                .add(&Text::new(&self.app, text).fg(fg).wrap(WrapMode::None));
+            texts.push(Text::new(&self.app, text).fg(fg).wrap(WrapMode::None));
+            for text in &texts {
+                row.add(text);
+            }
+            self.header.add(&row);
+            *self.painted.borrow_mut() = Painted::Done(texts);
         } else {
             let label = match &header.title {
                 Some(title) => format!("Thinking: {title}"),
@@ -193,6 +234,7 @@ impl Inner {
                 .label(label)
                 .animations(self.animations);
             self.header.add(&View::new(&self.app).row().child(&spinner));
+            *self.painted.borrow_mut() = Painted::Thinking(spinner);
         }
         state.header = Some(header);
     }

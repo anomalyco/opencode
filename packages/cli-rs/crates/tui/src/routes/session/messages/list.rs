@@ -407,6 +407,16 @@ impl Inner {
     /// `updateAwayFromBottom`: away from the bottom the window stays put; back at it, the window
     /// follows the tail again.
     fn follow(&self, tui: &Tui) {
+        // Rows mounted since the last frame are not in the content's size yet.
+        let frame = tui.app.frame_number();
+        if self
+            .pin
+            .borrow()
+            .as_ref()
+            .is_some_and(|pin| frame <= pin.frame + 1)
+        {
+            return;
+        }
         let (_, top) = self.scroll.scroll_position();
         let content = self.scroll.content_view().rect().height;
         let bottom = f64::from((content - self.scroll.rect().height).max(0.0));
