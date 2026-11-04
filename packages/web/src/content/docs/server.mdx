@@ -13,7 +13,7 @@ The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI
 ### Usage
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--base-path <path>] [--cors <origin>]
 ```
 
 #### Options
@@ -22,6 +22,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | --------------- | ----------------------------------- | ---------------- |
 | `--port`        | Port to listen on                   | `4096`           |
 | `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
+| `--base-path`   | URL path prefix to serve under      | `/`              |
 | `--mdns`        | Enable mDNS discovery               | `false`          |
 | `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
@@ -31,6 +32,31 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```bash
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
 ```
+
+---
+
+### Serve under a path prefix
+
+Use `--base-path` to serve the API and the web app under a URL path prefix, for example behind a reverse proxy that hosts other applications on the same domain.
+
+```bash
+opencode serve --base-path /opencode
+```
+
+The server then answers only under `/opencode/`: `/opencode` redirects to `/opencode/`, and other paths return `404`. Have the proxy forward the prefix unchanged. With nginx:
+
+```nginx
+location /opencode/ {
+  proxy_pass http://127.0.0.1:4096;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+}
+```
+
+`proxy_pass` has no path, so nginx keeps the prefix. The `Upgrade` headers let terminals connect over WebSocket.
+
+`--base-path` can't be combined with `--service`.
 
 ---
 
