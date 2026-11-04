@@ -1,4 +1,4 @@
-﻿import { usePlatform } from "@/runtime/platform/platform"
+import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
 import {
