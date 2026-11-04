@@ -9,7 +9,13 @@ export default defineApp({
       checkpoint: "narrow",
       until: "Ask",
       masks: [
-        { x: 2, y: 16, width: 38, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" },
+        {
+          x: 2,
+          y: 16,
+          width: 38,
+          height: 1,
+          reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+        },
       ],
     },
   ],
