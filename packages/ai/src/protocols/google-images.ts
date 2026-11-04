@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, tokenUsage, type OpenString } from "../schema/index.js"
@@ -22,7 +22,7 @@ export type GoogleImageOptions = {
   readonly includeThoughts?: boolean
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<GoogleImageOptions>
+export type Request = ImageRequest<ImageModel<GoogleImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

@@ -1,15 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import {
-  ai,
-  type LanguageModel,
-  LLMEvent,
-  LLMRequest,
-  LLMResponse,
-  Message,
-  ToolChoice,
-  ToolDefinition,
-} from "../../src/effect.js"
+import { ai, type LanguageModel, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -193,7 +184,8 @@ describe("MiniMax recorded", () => {
           expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
           expectUsage(first)
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             toolChoice: ToolChoice.make("none"),
             messages: [
               ...request.messages,
@@ -202,7 +194,7 @@ describe("MiniMax recorded", () => {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           const reasoning = first.message.content.filter((part) => part.type === "reasoning")
           if (item.api === "messages") {

@@ -4,12 +4,13 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { MetaResponses } from "../protocols/meta-responses.js"
 import { MetaMessages } from "../protocols/meta-messages.js"
 import { MetaImages } from "../protocols/meta-images.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("meta")
 const baseURL = "https://api.meta.ai/v1"
@@ -119,12 +120,7 @@ const messagesRoute = Route.make({
 export const routes = [responsesRoute, chatRoute, messagesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const options = {
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "META_API_KEY"),
-  }
+  const options = bearerRouteDefaults(input, "META_API_KEY", baseURL)
   const configuredResponses = responsesRoute.with(options)
   const configuredChat = chatRoute.with(options)
   const configuredMessages = messagesRoute.with(options)
@@ -151,24 +147,14 @@ export const messages = provider.messages
 export const image = provider.image
 
 export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).responses(modelID)
+  configure(toConfig(settings)).responses(modelID)
 
 export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).chat(modelID)
+  configure(toConfig(settings)).chat(modelID)
 
 export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
-  fromSettings(settings).messages(modelID)
+  configure(toConfig(settings)).messages(modelID)
 
-export const imageModel = (modelID: string, settings?: Settings) => fromSettings(settings).image(modelID)
-
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  })
-}
+export const imageModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).image(modelID)
 
 export * as Meta from "./meta.js"

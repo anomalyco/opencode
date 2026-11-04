@@ -6,13 +6,14 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
   GenerationOptions,
-  LLMRequest,
   Message,
   LanguageModel,
+  SystemMessage,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolResultPart,
+  UserMessage,
 } from "../src/schema/index.js"
 import { fixedResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -24,6 +25,7 @@ describe("llm constructors", () => {
   test("normalizes recursive tool namespaces", () => {
     const request = ai.request({
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
+      prompt: "Hello",
       tools: [
         {
           type: "namespace",
@@ -67,7 +69,7 @@ describe("llm constructors", () => {
     )
   })
 
-  test("builds canonical schema classes from ergonomic input", () => {
+  test("normalizes ergonomic input into a plain request", () => {
     const request = ai.request({
       id: "req_1",
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
@@ -75,31 +77,41 @@ describe("llm constructors", () => {
       prompt: "Say hello.",
     })
 
-    expect(request).toBeInstanceOf(LLMRequest)
+    expect(Object.getPrototypeOf(request)).toBe(Object.prototype)
     expect(request.model).toBeInstanceOf(LanguageModel)
-    expect(request.messages[0]).toBeInstanceOf(Message)
+    expect(request.messages[0]).toBeInstanceOf(UserMessage)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
     expect(request.generation).toBeUndefined()
     expect(request.tools).toEqual([])
   })
 
-  test("updates requests without spreading schema class instances", () => {
+  test("edits requests with a spread or by passing them back to ai.request", () => {
     const base = ai.request({
       id: "req_1",
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
-    const updated = LLMRequest.update(base, {
+    const updated = {
+      ...base,
       generation: GenerationOptions.make({ maxTokens: 20 }),
       messages: [...base.messages, Message.assistant("Hi.")],
-    })
+    }
 
-    expect(updated).toBeInstanceOf(LLMRequest)
     expect(updated.id).toBe("req_1")
-    expect(updated.model).toEqual(base.model)
+    expect(updated.model).toBe(base.model)
     expect(updated.generation).toEqual({ maxTokens: 20 })
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+    expect(ai.request(updated)).toEqual(updated)
+    expect(ai.request(updated).messages[1]).toBe(updated.messages[1])
+
+    const prompted = ai.request({
+      ...updated,
+      system: "Be brief.",
+      messages: [...updated.messages, Message.user("Again.")],
+    })
+    expect(prompted.system).toEqual([{ type: "text", text: "Be brief." }])
+    expect(prompted.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
   })
 
   test("keeps request options separate from route defaults", () => {
@@ -116,31 +128,14 @@ describe("llm constructors", () => {
       prompt: "Say hello.",
       generation: { temperature: 0 },
       providerOptions: { store: true, metadata: { request: true } },
-      http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
+      headers: { "x-shared": "request" },
+      http: { body: { metadata: { request: true } }, query: { request: "1" } },
     })
 
     expect(request.generation).toEqual({ temperature: 0 })
     expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
-    expect(request.http).toEqual({
-      body: { metadata: { request: true } },
-      headers: { "x-shared": "request" },
-      query: { request: "1" },
-    })
-  })
-
-  test("updates canonical requests from the request datatype", () => {
-    const base = ai.request({
-      id: "req_1",
-      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
-      prompt: "Say hello.",
-    })
-    const updated = LLMRequest.update(base, { messages: [...base.messages, Message.assistant("Hi.")] })
-
-    expect(updated).toBeInstanceOf(LLMRequest)
-    expect(updated.id).toBe("req_1")
-    expect(LLMRequest.input(updated).id).toBe("req_1")
-    expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
-    expect(LLMRequest.update(updated, {})).toBe(updated)
+    expect(request.headers).toEqual({ "x-shared": "request" })
+    expect(request.http).toEqual({ body: { metadata: { request: true } }, query: { request: "1" } })
   })
 
   test("updates canonical models from the model datatype", () => {
@@ -234,7 +229,7 @@ describe("llm constructors", () => {
       messages: [Message.user("Review this."), update],
     })
 
-    expect(update).toBeInstanceOf(Message)
+    expect(update).toBeInstanceOf(SystemMessage)
     expect(update).toEqual({
       role: "system",
       content: [{ type: "text", text: "Use parameterized SQL.", cache: { type: "ephemeral" } }],

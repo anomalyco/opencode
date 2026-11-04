@@ -1,8 +1,9 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer, Tracer } from "effect"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Formatter } from "@opencode/core/formatter"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -25,18 +26,20 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, FileAccess.node, FileMutation.node, Environment.node, Formatter.node, Permission.node],
+  deps: [Tool.node, FileWrite.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
 const makeWriteFixture = () => {
   const fixture: {
     assertions: Permission.AssertInput[]
+    reads: Array<{ target: string; length?: number }>
     writes: string[]
     denyAction?: string
     formatFile: (target: string) => Effect.Effect<boolean>
   } = {
     assertions: [],
+    reads: [],
     writes: [],
     formatFile: () => Effect.succeed(false),
   }
@@ -82,6 +85,10 @@ const withTool = <A, E, R>(
       AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, writeToolNode]), [
         Environment.node.replace(
           transformEnvironmentFiles((files) => ({
+            read: (target, options) =>
+              Effect.sync(() => fixture.reads.push({ target, length: options?.length })).pipe(
+                Effect.andThen(files.read(target, options)),
+              ),
             write: (target, content) =>
               Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
           })),
@@ -399,4 +406,37 @@ describe("WriteTool", () => {
         ),
     ),
   )
+
+  it.live("creates a new unformatted file without span failures or post-write reads", () => {
+    const spans: Tracer.NativeSpan[] = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      },
+    })
+    return withTempDir((tmp) => {
+      const fixture = makeWriteFixture()
+      return withTool(tmp.path, fixture, (registry) =>
+        Effect.gen(function* () {
+          const target = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "fresh.txt")
+          const settled = yield* executeTool(registry, call({ path: "src/fresh.txt", content: "hello" }))
+          expect(settled.status).toBe("completed")
+          // Only the pre-write diff probe and the 3-byte BOM header check run; the written file is not re-read.
+          expect(fixture.reads).toEqual([
+            { target, length: undefined },
+            { target, length: 3 },
+          ])
+          const mutationSpans = spans.filter((span) => span.name.startsWith("FileMutation."))
+          expect(mutationSpans.some((span) => span.name === "FileMutation.readOptionalText")).toBe(true)
+          for (const span of mutationSpans) {
+            if (span.status._tag === "Ended") {
+              expect(Exit.isFailure(span.status.exit)).toBe(false)
+            }
+          }
+        }),
+      ).pipe(Effect.provideService(Tracer.Tracer, tracer))
+    })
+  })
 })

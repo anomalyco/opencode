@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nincsenek beállítva bővítmények",
   skills: "Készségek",
   "skills.empty": "Nincsenek konfigurálva készségek",
-  lsp: "LSP",
-  "lsp.empty": "Nincs konfigurálva LSP szerver",
   failed: "Sikertelen",
   retry: "Próbálja újra",
   connecting: "Csatlakozás…",

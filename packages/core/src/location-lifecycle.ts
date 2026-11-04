@@ -13,6 +13,9 @@ import { Rpc } from "./rpc.js"
 import { SessionEvent } from "./session/event.js"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
+const durableSessionEventTypes: ReadonlySet<string> = new Set(
+  SessionEvent.DurableDefinitions.map((definition) => definition.type),
+)
 
 export class Service extends Context.Service<
   Service,
@@ -37,13 +40,17 @@ const layer = Layer.effect(
     const rpc = yield* Rpc.Service
     const project = yield* Project.Service
     const scope = yield* Effect.scope
+    const self = LocationServiceMap.canonical(
+      Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+    )
     yield* project.activate(location.project.id)
     const unsubscribe = yield* bus.listen((event) => {
-      if (!isSessionEvent(event) || !event.location) return Effect.void
+      if (!event.location || !durableSessionEventTypes.has(event.type)) return Effect.void
       const ref = LocationServiceMap.canonical(event.location)
-      if (ref.directory !== location.directory || ref.workspaceID !== location.workspaceID) return Effect.void
+      if (ref.directory !== self.directory || ref.workspaceID !== self.workspaceID) return Effect.void
+      if (!isSessionEvent(event)) return Effect.void
       // Listeners run inside publish; keep the write and its Project event off that path.
-      return project.activate(location.project.id).pipe(Effect.forkIn(scope), Effect.asVoid)
+      return project.activate(location.project.id, { forkIn: scope })
     })
     yield* Effect.addFinalizer(() => unsubscribe)
     let closed = false

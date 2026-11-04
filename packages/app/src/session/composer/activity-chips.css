@@ -58,7 +58,7 @@
     grid-column: 2 / 4;
   }
 
-  [data-slot="menu-v2-item-content"] > svg:first-child {
+  [data-slot="menu-v2-item-content"] > :is(svg, [data-slot="spinner-dots"]):first-child {
     flex: none;
     width: 16px;
     height: 16px;

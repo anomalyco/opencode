@@ -175,6 +175,7 @@ async function latestSession(
     {
       directory: location.directory,
       parentID: null,
+      archived: false,
       limit: SESSION_PAGE_LIMIT,
       order: "desc",
       ...(cursor ? { cursor } : {}),

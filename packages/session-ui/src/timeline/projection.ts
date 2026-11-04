@@ -657,7 +657,7 @@ export namespace Timeline {
   }
 }
 
-const MAX_RETRY_AFTER_MS = 7 * 86_400_000
+const MAX_RETRY_AFTER_MS = 45 * 86_400_000
 
 function usageLimit(
   message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },

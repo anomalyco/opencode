@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -90,7 +90,8 @@ recorded.effect.with(
       const encrypted = first.message.content.find((part) => part.type === "reasoning")?.providerMetadata?.meta
         ?.redactedData
       expect(encrypted).toEqual(expect.stringMatching(/\S/))
-      const next = LLMRequest.update(request, {
+      const next = {
+        ...request,
         toolChoice: ToolChoice.make("none"),
         messages: [
           ...request.messages,
@@ -99,7 +100,7 @@ recorded.effect.with(
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny" } }),
           ),
         ],
-      })
+      }
       const replay = yield* compileRequest(next)
       expect(replay.body.messages[1].content).toEqual(
         expect.arrayContaining([

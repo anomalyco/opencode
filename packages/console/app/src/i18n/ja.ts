@@ -9,7 +9,7 @@ export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
   "nav.enterprise": "エンタープライズ",
-  "nav.zen": "Zen",
+  "nav.zen": "OpenCode Models",
   "nav.login": "ログイン",
   "nav.free": "ダウンロード",
   "nav.home": "ホーム",
@@ -110,7 +110,7 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "これらに加えて、",
   "home.faq.a3.p2.afterZen": " アカウントを作成することで、人気のコーディングモデルを利用できます。",
   "home.faq.a3.p3":
-    "Zenの利用を推奨していますが、OpenCodeはOpenAI、Anthropic、xAIなどの主要プロバイダーにも対応しています。",
+    "OpenCode Modelsの利用を推奨していますが、OpenCodeはOpenAI、Anthropic、xAIなどの主要プロバイダーにも対応しています。",
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
@@ -136,25 +136,25 @@ export const dict = {
 
   "home.zenCta.title": "コーディングエージェント向けの信頼できる最適化モデル",
   "home.zenCta.body":
-    "Zenは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
-  "home.zenCta.link": "Zenについて知る",
+    "OpenCode Modelsは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
+  "home.zenCta.link": "OpenCode Modelsについて知る",
 
-  "zen.title": "OpenCode Zen | コーディングエージェント向けの信頼できる最適化モデル",
+  "zen.title": "OpenCode Models | コーディングエージェント向けの信頼できる最適化モデル",
   "zen.hero.title": "コーディングエージェント向けの信頼できる最適化モデル",
   "zen.hero.body":
-    "Zenは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
+    "OpenCode Modelsは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
 
-  "zen.faq.q1": "OpenCode Zenとは？",
+  "zen.faq.q1": "OpenCode Modelsとは？",
   "zen.faq.a1":
-    "Zenは、OpenCodeのチームが作成した、コーディングエージェント向けにテスト・ベンチマークされたAIモデルの厳選セットです。",
-  "zen.faq.q2": "Zenはなぜ精度が高いのですか？",
+    "OpenCode Modelsは、OpenCodeのチームが作成した、コーディングエージェント向けにテスト・ベンチマークされたAIモデルの厳選セットです。",
+  "zen.faq.q2": "OpenCode Modelsはなぜ精度が高いのですか？",
   "zen.faq.a2":
-    "Zenはコーディングエージェント向けにテスト・ベンチマークされたモデルだけを提供します。ステーキを切るのにバターナイフを使わないように、コーディングには品質の低いモデルを使わないでください。",
-  "zen.faq.q3": "Zenは安いですか？",
+    "OpenCode Modelsはコーディングエージェント向けにテスト・ベンチマークされたモデルだけを提供します。ステーキを切るのにバターナイフを使わないように、コーディングには品質の低いモデルを使わないでください。",
+  "zen.faq.q3": "OpenCode Modelsは安いですか？",
   "zen.faq.a3":
-    "Zenは営利目的ではありません。Zenはモデル提供元のコストをそのままあなたに渡します。Zenの利用が増えるほど、OpenCodeはより良いレートを交渉し、その分をあなたに還元できます。",
-  "zen.faq.q4": "Zenの料金は？",
-  "zen.faq.a4.p1.beforePricing": "Zenは",
+    "OpenCode Modelsは営利目的ではありません。OpenCode Modelsはモデル提供元のコストをそのままあなたに渡します。OpenCode Modelsの利用が増えるほど、OpenCodeはより良いレートを交渉し、その分をあなたに還元できます。",
+  "zen.faq.q4": "OpenCode Modelsの料金は？",
+  "zen.faq.a4.p1.beforePricing": "OpenCodeは",
   "zen.faq.a4.p1.pricingLink": "リクエスト単位で課金",
   "zen.faq.a4.p1.afterPricing": "し、マークアップはありません。つまり、モデル提供元の請求額をそのまま支払います。",
   "zen.faq.a4.p2.beforeAccount": "総コストは利用量に依存し、月次の支出上限を",
@@ -162,44 +162,45 @@ export const dict = {
   "zen.faq.a4.p3": "コストを賄うために、OpenCodeは$20の残高チャージあたり$1.23の小さな決済手数料のみを追加します。",
   "zen.faq.q5": "データとプライバシーは？",
   "zen.faq.a5.beforeExceptions":
-    "Zenのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
+    "OpenCode Modelsのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーを守り、データをモデル学習に使用しません（",
   "zen.faq.a5.exceptionsLink": "以下の例外",
   "zen.faq.q6": "支出上限を設定できますか？",
   "zen.faq.a6": "はい、アカウントで月次の支出上限を設定できます。",
   "zen.faq.q7": "キャンセルできますか？",
   "zen.faq.a7": "はい、いつでも請求を無効化し、残りの残高を利用できます。",
-  "zen.faq.q8": "他のコーディングエージェントでもZenを使えますか？",
+  "zen.faq.q8": "他のコーディングエージェントでもOpenCode Modelsを使えますか？",
   "zen.faq.a8":
-    "ZenはOpenCodeとの相性が良いですが、どのエージェントでもZenを利用できます。お使いのコーディングエージェントのセットアップ手順に従ってください。",
+    "OpenCode ModelsはOpenCodeとの相性が良いですが、どのエージェントでもOpenCode Modelsを利用できます。お使いのコーディングエージェントのセットアップ手順に従ってください。",
   "zen.faq.q9": "返金を受けられますか？",
   "zen.faq.a9":
     "請求から14日以内で、その購入分のクレジットを一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
 
-  "zen.cta.start": "Zenをはじめる",
+  "zen.cta.start": "OpenCode Modelsをはじめる",
   "zen.pricing.title": "$20の従量課金制残高を追加",
   "zen.pricing.fee": "(+$1.23 カード処理手数料)",
   "zen.pricing.body":
     "任意のエージェントと一緒に使用できます。毎月の支出制限を設定できます。いつでもキャンセルできます。",
-  "zen.problem.title": "Zenはどのような問題を解決していますか？",
+  "zen.problem.title": "OpenCode Modelsはどのような問題を解決していますか？",
   "zen.problem.body":
     "利用可能なモデルは非常に多くありますが、コーディングエージェントで適切に機能するモデルはほんのわずかです。ほとんどのプロバイダーは、それらを異なる設定で提供し、結果も異なります。",
   "zen.problem.subtitle": "OpenCodeユーザーだけでなく、すべての人を対象にこの問題を修正しています。",
   "zen.problem.item1": "選択したモデルをテストし、チームに相談する",
   "zen.problem.item2": "プロバイダーと連携して適切に提供されるようにする",
   "zen.problem.item3": "私たちが推奨するすべてのモデルとプロバイダーの組み合わせをベンチマークする",
-  "zen.how.title": "Zenの仕組み",
-  "zen.how.body": "ZenをOpenCodeとともに使用することをお勧めしますが、Zenはどのエージェントでも使用できます。",
+  "zen.how.title": "OpenCode Modelsの仕組み",
+  "zen.how.body":
+    "OpenCode ModelsをOpenCodeとともに使用することをお勧めしますが、OpenCode Modelsはどのエージェントでも使用できます。",
   "zen.how.step1.title": "サインアップして$20の残高を追加",
   "zen.how.step1.beforeLink": "",
   "zen.how.step1.link": "セットアップ手順",
-  "zen.how.step2.title": "透明性のある価格設定でZenを使用する",
+  "zen.how.step2.title": "透明性のある価格設定でOpenCode Modelsを使用する",
   "zen.how.step2.link": "リクエストごとに支払う",
   "zen.how.step2.afterLink": "（マークアップなし）",
   "zen.how.step3.title": "自動チャージ",
   "zen.how.step3.body": "任意で自動チャージを有効にし、残高のしきい値とチャージ額を設定できます",
   "zen.privacy.title": "あなたのプライバシーは私たちにとって重要です",
   "zen.privacy.beforeExceptions":
-    "すべてのZenモデルは米国とEUでホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
+    "OpenCode Modelsのモデルはすべて米国とEUでホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.promo.kimiK31Pro": "Kimi K3.1 Pro を Go で提供開始しました。",
@@ -270,9 +271,9 @@ export const dict = {
     "Goは、エージェント型コーディングのための有能なオープンソースモデルへの安定したアクセスを提供する低価格なサブスクリプションです。",
   "go.faq.q2": "Goにはどのモデルが含まれますか？",
   "go.faq.a2": "Go には、十分な利用上限と安定したアクセスを備えた、以下のモデルが含まれます。",
-  "go.faq.q3": "GoはZenと同じですか？",
+  "go.faq.q3": "GoはOpenCode Modelsと同じですか？",
   "go.faq.a3":
-    "いいえ。Zenは従量課金制ですが、Goは月額$10で、厳選されたモデルラインナップへのゆとりある上限と安定したアクセスを提供します。",
+    "いいえ。OpenCode Modelsは従量課金制ですが、Goは月額$10で、厳選されたモデルラインナップへのゆとりある上限と安定したアクセスを提供します。",
   "go.faq.q4": "Goの料金は？",
   "go.faq.a4.p1.beforePricing": "Goは",
   "go.faq.a4.p1.pricingLink": "月額$10",

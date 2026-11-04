@@ -5,7 +5,7 @@ import {
   LanguageModel,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   ProviderID,
 } from "../../src/effect.js"
@@ -32,12 +32,13 @@ for (const model of [
 }
 
 const unsupported = {
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture") }),
-  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture") }),
-  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
-  xaiChat: ai.request({ model: XAI.configure().chat("fixture") }),
+  anthropic: ai.request({ model: Anthropic.configure().model("fixture"), prompt: "Hello" }),
+  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture"), prompt: "Hello" }),
+  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture"), prompt: "Hello" }),
+  xaiChat: ai.request({ model: XAI.configure().chat("fixture"), prompt: "Hello" }),
   compatible: ai.request({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+    prompt: "Hello",
   }),
 }
 // @ts-expect-error Anthropic has no standalone compact endpoint.
@@ -56,25 +57,28 @@ LLMClient.Service.use((client) => {
 })
 
 const request = ai.request({ model: openai, prompt: "hello" })
-ai.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
-ai.compact(new LLMRequest(LLMRequest.input(request)))
-const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
+ai.compact({ ...request, messages: [Message.user("continue")] })
+ai.compact({ ...request })
+const switched = { ...request, model: Anthropic.configure().model("fixture") }
 // @ts-expect-error Switching models replaces, rather than inherits, the capability.
 ai.compact(switched)
-ai.compact(LLMRequest.update(switched, { model: openai }))
+ai.compact({ ...switched, model: openai })
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
-  ai.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+  ai.request({
+    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
+    prompt: "Hello",
+  }),
 )
 
 declare const dynamicModel: LanguageModel
-declare const dynamicPatch: Partial<LLMRequest.Input>
+declare const dynamicPatch: Partial<LLMRequest>
 const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
 ai.compact(dynamicRequest)
 if (ai.canCompact(dynamicRequest)) ai.compact(dynamicRequest)
 // @ts-expect-error An optional model override cannot retain the old capability statically.
-ai.compact(LLMRequest.update(request, dynamicPatch))
+ai.compact({ ...request, ...dynamicPatch })
 
 const checkpoint = CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_1", encrypted: "opaque" })
 const provider = ProviderID.make("anthropic")
@@ -110,6 +114,7 @@ ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
 )
 ai.request({
   model: openai,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
     contextManagement: [{ type: "compaction", compactThreshold: "100000" }],
@@ -118,6 +123,7 @@ ai.request({
 const anthropic = Anthropic.configure().model("claude-opus-4-6")
 ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     contextManagement: {
       edits: [{ type: "compact_20260112", pauseAfterCompaction: true, instructions: "Summarize without using tools" }],
@@ -126,8 +132,15 @@ ai.request({
 })
 ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.
     contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
   },
 })
+
+// Plain inputs compact without `ai.request(...)`, and a model alone can be narrowed.
+ai.compact({ model: OpenAI.configure().responses("fixture"), messages: [Message.user("continue")] })
+if (ai.canCompact(dynamicModel)) ai.compact({ model: dynamicModel, prompt: "continue" })
+// @ts-expect-error A dynamically selected model must be narrowed first.
+ai.compact({ model: dynamicModel, prompt: "continue" })

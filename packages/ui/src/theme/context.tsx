@@ -1,7 +1,7 @@
 // @refresh reload
 
-import { createEffect, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, onMount } from "solid-js"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
 import oc2ThemeJson from "./themes/oc-2.json"
@@ -10,6 +10,18 @@ import { resolveThemeVariantV2, themeV2ToCss } from "./v2/resolve"
 import type { DesktopTheme } from "./types"
 
 export type ColorScheme = "light" | "dark" | "system"
+
+type ThemeState = {
+  /** Loaded bundled themes and registered themes, by id. */
+  themes: Record<string, DesktopTheme>
+  themeId: string
+  colorScheme: ColorScheme
+  mode: "light" | "dark"
+  previewThemeId: string | null
+  previewScheme: ColorScheme | null
+  /** Registered themes that have not arrived are not coming. */
+  settled: boolean
+}
 
 const STORAGE_KEYS = {
   THEME_ID: "opencode-theme-id",
@@ -49,56 +61,53 @@ function knownThemes() {
   return known
 }
 
-const names: Record<string, string> = {
-  "oc-2": "OpenCode",
-  amoled: "AMOLED",
-  aura: "Aura",
-  ayu: "Ayu",
-  carbonfox: "Carbonfox",
-  catppuccin: "Catppuccin",
-  "catppuccin-frappe": "Catppuccin Frappe",
-  "catppuccin-macchiato": "Catppuccin Macchiato",
-  cobalt2: "Cobalt2",
-  cursor: "Cursor",
-  dracula: "Dracula",
-  everforest: "Everforest",
-  flexoki: "Flexoki",
-  github: "GitHub",
-  gruvbox: "Gruvbox",
-  kanagawa: "Kanagawa",
-  "lucent-orng": "Lucent Orng",
-  material: "Material",
-  matrix: "Matrix",
-  mercury: "Mercury",
-  monokai: "Monokai",
-  nightowl: "Night Owl",
-  nord: "Nord",
-  "one-dark": "One Dark",
-  onedarkpro: "One Dark Pro",
-  orng: "Orng",
-  "osaka-jade": "Osaka Jade",
-  palenight: "Palenight",
-  rosepine: "Rose Pine",
-  shadesofpurple: "Shades of Purple",
-  solarized: "Solarized",
-  synthwave84: "Synthwave '84",
-  tokyonight: "Tokyonight",
-  vercel: "Vercel",
-  vesper: "Vesper",
-  zenburn: "Zenburn",
-}
+const names = new Map(
+  Object.entries({
+    "oc-2": "OpenCode",
+    amoled: "AMOLED",
+    aura: "Aura",
+    ayu: "Ayu",
+    carbonfox: "Carbonfox",
+    catppuccin: "Catppuccin",
+    "catppuccin-frappe": "Catppuccin Frappe",
+    "catppuccin-macchiato": "Catppuccin Macchiato",
+    cobalt2: "Cobalt2",
+    cursor: "Cursor",
+    dracula: "Dracula",
+    everforest: "Everforest",
+    flexoki: "Flexoki",
+    github: "GitHub",
+    gruvbox: "Gruvbox",
+    kanagawa: "Kanagawa",
+    "lucent-orng": "Lucent Orng",
+    material: "Material",
+    matrix: "Matrix",
+    mercury: "Mercury",
+    monokai: "Monokai",
+    nightowl: "Night Owl",
+    nord: "Nord",
+    "one-dark": "One Dark",
+    onedarkpro: "One Dark Pro",
+    orng: "Orng",
+    "osaka-jade": "Osaka Jade",
+    palenight: "Palenight",
+    rosepine: "Rose Pine",
+    shadesofpurple: "Shades of Purple",
+    solarized: "Solarized",
+    synthwave84: "Synthwave '84",
+    tokyonight: "Tokyonight",
+    vercel: "Vercel",
+    vesper: "Vesper",
+    zenburn: "Zenburn",
+  }),
+)
 
+// SAFETY: oc-2.json follows desktop-theme.schema.json; JSON modules only widen its colors to `string`, and
+// v2/resolve.test.ts resolves the same file as a DesktopTheme.
 const oc2Theme = oc2ThemeJson as DesktopTheme
 
-function resolveStoredTheme(id: string | null | undefined, registered?: Record<string, DesktopTheme>) {
-  if (id === "oc-2" || (id && (knownThemes().has(id) || registered?.[id]))) return id
-
-  return "oc-2"
-}
-
+// Storage access throws where localStorage is missing or blocked; every caller treats that as no stored value.
 function read(key: string) {
-  if (typeof localStorage !== "object") return null
-
   try {
     return localStorage.getItem(key)
   } catch {
@@ -107,19 +116,21 @@ function read(key: string) {
 }
 
 function write(key: string, value: string) {
-  if (typeof localStorage !== "object") return
-
   try {
     localStorage.setItem(key, value)
   } catch {}
 }
 
 function drop(key: string) {
-  if (typeof localStorage !== "object") return
-
   try {
     localStorage.removeItem(key)
   } catch {}
+}
+
+function readScheme(): ColorScheme {
+  const value = read(STORAGE_KEYS.COLOR_SCHEME)
+
+  return value === "light" || value === "dark" ? value : "system"
 }
 
 function clear() {
@@ -128,9 +139,9 @@ function clear() {
 }
 
 function ensureThemeStyleElement(): HTMLStyleElement {
-  const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
+  const existing = document.getElementById(THEME_STYLE_ID)
 
-  if (existing) return existing
+  if (existing instanceof HTMLStyleElement) return existing
   const element = document.createElement("style")
   element.id = THEME_STYLE_ID
   document.head.appendChild(element)
@@ -139,9 +150,7 @@ function ensureThemeStyleElement(): HTMLStyleElement {
 }
 
 function getSystemMode(): "light" | "dark" {
-  if (typeof window !== "object") return "light"
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
@@ -191,28 +200,31 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: {
     defaultTheme?: string
-    onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark", scheme: ColorScheme) => void
+    /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
+    onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
-    const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
-    const themeId = resolveStoredTheme(rawTheme)
-
-    if (rawTheme && rawTheme !== themeId) {
-      write(STORAGE_KEYS.THEME_ID, themeId)
-      clear()
-    }
-
-    const colorScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
+    // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
+    const themeId = read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || "oc-2"
+    const colorScheme = readScheme()
     const mode = colorScheme === "system" ? getSystemMode() : colorScheme
 
-    const [store, setStore] = createStore({
+    const [store, setStore] = createStore<ThemeState>({
       themes: {
         "oc-2": oc2Theme,
-      } as Record<string, DesktopTheme>,
+      },
       themeId,
       colorScheme,
       mode,
-      previewThemeId: null as string | null,
-      previewScheme: null as ColorScheme | null,
+      previewThemeId: null,
+      previewScheme: null,
+      settled: false,
+    })
+
+    // The selected theme, or the default while it is not loaded, registered or coming.
+    const active = createMemo(() => {
+      const id = store.themeId
+
+      return knownThemes().has(id) || store.themes[id] || !store.settled ? id : "oc-2"
     })
 
     const loads = new Map<string, Promise<DesktopTheme | undefined>>()
@@ -249,32 +261,22 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const applyTheme = (theme: DesktopTheme, themeId: string, mode: "light" | "dark", scheme: ColorScheme) => {
       applyThemeCss(theme, themeId, mode)
-      props.onThemeApplied?.(theme, mode, scheme)
+      props.onThemeApplied?.(mode, scheme)
     }
 
-    const ids = () => {
-      const extra = Object.keys(store.themes)
-        .filter((id) => !knownThemes().has(id))
-        .sort()
+    const name = (id: string) => store.themes[id]?.name ?? names.get(id) ?? id
 
-      const all = themeIDs()
-
-      if (extra.length === 0) return all
-
-      return [...all, ...extra]
-    }
+    // Bundled and registered themes in one list, alphabetical by name.
+    const ids = () =>
+      [...themeIDs(), ...Object.keys(store.themes).filter((id) => !knownThemes().has(id))].toSorted((a, b) =>
+        name(a).localeCompare(name(b), undefined, { sensitivity: "base" }),
+      )
 
     const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
-        const next = resolveStoredTheme(e.newValue, store.themes)
-
-        if (next !== e.newValue) {
-          write(STORAGE_KEYS.THEME_ID, next)
-          clear()
-        }
-
+        const next = e.newValue
         setStore("themeId", next)
 
         if (next === "oc-2") {
@@ -290,8 +292,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
 
       if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue) {
-        setStore("colorScheme", e.newValue as ColorScheme)
-        setStore("mode", e.newValue === "system" ? getSystemMode() : (e.newValue as "light" | "dark"))
+        const scheme = readScheme()
+        setStore("colorScheme", scheme)
+        setStore("mode", scheme === "system" ? getSystemMode() : scheme)
       }
     }
 
@@ -307,14 +310,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
       makeEventListener(mediaQuery, "change", onMedia)
 
-      const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
-      const savedTheme = resolveStoredTheme(rawTheme, store.themes)
-      const savedScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
-
-      if (rawTheme && rawTheme !== savedTheme) {
-        write(STORAGE_KEYS.THEME_ID, savedTheme)
-        clear()
-      }
+      const savedTheme = read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || "oc-2"
+      const savedScheme = readScheme()
 
       if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
 
@@ -327,10 +324,22 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      const theme = store.themes[store.themeId]
+      const id = active()
+      const theme = store.themes[id]
 
-      if (!theme) return
-      applyTheme(theme, store.themeId, store.mode, store.colorScheme)
+      if (theme) {
+        // The selected theme is gone, so the next start paints the default theme instead of its cached colors. The
+        // choice stays stored and returns with the theme.
+        if (id !== store.themeId) clear()
+        applyTheme(theme, id, store.mode, store.colorScheme)
+
+        return
+      }
+
+      // A bundled theme is loading: keep what is on screen until it arrives.
+      if (knownThemes().has(id)) return
+      // A registered theme may still arrive: the colors cached from the last run stay on screen meanwhile.
+      props.onThemeApplied?.(store.mode, store.colorScheme)
     })
 
     const setTheme = (id: string) => {
@@ -371,16 +380,35 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     return {
-      themeId: () => store.themeId,
+      themeId: active,
       colorScheme: () => store.colorScheme,
       mode: () => store.mode,
       ids,
-      name: (id: string) => store.themes[id]?.name ?? names[id] ?? id,
+      name,
       loadThemes,
       themes: () => store.themes,
       setTheme,
       setColorScheme,
-      registerTheme: (theme: DesktopTheme) => setStore("themes", theme.id, theme),
+      /** Lists a theme beside the bundled ones until the returned function withdraws it. */
+      registerTheme: (theme: DesktopTheme) => {
+        setStore("themes", theme.id, theme)
+
+        return () => {
+          // A theme registered again under the same id replaces this one; leave it.
+          if (unwrap(store.themes)[theme.id] !== theme) return
+          setStore(
+            "themes",
+            produce((themes) => {
+              delete themes[theme.id]
+            }),
+          )
+        }
+      },
+      /**
+       * Every theme source has registered what it will: a selected theme that is still missing is not coming, so the
+       * window shows the default theme and keeps the choice for when it returns.
+       */
+      settle: () => setStore("settled", true),
       previewTheme: (id: string) => {
         const next = id
 
@@ -403,11 +431,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       previewColorScheme: (scheme: ColorScheme) => {
         setStore("previewScheme", scheme)
         const mode = scheme === "system" ? getSystemMode() : scheme
-        const id = store.previewThemeId ?? store.themeId
+        const id = store.previewThemeId ?? active()
         void load(id).then((theme) => {
           if (!theme) return
 
-          if ((store.previewThemeId ?? store.themeId) !== id) return
+          if ((store.previewThemeId ?? active()) !== id) return
 
           if (store.previewScheme !== scheme) return
           applyTheme(theme, id, mode, scheme)
@@ -428,9 +456,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       cancelPreview: () => {
         setStore("previewThemeId", null)
         setStore("previewScheme", null)
-        void load(store.themeId).then((theme) => {
-          if (!theme) return
-          applyTheme(theme, store.themeId, store.mode, store.colorScheme)
+        const id = active()
+        void load(id).then((theme) => {
+          if (!theme || active() !== id) return
+          applyTheme(theme, id, store.mode, store.colorScheme)
         })
       },
     }

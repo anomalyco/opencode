@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message } from "../../src/effect.js"
+import { ai, LLMEvent, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -67,14 +67,15 @@ for (const api of ["responses", "messages"] as const) {
             ]),
           )
         }
-        const next = LLMRequest.update(request, {
+        const next = {
+          ...request,
           tools: [],
           messages: [
             ...request.messages,
             first.message,
             Message.user("Using the information already found, reply with just that person's surname."),
           ],
-        })
+        }
         const replay = yield* compileRequest(next)
         if (api === "responses")
           expect(replay.body.input).toEqual(
