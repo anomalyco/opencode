@@ -1,6 +1,6 @@
 //! User messages (E.6a): `UserMessage` (`routes/session/index.tsx:2354-2479`). The text on a raised
-//! surface behind a bar in the agent's color, then skill and file chips. Images (V16) are E.6b's,
-//! and the pending-steer and message dialogs are E.10b's and DLG38's.
+//! surface behind a bar in the agent's color, its images (E.6b), then skill and file chips. The
+//! pending-steer and message dialogs are E.10b's and DLG38's.
 
 use std::cell::{Cell, RefCell};
 
@@ -8,6 +8,7 @@ use opencode_api::generated::{PromptFileSource, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
 use opentui::prelude::*;
 
+use super::images::{self, Images};
 use super::list::Context;
 
 pub struct User {
@@ -15,6 +16,7 @@ pub struct User {
     text: Text,
     skills: View,
     files: View,
+    images: Images,
     color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
 }
@@ -50,17 +52,20 @@ impl User {
         body.on_hover(move |_, hover| {
             target.bg(if hover { hovered } else { raised });
         });
+        let images = Images::new(cx, 2);
         let root = View::new(cx.app)
             .column()
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
             .bg(raised)
+            .child(images.root())
             .child(&body);
         Self {
             root,
             text,
             skills,
             files,
+            images,
             color: Cell::new(None),
             rendered: RefCell::default(),
         }
@@ -80,6 +85,7 @@ impl User {
             return;
         }
         let files = message.files.as_deref().unwrap_or_default();
+        self.images.update(cx, images::user_images(files));
         let skills = message.skills.as_deref().unwrap_or_default();
         self.root
             .visible(!message.text.trim().is_empty() || !files.is_empty() || !skills.is_empty());
