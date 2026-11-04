@@ -5,6 +5,7 @@
 //! transcript    messages::list (E.6a), sticky to the bottom
 //! working       the spinner while the session runs
 //! permission    permission::Permission (E.9a); the prompt hides while it shows
+//! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
 //! prompt        prompt::editor::mount (E.2)
 //! ```
 //! The sidebar (E.14) mounts beside the column.
@@ -35,6 +36,7 @@ pub struct Session {
     transcript: messages::list::Transcript,
     working: Spinner,
     permission: permission::Permission,
+    form: form::SessionForms,
     prompt: crate::prompt::editor::Prompt,
 }
 
@@ -50,6 +52,7 @@ impl Session {
             .animations(opencode_ui::motion::enabled(tui.config.info.animations))
             .visible(false);
         let permission = permission::Permission::new(tui, &id);
+        let form = form::SessionForms::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
         let column = View::new(app)
             .column()
@@ -64,6 +67,7 @@ impl Session {
             .child(transcript.root())
             .child(&working)
             .child(permission.root())
+            .child(form.root())
             .child(prompt.root());
         let root = View::new(app)
             .row()
@@ -80,6 +84,7 @@ impl Session {
             transcript,
             working,
             permission,
+            form,
             prompt,
         }
     }
@@ -104,9 +109,10 @@ impl RouteView for Session {
             self.working.visible(running);
         }
         self.transcript.sync(tui, &self.id, changes);
-        let prompting = self.permission.active();
+        let prompting = self.permission.active() || self.form.active();
         self.permission.sync(tui, changes);
-        if self.permission.active() != prompting {
+        self.form.sync(tui, changes, self.permission.active());
+        if (self.permission.active() || self.form.active()) != prompting {
             self.prompt.root().visible(prompting);
             if prompting {
                 self.prompt.focus(tui);
@@ -116,7 +122,7 @@ impl RouteView for Session {
     }
 
     fn focus(&self, tui: &Tui) {
-        if !self.permission.active() {
+        if !self.permission.active() && !self.form.active() {
             self.prompt.focus(tui);
         }
     }
