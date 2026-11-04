@@ -2,12 +2,12 @@ import type { ElectronAPI } from "../api-types"
 
 type SidecarData = Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>
 
-export function initializationData<A>(state: (() => A | undefined) & { error: unknown }) {
-  if (state.error === undefined) return state()
-  const failure = state.error instanceof Error ? state.error : new Error(String(state.error))
+/** Marks a startup failure so the error page describes it as the local server failing to start. */
+export function localServerStartupError(cause: unknown) {
+  const failure = cause instanceof Error ? cause : new Error(String(cause))
   Object.defineProperty(failure, "localServerStartup", { value: true })
 
-  throw failure
+  return failure
 }
 
 // The main process adds Authorization to sidecar requests (`wireRendererHeaders`); the renderer never
