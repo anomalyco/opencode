@@ -12,7 +12,7 @@ import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData, useServer } from "@/runtime/server/current"
-import { isDockVisible } from "./auto-approve-machine"
+import { needsUser } from "./auto-approve-machine"
 
 export function createSessionRequestModel() {
   const params = useParams()
@@ -114,7 +114,7 @@ export function createSessionRequestModel() {
     )
 
     return sessionPermissionRequest(data.session.list(), data.session.permission.list, id, (item) =>
-      isDockVisible(autoApprove.state(item.id), enabled),
+      needsUser(autoApprove.state(item.id), enabled),
     )
   })
 
