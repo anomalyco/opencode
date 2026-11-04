@@ -239,8 +239,11 @@ export class Types {
     }
     if (resolved.every((member) => ["Literal", "String", "TemplateLiteral"].includes(member._tag)))
       return wrap("String")
-    if (resolved.every((member) => member._tag === "Objects")) {
-      const tagged = this.discriminator(resolved as Array<Objects>)
+    // A member may itself be a union of objects (`Session.Message.Compaction`, tagged by `status`),
+    // as long as all of its objects carry the outer tag.
+    const shapes = resolved.map((member) => this.objectsOf(member))
+    if (shapes.every((shape) => shape !== undefined)) {
+      const tagged = this.discriminator(shapes as Array<Array<Objects>>)
       if (tagged !== undefined) return wrap(this.tagged(rest, tagged, ref ?? hint, ref))
     }
     return wrap(this.untagged(rest, ref ?? hint, ref))
@@ -256,14 +259,32 @@ export class Types {
     return name
   }
 
+  /** The objects a union member stands for: itself, or every object of a nested union. */
+  private objectsOf(member: R): Array<Objects> | undefined {
+    if (member._tag === "Objects") return [member]
+    if (member._tag !== "Union") return undefined
+    const parts = flatten(member.types).map((part) => this.deref(part))
+    if (!parts.every((part) => part._tag === "Objects")) return undefined
+    return parts as Array<Objects>
+  }
+
   /** The discriminator of an object union: a required field whose literal values tell every member apart. */
-  private discriminator(members: Array<Objects>) {
-    const tags = (member: Objects, key: string) => {
+  private discriminator(members: Array<Array<Objects>>) {
+    const one = (member: Objects, key: string) => {
       const property = member.propertySignatures.find((p) => p.name === key)
       if (property === undefined || property.isOptional) return undefined
       return this.tagValues(property.type)
     }
-    const keys = members[0].propertySignatures.map((p) => String(p.name))
+    const tags = (member: Array<Objects>, key: string) => {
+      const parts = member.map((objects) => one(objects, key))
+      if (parts.some((part) => part === undefined)) return undefined
+      if (member.length === 1) return parts[0]
+      // A nested union joins only when all its objects share one exact tag, which `tag()` then returns.
+      const exact = [...new Set(parts.flatMap((part) => part!.exact))]
+      if (exact.length !== 1 || parts.some((part) => part!.prefixes.length > 0)) return undefined
+      return { exact, prefixes: [] }
+    }
+    const keys = members[0][0].propertySignatures.map((p) => String(p.name))
     const ordered = [
       ...keys.filter((key) => key === "type" || key === "_tag"),
       ...keys.filter((key) => key !== "type" && key !== "_tag"),
@@ -341,7 +362,7 @@ export class Types {
     const tagMethod =
       kind === "boolean"
         ? ""
-        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map((variant) => `            Self::${variant}(value) => value.${snake(tag.key)}.as_str(),`).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
+        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map((variant, index) => (this.deref(members[index])._tag === "Union" ? `            Self::${variant}(_) => ${JSON.stringify(tag.values[index].exact[0])},` : `            Self::${variant}(value) => value.${snake(tag.key)}.as_str(),`)).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
       `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = serde_json::Value::deserialize(deserializer)?;\n        match value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::${access}) {\n${ordered.join("\n")}\n            _ => Ok(Self::Unknown(value)),\n        }\n    }\n}${tagMethod}`,
