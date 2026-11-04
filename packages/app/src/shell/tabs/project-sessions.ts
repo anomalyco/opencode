@@ -11,7 +11,7 @@ export function createProjectSessionActions() {
 
   return {
     openProjectNewSession(conn: ServerConnection.Any, directory: string) {
-      global.ensureServerCtx(conn).projects.touch(directory)
+      global.serverCtx(ServerConnection.key(conn))?.projects.touch(directory)
       void tabs.newDraft({ server: ServerConnection.key(conn), directory })
     },
     openProjectSession(
@@ -20,8 +20,9 @@ export function createProjectSessionActions() {
       session: SessionInfo,
       options?: { preview?: boolean },
     ) {
-      const ctx = global.ensureServerCtx(conn)
+      const ctx = global.serverCtx(ServerConnection.key(conn))
 
+      if (!ctx) return
       void ctx.data.session.message.sync(session.id).catch(() => undefined)
       void startTransition(() => {
         ctx.data.session.remember(session)

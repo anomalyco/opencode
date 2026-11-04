@@ -1,6 +1,7 @@
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
+import { endpointCredentials } from "./machine"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
 import { Match } from "effect"
 import { Accessor, createEffect, createSignal, onCleanup } from "solid-js"
@@ -35,10 +36,6 @@ const healthCache = new Map<
   string,
   { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
 >()
-
-function cacheKey(server: ServerConnection.HttpBase) {
-  return `${server.url}\n${server.password ?? ""}`
-}
 
 /** A signal that aborts after a timeout, and how to stop its timer early when one runs. */
 type Timeout = { readonly signal: AbortSignal; readonly clear?: () => void }
@@ -158,7 +155,7 @@ export function useCheckServerHealth() {
   const fetcher = platform.fetch ?? globalThis.fetch
 
   return (http: ServerConnection.HttpBase) => {
-    const key = cacheKey(http)
+    const key = endpointCredentials(http)
     const hit = healthCache.get(key)
     const now = Date.now()
 
@@ -178,14 +175,22 @@ export function useCheckServerHealth() {
   }
 }
 
-export const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
-  return createServerHealth(servers, enabled, useCheckServerHealth())
+/** One finished probe, with the endpoint credentials it used. */
+export type ServerProbe = { key: ServerConnection.Key; auth: string; health: ServerHealth }
+
+export const useServerHealth = (
+  servers: Accessor<ServerConnection.Any[]>,
+  enabled: Accessor<boolean>,
+  onProbe?: (probe: ServerProbe) => void,
+) => {
+  return createServerHealth(servers, enabled, useCheckServerHealth(), onProbe)
 }
 
 export function createServerHealth(
   servers: Accessor<ServerConnection.Any[]>,
   enabled: Accessor<boolean>,
   check: (http: ServerConnection.HttpBase) => Promise<ServerHealth>,
+  onProbe?: (probe: ServerProbe) => void,
 ) {
   const [status, setStatus] = createStore<Record<ServerConnection.Key, ServerHealth | undefined>>({})
   const [attempt, setAttempt] = createSignal(0)
@@ -220,7 +225,7 @@ export function createServerHealth(
         continue
       }
 
-      const endpoint = cacheKey(conn.http)
+      const endpoint = endpointCredentials(conn.http)
 
       if (conn.managed && endpoints.get(conn.key) !== endpoint) {
         setStatus(conn.key, reconcile({ healthy: false, checking: true }))
@@ -245,8 +250,11 @@ export function createServerHealth(
             return
           }
 
+          // The endpoint can change while the probe runs; the listener matches the result to the credentials it used.
+          const auth = endpointCredentials(conn.http)
           const result = await check(conn.http)
           results[conn.key] = result
+          onProbe?.({ key: conn.key, auth, health: result })
 
           if (!dead) setStatus(conn.key, reconcile(result))
         }),

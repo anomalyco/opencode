@@ -53,9 +53,9 @@ export function createHomeController() {
     const conn = servers.visible.find((conn) => ServerConnection.key(conn) === current.server)
 
     if (!conn) return
-    const ctx = global.ensureServerCtx(conn)
+    const ctx = global.serverCtx(ServerConnection.key(conn))
 
-    if (!ctx.sync.project.ready()) return
+    if (!ctx?.sync.project.ready()) return
 
     if (ctx.projects.used().some((project) => pathKey(project.worktree) === pathKey(directory))) return
     setSelection({ server: current.server })
@@ -75,7 +75,7 @@ export function createHomeController() {
       list: () => servers.visible,
       health: (conn: ServerConnection.Any) => global.servers.health[ServerConnection.key(conn)],
       label: servers.label,
-      context: (conn: ServerConnection.Any) => global.ensureServerCtx(conn),
+      context: (conn: ServerConnection.Any) => global.serverCtx(ServerConnection.key(conn)),
       focused: focusedServer,
       focusedContext: focusedServerCtx,
       focusedSync,
@@ -84,7 +84,7 @@ export function createHomeController() {
       list: projects,
       selected: selectedProject,
       newSession: newSessionProject,
-      forServer: (conn: ServerConnection.Any) => global.ensureServerCtx(conn).projects.used(),
+      forServer: (conn: ServerConnection.Any) => global.serverCtx(ServerConnection.key(conn))?.projects.used() ?? [],
       select: (conn: ServerConnection.Any, directory: string) => {
         const key = ServerConnection.key(conn)
 
@@ -92,15 +92,18 @@ export function createHomeController() {
 
         if (
           !global
-            .ensureServerCtx(conn)
-            .projects.used()
+            .serverCtx(key)
+            ?.projects.used()
             .some((project) => project.worktree === directory)
         )
           return
         setSelection(toggleHomeProjectSelection(selection(), key, directory))
       },
       add: async (conn: ServerConnection.Any, directories: string[]) => {
-        const project = await addProjects(global.ensureServerCtx(conn), directories)
+        const ctx = global.serverCtx(ServerConnection.key(conn))
+
+        if (!ctx) return
+        const project = await addProjects(ctx, directories)
 
         if (!project) return
         setSelection({ server: ServerConnection.key(conn), directory: project.worktree })

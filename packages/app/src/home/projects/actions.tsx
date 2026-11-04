@@ -61,7 +61,10 @@ export function createProjectActions() {
               Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
             )(await file.text())
 
-            const api = global.ensureServerCtx(conn).sdk.api.experimental.session
+            const ctx = global.serverCtx(ServerConnection.key(conn))
+
+            if (!ctx) throw new Error(language.t("common.requestFailed"))
+            const api = ctx.sdk.api.experimental.session
 
             // SAFETY: the import endpoint validates the transcript, including exports written by earlier releases.
             const imported = await api.import({ ...data, location: { directory: project.worktree } } as Parameters<
@@ -82,16 +85,17 @@ export function createProjectActions() {
       settings.openProject({ server: ServerConnection.key(conn), project: project.worktree })
     },
     hasUnread(conn: ServerConnection.Any, project: LocalProject) {
-      const notification = global.ensureServerCtx(conn).notification
+      const notification = global.serverCtx(ServerConnection.key(conn))?.notification
 
-      return directories(project).some((directory) => notification.project.hasUnread(directory))
+      return !!notification && directories(project).some((directory) => notification.project.hasUnread(directory))
     },
     clearNotifications(conn: ServerConnection.Any, project: LocalProject) {
-      const notification = global.ensureServerCtx(conn).notification
+      const notification = global.serverCtx(ServerConnection.key(conn))?.notification
 
-      directories(project).forEach((directory) => notification.project.markViewed(directory))
+      directories(project).forEach((directory) => notification?.project.markViewed(directory))
     },
-    hide: (conn: ServerConnection.Any, project: LocalProject) => global.ensureServerCtx(conn).projects.hide(project),
+    hide: (conn: ServerConnection.Any, project: LocalProject) =>
+      global.serverCtx(ServerConnection.key(conn))?.projects.hide(project),
     canReveal: revealProject.available,
     reveal: revealProject.reveal,
   }
