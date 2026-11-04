@@ -86,7 +86,8 @@ export function mount(input: {
         online: [],
         distroProbes: {},
         pendingRestart: false,
-        job: null,
+        hostJob: "idle",
+        distroJobs: {},
         servers: [
           {
             config: { id: "wsl:Ubuntu", distro: "Ubuntu" },
