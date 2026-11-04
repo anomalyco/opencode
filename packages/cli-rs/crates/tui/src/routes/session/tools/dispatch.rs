@@ -657,11 +657,12 @@ impl BlockTool {
                 .as_ref()
                 .is_some_and(|state| state.clickable);
             inner.hover.set(hovered && clickable);
-            let raised = inner.theme.background.raised.base;
+            // `decrease` finds the token by reference, so it takes the theme's own field.
+            let raised = &inner.theme.background.raised.base;
             inner.root.bg(if inner.hover.get() {
-                inner.theme.decrease(&raised, 1)
+                inner.theme.decrease(raised, 1)
             } else {
-                raised
+                *raised
             });
         });
         let weak = Rc::downgrade(&inner);
@@ -718,14 +719,14 @@ impl BlockTool {
             return;
         }
         let theme = &inner.theme;
-        let raised = theme.background.raised.base;
+        let raised = &theme.background.raised.base;
         if !block.clickable {
             inner.hover.set(false);
         }
         inner.root.bg(if inner.hover.get() {
-            theme.decrease(&raised, 1)
+            theme.decrease(raised, 1)
         } else {
-            raised
+            *raised
         });
         let colors = inner.colors.get();
         let spinner_fg = if block.permission {
@@ -787,13 +788,14 @@ impl BlockTool {
 
 /// `StatusBadge`: a padded label on a darker background.
 pub fn status_badge(app: &App, theme: &Theme, label: &str, raised: bool) -> Text {
+    // `decrease` finds the token by reference, so this borrows the theme's own field.
     let background = if raised {
-        theme.background.raised.base
+        &theme.background.raised.base
     } else {
-        theme.background.base
+        &theme.background.base
     };
     Text::new(app, format!(" {label} "))
         .shrink(0.0)
-        .bg(theme.decrease(&background, 1))
+        .bg(theme.decrease(background, 1))
         .fg(theme.text.muted)
 }
