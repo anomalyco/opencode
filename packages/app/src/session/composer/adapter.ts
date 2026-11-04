@@ -5,6 +5,8 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionMessageHandoff } from "@/session/handoff"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { useTabs } from "@/shell/tabs/tabs"
+import { ServerConnection } from "@/runtime/server/registry"
 
 export function createActiveComposerAdapter(input: {
   sessionID: string
@@ -23,12 +25,21 @@ export function createActiveComposerAdapter(input: {
   const server = useServerSDK()
   const location = useWorkspaceLocation()
 
+  const tabs = useTabs()
+
+  const preview = tabs.preview()
+
   const adapter: ActiveComposerAdapter = {
     kind: "active-session",
     state,
     ready: prompt.ready,
     controls: input.controls,
     working: () => data.session.status(id) === "running",
+    beforeSubmit:
+      preview?.server === ServerConnection.key(server.server) &&
+      (preview.sessionId === id || preview.sessionId === data.session.root(id))
+        ? () => tabs.keepPreview(preview)
+        : undefined,
     submitted: input.submitted,
     setEditor: input.setEditor,
     session: () => ({

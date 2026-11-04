@@ -176,6 +176,38 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test("retains the submitting session before waiting for server admission", async () => {
+    const calls: string[] = []
+
+    const admitted = Promise.withResolvers<void>()
+
+    const state = createMemoryComposerState({ prompt: "Hello" }).capture()
+
+    const adapter = {
+      ...active(state, session({ calls, prompt: () => admitted.promise })),
+      beforeSubmit: () => calls.push("keep-preview"),
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+    admitted.resolve()
+    expect(calls[0]).toBe("keep-preview")
+    expect(calls).toContain("admit")
+  })
+
+  test("an empty submit does not retain a preview", async () => {
+    const calls: string[] = []
+
+    const state = createMemoryComposerState().capture()
+
+    const adapter = {
+      ...active(state, session({ calls })),
+      beforeSubmit: () => calls.push("keep-preview"),
+    }
+
+    await submitInput(adapter).submit(new Event("submit"))
+    expect(calls).toEqual([])
+  })
+
   test.each(["steer", "queue"] as const)(
     "sends only the selected quote as a %s, including its comment mentions, without clearing the draft",
     async (delivery) => {

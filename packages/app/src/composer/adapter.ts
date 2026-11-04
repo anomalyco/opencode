@@ -105,6 +105,7 @@ type ComposerAdapterBase = {
   ready: Accessor<boolean>
   controls: Accessor<ComposerControls>
   working: Accessor<boolean>
+  beforeSubmit?: () => void
   submitted: () => void
 }
 

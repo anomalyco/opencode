@@ -71,6 +71,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
     if (clientCommand) {
       if (submitting.has(input.adapter.state)) return
+      input.adapter.beforeSubmit?.()
       submitting.add(input.adapter.state)
 
       try {
@@ -131,6 +132,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     }
 
     if (submitting.has(input.adapter.state)) return
+
+    input.adapter.beforeSubmit?.()
 
     // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
     const value = {
@@ -217,6 +220,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         return false
       }
 
+      input.adapter.beforeSubmit?.()
       const session = input.adapter.session()
 
       const value: ComposerSubmission = {
