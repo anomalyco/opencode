@@ -1649,7 +1649,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       tabs: [],
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: false } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
   await page.goto("/")
@@ -1695,7 +1695,7 @@ test("the inbox Archived dialog searches only archived sessions and restores the
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       tabs: [],
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: false } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
   await page.goto("/")
@@ -1741,7 +1741,7 @@ test("opening a working session expands its shelf and still allows manual collap
     sessionStatus: { ses_working_selected: { type: "running" } },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false, recentExpanded: false } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
     },
   })
 
@@ -1794,7 +1794,7 @@ test("sessions opened from Home and Search get a temporary Current session row w
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       tabs: [],
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: false } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
   await page.goto("/")
