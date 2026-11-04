@@ -65,22 +65,8 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
                         .child(&body),
                 );
             }
-            // `maxHeight` over content that sizes the box: a Rust scroll box takes no height from its content, so
-            // it gets the wrapped rows.
-            let width = cx
-                .dialogs
-                .size()
-                .width()
-                .min(u32::from(cx.width()).saturating_sub(2))
-                .saturating_sub(2 * DIALOG_INSET) as usize;
-            let rows: usize = items
-                .iter()
-                .map(|item| 1 + super::error_details::wrapped_lines(&item.body, width))
-                .sum::<usize>()
-                + items.len().saturating_sub(1);
-            let scroll = ScrollBox::new(app)
-                .scrollbars(false)
-                .height((rows as i32).clamp(0, max_height) as u32);
+            let scroll = ScrollBox::new(app).scrollbars(false).max_height(max_height);
+            scroll.content_view().min_height(0);
             scroll.add(&list);
             // The band owns the vertical padding so it stays visible while the highlights scroll.
             let band = View::new(app)
