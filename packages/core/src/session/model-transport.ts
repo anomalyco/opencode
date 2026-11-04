@@ -39,9 +39,15 @@ interface Active {
 
 type ChannelState =
   | { readonly status: "idle"; readonly checkpoint?: ChannelCheckpoint }
-  | { readonly status: "exchanging"; readonly active: Active; readonly staged?: ChannelCheckpoint }
-  // A completed exchange's checkpoint waits here until the caller's `complete` commits it.
-  | { readonly status: "staged"; readonly token: object; readonly checkpoint: ChannelCheckpoint }
+  // `complete` can commit the staged checkpoint before the exchange stream finalizes.
+  | {
+      readonly status: "exchanging"
+      readonly active: Active
+      readonly staged?: ChannelCheckpoint
+      readonly committed?: true
+    }
+  // A finished exchange's checkpoint waits here until the caller's `complete` commits it.
+  | { readonly status: "staged"; readonly active: Active; readonly checkpoint: ChannelCheckpoint }
   | { readonly status: "closing" }
 
 interface Channel {
@@ -439,7 +445,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
         yield* metric("send")
 
         let terminal: ChannelObservation | undefined
-        const token = {}
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
             duration: idleTimeout === false ? Duration.infinity : (idleTimeout ?? IDLE_TIMEOUT),
@@ -474,9 +479,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Stream.ensuring(
             Effect.gen(function* () {
               if (channel.state.status === "exchanging" && channel.state.active === active)
-                channel.state = channel.state.staged
-                  ? { status: "staged", token, checkpoint: channel.state.staged }
-                  : { status: "idle" }
+                channel.state = !channel.state.staged
+                  ? { status: "idle" }
+                  : channel.state.committed
+                    ? { status: "idle", checkpoint: channel.state.staged }
+                    : { status: "staged", active, checkpoint: channel.state.staged }
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
               if (terminal && pending === 0) {
@@ -531,8 +538,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
         )
         const complete = Effect.sync(() => {
           if (owner.state.status !== "socket" || owner.state.channel !== channel) return
-          if (channel.state.status !== "staged" || channel.state.token !== token) return
-          channel.state = { status: "idle", checkpoint: channel.state.checkpoint }
+          if (channel.state.status === "exchanging" && channel.state.active === active && channel.state.staged)
+            channel.state = { ...channel.state, committed: true }
+          if (channel.state.status === "staged" && channel.state.active === active)
+            channel.state = { status: "idle", checkpoint: channel.state.checkpoint }
         })
         return { frames, complete, http: channel.connection.http }
       })
