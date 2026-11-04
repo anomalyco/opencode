@@ -8,6 +8,8 @@
     "cargo": "cargo",
     "generate": "bun run script/generate.ts",
     "fixtures": "bun run parity/fixtures.ts",
+    "parity:cli": "bun run parity/cli/run.ts",
+    "parity:pty": "bun run parity/pty/run.ts",
     "live": "sh script/live.sh",
     "opentui-lib": "sh script/opentui-lib.sh",
     "typecheck": "bun check --no-script",
