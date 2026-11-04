@@ -126,8 +126,9 @@ export const layer = Layer.effectDiscard(
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
     const internal = yield* PluginInternal.list()
-    let release: Effect.Effect<void> | undefined = yield* registry.hold()
-    yield* Effect.addFinalizer(() => release ?? Effect.void)
+    // The initial activation runs as request 0 under the boot hold.
+    let hold: Hold = { status: "pending", observed: 0, release: yield* registry.hold() }
+    yield* Effect.addFinalizer(() => (hold.status === "pending" ? hold.release : Effect.void))
     // Built-ins capture services from this layer; unload them before those services close.
     yield* Effect.addFinalizer(registry.close)
     let packages = new Set<string>()
@@ -136,7 +137,6 @@ export const layer = Layer.effectDiscard(
     let outdated = new Set<string>()
     const updating = new Set<string>()
     let generation = 0
-    let observed = 0
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       const current = ++generation
@@ -193,8 +193,12 @@ export const layer = Layer.effectDiscard(
     const triggers = yield* Queue.sliding<number>(1)
     // Make accepted work visible to awaitActivation before coalescing the burst.
     const notify = Effect.gen(function* () {
-      observed++
-      if (!release) release = yield* registry.hold()
+      const release = yield* registry.hold()
+      const previous = hold
+      const observed = previous.observed + 1
+      hold = { status: "pending", observed, release: previous.status === "pending" ? previous.release : release }
+      // Readiness is already held for this burst; the extra hold only keeps the transition synchronous.
+      if (previous.status === "pending") yield* release
       yield* Queue.offer(triggers, observed)
     })
     const watch = <A>(stream: Stream.Stream<A>) =>
@@ -222,16 +226,20 @@ export const layer = Layer.effectDiscard(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
-          if (observed !== target) return
-          const settled = release
-          release = undefined
-          if (settled) yield* settled
+          if (hold.status === "idle" || hold.observed !== target) return
+          const settled = hold.release
+          hold = { status: "idle", observed: hold.observed }
+          yield* settled
         }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),
 )
+
+type Hold =
+  | { readonly status: "idle"; readonly observed: number }
+  | { readonly status: "pending"; readonly observed: number; readonly release: Effect.Effect<void> }
 
 const nodeDeps = [
   Plugin.node,

@@ -59,20 +59,26 @@ const layer = Layer.effect(
       return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle
     })
     const hostContext = yield* Effect.context<Effect.Services<ReturnType<typeof PluginHost.make>>>()
-    const load = Effect.fnUntraced(function* (plugin: Generation) {
+    const load = Effect.fnUntraced(function* (plugin: Definition) {
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
+      let disabled: Disabled | undefined
       const grouped = State.group((failure, refresh) => {
-        activation.failure = {
+        const next: Disabled = {
           error: `Plugin disabled after ${failure.state}.transform failed. Check server logs for details.`,
           ref: `err_${crypto.randomUUID().slice(0, 8)}`,
         }
+        disabled = next
+        // Only disable the slot still running this exact activation; a replacement keeps its own state.
+        const slot = active.get(plugin.id)
+        if ((slot?.status === "active" || slot?.status === "fallback") && slot.activation === activation)
+          active.set(plugin.id, { status: "disabled", plugin: slot.plugin, failure: next })
         Queue.offerUnsafe(pendingFailures, {
           plugin,
           scope: activation.scope,
           failure,
           refresh,
-          ref: activation.failure.ref,
+          ref: next.ref,
           release: holdUnsafe(),
         })
       })
@@ -88,16 +94,17 @@ const layer = Layer.effect(
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
         Effect.onExit((exit) =>
-          Exit.isFailure(exit) && !activation.failure ? Scope.close(activation.scope, exit) : Effect.void,
+          Exit.isFailure(exit) && !disabled ? Scope.close(activation.scope, exit) : Effect.void,
         ),
         Effect.exit,
       )
-      if (activation.failure || Exit.isSuccess(exit)) return { activation } as const
+      if (disabled) return { status: "disabled", failure: disabled } as const
+      if (Exit.isSuccess(exit)) return { status: "active", activation } as const
       yield* Effect.logWarning("failed to load plugin", {
         "plugin.id": plugin.id,
         cause: exit.cause,
       })
-      return { error: Cause.pretty(exit.cause) } as const
+      return { status: "setup-failed", error: Cause.pretty(exit.cause) } as const
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
@@ -137,43 +144,45 @@ const layer = Layer.effect(
               yield* State.batch(
                 Effect.gen(function* () {
                   // Registrations are ordered by setup, so only the unchanged prefix can stay alive.
-                  const previous = new Map(Array.from(active.entries()).slice(prefix))
+                  const previous = new Map<Plugin.ID, Slot>()
                   yield* Effect.forEach(
-                    Array.from(previous.entries()).toReversed(),
-                    ([id, slot]) =>
+                    Array.from(active.keys()).slice(prefix).toReversed(),
+                    (id) =>
                       Effect.gen(function* () {
-                        active.delete(id)
-                        if (slot.activation && !slot.activation.failure)
+                        const slot = active.get(id)
+                        if (slot?.status === "active" || slot?.status === "fallback")
                           yield* Scope.close(slot.activation.scope, Exit.void)
+                        // Read again after closing: a transform can fail while its own scope closes.
+                        const closed = active.get(id)
+                        if (closed) previous.set(id, closed)
+                        active.delete(id)
                       }),
                     { discard: true },
                   )
                   for (const definition of definitions.slice(prefix)) {
                     const slot = previous.get(definition.id)
                     // Reordering healthy registrations does not authorize retrying a failed revision.
-                    if (slot?.activation?.failure && slot.plugin.revision === definition.revision) {
+                    if (slot?.status === "disabled" && slot.plugin.revision === definition.revision) {
                       active.set(definition.id, { ...slot, plugin: definition })
                       continue
                     }
                     const result = yield* load(definition)
-                    if (result.activation !== undefined) {
-                      active.set(definition.id, {
-                        plugin: definition,
-                        activation: result.activation,
-                      })
-                      continue
-                    }
-                    active.set(definition.id, { plugin: definition, error: result.error })
+                    active.set(definition.id, { ...result, plugin: definition })
+                    if (result.status !== "setup-failed") continue
 
-                    const fallback = slot?.activation
-                    if (!fallback || fallback.failure) continue
-                    const restored = yield* load(fallback.plugin)
-                    if (restored.activation !== undefined) {
+                    if (slot?.status !== "active" && slot?.status !== "fallback") continue
+                    const restored = yield* load(slot.activation.plugin)
+                    if (restored.status === "active") {
                       active.set(definition.id, {
+                        status: "fallback",
                         plugin: definition,
                         activation: restored.activation,
                         error: result.error,
                       })
+                      continue
+                    }
+                    if (restored.status === "disabled") {
+                      active.set(definition.id, { ...restored, plugin: definition })
                       continue
                     }
                     yield* Effect.logError("failed to restore plugin; deactivating", {
@@ -203,8 +212,8 @@ const layer = Layer.effect(
           yield* lock.withPermit(
             Effect.gen(function* () {
               if (closed) return
-              // Failure is already recorded on its exact activation, so an old queued item
-              // cannot disable a replacement and teardown need not wait for this worker.
+              // Failure is already recorded on the slot running its exact activation, so an old
+              // queued item cannot disable a replacement and teardown need not wait for this worker.
               inventory = snapshot()
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
               yield* publish(inventory)
@@ -270,21 +279,24 @@ const layer = Layer.effect(
   }),
 )
 
-// `plugin` is the requested definition; `activation` is its last activation, which may have
-// failed or be an older fallback while the requested revision keeps failing setup.
-type Slot = {
-  readonly plugin: Generation & { readonly id: Plugin.ID }
-  readonly activation?: Activation
-  readonly error?: string
+type Definition = Generation & { readonly id: Plugin.ID }
+
+// `plugin` is the requested definition. A fallback keeps an older activation running while the
+// requested revision keeps failing setup; a disabled slot's transform failed and its scope now
+// belongs to the failure worker.
+type Slot = { readonly plugin: Definition } & (
+  | { readonly status: "active"; readonly activation: Activation }
+  | { readonly status: "fallback"; readonly activation: Activation; readonly error: string }
+  | { readonly status: "setup-failed"; readonly error: string }
+  | { readonly status: "disabled"; readonly failure: Disabled }
+)
+
+type Activation = {
+  readonly plugin: Definition
+  readonly scope: Scope.Closeable
 }
 
-// Share the activation across slot snapshots so teardown sees failures synchronously,
-// including failures discovered after activate() has captured its previous slots.
-type Activation = {
-  readonly plugin: Generation
-  readonly scope: Scope.Closeable
-  failure?: { readonly error: string; readonly ref: string }
-}
+type Disabled = { readonly error: string; readonly ref: string }
 
 type PendingFailure = {
   readonly plugin: Generation
@@ -296,11 +308,13 @@ type PendingFailure = {
 }
 
 function slotInfo(slot: Slot): Plugin.Info {
-  const failure = slot.activation?.failure ?? (slot.error === undefined ? undefined : { error: slot.error })
   return {
     id: slot.plugin.id,
     source: slot.plugin.source ?? { type: "builtin" },
-    state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
+    state:
+      slot.status === "active"
+        ? { status: "active" }
+        : { status: "failed", ...(slot.status === "disabled" ? slot.failure : { error: slot.error }) },
     // Built-in and SDK plugins are server parts; a package lists its own parts.
     features: slot.plugin.features ?? { server: true },
   }
