@@ -8,7 +8,7 @@ import {
   hidden,
   Arr,
   GeneratorObj,
-  hostIterator,
+  positionIterator,
   Obj,
   PromiseObj,
   coerceToInteger,
@@ -352,19 +352,9 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return parts.join(",")
       },
     ],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").items.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").items.values())],
-    [
-      "entries",
-      0,
-      (thisValue) =>
-        hostIterator(
-          builtins,
-          self(thisValue, "entries")
-            .items.entries()
-            .map(([index, item]) => wrap([index, item])),
-        ),
-    ],
+    ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
+    ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
+    ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
     [
       "flatMap",
       1,

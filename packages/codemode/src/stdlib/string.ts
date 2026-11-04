@@ -7,7 +7,7 @@ import {
   get,
   hidden,
   Arr,
-  hostIterator,
+  positionIterator,
   Obj,
   RegExpObj,
   record,
@@ -25,7 +25,7 @@ import {
   withPrimitives,
 } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { matchToValue, toHostRegex } from "./regexp.js"
+import { matchToValue, withHostRegex } from "./regexp.js"
 import { coerce } from "./value.js"
 
 // console is intercepted by the interpreter before reaching here.
@@ -70,9 +70,11 @@ function* replaceWithCallback<R>(
 
   const pattern = args[0]
   if (pattern instanceof RegExpObj) {
-    if (name === "replaceAll") replaceAllNeedsGlobal(pattern.regex)
-    if (name === "replace") value.replace(pattern.regex, collect)
-    else value.replaceAll(pattern.regex, collect)
+    pattern.use((regex) => {
+      if (name === "replaceAll") replaceAllNeedsGlobal(regex)
+      if (name === "replace") value.replace(regex, collect)
+      else value.replaceAll(regex, collect)
+    })
   } else {
     const search = coerceToString(requireDataArgument(name, 0, pattern))
     if (name === "replace") value.replace(search, collect)
@@ -200,10 +202,11 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
           }
           const primitives = [search, replacement]
           if (pattern instanceof RegExpObj) {
-            const regex = pattern.regex
             const text = str(name, primitives, 1)
-            if (name === "replaceAll") replaceAllNeedsGlobal(regex)
-            return name === "replace" ? value.replace(regex, text) : value.replaceAll(regex, text)
+            return pattern.use((regex) => {
+              if (name === "replaceAll") replaceAllNeedsGlobal(regex)
+              return name === "replace" ? value.replace(regex, text) : value.replaceAll(regex, text)
+            })
           }
           if (name === "replace") return value.replace(str(name, primitives, 0), str(name, primitives, 1))
           return value.replaceAll(str(name, primitives, 0), str(name, primitives, 1))
@@ -257,7 +260,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
           }
           const parts =
             separator instanceof RegExpObj
-              ? value.split(separator.regex, requestedLimit)
+              ? separator.use((regex) => value.split(regex, requestedLimit))
               : value.split(str("split", [pattern], 0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
           checkArrayLength(parts.length)
           return wrap(parts)
@@ -284,32 +287,36 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     replace("replace"),
     replace("replaceAll"),
     simple("match", 1, (value, args) =>
-      withPattern(args, (arg) => {
-        const regex = toHostRegex(arg, "match")
-        const matched = value.match(regex)
-        if (matched === null) return null
-        // Preserve the own `index` and `groups` properties on non-global matches.
-        if (regex.global) return new Arr(builtins.Array, [...matched])
-        return matchToValue(builtins, matched)
-      }),
+      withPattern(args, (arg) =>
+        withHostRegex(arg, "match", "", (regex) => {
+          const matched = value.match(regex)
+          if (matched === null) return null
+          // Preserve the own `index` and `groups` properties on non-global matches.
+          if (regex.global) return new Arr(builtins.Array, [...matched])
+          return matchToValue(builtins, matched)
+        }),
+      ),
     ),
     simple("matchAll", 1, (value, args) =>
-      withPattern(args, (arg) => {
-        const regex = toHostRegex(arg, "matchAll", "g")
-        if (!regex.global) {
-          throw typeError(
-            `String.matchAll requires a regular expression with the global (g) flag: write /${regex.source}/${regex.flags}g, or use String.match for a single match.`,
-          )
-        }
-        const matches: Array<Value> = []
-        for (const match of value.matchAll(regex)) {
-          checkArrayLength(matches.length + 1)
-          matches.push(matchToValue(builtins, match))
-        }
-        return new Arr(builtins.Array, matches)
-      }),
+      withPattern(args, (arg) =>
+        withHostRegex(arg, "matchAll", "g", (regex) => {
+          if (!regex.global) {
+            throw typeError(
+              `String.matchAll requires a regular expression with the global (g) flag: write /${regex.source}/${regex.flags}g, or use String.match for a single match.`,
+            )
+          }
+          const matches: Array<Value> = []
+          for (const match of value.matchAll(regex)) {
+            checkArrayLength(matches.length + 1)
+            matches.push(matchToValue(builtins, match))
+          }
+          return new Arr(builtins.Array, matches)
+        }),
+      ),
     ),
-    simple("search", 1, (value, args) => withPattern(args, (arg) => value.search(toHostRegex(arg, "search")))),
+    simple("search", 1, (value, args) =>
+      withPattern(args, (arg) => withHostRegex(arg, "search", "", (regex) => value.search(regex))),
+    ),
     simple(
       "repeat",
       1,
@@ -371,7 +378,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     builtins.String,
     IteratorSymbol,
     fn(builtins, "[Symbol.iterator]", 0, (thisValue) =>
-      hostIterator(builtins, self(thisValue, "[Symbol.iterator]")[Symbol.iterator]()),
+      positionIterator(builtins, self(thisValue, "[Symbol.iterator]"), "values"),
     ),
     hidden,
   )

@@ -64,12 +64,12 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
       }
       if (value instanceof SetObj) {
         const copy = remember(new SetObj(builtins.Set))
-        for (const item of value.set) copy.set.add(clone(item))
+        for (const item of value.set.liveKeys()) copy.set.add(clone(item))
         return copy
       }
       if (value instanceof DateObj) return remember(new DateObj(builtins.Date, value.time))
       if (value instanceof RegExpObj) {
-        return remember(new RegExpObj(builtins.RegExp, value.regex.source, value.regex.flags))
+        return remember(new RegExpObj(builtins.RegExp, value.source, value.flags))
       }
       if (value instanceof Bytes) return remember(new Bytes(builtins.Uint8Array, new Uint8Array(value.bytes)))
       if (value instanceof ErrorObj) {

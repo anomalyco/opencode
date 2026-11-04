@@ -7,9 +7,8 @@ import {
   defineAccessor,
   get,
   hidden,
-  Arr,
   Bytes,
-  hostIterator,
+  positionIterator,
   Obj,
   coerceToInteger,
   coerceToNumber,
@@ -99,7 +98,6 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
   // Uint8Array cannot contain NaN, so non-number search values never match a byte.
   const search = (value: Value) => (typeof value === "number" ? value : NaN)
-  const wrapAll = (items: Array<Value>) => new Arr(builtins.Array, items)
   defineAccessor(proto, "length", (thisValue) => self(thisValue, "length").bytes.length)
   methods(builtins, proto, [
     ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber(args[0]) ?? 0)],
@@ -189,19 +187,9 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
     ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").bytes.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").bytes.values())],
-    [
-      "entries",
-      0,
-      (thisValue) =>
-        hostIterator(
-          builtins,
-          self(thisValue, "entries")
-            .bytes.entries()
-            .map(([index, byte]) => wrapAll([index, byte])),
-        ),
-    ],
+    ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
+    ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
+    ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
     ...callbackMethods(
       ctx,
       "Uint8Array",

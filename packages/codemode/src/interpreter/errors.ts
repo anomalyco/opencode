@@ -68,7 +68,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof Throw) {
     const value = error.value
     if (value instanceof ErrorObj) {
-      return value.host ? normalizeError(value.host) : { kind: "ExecutionFailure", message: errorToString(value) }
+      return value.failure ? normalizeError(value.failure) : { kind: "ExecutionFailure", message: errorToString(value) }
     }
     let message: string
     if (containsRuntimeReference(value)) {
@@ -124,7 +124,7 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
   if (thrown instanceof PendingThrow) {
     if (thrown.value === undefined) {
       thrown.value = createErrorValue(builtins[thrown.type], thrown.message)
-      thrown.value.host = thrown
+      thrown.value.failure = thrown
     }
     return thrown.value
   }

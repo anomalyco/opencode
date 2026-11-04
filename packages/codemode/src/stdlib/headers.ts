@@ -8,7 +8,7 @@ import {
   hidden,
   Arr,
   HeadersObj,
-  hostIterator,
+  positionIterator,
   Obj,
   coerceToString,
   isRuntimeReference,
@@ -104,9 +104,9 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").headers.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").headers.values())],
-    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
+    ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
+    ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
     [
       "forEach",
       1,

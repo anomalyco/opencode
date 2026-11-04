@@ -9,9 +9,9 @@ import {
   hidden,
   Arr,
   coerceToString,
-  hostCursor,
-  hostIterator,
   MapObj,
+  Position,
+  positionIterator,
   Obj,
   PromiseObj,
   SetObj,
@@ -170,9 +170,9 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").map.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").map.values())],
-    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
+    ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
+    ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
     [
       "forEach",
       1,
@@ -202,7 +202,7 @@ function* loadSetRecord<R>(ctx: Interpreter<R>, source: Value, name: string): Ev
         return source.set.has(item)
       },
       keys: function* () {
-        return source.set.values()
+        return source.set.liveKeys()
       },
     }
   }
@@ -213,7 +213,7 @@ function* loadSetRecord<R>(ctx: Interpreter<R>, source: Value, name: string): Ev
         return source.map.has(item)
       },
       keys: function* () {
-        return source.map.keys()
+        return source.map.liveKeys()
       },
     }
   }
@@ -236,7 +236,8 @@ function* loadSetRecord<R>(ctx: Interpreter<R>, source: Value, name: string): Ev
     },
     keys: function* () {
       const result = yield* ctx.call(keys, source, [])
-      const cursor = result instanceof Arr ? hostCursor(result.items.values()) : ctx.iterateDirect(result)
+      const cursor =
+        result instanceof Arr ? new Position(result, "values", ctx.builtins.Array) : ctx.iterateDirect(result)
       const items: Array<Value> = []
       while (true) {
         const step = yield* cursor.next()
@@ -251,7 +252,7 @@ function* setOperation<R>(ctx: Interpreter<R>, target: SetObj, name: string, sou
   const other = yield* loadSetRecord(ctx, source, name)
   const copy = () => {
     const result = new SetObj(ctx.builtins.Set)
-    for (const item of target.set.values()) result.set.add(item)
+    for (const item of target.set.liveKeys()) result.set.add(item)
     return result
   }
   if (name === "union") {
@@ -262,7 +263,7 @@ function* setOperation<R>(ctx: Interpreter<R>, target: SetObj, name: string, sou
   if (name === "intersection") {
     const result = new SetObj(ctx.builtins.Set)
     if (target.set.size <= other.size) {
-      for (const item of target.set.values()) {
+      for (const item of target.set.liveKeys()) {
         if (yield* other.has(item)) result.set.add(item)
       }
       return result
@@ -275,7 +276,7 @@ function* setOperation<R>(ctx: Interpreter<R>, target: SetObj, name: string, sou
   if (name === "difference") {
     const result = copy()
     if (target.set.size <= other.size) {
-      for (const item of result.set.values()) {
+      for (const item of result.set.liveKeys()) {
         if (yield* other.has(item)) result.set.delete(item)
       }
       return result
@@ -293,7 +294,7 @@ function* setOperation<R>(ctx: Interpreter<R>, target: SetObj, name: string, sou
   }
   if (name === "isSubsetOf") {
     if (target.set.size > other.size) return false
-    for (const item of target.set.values()) {
+    for (const item of target.set.liveKeys()) {
       if (!(yield* other.has(item))) return false
     }
     return true
@@ -306,7 +307,7 @@ function* setOperation<R>(ctx: Interpreter<R>, target: SetObj, name: string, sou
     return true
   }
   if (target.set.size <= other.size) {
-    for (const item of target.set.values()) {
+    for (const item of target.set.liveKeys()) {
       if (yield* other.has(item)) return false
     }
     return true
@@ -326,7 +327,6 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
     construct: (args, newTarget) => constructSet(ctx, args[0], prototypeFrom(newTarget, proto)),
   })
   const self = (thisValue: Value, name: string) => receiver(SetObj, thisValue, `Set.prototype.${name}`)
-  const wrap = (items: Array<Value>) => new Arr(builtins.Array, items)
   const operation = (name: string): Method => [
     name,
     1,
@@ -353,26 +353,16 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").set.values())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").set.values())],
-    [
-      "entries",
-      0,
-      (thisValue) =>
-        hostIterator(
-          builtins,
-          self(thisValue, "entries")
-            .set.values()
-            .map((item) => wrap([item, item])),
-        ),
-    ],
+    ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
+    ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
+    ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
     [
       "forEach",
       1,
       function* (thisValue, args) {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Set.forEach")
-        for (const item of target.set.values()) yield* apply([item, item, target], args[1])
+        for (const item of target.set.liveKeys()) yield* apply([item, item, target], args[1])
         return undefined
       },
     ],

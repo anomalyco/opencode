@@ -7,11 +7,13 @@ import {
   AsyncIteratorSymbol,
   type Binding,
   IteratorSymbol,
+  type PendingThrow,
   rangeError,
   Throw,
   typeError,
 } from "./model.js"
 import type { Entry, Eval, GeneratorRequest, Reaction, Resolving } from "./runner.js"
+import { OrderedTable, type TableCursor } from "./table.js"
 
 /** Property attributes, as in a JS property descriptor. */
 export type Attributes = {
@@ -88,7 +90,7 @@ export class Obj {
   }
 
   /** The built-in iteration `for...of` and spread use, when this kind of object has one. */
-  iterator(builtins: Builtins): Iterator<Value, undefined> | undefined {
+  iterator(builtins: Builtins): Cursor | undefined {
     return undefined
   }
 }
@@ -115,16 +117,20 @@ export class Arr extends Obj {
   override toHost(item: (value: Value) => unknown) {
     return this.items.map(item)
   }
-  override iterator() {
-    return this.items.values()
+  override iterator(builtins: Builtins) {
+    return new Position(this, "values", builtins.Array)
   }
 }
 
 /** An object with the [[ErrorData]] slot: what `Error.prototype.toString` and the host boundary recognize as an error. */
 export class ErrorObj extends Obj {
   override readonly tag = "Error"
-  /** The failure this error materialized from, so rethrowing it keeps the diagnostic kind and location. */
-  host?: unknown
+  /**
+   * The interpreter failure this error materialized from, so rethrowing it keeps the diagnostic kind and location. It
+   * is plain data (type, message, kind, suggestions, and the node it is located at), shared with the failure so a
+   * location attached later is seen here too.
+   */
+  failure?: PendingThrow
   /** Error.prototype.toString: "name: message", or just one when the other is empty. */
   override toString() {
     const name = get(this, "name")
@@ -188,10 +194,12 @@ export class Arguments extends Obj {
     args.forEach((arg, index) => define(this, String(index), arg))
     define(this, "length", args.length, hidden)
   }
-  override iterator() {
-    return keys(this)
-      .map((key) => get(this, key))
-      .values()
+  override iterator(builtins: Builtins) {
+    return new Position(
+      keys(this).map((key) => get(this, key)),
+      "values",
+      builtins.Array,
+    )
   }
 }
 
@@ -365,14 +373,88 @@ export type Cursor = {
   readonly close: () => Eval<void>
 }
 
-/** A cursor over a host iterator; there is nothing to close. */
-export const hostCursor = (iterator: Iterator<Value, undefined>): Cursor => ({
-  next: function* () {
-    const step = iterator.next()
-    return { done: Boolean(step.done), value: step.value }
-  },
-  close: function* () {},
-})
+const finished: Step = { done: true, value: undefined }
+
+/** What a built-in iterator yields for each entry: `keys()`, `values()`, or `entries()`. */
+export type IterationKind = "keys" | "values" | "entries"
+
+/** What a built-in iterator walks: a collection, a string, or a fixed list of values. */
+export type PositionSource =
+  | Arr
+  | Bytes
+  | MapObj
+  | SetObj
+  | HeadersObj
+  | URLSearchParamsObj
+  | string
+  | ReadonlyArray<Value>
+
+/**
+ * A built-in iterator's place in its source, as data: what it walks, what it yields, and the next index. Iteration is
+ * live, as in JS: an array iterator reads the length on every step, and a Map or Set iterator is kept in place by its
+ * table. Once done it stays done. There is nothing to close.
+ */
+export class Position implements Cursor, TableCursor {
+  index = 0
+  done = false
+  constructor(
+    readonly source: PositionSource,
+    readonly kind: IterationKind,
+    /** The prototype of the `[key, value]` arrays `entries()` yields. */
+    readonly arrays: Obj,
+  ) {
+    if (source instanceof MapObj) source.map.track(this)
+    if (source instanceof SetObj) source.set.track(this)
+  }
+
+  *next(): Eval<Step> {
+    return this.step()
+  }
+
+  *close(): Eval<void> {}
+
+  step(): Step {
+    if (this.done) return finished
+    const source = this.source
+    if (typeof source === "string") {
+      if (this.index >= source.length) return this.finish()
+      const point = source.codePointAt(this.index)!
+      const value = source.slice(this.index, this.index + (point > 0xffff ? 2 : 1))
+      this.index += value.length
+      return { done: false, value }
+    }
+    if (source instanceof MapObj || source instanceof SetObj) {
+      const table = source instanceof MapObj ? source.map : source.set
+      const at = table.advance(this)
+      if (at < 0) return finished
+      const key = table.keys[at] as Value
+      return this.yield(key, source instanceof MapObj ? table.values[at] : key)
+    }
+    if (source instanceof HeadersObj || source instanceof URLSearchParamsObj) {
+      // The host recomputes the sorted list on every step, as the spec's pair iterators do.
+      const list = Array.from(source instanceof HeadersObj ? source.headers.entries() : source.params.entries())
+      const entry = list[this.index]
+      if (entry === undefined) return this.finish()
+      this.index++
+      return this.yield(entry[0], entry[1])
+    }
+    const items = source instanceof Arr ? source.items : source instanceof Bytes ? source.bytes : source
+    if (this.index >= items.length) return this.finish()
+    const at = this.index++
+    return this.yield(at, items[at])
+  }
+
+  private yield(key: Value, value: Value): Step {
+    if (this.kind === "keys") return { done: false, value: key }
+    if (this.kind === "values") return { done: false, value }
+    return { done: false, value: new Arr(this.arrays, [key, value]) }
+  }
+
+  private finish(): Step {
+    this.done = true
+    return finished
+  }
+}
 
 /** A built-in iterator: a live cursor over a host collection or an iterator helper, yielding program values. */
 export class IteratorObj extends Opaque {
@@ -388,9 +470,9 @@ export class IteratorObj extends Opaque {
   }
 }
 
-/** A built-in iterator over a host iterator, e.g. `array.values()`. */
-export const hostIterator = (builtins: Builtins, iterator: Iterator<Value, undefined>): IteratorObj =>
-  new IteratorObj(builtins.Iterator, hostCursor(iterator))
+/** A built-in iterator over a collection, e.g. `array.values()`. */
+export const positionIterator = (builtins: Builtins, source: PositionSource, kind: IterationKind): IteratorObj =>
+  new IteratorObj(builtins.Iterator, new Position(source, kind, builtins.Array))
 
 /** A built-in object around a host value: data-like, so it prints as itself and crosses to extensions as a copy. */
 export abstract class Wrapper extends Obj {
@@ -418,24 +500,47 @@ export class DateObj extends Wrapper {
   }
 }
 
+/** A RegExp as data: its source, flags, and `lastIndex`; the host regex is only a compiled cache of the first two. */
 export class RegExpObj extends Wrapper {
   override readonly tag = "RegExp"
-  readonly regex: RegExp
+  readonly source: string
+  readonly flags: string
+  /** Shared by `exec`/`test` and the String methods, as the host regex's own `lastIndex` would be. */
+  lastIndex = 0
+  private compiled: RegExp | undefined
   constructor(proto: Obj, pattern: string, flags: string) {
     super(proto)
-    this.regex = new RegExp(pattern, flags)
+    // Compiling validates the pattern and flags, and normalizes both as the host spells them.
+    this.compiled = new RegExp(pattern, flags)
+    this.source = this.compiled.source
+    this.flags = this.compiled.flags
+  }
+  /** The compiled regex, for reading what it is; anything that matches goes through `use`. */
+  get regex(): RegExp {
+    this.compiled ??= new RegExp(this.source, this.flags)
+    return this.compiled
+  }
+  /** Runs host regex work starting from this object's `lastIndex`, and keeps the `lastIndex` the work leaves. */
+  use<T>(work: (regex: RegExp) => T): T {
+    const regex = this.regex
+    regex.lastIndex = this.lastIndex
+    try {
+      return work(regex)
+    } finally {
+      this.lastIndex = regex.lastIndex
+    }
   }
   override toString() {
-    return `/${this.regex.source}/${this.regex.flags}`
+    return `/${this.source}/${this.flags}`
   }
   override toHost() {
-    return new RegExp(this.regex.source, this.regex.flags)
+    return new RegExp(this.source, this.flags)
   }
 }
 
 export class MapObj extends Wrapper {
   override readonly tag = "Map"
-  readonly map = new Map<Value, Value>()
+  readonly map = new OrderedTable()
   override inspect(item: (value: Value) => string) {
     return `Map(${this.map.size}) [${[...this.map].map(([key, value]) => `[${item(key)},${item(value)}]`).join(",")}]`
   }
@@ -443,28 +548,31 @@ export class MapObj extends Wrapper {
     return new Map([...this.map].map(([key, value]) => [item(key), item(value)]))
   }
   override iterator(builtins: Builtins) {
-    return this.map.entries().map((entry) => new Arr(builtins.Array, entry))
+    return new Position(this, "entries", builtins.Array)
   }
 }
 
 export class SetObj extends Wrapper {
   override readonly tag = "Set"
-  readonly set = new Set<Value>()
+  readonly set = new OrderedTable()
   override inspect(item: (value: Value) => string) {
-    return `Set(${this.set.size}) [${[...this.set].map(item).join(",")}]`
+    return `Set(${this.set.size}) [${[...this.set.liveKeys()].map(item).join(",")}]`
   }
   override toHost(item: (value: Value) => unknown) {
-    return new Set([...this.set].map(item))
+    return new Set([...this.set.liveKeys()].map(item))
   }
-  override iterator() {
-    return this.set.values()
+  override iterator(builtins: Builtins) {
+    return new Position(this, "values", builtins.Array)
   }
 }
 
-/** Keys are program objects, so a host WeakMap gives the same lifetime rule as JavaScript without any bookkeeping. */
+/**
+ * Keys are held strongly for the run, which is short-lived; garbage collection is not observable in Code Mode, and a
+ * plain table keeps the state as data.
+ */
 export class WeakMapObj extends Wrapper {
   override readonly tag = "WeakMap"
-  readonly map = new WeakMap<Obj, Value>()
+  readonly map = new Map<Obj, Value>()
   override inspect() {
     return "WeakMap { <items unknown> }"
   }
@@ -472,7 +580,7 @@ export class WeakMapObj extends Wrapper {
 
 export class WeakSetObj extends Wrapper {
   override readonly tag = "WeakSet"
-  readonly set = new WeakSet<Obj>()
+  readonly set = new Set<Obj>()
   override inspect() {
     return "WeakSet { <items unknown> }"
   }
@@ -493,7 +601,7 @@ export class URLSearchParamsObj extends Wrapper {
     return new URLSearchParams(this.params)
   }
   override iterator(builtins: Builtins) {
-    return this.params.entries().map((entry) => new Arr(builtins.Array, entry))
+    return new Position(this, "entries", builtins.Array)
   }
 }
 
@@ -512,8 +620,7 @@ export class HeadersObj extends Wrapper {
     return new Headers(this.headers)
   }
   override iterator(builtins: Builtins) {
-    // Bun's Headers typings lack the iterator helpers, so the host iterator is lifted first.
-    return Iterator.from(this.headers.entries()).map((entry) => new Arr(builtins.Array, entry))
+    return new Position(this, "entries", builtins.Array)
   }
 }
 
@@ -554,8 +661,8 @@ export class Bytes extends Wrapper {
   override toHost() {
     return new Uint8Array(this.bytes)
   }
-  override iterator() {
-    return this.bytes.values()
+  override iterator(builtins: Builtins) {
+    return new Position(this, "values", builtins.Array)
   }
 }
 

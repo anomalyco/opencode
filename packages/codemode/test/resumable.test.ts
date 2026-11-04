@@ -169,3 +169,99 @@ describe("natives only at intrinsic creation", () => {
     ])
   })
 })
+
+describe("heap as data", () => {
+  // Each program's result must match the host engine's.
+  const programs = {
+    "map iteration is live": `
+      const m = new Map([[1, 1], [2, 2], [3, 3]])
+      const out = []
+      for (const [k] of m) {
+        out.push(k)
+        if (k === 1) { m.delete(2); m.set(4, 4) }
+        if (k === 3) { m.clear(); m.set(5, 5) }
+      }
+      return [out, [...m]]`,
+    "a live iterator survives compaction": `
+      const m = new Map(Array.from({ length: 100 }, (_, i) => [i, i]))
+      const it = m.keys()
+      const seen = []
+      for (let i = 0; i < 10; i++) seen.push(it.next().value)
+      for (let i = 0; i < 80; i++) m.delete(i)
+      seen.push(...it)
+      const s = new Set(Array.from({ length: 100 }, (_, i) => i))
+      const values = s.values()
+      for (let i = 0; i < 50; i++) values.next()
+      for (let i = 50; i < 90; i++) s.delete(i)
+      for (let i = 0; i < 40; i++) s.delete(i)
+      return [seen, values.next().value, [...s].length, m.size]`,
+    "clear mid-iteration continues with new entries": `
+      const s = new Set([1, 2, 3])
+      const it = s.values()
+      const out = [it.next().value]
+      s.clear()
+      s.add(7)
+      out.push(...it)
+      s.add(8)
+      return [out, it.next().done, [...s.entries()]]`,
+    "keys compare by SameValueZero": `
+      const s = new Set([-0, NaN, NaN, 0])
+      const m = new Map([[-0, "a"]])
+      return [s.size, 1 / [...s][0], 1 / [...m.keys()][0], m.get(0), s.has(NaN)]`,
+    "forEach visits entries added during the walk": `
+      const m = new Map([["a", 1]])
+      const out = []
+      m.forEach((v, k) => { out.push(k); if (m.size < 4) m.set(k + "x", v + 1) })
+      const s = new Set([1, 2, 3])
+      const seen = []
+      s.forEach((v) => { seen.push(v); s.delete(v + 1) })
+      return [out, seen]`,
+    "set operations read the live table": `
+      const a = new Set([1, 2, 3, 4])
+      const other = { size: 10, has(v) { a.delete(v + 1); return true }, keys() { return [][Symbol.iterator]() } }
+      return [[...a.intersection(other)], [...a]]`,
+    "array, string and bytes iterators keep a position": `
+      const a = [1, 2]
+      const it = a.values()
+      it.next()
+      a.push(3)
+      const rest = [...it]
+      a.push(4)
+      const done = it.next().done
+      const entries = [...[5, , 6].entries()]
+      return [rest, done, entries, [..."a😀b"], [...new Uint8Array([1, 2]).entries()], [...[7, 8].keys()]]`,
+    "headers and search params iterate the live sorted list": `
+      const h = new Headers({ b: "1", d: "2" })
+      const hk = h.keys()
+      const first = hk.next().value
+      h.append("a", "x")
+      h.append("c", "y")
+      const p = new URLSearchParams("b=1&d=2")
+      const pk = p.keys()
+      const pFirst = pk.next().value
+      p.append("a", "x")
+      p.delete("b")
+      return [first, [...hk], pFirst, [...pk], [...h.entries()], [...p]]`,
+    "a RegExp keeps lastIndex as a field shared with the String methods": `
+      const r = /a/g
+      const out = [r.exec("aaa").index, r.lastIndex]
+      out.push("xaxa".replace(r, "b"), r.lastIndex)
+      r.lastIndex = 1
+      out.push(r.test("ab"), r.lastIndex, r.test("ab"), r.lastIndex)
+      const y = /a/y
+      y.lastIndex = 1
+      out.push("ba".search(y), y.lastIndex, "ba".match(y)?.[0], y.lastIndex, "ba".split(y), y.lastIndex)
+      r.lastIndex = 2
+      out.push([..."aaaa".matchAll(r)].length, r.lastIndex, new RegExp(r).lastIndex, String(new RegExp(r, "i")))
+      return out`,
+  }
+
+  for (const [name, code] of Object.entries(programs)) {
+    test(name, async () => {
+      const expected: unknown = await new Function(`return (async () => {${code}})()`)()
+      const result = await Effect.runPromise(CodeMode.execute({ code, tools: {} }))
+      if (!result.ok) throw new Error(result.error.message)
+      expect(result.value).toEqual(JSON.parse(JSON.stringify(expected)))
+    })
+  }
+})

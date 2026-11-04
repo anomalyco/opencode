@@ -80,8 +80,8 @@ import {
   define,
   frozen,
   get,
-  hostCursor,
   IteratorObj,
+  Position,
   type Cursor,
   has,
   hasOwn,
@@ -1125,13 +1125,8 @@ class Frame<R> {
 
   private builtinCursor(value: Value): Cursor | undefined {
     if (value instanceof IteratorObj) return value.cursor
-    const iterator =
-      typeof value === "string"
-        ? value[Symbol.iterator]()
-        : value instanceof Obj
-          ? value.iterator(this.ctx.builtins)
-          : undefined
-    return iterator === undefined ? undefined : hostCursor(iterator)
+    if (typeof value === "string") return new Position(value, "values", this.ctx.builtins.Array)
+    return value instanceof Obj ? value.iterator(this.ctx.builtins) : undefined
   }
 
   private *customIterator(
