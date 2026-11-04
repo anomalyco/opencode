@@ -250,7 +250,11 @@ impl Harness {
 
     fn experiment(&self, on: bool) {
         opencode_tui::dialogs::settings::update(&self.tui, move |value| {
-            opencode_tui::dialogs::settings::set_path(value, &["experimental", "client-mcp"], json!(on));
+            opencode_tui::dialogs::settings::set_path(
+                value,
+                &["experimental", "client-mcp"],
+                json!(on),
+            );
         });
     }
 
@@ -259,7 +263,15 @@ impl Harness {
         let id = self.next.get() + 1;
         self.next.set(id);
         let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        let deliver = self.opened.lock().unwrap().last().unwrap().2.deliver.clone();
+        let deliver = self
+            .opened
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .2
+            .deliver
+            .clone();
         deliver
             .try_send(Incoming::Text(message.to_string()))
             .unwrap();
@@ -350,7 +362,9 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
         ("Wrote to terminal pty_1", false)
     );
     assert!(
-        harness.requests("POST", "/api/experimental/session/ses_a/terminal").is_empty(),
+        harness
+            .requests("POST", "/api/experimental/session/ses_a/terminal")
+            .is_empty(),
         "an existing terminal is reused"
     );
 
@@ -376,12 +390,19 @@ fn the_subagents_tab_interrupts_a_running_subagent_and_hides_the_queued_dock() {
     assert!(harness.wait(|harness| harness.app.text().contains("Explore: Scan ()")));
     let text = harness.app.text();
     assert!(text.contains("interrupt ctrl+d"), "{text}");
-    assert!(!text.contains("1 queued"), "the dock hides under the composer");
+    assert!(
+        !text.contains("1 queued"),
+        "the dock hides under the composer"
+    );
     harness
         .tui
         .keymap
         .dispatch("composer.subagent.interrupt", None);
-    assert!(harness.wait(|harness| !harness.requests("POST", "/api/session/ses_c/interrupt").is_empty()));
+    assert!(harness.wait(|harness| {
+        !harness
+            .requests("POST", "/api/session/ses_c/interrupt")
+            .is_empty()
+    }));
     // Escape closes the composer, and the dock and the prompt come back.
     harness.app.press("escape");
     assert!(harness.wait(|harness| harness.app.text().contains("1 queued")));
@@ -393,7 +414,10 @@ fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();
     harness.tui.keymap.dispatch("terminal.select", None);
     assert!(harness.wait(|harness| harness.app.text().contains("+ New terminal")));
-    assert!(harness.app.text().contains("vim"), "the foreground process names the terminal");
+    assert!(
+        harness.app.text().contains("vim"),
+        "the foreground process names the terminal"
+    );
     harness.app.press("down");
     harness.app.press("enter");
     assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
@@ -414,13 +438,27 @@ fn the_shell_output_dialog_shows_the_output_without_escapes() {
     harness.app.press("enter");
     assert!(harness.wait(|harness| harness.app.text().contains("hello red")));
     let text = harness.app.text();
-    assert!(text.contains("Shell output") && text.contains("Running"), "{text}");
+    assert!(
+        text.contains("Shell output") && text.contains("Running"),
+        "{text}"
+    );
     assert!(text.contains("world"));
     assert!(!text.contains("Earlier output omitted"));
     let outputs = harness.requests("GET", "/api/shell/sh_1/output");
-    let query = |logged: &Logged, name: &str| logged.query.get(name).and_then(|values| values.first().cloned());
-    assert_eq!(query(&outputs[0], "cursor").as_deref(), Some("9007199254740991"));
+    let query = |logged: &Logged, name: &str| {
+        logged
+            .query
+            .get(name)
+            .and_then(|values| values.first().cloned())
+    };
+    assert_eq!(
+        query(&outputs[0], "cursor").as_deref(),
+        Some("9007199254740991")
+    );
     assert_eq!(query(&outputs[1], "cursor").as_deref(), Some("0"));
     assert_eq!(query(&outputs[1], "limit").as_deref(), Some("65536"));
-    assert_eq!(query(&outputs[1], "location[directory]").as_deref(), Some("/project"));
+    assert_eq!(
+        query(&outputs[1], "location[directory]").as_deref(),
+        Some("/project")
+    );
 }
