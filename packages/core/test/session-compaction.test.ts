@@ -649,6 +649,79 @@ const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateC
     return stored?.type === "compaction" && stored.status === "completed" ? stored.metadata?.recent : ""
   })
 
+it.effect("compaction window overrides and caps the automatic compaction ceiling", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_compaction_window_override"))
+
+    // One measured assistant message: its `input` tokens are the prompt estimate.
+    const message = (input: number) =>
+      Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: "summary-model", providerID: "test" },
+        content: [{ type: "text", text: "Done" }],
+        tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 0, completed: 0 },
+      })
+
+    const agent = (settings?: { compaction?: { window?: number }; compactionWindow?: number }) => ({
+      id: Agent.defaultID,
+      info: {
+        ...Agent.Info.default(Agent.defaultID),
+        request: {
+          settings: settings ?? {},
+          headers: {},
+          body: {},
+        },
+      },
+    })
+
+    const context = (input: number, overrides?: {
+      model?: { compaction?: { window?: number } }
+      agent?: { settings?: { compaction?: { window?: number }; compactionWindow?: number } }
+    }) => ({
+      ...loaded(session, [message(input)]),
+      model: overrides?.model ? { ...resolved, compaction: overrides.model.compaction } : resolved,
+      agent: overrides?.agent ? agent(overrides.agent.settings) : agent(),
+    })
+
+    // An automatic compaction that is not due is skipped.
+    const due = (ctx: SessionContext.Loaded) =>
+      compaction
+        .compact({ reason: "auto", context: ctx })
+        .pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+
+    // A model compaction.window of 50k on the 200k model lowers the ceiling to 34k.
+    expect(yield* due(context(33_999, { model: { compaction: { window: 50_000 } } }))).toBe(false)
+    expect(yield* due(context(34_000, { model: { compaction: { window: 50_000 } } }))).toBe(true)
+
+    // The agent's request.settings.compaction.window overrides the model's window: 200k opts back into the
+    // model's full 200k window (ceiling 170k) even though the model is set to 50k.
+    expect(
+      yield* due(context(169_999, { model: { compaction: { window: 50_000 } }, agent: { settings: { compaction: { window: 200_000 } } } })),
+    ).toBe(false)
+    expect(
+      yield* due(context(170_000, { model: { compaction: { window: 50_000 } }, agent: { settings: { compaction: { window: 200_000 } } } })),
+    ).toBe(true)
+
+    // The same override through request.settings.compactionWindow.
+    expect(
+      yield* due(context(169_999, { model: { compaction: { window: 50_000 } }, agent: { settings: { compactionWindow: 200_000 } } })),
+    ).toBe(false)
+    expect(
+      yield* due(context(170_000, { model: { compaction: { window: 50_000 } }, agent: { settings: { compactionWindow: 200_000 } } })),
+    ).toBe(true)
+
+    // Invalid (-1) or larger-than-limit (1_000_000) windows never raise the ceiling past the model's own limit.
+    expect(yield* due(context(169_999, { model: { compaction: { window: -1 } } }))).toBe(false)
+    expect(yield* due(context(170_000, { model: { compaction: { window: -1 } } }))).toBe(true)
+    expect(yield* due(context(169_999, { model: { compaction: { window: 1_000_000 } } }))).toBe(false)
+    expect(yield* due(context(170_000, { model: { compaction: { window: 1_000_000 } } }))).toBe(true)
+  }),
+)
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
