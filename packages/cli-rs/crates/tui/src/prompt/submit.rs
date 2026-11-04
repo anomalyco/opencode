@@ -6,6 +6,7 @@
 
 use std::rc::Rc;
 
+use indexmap::IndexMap;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
     AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID,
@@ -121,10 +122,17 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
     let agent = selection.agent.id.clone();
     let model = model.model_ref();
+    // `--session` with an unknown ID names the first session created here (`takeNewSessionID`).
+    let startup_id = prompt
+        .session
+        .is_none()
+        .then(|| tui.startup.take_new_session_id())
+        .flatten();
     let (target, creation) = match &prompt.session {
         Some(session) => (session.clone(), None),
         None => {
             let (id, task) = tui.data.session_create(CreateSession {
+                id: startup_id.clone(),
                 agent: Some(agent.clone()),
                 model: Some(model.clone()),
                 location: Some(LocationPublicRef {
@@ -136,9 +144,14 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         }
     };
     let created = creation.is_some();
+    // New-session sends wait for creation and the environment upload.
+    let environment = created
+        .then(|| tui.startup.args.environment.clone())
+        .flatten();
     let commit = Commit {
         client: tui.data.client().clone(),
         session: target.clone(),
+        environment: environment.clone(),
         switch_agent: session
             .as_ref()
             .is_some_and(|session| session.agent.as_ref() != Some(&agent))
@@ -168,6 +181,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         tui: tui.weak(),
         prompt: prompt.this.clone(),
         session: created.then(|| target.clone()),
+        startup_id,
         entry,
     };
     match (mode, command) {
@@ -182,6 +196,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 async move {
                     if let Some(creation) = creation {
                         creation.await?;
+                    }
+                    if let Some(variables) = environment {
+                        opencode_store::environment::upload(&client, &input.session_id, variables)
+                            .await
+                            .map_err(Error::new)?;
                     }
                     client
                         .session_shell(&input, &RequestOptions::default())
@@ -288,6 +307,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 struct Commit {
     client: Client,
     session: SessionID,
+    /// The terminal's variables for a session this submit created.
+    environment: Option<IndexMap<String, String>>,
     switch_agent: Option<AgentID>,
     model: ModelRef,
 }
@@ -295,6 +316,11 @@ struct Commit {
 impl Commit {
     async fn run(self) -> Result<(), Error> {
         let options = RequestOptions::default();
+        if let Some(variables) = self.environment {
+            opencode_store::environment::upload(&self.client, &self.session, variables)
+                .await
+                .map_err(Error::new)?;
+        }
         if let Some(agent) = self.switch_agent {
             let input = SessionSwitchAgentInput {
                 session_id: self.session.clone(),
@@ -326,6 +352,8 @@ struct Failure {
     prompt: std::rc::Weak<Inner>,
     /// The session this submit created, if any.
     session: Option<SessionID>,
+    /// The `--session` ID that session took; a failed creation gives it back.
+    startup_id: Option<SessionID>,
     entry: Value,
 }
 
@@ -340,11 +368,15 @@ impl Failure {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let title = if tui.data.read(|state| state.session(&session).is_some()) {
+        let exists = tui.data.read(|state| state.session(&session).is_some());
+        let title = if exists {
             "Failed to set up session"
         } else {
             "Creating a session failed"
         };
+        if let Some(id) = self.startup_id.filter(|_| !exists) {
+            tui.startup.restore_new_session_id(id);
+        }
         tui.toasts
             .show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
         tui.prompt.drafts.save(
