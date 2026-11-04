@@ -13,7 +13,7 @@ export type Reply<Value> = { readonly resolve: (value: Value) => void; readonly 
  * so a load that succeeds after a failed one still activates them.
  */
 export type State<Host> =
-  /** No host yet: the next use loads it, also after a failed or timed-out load. */
+  /** No host yet: the next use loads it, also after a failed or timed-out load. A timed-out load that finishes later still counts. */
   | { readonly status: "idle"; readonly attempt: number; readonly started: boolean }
   | {
       readonly status: "loading"
@@ -80,6 +80,11 @@ export function transition<Host>(state: State<Host>, event: Event<Host>): Transi
 
   if (state.status === "loading") return loading(state, event)
 
+  // The CLI lookup a timed-out load waited on keeps running. When it finishes and nothing replaced that load, its host
+  // still serves the start and the subscriptions it was for.
+  if (event.type === "load.succeeded" && state.status === "idle" && event.attempt === state.attempt)
+    return loaded(event.host, state.started, [], [])
+
   if (event.type === "host.requested") {
     if (state.status === "stopped") return unchanged<Host>(state, [reject([event.reply], { kind: "unavailable" })])
 
@@ -101,9 +106,9 @@ export function transition<Host>(state: State<Host>, event: Event<Host>): Transi
 /** The host once it loaded, until the app disposed it. */
 export const loadedHost = <Host>(state: State<Host>) => (state.status === "ready" ? state.host : undefined)
 
-/** Whether `attempt` is the load in flight, so its host may still be built. */
-export const isLoading = <Host>(state: State<Host>, attempt: number) =>
-  state.status === "loading" && state.attempt === attempt
+/** Whether the machine still takes the load `attempt`: the one in flight, or one that timed out and nothing replaced. */
+export const isCurrentLoad = <Host>(state: State<Host>, attempt: number) =>
+  (state.status === "loading" || state.status === "idle") && state.attempt === attempt
 
 /** Claims the next load in the same event that asked for it. */
 function load<Host>(
@@ -136,16 +141,7 @@ function loading<Host>(state: Extract<State<Host>, { status: "loading" }>, event
 
   if (event.attempt !== state.attempt) return unchanged(state)
 
-  if (event.type === "load.succeeded")
-    return {
-      state: { status: "ready", host: event.host, started: state.started },
-      commands: [
-        ...(state.hosts.length ? [{ type: "resolve-host" as const, host: event.host, replies: state.hosts }] : []),
-        state.started
-          ? { type: "start", host: event.host, replies: state.starts }
-          : { type: "demand-subscribed", host: event.host },
-      ],
-    }
+  if (event.type === "load.succeeded") return loaded(event.host, state.started, state.hosts, state.starts)
 
   return {
     state: { status: "idle", attempt: state.attempt, started: state.started },
@@ -153,6 +149,21 @@ function loading<Host>(state: Extract<State<Host>, { status: "loading" }>, event
       state,
       event.type === "load.failed" ? { kind: "failed", error: event.error } : { kind: "timed-out" },
     ),
+  }
+}
+
+function loaded<Host>(
+  host: Host,
+  started: boolean,
+  hosts: readonly Reply<Host>[],
+  starts: readonly Reply<void>[],
+): Transition<Host> {
+  return {
+    state: { status: "ready", host, started },
+    commands: [
+      ...(hosts.length ? [{ type: "resolve-host" as const, host, replies: hosts }] : []),
+      started ? { type: "start", host, replies: starts } : { type: "demand-subscribed", host },
+    ],
   }
 }
 
@@ -292,7 +303,7 @@ export function createDriver<
         .then(input.load)
         // Building the host reads storage and follows windows, the locale and the menubar, so a load that something
         // superseded while it ran builds nothing.
-        .then((build) => (isLoading(current.state, command.attempt) ? build() : undefined))
+        .then((build) => (isCurrentLoad(current.state, command.attempt) ? build() : undefined))
         .then(
           (host) => {
             if (host) dispatch({ type: "load.succeeded", attempt: command.attempt, host })
