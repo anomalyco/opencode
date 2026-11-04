@@ -76,9 +76,10 @@ impl Move {
         &self.root
     }
 
-    /// `creating()`: a submit waits while the worktree is being created.
+    /// `creating()`: a submit waits while the worktree is being created. Once it exists its directory is
+    /// staged, and the submit that waited for it runs.
     pub fn creating(&self) -> bool {
-        self.creating.get()
+        self.creating.get() && self.directory().is_none()
     }
 
     /// The staged directory, if a directory is staged.
