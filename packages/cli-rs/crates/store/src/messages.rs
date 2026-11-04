@@ -176,7 +176,9 @@ impl MessageExt for SessionMessageInfo {
             Self::Skill(item) => item.time.created = created,
             Self::Shell(item) => item.time.created = created,
             Self::Assistant(item) => item.time.created = created,
-            Self::Compaction(SessionMessageCompaction::Running(item)) => item.time.created = created,
+            Self::Compaction(SessionMessageCompaction::Running(item)) => {
+                item.time.created = created
+            }
             Self::Compaction(SessionMessageCompaction::Completed(item)) => {
                 item.time.created = created
             }
@@ -231,7 +233,9 @@ fn omit_message_file_data(message: &mut SessionMessageInfo) {
             continue;
         };
         match &mut tool.state {
-            SessionMessageAssistantToolState::Completed(state) => omit_file_data(&mut state.content),
+            SessionMessageAssistantToolState::Completed(state) => {
+                omit_file_data(&mut state.content)
+            }
             SessionMessageAssistantToolState::Error(state) => {
                 if let Some(content) = &mut state.content {
                     omit_file_data(content);
@@ -334,10 +338,14 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantTool),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
-                SessionMessageAssistantContentItem::Tool(part) if part.id == tool => Some(part),
-                _ => None,
-            });
+            let part = assistant
+                .content
+                .iter_mut()
+                .rev()
+                .find_map(|part| match part {
+                    SessionMessageAssistantContentItem::Tool(part) if part.id == tool => Some(part),
+                    _ => None,
+                });
             if let Some(part) = part {
                 f(part);
             }
@@ -352,10 +360,14 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantText),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
-                SessionMessageAssistantContentItem::Text(part) => Some(part),
-                _ => None,
-            });
+            let part = assistant
+                .content
+                .iter_mut()
+                .rev()
+                .find_map(|part| match part {
+                    SessionMessageAssistantContentItem::Text(part) => Some(part),
+                    _ => None,
+                });
             if let Some(part) = part {
                 f(part);
             }
@@ -370,14 +382,21 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantReasoning),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
-                SessionMessageAssistantContentItem::Reasoning(part)
-                    if part.time.as_ref().is_none_or(|time| time.completed.is_none()) =>
-                {
-                    Some(part)
-                }
-                _ => None,
-            });
+            let part = assistant
+                .content
+                .iter_mut()
+                .rev()
+                .find_map(|part| match part {
+                    SessionMessageAssistantContentItem::Reasoning(part)
+                        if part
+                            .time
+                            .as_ref()
+                            .is_none_or(|time| time.completed.is_none()) =>
+                    {
+                        Some(part)
+                    }
+                    _ => None,
+                });
             if let Some(part) = part {
                 f(part);
             }
@@ -932,59 +951,65 @@ impl Data {
             .options
             .initial_message_limit
             .unwrap_or(MESSAGE_PAGE);
-        self.sync_run(format!("session.message:{}", session.0), move |data| async move {
-            let started = data.read(|state| state.deletion_epoch);
-            let input = MessageListInput {
-                session_id: session.clone(),
-                limit: Some(limit),
-                order: Some(MessageListInputOrder::Desc),
-                ..Default::default()
-            };
-            let response = data
-                .client()
-                .message_list(&input, &RequestOptions::default())
-                .await
-                .map_err(|error| evict_missing(&data, error))?;
-            data.write(|state| {
-                if state.deleted_since(&session, started) {
-                    return;
-                }
-                let fetched: Vec<_> = response
-                    .data
-                    .into_iter()
-                    .rev()
-                    .map(|item| state.stored(item))
-                    .collect();
-                // A read racing an admission must not wipe its local transcript row.
-                let ids: HashSet<&str> = fetched.iter().map(MessageExt::id).collect();
-                let admitted: HashSet<&str> = state
-                    .pending
-                    .get(&session)
-                    .into_iter()
-                    .flatten()
-                    .filter(|item| matches!(item.tag(), "user" | "synthetic"))
-                    .map(|item| item.id())
-                    .collect();
-                let local: Vec<_> = state
-                    .messages(&session)
-                    .iter()
-                    .filter(|item| {
-                        !ids.contains(item.id())
-                            && (state.outbox.contains(item.id()) || admitted.contains(item.id()))
-                    })
-                    .cloned()
-                    .collect();
-                let mut messages = fetched;
-                messages.extend(local);
-                state.messages.insert(session.clone(), Transcript::new(messages));
-                match response.cursor.next.flatten() {
-                    Some(next) => state.cursor.insert(session.clone(), next),
-                    None => state.cursor.remove(&session),
+        self.sync_run(
+            format!("session.message:{}", session.0),
+            move |data| async move {
+                let started = data.read(|state| state.deletion_epoch);
+                let input = MessageListInput {
+                    session_id: session.clone(),
+                    limit: Some(limit),
+                    order: Some(MessageListInputOrder::Desc),
+                    ..Default::default()
                 };
-                state.log.messages(&session);
-            });
-            Ok(())
-        })
+                let response = data
+                    .client()
+                    .message_list(&input, &RequestOptions::default())
+                    .await
+                    .map_err(|error| evict_missing(&data, error))?;
+                data.write(|state| {
+                    if state.deleted_since(&session, started) {
+                        return;
+                    }
+                    let fetched: Vec<_> = response
+                        .data
+                        .into_iter()
+                        .rev()
+                        .map(|item| state.stored(item))
+                        .collect();
+                    // A read racing an admission must not wipe its local transcript row.
+                    let ids: HashSet<&str> = fetched.iter().map(MessageExt::id).collect();
+                    let admitted: HashSet<&str> = state
+                        .pending
+                        .get(&session)
+                        .into_iter()
+                        .flatten()
+                        .filter(|item| matches!(item.tag(), "user" | "synthetic"))
+                        .map(|item| item.id())
+                        .collect();
+                    let local: Vec<_> = state
+                        .messages(&session)
+                        .iter()
+                        .filter(|item| {
+                            !ids.contains(item.id())
+                                && (state.outbox.contains(item.id())
+                                    || admitted.contains(item.id()))
+                        })
+                        .cloned()
+                        .collect();
+                    let mut messages = fetched;
+                    messages.extend(local);
+                    state
+                        .messages
+                        .insert(session.clone(), Transcript::new(messages));
+                    match response.cursor.next.flatten() {
+                        Some(next) => state.cursor.insert(session.clone(), next),
+                        None => state.cursor.remove(&session),
+                    };
+                    state.log.messages(&session);
+                });
+                Ok(())
+            },
+        )
     }
 
     pub fn message_invalidate(&self, session: &SessionID) {
@@ -1002,7 +1027,12 @@ impl Data {
         session: &SessionID,
         options: LoadMore,
     ) -> Result<(), Error> {
-        let cancelled = || options.cancel.as_ref().is_some_and(|token| token.is_cancelled());
+        let cancelled = || {
+            options
+                .cancel
+                .as_ref()
+                .is_some_and(|token| token.is_cancelled())
+        };
         if cancelled() {
             return Ok(());
         }
@@ -1055,14 +1085,16 @@ impl Data {
             data.write(|state| {
                 state.loading.remove(&id);
                 state.log.messages(&id);
-                if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
+                if state
+                    .message_loads
+                    .get(&id)
+                    .is_some_and(|(current, _)| *current == token)
+                {
                     state.message_loads.remove(&id);
                 }
             });
             match result {
-                Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => {
-                    Ok(false)
-                }
+                Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => Ok(false),
                 result => result,
             }
         });

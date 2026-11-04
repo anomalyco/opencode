@@ -65,7 +65,10 @@ struct Fake {
 }
 
 impl Transport for Fake {
-    fn send(&self, request: Request) -> opencode_api::transport::BoxFuture<'_, Result<Response, String>> {
+    fn send(
+        &self,
+        request: Request,
+    ) -> opencode_api::transport::BoxFuture<'_, Result<Response, String>> {
         let req = Req {
             method: request.method.to_owned(),
             path: request.url.path().to_owned(),
@@ -82,9 +85,11 @@ impl Transport for Fake {
         let reply = (self.handler)(req);
         Box::pin(async move {
             let (status, content_type, body) = match reply.await {
-                Reply::Json(status, value) => {
-                    (status, "application/json", serde_json::to_vec(&value).unwrap())
-                }
+                Reply::Json(status, value) => (
+                    status,
+                    "application/json",
+                    serde_json::to_vec(&value).unwrap(),
+                ),
                 Reply::Text(status, text) => (status, "text/plain", text.into_bytes()),
             };
             Ok(Response {
@@ -104,7 +109,8 @@ where
 }
 
 pub fn data(handler: Handler, options: Options) -> Data {
-    let client = Client::with_transport("http://opencode.local", Arc::new(Fake { handler })).unwrap();
+    let client =
+        Client::with_transport("http://opencode.local", Arc::new(Fake { handler })).unwrap();
     Data::new(
         client,
         Options {
@@ -127,7 +133,10 @@ pub fn emit(data: &Data, value: Value) {
 pub async fn wait(mut check: impl FnMut() -> bool) {
     let started = Instant::now();
     while !check() {
-        assert!(started.elapsed() < Duration::from_secs(2), "timed out waiting for condition");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "timed out waiting for condition"
+        );
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }

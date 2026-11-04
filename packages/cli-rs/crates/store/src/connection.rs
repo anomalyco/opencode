@@ -77,7 +77,11 @@ impl Data {
                 Ok(active) => active,
                 Err(error) => {
                     data.write(|state| {
-                        if state.active_updates.as_ref().is_some_and(|(current, _)| *current == token) {
+                        if state
+                            .active_updates
+                            .as_ref()
+                            .is_some_and(|(current, _)| *current == token)
+                        {
                             state.active_updates = None;
                         }
                     });
