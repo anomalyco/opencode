@@ -95,13 +95,6 @@
           "width": 84,
           "height": 1,
           "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        },
-        {
-          "x": 50,
-          "y": 20,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
         }
       ],
       "fixture": "E.1/events/home"
@@ -145,13 +138,6 @@
           "width": 84,
           "height": 1,
           "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        },
-        {
-          "x": 50,
-          "y": 20,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
         }
       ],
       "fixture": "E.1/events/toast"
@@ -173,8 +159,7 @@
       "checkpoint": "selected",
       "until": "The parser drops the last token.",
       "deviation": [
-        "V01-plain-transcript",
-        "P01-read-only-prompt"
+        "V01-plain-transcript"
       ],
       "fixture": "E.1/events/selected"
     },
@@ -206,13 +191,6 @@
           "width": 84,
           "height": 1,
           "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        },
-        {
-          "x": 50,
-          "y": 20,
-          "width": 50,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
         }
       ],
       "fixture": "E.1/events/deleted"
@@ -240,8 +218,7 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt",
-        "P01-read-only-prompt"
+        "T17-home-prompt"
       ],
       "fixture": "E.1/events/command"
     }

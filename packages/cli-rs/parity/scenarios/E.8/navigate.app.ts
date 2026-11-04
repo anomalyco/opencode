@@ -32,7 +32,7 @@ const messages = turns.flatMap((turn) => {
   ]
 })
 
-const deviation = ["V01-plain-transcript", "P01-read-only-prompt"]
+const deviation = ["V01-plain-transcript"]
 
 export default defineApp({
   args: { sessionID: "ses_n" },

@@ -58,15 +58,6 @@
     {
       "checkpoint": "open",
       "until": "Fix the parser",
-      "masks": [
-        {
-          "x": 60,
-          "y": 28,
-          "width": 40,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.19a/failed-toast/open"
     },
     {
@@ -106,15 +97,6 @@
     {
       "checkpoint": "failed",
       "until": "Session failed",
-      "masks": [
-        {
-          "x": 60,
-          "y": 28,
-          "width": 40,
-          "height": 1,
-          "reason": "the prompt footer hints are E.14's (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.19a/failed-toast/failed"
     }
   ],
