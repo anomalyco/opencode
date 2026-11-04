@@ -13,6 +13,13 @@ export function parseSlashCommand(text: string) {
   return { name, input: separator === -1 ? "" : text.slice(separator).trim() }
 }
 
+/** A configured command wins over a client command that takes arguments under the same name. */
+export function withoutShadowedClientCommands<T extends ClientSlashCommand>(options: readonly T[]) {
+  const custom = new Set(options.flatMap((item) => (item.type === "custom" ? [item.trigger] : [])))
+
+  return options.filter((item) => item.type === "custom" || !item.arguments || !custom.has(item.trigger))
+}
+
 export function parseClientSlashCommand(options: readonly ClientSlashCommand[], text: string) {
   const command = parseSlashCommand(text)
 

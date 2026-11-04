@@ -34,7 +34,7 @@ import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
 import { composerSubmitView } from "./machine"
 import { useAttachmentDestination } from "./attachments/destination"
-import { parseClientSlashCommand } from "./client-slash-command"
+import { parseClientSlashCommand, withoutShadowedClientCommands } from "./client-slash-command"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -272,25 +272,27 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     })),
   ])
 
-  const slashCommands = createMemo(() => [
-    ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
-      id: `custom.${item.name}`,
-      trigger: item.name,
-      title: item.name,
-      description: item.description,
-      type: "custom" as const,
-    })),
-    ...command.options
-      .filter((item) => !item.disabled && !item.id.startsWith("suggested.") && item.slash)
-      .map((item) => ({
-        id: item.id,
-        trigger: item.slash!,
-        title: item.title,
+  const slashCommands = createMemo(() =>
+    withoutShadowedClientCommands([
+      ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
+        id: `custom.${item.name}`,
+        trigger: item.name,
+        title: item.name,
         description: item.description,
-        arguments: item.slashArguments,
-        type: "builtin" as const,
+        type: "custom" as const,
       })),
-  ])
+      ...command.options
+        .filter((item) => !item.disabled && !item.id.startsWith("suggested.") && item.slash)
+        .map((item) => ({
+          id: item.id,
+          trigger: item.slash!,
+          title: item.title,
+          description: item.description,
+          arguments: item.slashArguments,
+          type: "builtin" as const,
+        })),
+    ]),
+  )
 
   const commands = createMemo<ComposerSuggestion[]>(() => [
     ...slashCommands().map((item) => ({
