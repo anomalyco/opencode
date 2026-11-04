@@ -27,11 +27,18 @@ fn main() -> ExitCode {
         return ExitCode::from(askpass::run(&port));
     }
     let command = help::command();
-    let argv = match args::normalize(&command, std::env::args_os().collect()) {
+    let raw: Vec<_> = std::env::args_os().collect();
+    let argv = match args::normalize(&command, raw.clone()) {
         Ok(argv) => argv,
         Err(message) => return usage_error(&message),
     };
-    let matches = match command.clone().try_get_matches_from(argv) {
+    // Effect CLI runs its action flags before it checks for missing arguments, so the wizard can ask for them.
+    let wizard = wizard::requested(&argv);
+    let parser = match wizard {
+        true => wizard::lenient(command.clone()),
+        false => command.clone(),
+    };
+    let matches = match parser.try_get_matches_from(argv) {
         Ok(matches) => matches,
         Err(error) => {
             // Effect CLI exits 1 on a usage error; clap would exit 2. Help output (`--help`) exits 0.
@@ -39,6 +46,19 @@ fn main() -> ExitCode {
             return ExitCode::from(u8::from(error.use_stderr()));
         }
     };
+    if wizard {
+        let global = match args::GlobalArgs::from_arg_matches(&matches) {
+            Ok(global) => global,
+            Err(error) => return usage_error(&error.to_string()),
+        };
+        // `--version` comes before `--wizard`.
+        if global.version {
+            return exit(help::version());
+        }
+        signals::install();
+        let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
+        return exit(wizard::run(&command, &matches, &raw));
+    }
     let cli = match args::Cli::from_arg_matches(&matches) {
         Ok(cli) => cli,
         Err(error) => return usage_error(&error.to_string()),
@@ -50,7 +70,6 @@ fn main() -> ExitCode {
     let result = match &cli.global {
         // Effect CLI runs the first action flag given, in this order, instead of the command.
         global if global.version => help::version(),
-        global if global.wizard => wizard::run(),
         args::GlobalArgs {
             completions: Some(shell),
             ..
@@ -95,6 +114,10 @@ fn main() -> ExitCode {
             result
         }
     };
+    exit(result)
+}
+
+fn exit(result: anyhow::Result<()>) -> ExitCode {
     let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => ExitCode::from(output::fail(error)),
