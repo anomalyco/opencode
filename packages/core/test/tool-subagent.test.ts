@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
@@ -407,7 +407,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-foreground-completion",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "foreground review", prompt: "review" },
+              input: { agent: "reviewer", description: "foreground review", prompt: "review", background: false },
             },
           })
           expect(result).toMatchObject({ status: "completed", metadata: { status: "completed" } })
@@ -511,7 +511,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-configured-nested-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "nested", prompt: "should run" },
+              input: { agent: "reviewer", description: "nested", prompt: "should run", background: false },
             },
           })
 
@@ -550,7 +550,14 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: "" },
+              input: {
+                agent: "reviewer",
+                description: "review",
+                prompt: "review this",
+                model: "",
+                sessionID: "",
+                background: false,
+              },
             },
           })
 
@@ -580,7 +587,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent-fallback",
               name: SubagentTool.name,
-              input: { agent: "fallback", description: "fallback", prompt: "fallback" },
+              input: { agent: "fallback", description: "fallback", prompt: "fallback", background: false },
             },
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
@@ -608,7 +615,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent-first",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this" },
+              input: { agent: "reviewer", description: "review", prompt: "review this", background: false },
             },
           })
           const childID = outputSessionID(first.metadata)
@@ -625,6 +632,7 @@ describe("SubagentTool", () => {
                 prompt: "continue this",
                 sessionID: childID,
                 model: "",
+                background: false,
               },
             },
           })
@@ -735,7 +743,8 @@ describe("SubagentTool", () => {
 
           const launched = yield* followUp("call-launch", { background: true })
           const steered = yield* followUp("call-steer", { background: true })
-          const unflagged = yield* followUp("call-steer-foreground", {})
+          // No flag: background is the default, so it still returns a running handle.
+          const unflagged = yield* followUp("call-default", {})
           ;[launched, steered, unflagged].forEach((result) =>
             expect(result).toMatchObject({ metadata: { sessionID: child.id, status: "running" } }),
           )
@@ -778,7 +787,7 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent, description: "follow up", prompt: "continue", sessionID },
+                input: { agent, description: "follow up", prompt: "continue", sessionID, background: false },
               },
             })
 
@@ -859,7 +868,7 @@ describe("SubagentTool", () => {
                 type: "tool-call" as const,
                 id,
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "review", prompt: "review this", ...input },
+                input: { agent: "reviewer", description: "review", prompt: "review this", background: false, ...input },
               },
             })
 
@@ -922,7 +931,7 @@ describe("SubagentTool", () => {
                 type: "tool-call",
                 id: "call-subagent-failure",
                 name: SubagentTool.name,
-                input: { agent: "reviewer", description: "fail review", prompt: "please fail" },
+                input: { agent: "reviewer", description: "fail review", prompt: "please fail", background: false },
               },
             }),
           ).toEqual({
@@ -937,7 +946,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("notifies once when background work completes", () =>
+  it.live("defaults to background and notifies once when the work completes", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -962,7 +971,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-background-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+              input: { agent: "reviewer", description: "background review", prompt: "review" },
             },
           })
           const childID = outputSessionID(settled.metadata)
@@ -1106,4 +1115,10 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  test("describes background as the default mode", () => {
+    expect(SubagentTool.description).toContain("Background mode (default)")
+    expect(SubagentTool.description).not.toContain("Foreground (default)")
+    expect(SubagentTool.description).toContain("Set background=false")
+  })
 })

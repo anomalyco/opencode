@@ -215,8 +215,9 @@ ID, a short `description`, and a complete `prompt`.
 Ask the explore subagent to map the authentication flow and return the key files.
 ```
 
-Foreground calls wait for the result. `background: true` returns immediately
-and notifies the parent when the child finishes. Pass the returned `sessionID`
+Subagents run in the background by default: the tool returns immediately with a
+`sessionID`, and the parent is notified when the child finishes. Set
+`background: false` to wait for the result instead. Pass the returned `sessionID`
 to continue that same child conversation. Only subagent-mode agents can be
 used, and the default nesting depth is one.
 

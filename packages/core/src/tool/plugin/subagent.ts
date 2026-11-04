@@ -43,7 +43,7 @@ export const Input = Schema.Struct({
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+      "Defaults to true: launch the subagent in the background and return immediately, and you are notified when it completes. Set false to run it to completion and return the final response inline; do not sleep, poll, or proactively check on background progress.",
   }),
   notify: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -60,9 +60,9 @@ export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
-  "Foreground (default) runs the subagent to completion and returns its final response.",
-  "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
-  "Use background only for independent work that can run while you continue elsewhere.",
+  "Background mode (default) launches the subagent asynchronously and returns immediately; you are notified when it finishes.",
+  "Use it for independent work that can run while you continue elsewhere, or briefly tell the user what you launched and end your response.",
+  "Set background=false to run the subagent to completion and return its final response inline, only when you need the result before your next step.",
   "Set notify=false to run a background subagent silently when you expect to read its session yourself later.",
 ].join("\n")
 
@@ -202,7 +202,7 @@ export const Plugin = {
                     ),
                   ))
 
-              const background = input.background === true
+              const background = input.background !== false
               const notify = input.notify !== false
               yield* context.progress({ sessionID: child.id, status: "running" })
 
