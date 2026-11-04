@@ -33,6 +33,7 @@ impl<T> Choice<T> {
 }
 
 impl<T: ToString> Choice<T> {
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// An option labeled with its value, as Clack labels an option without `label`.
     pub fn plain(value: T) -> Choice<T> {
         let label = value.to_string();
@@ -96,7 +97,6 @@ pub struct Select<T> {
     options: Vec<Choice<T>>,
     initial_value: Option<T>,
     max_items: Option<usize>,
-    output: Output,
 }
 
 pub fn select<T: Clone + PartialEq>(
@@ -108,7 +108,6 @@ pub fn select<T: Clone + PartialEq>(
         options,
         initial_value: None,
         max_items: None,
-        output: Output::Stdout,
     }
 }
 
@@ -119,13 +118,9 @@ impl<T: Clone + PartialEq> Select<T> {
         self
     }
 
+    #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     pub fn max_items(mut self, items: usize) -> Self {
         self.max_items = Some(items);
-        self
-    }
-
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
         self
     }
 
@@ -143,12 +138,11 @@ impl<T: Clone + PartialEq> Select<T> {
                     .position(|option| option.value == *initial)
             })
             .unwrap_or(0);
-        let output = self.output;
         let mut prompt = SelectPrompt {
             options: self,
             cursor,
         };
-        core::run(&mut prompt, output, None)?;
+        core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.options.options[prompt.cursor].value.clone())
     }
 }
@@ -190,7 +184,7 @@ impl<T> Prompt for SelectPrompt<T> {
                     &self.options.options,
                     self.cursor,
                     self.options.max_items,
-                    self.options.output,
+                    Output::Stdout,
                     |option, active| {
                         if active {
                             let hint = option
@@ -241,10 +235,7 @@ pub struct MultiSelect<T> {
     message: String,
     options: Vec<Choice<T>>,
     initial_values: Vec<T>,
-    max_items: Option<usize>,
     required: bool,
-    cursor_at: Option<T>,
-    output: Output,
 }
 
 pub fn multiselect<T: Clone + PartialEq>(
@@ -255,10 +246,7 @@ pub fn multiselect<T: Clone + PartialEq>(
         message: message.into(),
         options,
         initial_values: Vec::new(),
-        max_items: None,
         required: true,
-        cursor_at: None,
-        output: Output::Stdout,
     }
 }
 
@@ -268,25 +256,9 @@ impl<T: Clone + PartialEq> MultiSelect<T> {
         self
     }
 
-    pub fn max_items(mut self, items: usize) -> Self {
-        self.max_items = Some(items);
-        self
-    }
-
     /// Whether at least one value must be selected (default `true`).
     pub fn required(mut self, required: bool) -> Self {
         self.required = required;
-        self
-    }
-
-    /// The option focused first.
-    pub fn cursor_at(mut self, value: T) -> Self {
-        self.cursor_at = Some(value);
-        self
-    }
-
-    pub fn output(mut self, output: Output) -> Self {
-        self.output = output;
         self
     }
 
@@ -296,19 +268,13 @@ impl<T: Clone + PartialEq> MultiSelect<T> {
         if self.options.is_empty() {
             return Err(Cancelled);
         }
-        let cursor = self
-            .cursor_at
-            .as_ref()
-            .and_then(|at| self.options.iter().position(|option| option.value == *at))
-            .unwrap_or(0);
         let value = self.initial_values.clone();
-        let output = self.output;
         let mut prompt = MultiSelectPrompt {
             options: self,
-            cursor,
+            cursor: 0,
             value,
         };
-        core::run(&mut prompt, output, None)?;
+        core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
 }
@@ -341,8 +307,8 @@ impl<T: Clone + PartialEq> MultiSelectPrompt<T> {
         limit_options(
             &self.options.options,
             self.cursor,
-            self.options.max_items,
-            self.options.output,
+            None,
+            Output::Stdout,
             |option, active| {
                 let selected = self.value.contains(&option.value);
                 let state = match (active, selected) {

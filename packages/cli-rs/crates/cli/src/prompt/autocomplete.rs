@@ -16,9 +16,6 @@ type Render<'a, T> = Box<dyn Fn(&View<'_, T>) -> String + 'a>;
 pub struct Autocomplete<'a, T> {
     message: String,
     options: Vec<Choice<T>>,
-    placeholder: Option<String>,
-    initial_value: Option<T>,
-    initial_user_input: Option<String>,
     max_items: Option<usize>,
     validate: Option<Validate<'a, Option<T>>>,
     filter: Option<Filter<'a, T>>,
@@ -33,9 +30,6 @@ pub fn autocomplete<T: Clone + PartialEq + ToString>(
     Autocomplete {
         message: message.into(),
         options,
-        placeholder: None,
-        initial_value: None,
-        initial_user_input: None,
         max_items: None,
         validate: None,
         filter: None,
@@ -61,22 +55,6 @@ pub struct View<'v, T> {
 }
 
 impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
-    /// Shown instead of the search text. Clack shows it for as long as nothing is submitted.
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = Some(placeholder.into());
-        self
-    }
-
-    pub fn initial_value(mut self, value: T) -> Self {
-        self.initial_value = Some(value);
-        self
-    }
-
-    pub fn initial_user_input(mut self, input: impl Into<String>) -> Self {
-        self.initial_user_input = Some(input.into());
-        self
-    }
-
     pub fn max_items(mut self, items: usize) -> Self {
         self.max_items = Some(items);
         self
@@ -125,28 +103,20 @@ impl<'a, T: Clone + PartialEq + ToString> Autocomplete<'a, T> {
 
     /// The focused option on Enter, `None` when nothing matched the search.
     pub fn prompt(self) -> Result<Option<T>, Cancelled> {
-        let initial = self
-            .initial_value
-            .clone()
-            .or_else(|| self.options.first().map(|option| option.value.clone()));
-        let cursor =
-            initial.and_then(|value| self.options.iter().position(|option| option.value == value));
-        let input = self.initial_user_input.clone();
+        // Clack focuses and selects the first option.
+        let first = (!self.options.is_empty()).then_some(0);
         let output = self.output;
         let mut prompt = AutocompletePrompt {
             filtered: (0..self.options.len()).collect(),
-            selected: cursor.map(|cursor| vec![Some(cursor)]).unwrap_or_default(),
-            focused: self
-                .options
-                .get(cursor.unwrap_or(0))
-                .map(|_| cursor.unwrap_or(0)),
-            cursor: cursor.unwrap_or(0),
+            selected: first.map(|first| vec![Some(first)]).unwrap_or_default(),
+            focused: first,
+            cursor: 0,
             navigating: false,
             last_input: String::new(),
             value: None,
             options: self,
         };
-        core::run(&mut prompt, output, input.as_deref())?;
+        core::run(&mut prompt, output, None)?;
         Ok(prompt
             .value
             .flatten()
@@ -306,16 +276,10 @@ impl<T: Clone + PartialEq + ToString> Prompt for AutocompletePrompt<'_, T> {
                 strikethrough(&dim(&base.user_input))
             ),
             _ => {
-                // Clack compares `String(this.value ?? "")`, which stays empty until Enter.
-                let placeholder = self
-                    .options
-                    .placeholder
-                    .as_deref()
-                    .filter(|_| self.value.flatten().is_none());
-                let search = match placeholder {
-                    Some(placeholder) => dim(placeholder),
-                    None if self.navigating => dim(&base.user_input),
-                    None => Self::user_input_with_cursor(base),
+                let search = if self.navigating {
+                    dim(&base.user_input)
+                } else {
+                    Self::user_input_with_cursor(base)
                 };
                 let count = self.filtered.len();
                 let matches = if count != self.options.options.len() {
