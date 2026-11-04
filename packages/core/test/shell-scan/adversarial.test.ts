@@ -80,6 +80,7 @@ describe("ShellScan adversarial corpus", () => {
   test("scans repeated zsh q flags in bounded time", () => {
     const start = performance.now()
     ShellScan.scan("echo ${(" + "q".repeat(40) + "!x}", "zsh")
+    ShellScan.scan("echo ${(" + "q-".repeat(40) + "!x}", "zsh")
     expect(performance.now() - start).toBeLessThan(500)
   })
 
