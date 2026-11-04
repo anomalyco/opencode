@@ -2119,7 +2119,8 @@ impl Inner {
                 app,
                 vec![
                     Span::styled(name, Style::new().fg(theme.text.muted)),
-                    Span::raw(" "),
+                    // Unstyled in TS, which draws it in OpenTUI's default white.
+                    Span::styled(" ", Style::new().fg(Color::rgb(255, 255, 255))),
                     Span::styled(value, Style::new().fg(color)),
                 ],
             );
