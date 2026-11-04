@@ -187,7 +187,7 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
 }
 
 function inputSignature<R>(tool: Tool<R>) {
-  if (tool.freeformField !== undefined) return "(input: string)"
+  if (tool.stringInputField !== undefined) return "(input: string)"
   return isEmptyInput(tool) ? "()" : `(${inputTypeScript(tool, true)})`
 }
 

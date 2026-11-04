@@ -250,33 +250,53 @@ export type InputProperty = {
   readonly required: boolean
 }
 
-export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
+function inspectInput<A>(
+  input: SchemaType,
+  read: (schema: JsonSchema, resolve: (schema: JsonSchema) => JsonSchema | undefined) => A,
+) {
   try {
-    const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
+    const document = isEffectSchema(input)
+      ? (Schema.toJsonSchemaDocument(input, { onExcessProperty: "error" }) as {
           readonly schema: JsonSchema
           readonly definitions: Readonly<Record<string, JsonSchema>>
         })
       : {
-          schema: tool.input,
-          definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
+          schema: input,
+          definitions: { ...(input.definitions ?? {}), ...(input.$defs ?? {}) },
         }
-    let schema = document.schema
-    if (schema.$ref !== undefined) {
+    const resolve = (schema: JsonSchema) => {
+      if (schema.$ref === undefined) return schema
       const name = definitionName(schema.$ref)
-      const resolved = name === undefined ? undefined : document.definitions[name]
-      if (resolved === undefined) return []
-      schema = resolved
+      return name === undefined ? undefined : document.definitions[name]
     }
-    const required = new Set(schema.required ?? [])
-    return Object.entries(schema.properties ?? {}).map(([name, value]) => ({
-      name,
-      description: typeof value.description === "string" ? value.description : undefined,
-      required: required.has(name),
-    }))
+    const root = resolve(document.schema)
+    return root && read(root, resolve)
   } catch {
-    return []
+    return undefined
   }
+}
+
+export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
+  return (
+    inspectInput(tool.input, (schema) => {
+      const required = new Set(schema.required ?? [])
+      return Object.entries(schema.properties ?? {}).map(([name, value]) => ({
+        name,
+        description: typeof value.description === "string" ? value.description : undefined,
+        required: required.has(name),
+      }))
+    }) ?? []
+  )
+}
+
+export function stringInputField(input: SchemaType) {
+  return inspectInput(input, (schema, resolve) => {
+    if (schema.type !== undefined && schema.type !== "object") return
+    const fields = Object.entries(schema.properties ?? {})
+    if (fields.length !== 1) return
+    const [key, field] = fields[0]!
+    if (schema.required?.length === 1 && schema.required[0] === key && resolve(field)?.type === "string") return key
+  })
 }
 
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
@@ -299,7 +319,8 @@ export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
       : jsonSchemaToTypeScript(tool.output, pretty)
 
 export const decodeInput = <R>(tool: Tool<R>, value: unknown): unknown => {
-  const input = tool.freeformField !== undefined && typeof value === "string" ? { [tool.freeformField]: value } : value
+  const input =
+    tool.stringInputField !== undefined && typeof value === "string" ? { [tool.stringInputField]: value } : value
   return isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(input) : input
 }
 

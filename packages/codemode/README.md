@@ -61,8 +61,9 @@ only shape the model-visible signature. Without `output`, the signature uses `Pr
 
 Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
-For a tool whose input has one required string field, `freeformField: "patchText"` advertises `tools.patch(input: string)`.
-Both `tools.patch(diff)` and `tools.patch({ patchText: diff })` deliver `{ patchText: diff }` to validation, hooks, and the executor.
+Set `stringInput: true` on a tool whose input is an object with one required string field to accept the string directly.
+For example, with `input: Schema.Struct({ patchText: Schema.String })`, Code Mode advertises `tools.patch(input: string)`.
+Both `tools.patch(diff)` and `tools.patch({ patchText: diff })` deliver `{ patchText: diff }` to validation, hooks, and the executor. Other input shapes keep their declared signature.
 
 Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
 

@@ -5,6 +5,37 @@ import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
+test("stringInput derives the field from the encoded schema and keeps object calls working", async () => {
+  const lookup = Tool.make({
+    description: "Look up an ID",
+    input: Schema.Struct({ id: Schema.NumberFromString.annotate({ identifier: "ID" }) }).annotate({
+      identifier: "Lookup",
+    }),
+    stringInput: true,
+    output: Schema.Number,
+    execute: ({ id }) => Effect.succeed(id + 1),
+  })
+  const runtime = CodeMode.make({ tools: { lookup } })
+  expect(runtime.catalog[0]?.signature).toBe("tools.lookup(input: string): Promise<number>")
+  expect(
+    await Effect.runPromise(runtime.execute('return [await tools.lookup("1"), await tools.lookup({id:"2"})]')),
+  ).toMatchObject({ ok: true, value: [2, 3] })
+})
+
+test.each([
+  Schema.Struct({ text: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({ count: Schema.Number }),
+  Schema.Struct({ text: Schema.String, tag: Schema.optionalKey(Schema.String) }),
+])("stringInput leaves ineligible schemas object-shaped", async (input) => {
+  const tool = Tool.make({ description: "Inspect", input, stringInput: true, execute: () => Effect.void })
+  const runtime = CodeMode.make({ tools: { inspect: tool } })
+  expect(runtime.catalog[0]?.signature).toStartWith("tools.inspect({")
+  expect(await Effect.runPromise(runtime.execute('return await tools.inspect("value")'))).toMatchObject({
+    ok: false,
+    error: { kind: "InvalidToolInput" },
+  })
+})
+
 class HostError extends Schema.TaggedError<HostError>()("HostError", {
   message: Schema.String,
 }) {}
