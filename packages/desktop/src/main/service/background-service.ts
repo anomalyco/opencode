@@ -1,4 +1,5 @@
 import { app } from "electron"
+import type { DiscoverOptions } from "@opencode/client/service"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { CHANNEL } from "../constants"
 import { BackgroundServiceState } from "./background-service-state"
@@ -41,7 +42,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
-  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
+  const minimum = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
 
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
@@ -55,10 +56,10 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         )
       : undefined
 
-  const ensure = (required = version) =>
+  const ensure = (version: DiscoverOptions["version"]) =>
     client.Service.ensure({
       file,
-      version: required,
+      version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
       command: [
@@ -71,9 +72,11 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
 
+  // A newer service, such as one a newer CLI started, serves this app; only an older one is replaced. When the
+  // service it adopted fails, the retry requires the bundled version exactly and replaces it.
   const runEnsure = () =>
-    ensure().catch((error) => {
-      if (!shouldRetryEnsure(version, error instanceof Error ? error.message : String(error))) throw error
+    ensure(minimum === undefined ? undefined : client.atLeast(minimum)).catch((error) => {
+      if (!shouldRetryEnsure(error instanceof Error ? error.message : String(error))) throw error
 
       return ensure(cli.version)
     })
@@ -99,7 +102,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   )
 
   yield* Effect.logInfo("v2 CLI background service ready", {
-    version,
+    version: minimum,
     runningVersion,
     probed: !!early,
     ...endpoint(url.origin),

@@ -2,12 +2,12 @@ import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
-import { matchesVersion } from "../service-version.js"
+import { atLeast, matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
-export { fallback, headers }
+export { atLeast, fallback, headers }
 
 // Find, start, and stop the local opencode background service.
 //

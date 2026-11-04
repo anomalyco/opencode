@@ -17,7 +17,7 @@ export function startSidecarProbe() {
 
   if (version === "") return
   probe = import("@opencode/client/service")
-    .then(({ Service }) => Service.discover({ version }))
+    .then(({ atLeast, Service }) => Service.discover({ version: version === undefined ? undefined : atLeast(version) }))
     .catch(() => undefined)
 }
 

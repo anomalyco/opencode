@@ -19,15 +19,13 @@ describe("cli-version", () => {
   })
 
   test.each([
-    { version: undefined, message: "Background service failed to start", expected: true },
-    { version: undefined, message: "Timed out waiting for the background service to start", expected: true },
+    { message: "Background service failed to start", expected: true },
+    { message: "Timed out waiting for the background service to start", expected: true },
     {
-      version: undefined,
       message: "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
       expected: false,
     },
-    { version: "2.0.32", message: "Background service failed to start", expected: false },
-  ])("shouldRetryEnsure($version, $message) -> $expected", (input) => {
-    expect(shouldRetryEnsure(input.version, input.message)).toBe(input.expected)
+  ])("shouldRetryEnsure($message) -> $expected", (input) => {
+    expect(shouldRetryEnsure(input.message)).toBe(input.expected)
   })
 })

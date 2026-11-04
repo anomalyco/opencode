@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { decide, type LocalService } from "../src/service-probe"
+import { atLeast } from "../src/service-version"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -36,6 +37,29 @@ test("a compatible service is reused when ready, awaited while starting, and fai
     _tag: "fail",
     error: new Error("Background service failed to start"),
   })
+})
+
+// An older CLI launched after Desktop updated used to replace Desktop's newer service with its own.
+test.each([
+  { client: "2.0.32", service: "2.2.0", kept: true },
+  { client: "2.2.0", service: "2.2.0", kept: true },
+  { client: "2.2.0", service: "2.0.32", kept: false },
+  { client: "2.10.0", service: "2.9.9", kept: false },
+  { client: "0.0.0-beta-1200", service: "0.0.0-beta-1234", kept: true },
+  { client: "0.0.0-beta-1234", service: "0.0.0-beta-1200", kept: false },
+  { client: "0.0.0-beta-1234", service: "0.0.0-beta-1234.2", kept: true },
+  { client: "0.0.0-beta-1234.2", service: "0.0.0-beta-1234", kept: false },
+  { client: "2.2.0", service: "0.0.0-beta-1", kept: true },
+  { client: "0.0.0-beta-1", service: "2.0.0", kept: true },
+  { client: "0.0.0-next-5", service: "0.0.0-beta-1", kept: true },
+  { client: "local", service: "2.2.0", kept: false },
+  { client: "local", service: "local", kept: true },
+  { client: "2.2.0", service: "2.3.0-rc.1", kept: false },
+])("atLeast($client) keeps a $service service: $kept", (input) => {
+  const decision = decide(service({ version: input.service, state: "ready", compatible: true }), {
+    version: atLeast(input.client),
+  })
+  expect(decision._tag).toBe(input.kept ? "reuse" : "replace")
 })
 
 test("a version mismatch replaces the service, handing off terminals only when it is ready", () => {

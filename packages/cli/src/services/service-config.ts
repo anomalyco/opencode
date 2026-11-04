@@ -1,7 +1,7 @@
 import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
-import { Service } from "@opencode/client/effect/service"
+import { atLeast, Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -145,7 +145,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
-    version: input.checkVersion ? OPENCODE_VERSION : undefined,
+    // A newer service, such as one Desktop started after updating, serves this client; only an older one is replaced.
+    version: input.checkVersion ? atLeast(OPENCODE_VERSION) : undefined,
     env: processEnv((yield* read()).env),
     command: [...selfCommand(), "serve", "--service"],
   }

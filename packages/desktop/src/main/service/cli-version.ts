@@ -7,6 +7,7 @@ export function parseCliVersion(output: string) {
   return version
 }
 
+/** The oldest service version this app adopts, or undefined when it adopts any running service. */
 export function serviceVersion(input: {
   readonly channel: "local" | "dev" | "beta" | "prod"
   readonly isolated?: boolean
@@ -21,9 +22,7 @@ export function serviceVersion(input: {
 }
 
 // Retrying on timeout can also replace a server stuck in a migration longer than 120 s, which is accepted.
-export function shouldRetryEnsure(version: string | undefined, message: string) {
-  if (version !== undefined) return false
-
+export function shouldRetryEnsure(message: string) {
   return (
     message === "Background service failed to start" ||
     message === "Timed out waiting for the background service to start"
