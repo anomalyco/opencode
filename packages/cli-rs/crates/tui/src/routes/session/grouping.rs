@@ -69,7 +69,10 @@ impl Group {
     /// `groupID`: the first leaf's message and part, the kind, and the nesting level.
     pub fn id(&self, level: usize) -> Option<String> {
         let (message, part) = first_ref(&self.children)?;
-        Some(format!("{message}\u{1f}{part}\u{1f}{}\u{1f}{level}", self.kind.name()))
+        Some(format!(
+            "{message}\u{1f}{part}\u{1f}{}\u{1f}{level}",
+            self.kind.name()
+        ))
     }
 
     /// The rows below, depth first (`descendants`).
@@ -143,9 +146,9 @@ impl Settings {
         let verbosity = session
             .and_then(|session| session.verbosity)
             .unwrap_or(Verbosity::Medium);
-        let changed = self.grouping.replace(grouping) != grouping
-            || self.verbosity.replace(verbosity) != verbosity;
-        changed
+        let grouping = self.grouping.replace(grouping) != grouping;
+        let verbosity = self.verbosity.replace(verbosity) != verbosity;
+        grouping || verbosity
     }
 
     /// `groupExpanded`: the reader's choice, else High opens exploration and instruction groups.
@@ -203,7 +206,11 @@ pub fn rows_before(weights: &[usize], end: usize, budget: usize) -> usize {
 const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
 
 /// `projectEntries` over `reduce`'s rows: adjacent rows that share a path prefix form groups.
-pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verbosity) -> Vec<Spec> {
+pub fn project(
+    rows: Vec<Spec>,
+    messages: &[SessionMessageInfo],
+    verbosity: Verbosity,
+) -> Vec<Spec> {
     let index: HashMap<&str, &SessionMessageInfo> = messages
         .iter()
         .map(|message| (message.id(), message))
@@ -233,7 +240,6 @@ pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verb
     }
     out
 }
-
 
 /// Appends a row along its path (`appendEntry`). The flag is `closesPrevious`.
 fn append(nodes: &mut Vec<(Node, bool)>, spec: Spec, path: &[Kind], closes: bool) {
@@ -296,7 +302,9 @@ fn path(
             // A running compaction is pending and leaves the group before it open.
             let running = matches!(
                 message,
-                Some(SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)))
+                Some(SessionMessageInfo::Compaction(
+                    SessionMessageCompaction::Running(_)
+                ))
             );
             let path = if instruction_paths(message).is_empty() {
                 Vec::new()
@@ -427,7 +435,10 @@ pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool
 
 /// A thought or tool call an activity summary counts.
 pub enum Activity<'a> {
-    Thought(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning),
+    Thought(
+        &'a SessionMessageAssistant,
+        &'a SessionMessageAssistantReasoning,
+    ),
     Tool(&'a SessionMessageAssistantTool),
 }
 
@@ -450,7 +461,11 @@ impl Activity<'_> {
 
 /// `summarizeActivity`: Low's summary, e.g. `3 commands, 1 edit, 2 thoughts, 4 reads`. Until something
 /// finishes, the label is the first running item's status. Returns the label and whether any item runs.
-pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: bool) -> (String, bool) {
+pub fn activity_summary(
+    items: &[Activity<'_>],
+    instructions: usize,
+    closed: bool,
+) -> (String, bool) {
     let mut counts = [
         ("command", 0),
         ("edit", 0),
@@ -612,7 +627,7 @@ enum ChildKey {
 }
 
 enum Child {
-    Row(Row),
+    Row(Box<Row>),
     Thought(Thought),
     Group(GroupView),
 }
@@ -646,7 +661,11 @@ impl GroupView {
         inner.header.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
             // A click that ends a text selection does not toggle (`useDisclosure`).
-            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
+            if cx
+                .app()
+                .selected_text()
+                .is_some_and(|text| !text.is_empty())
+            {
                 return;
             }
             let (Some(id), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else {
@@ -698,11 +717,12 @@ impl GroupView {
                 0
             },
         );
-        inner.body.gap(if group.kind == Kind::Activity { 1 } else { 0 });
-        inner.body.padding_edge(
-            Edge::Left,
-            if mode == Some(Mode::Thought) { 3 } else { 0 },
-        );
+        inner
+            .body
+            .gap(if group.kind == Kind::Activity { 1 } else { 0 });
+        inner
+            .body
+            .padding_edge(Edge::Left, if mode == Some(Mode::Thought) { 3 } else { 0 });
         inner.children(cx, children, mode.unwrap_or(Mode::Normal), completed);
     }
 
@@ -801,8 +821,7 @@ impl GroupView {
         if tools.is_empty() {
             return (None, None);
         }
-        let completed =
-            completed || tools.iter().all(|tool| tool.time.completed.is_some());
+        let completed = completed || tools.iter().all(|tool| tool.time.completed.is_some());
         let header = Header {
             icon: if completed { "→" } else { "✱" },
             label: exploration_label(&tools, completed),
@@ -888,7 +907,10 @@ impl GroupView {
 fn thought<'a>(
     cx: &'a Context<'_>,
     spec: &Spec,
-) -> Option<(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning)> {
+) -> Option<(
+    &'a SessionMessageAssistant,
+    &'a SessionMessageAssistantReasoning,
+)> {
     let Spec::Part { message, part } = spec else {
         return None;
     };
@@ -938,8 +960,7 @@ impl Inner {
                 .color(fg)
                 .label(header.label.clone())
                 .animations(self.animations);
-            self.header
-                .add(&View::new(&self.app).row().child(&spinner));
+            self.header.add(&View::new(&self.app).row().child(&spinner));
             Painted::Spinner(spinner)
         } else {
             // `InlineToolRow`: the icon in its own two cells, then the label.
@@ -947,9 +968,7 @@ impl Inner {
                 .width(2)
                 .shrink(0.0)
                 .fg(fg);
-            let label = Text::new(&self.app, header.label.clone())
-                .grow(1.0)
-                .fg(fg);
+            let label = Text::new(&self.app, header.label.clone()).grow(1.0).fg(fg);
             self.header
                 .add(&View::new(&self.app).row().child(&icon).child(&label));
             Painted::Done(vec![icon, label])
@@ -1001,7 +1020,7 @@ impl Inner {
                     Node::Entry(spec) => {
                         let row = Row::new(cx, spec);
                         row.wrapper.margin_edge(Edge::Top, 0);
-                        Child::Row(row)
+                        Child::Row(Box::new(row))
                     }
                     Node::Group(_) => {
                         Child::Group(GroupView::new(cx, &self.settings, self.level + 1))
@@ -1163,7 +1182,9 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, ["row", "Reasoning:2", "Exploration:2", "row", "row"]);
-        let Spec::Group(reasoning) = &medium[1] else { unreachable!() };
+        let Spec::Group(reasoning) = &medium[1] else {
+            unreachable!()
+        };
         assert!(reasoning.completed);
         assert_eq!(
             reasoning.id(0).as_deref(),
@@ -1173,9 +1194,13 @@ mod tests {
         // Low wraps the whole run of thoughts and tools in one activity group, with nested groups.
         let low = project(rows, &list, Verbosity::Low);
         assert_eq!(low.len(), 3);
-        let Spec::Group(activity) = &low[1] else { unreachable!() };
+        let Spec::Group(activity) = &low[1] else {
+            unreachable!()
+        };
         assert_eq!((activity.kind, activity.size), (Kind::Activity, 5));
-        assert!(matches!(&activity.children[0], Node::Group(group) if group.kind == Kind::Reasoning));
+        assert!(
+            matches!(&activity.children[0], Node::Group(group) if group.kind == Kind::Reasoning)
+        );
         assert!(matches!(&activity.children[2], Node::Entry(_)));
     }
 
@@ -1192,7 +1217,9 @@ mod tests {
             completed: true,
         });
         assert_eq!(settings.weight(&group, true), 1);
-        let Spec::Group(inner) = &group else { unreachable!() };
+        let Spec::Group(inner) = &group else {
+            unreachable!()
+        };
         settings
             .expanded
             .borrow_mut()
