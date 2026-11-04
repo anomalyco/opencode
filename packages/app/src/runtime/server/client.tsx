@@ -11,6 +11,7 @@ import { createRefCountMap } from "@/runtime/server/refcount"
 import { createRequestQueue } from "@/runtime/server/request-queue"
 import { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "./current"
+import { createEndpointSyncState, transitionEndpointSync, type EndpointSyncEvent } from "./server-sync/endpoint-machine"
 
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
@@ -89,9 +90,38 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
   const events = createOpenCodeEventSource()
   const reconnect = resolveEndpoint(server)
+  // Read only by `dispatchEndpoint`, the transport's only writer.
+  let endpoint = createEndpointSyncState(server.http)
+
+  function dispatchEndpoint(event: EndpointSyncEvent) {
+    const result = transitionEndpointSync(endpoint, event)
+    endpoint = result.state
+    result.effects.forEach((effect) => {
+      if (effect.type === "transport.update") return void transport.update(effect.http)
+      connection.internal.resync("Server endpoint changed")
+    })
+  }
 
   const connection = createClientConnection(transport.api, {
-    reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
+    // Returns the transport's client rather than the resolved one: when the plugin reported a newer endpoint while
+    // this resolution ran, the stream connects to that one.
+    reconnect: reconnect
+      ? async (signal) => {
+          dispatchEndpoint({ type: "resolve.started" })
+
+          if (endpoint.type !== "resolving") return transport.api
+          const attempt = endpoint.attempt
+          const resolution = reconnect(signal)
+
+          void resolution.catch(() => dispatchEndpoint({ type: "resolve.failed", attempt }))
+
+          return resolution.then((http) => {
+            dispatchEndpoint({ type: "resolve.succeeded", attempt, http })
+
+            return transport.api
+          })
+        }
+      : undefined,
     flushInterval: 16,
     pageLifecycle: true,
     onEvent(event) {
@@ -112,15 +142,13 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     createEffect(
       on(
         () => `${server.http.url}\0${server.http.password ?? ""}`,
-        () => {
-          if (sameEndpoint(transport.http, server.http)) return
-          transport.update(server.http)
-          connection.internal.resync("Server endpoint changed")
-        },
+        () => dispatchEndpoint({ type: "endpoint.reported", http: server.http }),
         { defer: true },
       ),
     )
   }
+
+  onCleanup(() => dispatchEndpoint({ type: "disposed" }))
 
   return {
     server,

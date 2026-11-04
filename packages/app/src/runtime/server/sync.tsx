@@ -109,8 +109,10 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
         refetchType: "none",
       })
     },
-    connected: () => {
-      if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
+    // The first connect enables the bootstrap query, which loads on its own. After a reconnect, a fetch still
+    // running from the lost stream may have read nothing, so it is replaced rather than joined.
+    connected: (info) => {
+      if (info.reconnect) void bootstrap.refetch({ cancelRefetch: true })
     },
   })
 
