@@ -16643,6 +16643,30 @@
               }
             ]
           },
+          "network": {
+            "type": "object",
+            "properties": {
+              "client_certificate": {
+                "type": "object",
+                "properties": {
+                  "cert": {
+                    "type": "string",
+                    "description": "Path to the PEM client certificate: absolute, `~/`, or relative to this configuration file"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "Path to the PEM private key: absolute, `~/`, or relative to this configuration file"
+                  },
+                  "passphrase": {
+                    "type": "string"
+                  }
+                },
+                "required": ["cert", "key"],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "providers": {
             "type": "object",
             "additionalProperties": {
