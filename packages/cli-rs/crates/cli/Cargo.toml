@@ -10,6 +10,12 @@ publish.workspace = true
 name = "opencode-rs"
 path = "src/main.rs"
 
+# Runs the prompt kit's parity scripts (parity/oracle/C.p-prompts.ts); not shipped.
+[[bin]]
+name = "opencode-prompt-demo"
+path = "src/prompt/demo.rs"
+test = false
+
 [lints]
 workspace = true
 
@@ -19,8 +25,10 @@ clap = { workspace = true, features = ["string"] }
 clap_complete.workspace = true
 log.workspace = true
 regex.workspace = true
+rustix = { workspace = true, features = ["termios", "event"] }
 serde_json.workspace = true
 tokio.workspace = true
+unicode-width.workspace = true
 url.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
