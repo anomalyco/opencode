@@ -67,6 +67,34 @@ const delta = (bus: Bus.Interface) =>
   })
 
 describe("Bus Session routing", () => {
+  it.effect("keeps cross-location children visible globally without widening parent-location subscriptions", () =>
+    Effect.gen(function* () {
+      yield* seed()
+      const bus = yield* Bus.Service
+      const parent = yield* watch(bus, a)
+      const child = yield* watch(bus, b)
+      const global = yield* watch(bus)
+      const typed = yield* bus.subscribe([SessionEvent.Created, SessionEvent.Execution.Succeeded, Done]).pipe(
+        Stream.takeUntil((event) => event.type === Done.type),
+        Stream.runCollect,
+        Effect.provideService(Location.Service, location(a)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const sessionID = SessionID.create()
+      const created = yield* bus.publish(
+        SessionEvent.Created,
+        { sessionID, parentID: id, location: b, projectID: Project.ID.global, slug: "child", version: "test" },
+        { location: b },
+      )
+      const completed = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      const done = yield* bus.publish(Done, {})
+      expect(yield* Fiber.join(parent)).toEqual([done])
+      expect(yield* Fiber.join(typed)).toEqual([done])
+      expect(yield* Fiber.join(child)).toEqual([created, completed, done])
+      expect(yield* Fiber.join(global)).toEqual([created, completed, done])
+    }),
+  )
+
   it.effect("delivers workspace-only moves to both owners without duplicating same-location moves", () =>
     Effect.gen(function* () {
       yield* seed()

@@ -10,6 +10,8 @@ import { Skill } from "@opencode/schema/skill"
 import { Agent } from "@opencode/core/agent"
 import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
+import { Config } from "@opencode/core/config"
+import { Instance } from "@opencode/core/instance"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Hash } from "@opencode/util/hash"
@@ -36,7 +38,7 @@ import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { initGit } from "./fixture/git"
+import { initGit, initRepo } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
@@ -89,7 +91,15 @@ const durableIt = testEffect(
 )
 const liveIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      Project.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      Instance.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(SessionExecution.noopLayer),
@@ -120,7 +130,6 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
-  // @ts-expect-error child sessions inherit their parent's location.
   session.create({ parentID: Session.ID.create(), location })
 }
 void assertCreateInputTypes
@@ -130,6 +139,84 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  liveIt.live("uses the child's configuration and shell directory from its first operation", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const childDirectory = AbsolutePath.make(path.join(directory, "child"))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(childDirectory)
+          await fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ default_agent: "build" }))
+          await fs.writeFile(path.join(childDirectory, "opencode.json"), JSON.stringify({ default_agent: "plan" }))
+        })
+        const sessions = yield* Session.Service
+        const instances = yield* Instance.Service
+        const parent = yield* sessions.create({ location: { directory: AbsolutePath.make(directory) } })
+        const child = yield* sessions.create({ parentID: parent.id, location: { directory: childDirectory } })
+        const selectedAgent = Effect.gen(function* () {
+          const config = yield* Config.Service
+          return Config.latest(yield* config.entries(), "default_agent")
+        })
+        expect(yield* selectedAgent.pipe(instances.provide(parent))).toBe("build")
+        expect(yield* selectedAgent.pipe(instances.provide(child))).toBe("plan")
+        yield* sessions.shell({
+          sessionID: child.id,
+          command: process.platform === "win32" ? "(Get-Location).Path" : "pwd",
+        })
+        const messages = yield* sessions.messages({ sessionID: child.id })
+        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
+        expect(shell).toMatchObject({ status: "exited", exit: 0 })
+        expect(shell?.output?.output.trim()).toBe(childDirectory)
+      }),
+    ),
+  )
+
+  projectIt.live("places children in worktrees and other projects without changing ownership", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const main = AbsolutePath.make(path.join(directory, "repo"))
+        const worktree = AbsolutePath.make(path.join(directory, "worktree"))
+        const other = AbsolutePath.make(path.join(directory, "other"))
+        yield* Effect.promise(async () => {
+          await initRepo(main)
+          await $`git worktree add --detach ${worktree}`.cwd(main).quiet()
+          await fs.mkdir(other)
+        })
+        const sessions = yield* Session.Service
+        const parent = yield* sessions.create({
+          location: { directory: main },
+          metadata: { task: "build" },
+          permissions: [{ action: "edit", resource: "*", effect: "ask" }],
+        })
+        const child = yield* sessions.create({
+          parentID: parent.id,
+          location: { directory: AbsolutePath.make(`${worktree}${path.sep}`) },
+        })
+        const separate = yield* sessions.create({ parentID: parent.id, location: { directory: other } })
+
+        expect(child).toMatchObject({
+          parentID: parent.id,
+          location: { directory: worktree },
+          projectID: parent.projectID,
+          metadata: parent.metadata,
+          permissions: parent.permissions,
+        })
+        expect(child.subpath).toBeUndefined()
+        expect(separate.location.directory).toBe(other)
+        expect(separate.projectID).not.toBe(parent.projectID)
+        expect((yield* sessions.list({ parentID: parent.id })).data.map((item) => item.id).sort()).toEqual(
+          [child.id, separate.id].sort(),
+        )
+        expect((yield* sessions.list({ parentID: parent.id, directory: main })).data).toEqual([])
+        expect(yield* sessions.create({ id: child.id, parentID: parent.id, location: { directory: other } })).toEqual(
+          child,
+        )
+        yield* sessions.remove(parent.id)
+        expect(yield* sessions.get(child.id).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+        expect(yield* sessions.get(separate.id).pipe(Effect.flip)).toBeInstanceOf(Session.NotFoundError)
+      }),
+    ),
+  )
+
   liveIt.live("preserves the project canonical directory when creating a session in another clone", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -516,6 +603,9 @@ describe("Session.create", () => {
       const missing = Session.ID.create()
 
       expect(yield* Effect.flip(session.create({ parentID: missing, title: "child" }))).toEqual(
+        new Session.NotFoundError({ sessionID: missing }),
+      )
+      expect(yield* Effect.flip(session.create({ parentID: missing, location }))).toEqual(
         new Session.NotFoundError({ sessionID: missing }),
       )
     }),

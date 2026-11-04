@@ -93,7 +93,7 @@ type CreateBaseInput = {
   permissions?: Permission.Ruleset
 }
 type CreateInput = CreateBaseInput &
-  ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
+  ({ location: Location.Ref; parentID?: SessionSchema.ID } | { parentID: SessionSchema.ID; location?: Location.Ref })
 
 type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: SessionSchema.ID }
 
@@ -291,7 +291,7 @@ const layer = Layer.effect(
         if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
+        const location = input.location ? LocationServiceMap.canonical(input.location) : parent?.location
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
@@ -308,8 +308,7 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
-              // Children inherit metadata and permissions the way they inherit
-              // location, so host policies that read them treat the family uniformly.
+              // Placement overrides do not change the inherited host policies.
               metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,

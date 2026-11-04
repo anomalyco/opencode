@@ -136,6 +136,9 @@ export interface Subscribe {
    * With an ambient Location, delivery is restricted to that Location and global
    * events. Unlocated Session events use the Session's owner at publication time.
    * Session moves reach both the old and new Location, without changing the event.
+   * Parentage does not widen this scope: children may live in other Locations.
+   * Family observers must subscribe without an ambient Location and filter by
+   * Session ID. Subagent completion uses global Session-ID jobs, not this filter.
    */
   (): Stream.Stream<Event.Payload>
   <D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>

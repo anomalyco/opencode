@@ -180,7 +180,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.create",
           summary: "Create session",
           description:
-            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+            "Create a session at the requested location. A parentID creates a linked child session; when location is omitted, the child inherits its parent's location. An explicit location takes precedence. Metadata and permissions still inherit when omitted. List by parentID without a directory filter to include children in other locations.",
         }),
       ),
     )
