@@ -30,5 +30,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+futures-util.workspace = true
 opencode-parity.workspace = true
 tempfile.workspace = true
