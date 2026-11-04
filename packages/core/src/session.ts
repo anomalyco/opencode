@@ -308,7 +308,7 @@ const layer = Layer.effect(
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
               agent: input.agent,
-              // Placement overrides do not change the inherited host policies.
+              // Children inherit metadata and permissions even when placed at another location.
               metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,

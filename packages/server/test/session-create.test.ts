@@ -1,17 +1,59 @@
 import { expect } from "bun:test"
-import { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/core/session"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Workspace } from "@opencode/schema/workspace"
 import { OpenCode } from "@opencode/client"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
+import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import path from "path"
 import { it } from "../../core/test/lib/effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { ServerFetch } from "../src/fetch"
+import { createEmbeddedRoutes } from "../src/routes"
 
 const SessionResponse = Schema.Struct({ data: Schema.toEncoded(Session.Info) })
 const SessionsResponse = Schema.Struct({ data: Schema.Array(Schema.toEncoded(Session.Info)) })
 
+it.live("an explicit HTTP location selects local placement while omission preserves the parent's workspace", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const context = yield* Layer.build(
+      createEmbeddedRoutes({
+        app: { version: "test" },
+        database: { path: ":memory:" },
+        fs: { filewatcher: false },
+      }).pipe(Layer.provide(HttpServer.layerServices)),
+    )
+    const sessions = Context.get(context, Session.Service)
+    const handler = Context.get(context, HttpRouter.HttpRouter)
+      .asHttpEffect()
+      .pipe(HttpEffect.toWebHandlerWith(context))
+    const parent = yield* sessions.create({
+      location: { directory: AbsolutePath.make(tmp.path), workspaceID: Workspace.ID.make("wrk_parent") },
+    })
+    const create = (location?: { directory: string }) =>
+      Effect.promise(async () => {
+        const response = await handler(
+          new Request("http://opencode.local/api/session", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ parentID: parent.id, location }),
+          }),
+        )
+        expect(response.status).toBe(200)
+        return Session.ID.make(Schema.decodeUnknownSync(SessionResponse)(await response.json()).data.id)
+      })
+    const inherited = yield* sessions.get(yield* create())
+    const explicit = yield* sessions.get(yield* create({ directory: `${tmp.path}${path.sep}` }))
+    expect(inherited.location).toEqual(parent.location)
+    expect(explicit.location.directory).toBe(parent.location.directory)
+    expect(explicit.location.workspaceID).toBeUndefined()
+  }).pipe(Effect.scoped),
+)
+
 it.live("creates a child at its parent's location and lists it under the parent", () =>
   Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
     const handler = yield* ServerFetch.make({
       app: { version: "test" },
       database: { path: ":memory:" },
@@ -29,7 +71,7 @@ it.live("creates a child at its parent's location and lists it under the parent"
         expect(response.status).toBe(200)
         return Schema.decodeUnknownSync(SessionResponse)(await response.json()).data
       })
-    const parent = yield* create({ title: "Parent" })
+    const parent = yield* create({ title: "Parent", location: { directory: tmp.path } })
     const child = yield* create({ parentID: parent.id, title: "Child" })
     const response = yield* Effect.promise(() =>
       handler(new Request(`http://opencode.local/api/session?parentID=${parent.id}`)),
