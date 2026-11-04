@@ -16667,6 +16667,12 @@
               "part_rows": {
                 "type": "boolean"
               },
+              "schedules": {
+                "type": "boolean"
+              },
+              "artifacts": {
+                "type": "boolean"
+              },
               "image_generate": {
                 "anyOf": [
                   {
@@ -16706,12 +16712,6 @@
                     "additionalProperties": false
                   }
                 ]
-              },
-              "schedules": {
-                "type": "boolean"
-              },
-              "artifacts": {
-                "type": "boolean"
               },
               "subagent_depth": {
                 "type": "integer",
