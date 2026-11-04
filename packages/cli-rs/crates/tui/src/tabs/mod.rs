@@ -12,7 +12,7 @@ pub mod strip;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use opencode_api::generated::{
@@ -76,12 +76,15 @@ impl Status {
 }
 
 type Mutation = Arc<dyn Fn(&mut Scope) + Send + Sync>;
+type Write = Arc<dyn Fn(&mut Persisted) + Send + Sync>;
 
 #[derive(Default)]
 pub struct Tabs {
     file: RefCell<Persisted>,
     /// The latest write; a write's result replaces the memory copy only if no newer write was sent.
     writes: Cell<u64>,
+    /// Writes not in `tabs.json` yet, in the order they were made, with their revisions.
+    pending: Arc<Mutex<Vec<(u64, Write)>>>,
     history: RefCell<History>,
     closed: RefCell<Vec<Closed>>,
     /// Closed tabs that a write still in flight must not bring back (`cancelledTabs`).
@@ -660,6 +663,10 @@ fn select_index(tui: &Tui, index: usize) {
 
 /// Applies `mutation` to the scope in memory now, and to `tabs.json` under the storage lock on a blocking
 /// thread. The written file then replaces the memory copy, unless a newer write was sent meanwhile.
+///
+/// Blocking tasks can run in any order, so each one writes every pending mutation, in the order they were
+/// made, while it holds the queue: a title that lands just after its tab opened must not reach the file
+/// before the tab does.
 fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let mutation: Mutation = Arc::new(mutation);
     let cwd = tui.tabs.cwd.borrow().clone();
@@ -682,11 +689,25 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     tui.tabs.writes.set(revision);
     changed(tui);
     let Some(storage) = tui.storage() else { return };
+    if let Ok(mut pending) = tui.tabs.pending.lock() {
+        pending.push((revision, Arc::new(apply)));
+    }
+    let pending = tui.tabs.pending.clone();
     let proxy = tui.app.proxy();
     tui.app.runtime().spawn_blocking(move || {
+        let Ok(mut pending) = pending.lock() else {
+            return;
+        };
+        // An earlier task already wrote this one.
+        let Some(&(revision, _)) = pending.last() else {
+            return;
+        };
+        let batch = std::mem::take(&mut *pending);
         let result = storage.update("tabs", &serde_json::json!({}), |value| {
             let mut file: Persisted = serde_json::from_value(value.clone()).unwrap_or_default();
-            apply(&mut file);
+            for (_, write) in &batch {
+                write(&mut file);
+            }
             *value = serde_json::to_value(&file).unwrap_or_default();
         });
         match result {
