@@ -20,7 +20,7 @@ use opencode_plugin::{Definition, Setup};
 use opencode_tui::app::Roots;
 use opencode_tui::dialogs::highlights::Highlight;
 use opencode_tui::dialogs::{pair, settings, status, theme_list};
-use opencode_tui::features::highlights;
+use opencode_tui::features::{highlights, update_notification};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -130,8 +130,8 @@ fn wait_for(app: &TestApp, text: &str) -> String {
     screen
 }
 
-/// Compares the dialog panel with the fixture: every cell inside the bounding box of the cells that carry the
-/// panel background (the background under the fixture's first `title` letter).
+/// Compares the dialog panel with the fixture: every cell inside the bounding box of the cells whose background is
+/// not the backdrop's (the fixture's top-left cell), so the footer band counts. `title` must be in the fixture.
 #[track_caller]
 fn assert_dialog(app: &TestApp, name: &str, title: &str) {
     // Deferred work (a dialog built again, a read) may still be on its way.
@@ -146,19 +146,17 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
 fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
     let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let mut actual = Fixture::from_capture(&app.render());
-    let at = (0..expected.height)
-        .find_map(|y| {
-            let row: String = (0..expected.width)
-                .map(|x| expected.cell(x, y).unwrap().symbol.clone())
-                .collect();
-            row.find(title)
-                .map(|x| (row[..x].chars().count() as u32, y))
-        })
-        .unwrap_or_else(|| panic!("{title:?} is not in {name}"));
-    let panel = expected.cell(at.0, at.1).unwrap().bg;
+    let titled = (0..expected.height).any(|y| {
+        let row: String = (0..expected.width)
+            .map(|x| expected.cell(x, y).unwrap().symbol.clone())
+            .collect();
+        row.contains(title)
+    });
+    assert!(titled, "{title:?} is not in {name}");
+    let backdrop = expected.cell(0, 0).unwrap().bg;
     let inside: Vec<(u32, u32)> = (0..expected.height)
         .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
-        .filter(|&(x, y)| expected.cell(x, y).unwrap().bg == panel)
+        .filter(|&(x, y)| expected.cell(x, y).unwrap().bg != backdrop)
         .collect();
     let (left, right) = (
         inside.iter().map(|p| p.0).min().unwrap(),
@@ -702,4 +700,220 @@ fn highlights_open_once_after_an_update_into_an_idle_home() {
         storage.load("highlights", &json!({})).unwrap(),
         json!({ "seen": "2.0.28" })
     );
+}
+
+// Update ------------------------------------------------------------------------------------------------------
+
+type CheckDone = Box<dyn FnOnce(Result<Option<update_notification::Check>, String>)>;
+type ApplyDone = Box<dyn FnOnce(Result<(), String>)>;
+
+/// An updater that keeps its callbacks, so a test finishes each check and install when it wants. It never installs
+/// anything.
+#[derive(Default)]
+struct FakeUpdater {
+    checks: std::cell::RefCell<Vec<CheckDone>>,
+    applies: std::cell::RefCell<Vec<(String, ApplyDone)>>,
+}
+
+impl update_notification::Source for FakeUpdater {
+    fn remote(&self) -> bool {
+        false
+    }
+
+    fn check(&self, _installing: Box<dyn Fn(String)>, done: CheckDone) {
+        self.checks.borrow_mut().push(done);
+    }
+
+    fn apply(&self, version: &str, done: ApplyDone) {
+        self.applies.borrow_mut().push((version.to_owned(), done));
+    }
+}
+
+impl FakeUpdater {
+    fn finish_check(&self, result: Result<Option<update_notification::Check>, String>) {
+        let done = self.checks.borrow_mut().pop().expect("a check is running");
+        done(result);
+    }
+
+    fn finish_apply(&self, result: Result<(), String>) -> String {
+        let (version, done) = self
+            .applies
+            .borrow_mut()
+            .pop()
+            .expect("an install is running");
+        done(result);
+        version
+    }
+}
+
+/// Clicks the first cell of `text` in a fresh frame.
+fn click_on(app: &TestApp, text: &str) {
+    let frame = Fixture::from_capture(&app.render());
+    let rows: Vec<String> = (0..frame.height)
+        .map(|y| {
+            (0..frame.width)
+                .map(|x| frame.cell(x, y).unwrap().symbol.clone())
+                .collect()
+        })
+        .collect();
+    let (x, y) = rows
+        .iter()
+        .enumerate()
+        .find_map(|(y, line)| {
+            line.find(text)
+                .map(|x| (line[..x].chars().count() as u16, y as u16))
+        })
+        .unwrap_or_else(|| panic!("{text:?} is not on screen:\n{}", rows.join("\n")));
+    app.click(x, y);
+}
+
+fn with_updater(app: &TestApp, tui: Option<Rc<Tui>>) -> (Rc<Tui>, Rc<FakeUpdater>) {
+    let tui = tui.unwrap_or_else(|| mount(app, info(json!({}))));
+    let updater = Rc::new(FakeUpdater::default());
+    update_notification::set_source(&tui, updater.clone());
+    (tui, updater)
+}
+
+fn available(version: &str) -> update_notification::ClientNotice {
+    update_notification::ClientNotice {
+        kind: update_notification::Kind::Available,
+        version: version.to_owned(),
+    }
+}
+
+#[test]
+fn update_dialog_matches_typescript_through_an_install() {
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "/update to install v2.0.28");
+    update_notification::open(&tui, update_notification::Origin::Notification);
+    wait_for(&app, "Update available");
+    assert_dialog(&app, "E.18b/update-available", "Update available");
+    // The notice's state needs no check.
+    assert!(updater.checks.borrow().is_empty());
+
+    app.press("enter");
+    wait_for(&app, "Installing OpenCode 2.0.28");
+    assert_dialog(&app, "E.18b/update-installing", "Updating OpenCode");
+    assert_eq!(updater.finish_apply(Ok(())), "2.0.28");
+    wait_for(&app, "Update successful");
+    assert_dialog(&app, "E.18b/update-installed", "Update");
+    let epilogue = opencode_tui::features::epilogue::text(&tui).unwrap_or_default();
+    assert!(epilogue.contains("2.0.28"), "{epilogue}");
+
+    // A failed install shows the error under "Update available".
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::client_notice(&tui, available("2.0.28"));
+    update_notification::open(&tui, update_notification::Origin::Notification);
+    wait_for(&app, "update enter");
+    app.press("enter");
+    wait_for(&app, "Installing");
+    updater.finish_apply(Err("npm exited with code 1".to_owned()));
+    wait_for(&app, "npm exited with code 1");
+    assert_dialog(&app, "E.18b/update-failed", "Update available");
+}
+
+#[test]
+fn update_checks_show_their_result_as_typescript() {
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    tui.keymap.dispatch("opencode.update", None);
+    wait_for(&app, "Checking for updates");
+    assert_dialog(&app, "E.18b/update-checking", "Update");
+    updater.finish_check(Ok(None));
+    wait_for(&app, "already up to date");
+    assert_dialog(&app, "E.18b/update-current", "Update");
+
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    updater.finish_check(Ok(Some(update_notification::Check::Unavailable(
+        "OpenCode was installed with Homebrew. Run `brew upgrade opencode` to update.".to_owned(),
+    ))));
+    wait_for(&app, "Homebrew");
+    assert_dialog(&app, "E.18b/update-unavailable", "Update");
+
+    // A check that finds an update offers it; a check of a closed dialog is dropped.
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available(
+        "2.0.29",
+    )))));
+    wait_for(&app, "update enter");
+    assert_eq!(
+        tui.updates.state(),
+        Some(update_notification::UpdateState::Available(
+            "2.0.29".to_owned()
+        ))
+    );
+
+    let app = TestApp::new(80, 30);
+    let (tui, updater) = with_updater(&app, None);
+    update_notification::open(&tui, update_notification::Origin::Manual);
+    wait_for(&app, "Checking");
+    tui.dialogs.clear();
+    updater.finish_check(Ok(Some(update_notification::Check::Notice(available(
+        "2.0.30",
+    )))));
+    assert_eq!(tui.updates.state(), None);
+    assert!(!app.text().contains("Update"), "{}", app.text());
+}
+
+#[test]
+fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
+    let home = tempfile::tempdir().unwrap();
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
+    // Without an updater there is no notice and no `/update`; with one, the client's notice shows.
+    update_notification::client_notice(&tui, available("2.0.28"));
+    wait_for(&app, "/update to install v2.0.28");
+    click_on(&app, "/update");
+    wait_for(&app, "Update available");
+    assert_dialog(&app, "E.18b/update-available", "Update available");
+    // Skip dismisses the notice and remembers it.
+    click_on(&app, "skip");
+    app.wait_until(Duration::from_secs(5), || {
+        !app.text().contains("to install v2.0.28")
+    });
+    assert!(!app.text().contains("Update available"), "{}", app.text());
+    let storage = tui.storage().unwrap();
+    app.wait_until(Duration::from_secs(5), || {
+        storage.load("update-notifications", &json!({})).unwrap()
+            == json!({ "versions": ["client:2.0.28"] })
+    });
+    assert_eq!(
+        storage.load("update-notifications", &json!({})).unwrap(),
+        json!({ "versions": ["client:2.0.28"] })
+    );
+
+    // A later TUI on the same storage does not show it again, but shows a newer version.
+    let app = TestApp::new(80, 30);
+    let (tui, _updater) = with_updater(&app, Some(mount_rooted(&app, home.path(), json!({}))));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    app.wait_until(Duration::from_millis(300), || {
+        app.text().contains("v2.0.28")
+    });
+    assert!(!app.text().contains("v2.0.28"), "{}", app.text());
+    update_notification::client_notice(&tui, available("2.0.29"));
+    wait_for(&app, "/update to install v2.0.29");
+    update_notification::client_notice(
+        &tui,
+        update_notification::ClientNotice {
+            kind: update_notification::Kind::Installed,
+            version: "2.0.29".to_owned(),
+        },
+    );
+    wait_for(&app, "/exit restart to use v2.0.29");
+}
+
+#[test]
+fn without_an_updater_there_is_no_update_command_or_notice() {
+    let app = TestApp::new(80, 30);
+    let tui = mount(&app, info(json!({})));
+    update_notification::client_notice(&tui, available("2.0.28"));
+    tui.keymap.dispatch("opencode.update", None);
+    app.wait_until(Duration::from_millis(300), || app.text().contains("Update"));
+    assert!(!app.text().contains("Update"), "{}", app.text());
+    assert!(!app.text().contains("2.0.28"), "{}", app.text());
 }
