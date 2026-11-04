@@ -3,6 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Switch } from "@opencode/ui/switch"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -25,7 +26,6 @@ import {
 import { createStore } from "solid-js/store"
 import { createKeyed, useDrawer, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
-import { configuredLsps } from "./configured-lsp"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { createFlyoutMotion } from "./flyout-motion"
 
@@ -33,7 +33,6 @@ const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
   { type: "plugins", icon: "cube", label: "plugins" },
   { type: "skills", icon: "graduation-cap", label: "skills" },
-  { type: "lsp", icon: "code-slash", label: "lsp" },
 ] as const
 
 type Service = (typeof services)[number]["type"]
@@ -130,7 +129,6 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     mcp: useMcp(props, () => close()),
     plugins: useCatalog(props, "plugins"),
     skills: useCatalog(props, "skills"),
-    lsp: useLsp(props),
   }
 
   const active = () => {
@@ -471,17 +469,17 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     data-overflow={menu.overflow[service.type] || undefined}
                     inert={menu.pane !== service.type || undefined}
                   >
-                    <div
-                      ref={(element) => (scrollers[service.type] = element)}
-                      class="session-service-scroll"
-                      data-scrollable
+                    <MenuScroll
+                      class="min-h-0"
+                      viewportClass="session-service-scroll"
+                      viewportRef={(element) => (scrollers[service.type] = element)}
                     >
                       <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
                         <ServiceBody source={source}>
                           <source.Body />
                         </ServiceBody>
                       </div>
-                    </div>
+                    </MenuScroll>
                     <ServiceFooter source={source} />
                   </div>
                 )
@@ -492,69 +490,6 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
       </div>
     </>
   )
-}
-
-function useLsp(props: ServiceProps): ServiceSource {
-  const ctx = usePlugin()
-  const data = () => props.session.server.data
-
-  const [load, { refetch }] = createResource(
-    () => props.shown && data(),
-    (current) => {
-      const directory = props.directory
-
-      current.location.config.invalidate({ directory })
-
-      return current.location.config.sync({ directory })
-    },
-  )
-
-  const names = createMemo(() => configuredLsps(data().location.config.list({ directory: props.directory }) ?? []))
-
-  createKeyed(data, (current) =>
-    onCleanup(
-      current.on("config.updated", (event) => {
-        if (event.location?.directory !== props.directory) return
-        void refetch()
-      }),
-    ),
-  )
-
-  return {
-    get loading() {
-      return load.loading
-    },
-    get ready() {
-      return data().location.config.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!load.error
-    },
-    get count() {
-      return names().length
-    },
-    failed: false,
-    retry: () => void refetch(),
-    Body: () => (
-      <Show when={names().length} fallback={<ServiceEmpty title={ctx.t("lsp.empty")} />}>
-        <For each={names()}>
-          {(name) => (
-            <div class="session-service-row">
-              <TruncatedText text={name} class="session-summary-label" />
-            </div>
-          )}
-        </For>
-      </Show>
-    ),
-    Footer: () => (
-      <Show when={names().length} fallback={<ServiceEmptyFooter owner={props} service="lsp" />}>
-        <div class="session-service-footer">
-          <span class="session-service-config-separator" role="separator" />
-          <ServiceConfigLink owner={props} service="lsp" />
-        </div>
-      </Show>
-    ),
-  }
 }
 
 function useMcp(props: ServiceProps, close: () => void): ServiceSource {

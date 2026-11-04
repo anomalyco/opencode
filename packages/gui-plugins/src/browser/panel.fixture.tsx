@@ -398,7 +398,7 @@ export function mountBrowserPane(input: PaneHost) {
         state: () => "visible",
         open() {},
         close() {},
-        side: { opened: () => true, toggle() {}, menu: () => [] },
+        side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       },
       links: { open() {} },
       stores: {
@@ -534,9 +534,7 @@ export function mountBrowserPane(input: PaneHost) {
               aria-label="Picked element scenario"
               onChange={(event) => setStore("selection", event.currentTarget.value)}
             >
-              <For each={["default", "long", "fallback", "low", "zoomed"]}>
-                {(value) => <option>{value}</option>}
-              </For>
+              <For each={["default", "long", "fallback", "low", "zoomed"]}>{(value) => <option>{value}</option>}</For>
             </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
@@ -661,7 +659,7 @@ type RegionHost = {
   PluginHostProvider: Component<
     ParentProps<{
       definitions: Accessor<readonly Entry[]>
-      disabled: Accessor<ReadonlySet<string> | undefined>
+      disabled: Accessor<ReadonlySet<string>>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
       apis: { readonly [api: string]: (plugin: string) => object | undefined }
       /** Runs once the app interface mounts; the fixture's is always mounted. */
@@ -874,7 +872,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       stored: (session) =>
         strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
-      side: { opened: () => true, toggle() {}, menu: () => [] },
+      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => true },
       scroll: { get: () => undefined, set() {} },
       settings() {},

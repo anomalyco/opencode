@@ -3,21 +3,19 @@ export * as ApplicationLifecycle from "./index"
 import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
-import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
-import { emitIpcEvent } from "../ipc-events"
+import { DeepLinks } from "../deep-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { getLastFocusedWindow, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
-import { consoleReturnWindow } from "./deep-link"
 
 export interface Interface {
   readonly relaunch: () => void
   readonly prepareToRestart: Effect.Effect<void>
-  readonly consumeInitialDeepLinks: () => string[]
+  readonly deepLinks: DeepLinks.Interface
   readonly createWindow: () => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
 }
@@ -32,7 +30,6 @@ const runtime = Layer.effect(
     const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
     let shutdownReady = false
     let quitRequested = false
 
@@ -53,23 +50,7 @@ const runtime = Layer.effect(
       win.focus()
     }
 
-    const emitDeepLinks = (urls: string[]) => {
-      if (!urls.length) return
-      pendingDeepLinks.push(...urls)
-
-      const target = urls.flatMap((url) => {
-        const id = consoleReturnWindow(url)
-        const win = id ? getWindowByID(id) : null
-
-        return win ? [win] : []
-      })[0]
-
-      const win = target ?? getLastFocusedWindow()
-
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
-
-      return win
-    }
+    const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const relaunch = () => {
       setAppQuitting()
@@ -90,7 +71,7 @@ const runtime = Layer.effect(
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        focusWindow(emitDeepLinks(urls) ?? null)
+        deepLinks.receive(urls)
       }
 
       if (!urls.length) focusWindow(getLastFocusedWindow())
@@ -99,7 +80,7 @@ const runtime = Layer.effect(
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
-      focusWindow(emitDeepLinks([url]) ?? null)
+      deepLinks.receive([url])
     }
 
     const beforeQuit = (event: Event) => {
@@ -179,7 +160,7 @@ const runtime = Layer.effect(
     return Service.of({
       relaunch,
       prepareToRestart,
-      consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
+      deepLinks,
       createWindow,
       restoreWindows: () => {
         if (!windowsWired) {

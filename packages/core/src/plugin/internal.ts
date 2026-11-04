@@ -4,16 +4,17 @@ import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Generation } from "./service.js"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
-import { HttpClient } from "effect/http"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
 import { Config } from "../config.js"
+import { ConsoleAccess } from "../console-access.js"
 import { Credential } from "../credential.js"
 import { llmClient } from "../effect/app-node-platform.js"
 import { ConfigAgentPlugin } from "../config/plugin/agent.js"
@@ -118,6 +119,8 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = [
   Agent.Service,
+  FetchHttpClient.Fetch,
+  ConsoleAccess.Options,
   Artifact.Service,
   AppProcess.Service,
   Provider.Service,
@@ -176,6 +179,7 @@ export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
 export const requirements = LayerNode.group([
   Agent.node,
+  ConsoleAccess.node,
   Artifact.node,
   AppProcess.node,
   Provider.node,
@@ -195,6 +199,7 @@ export const requirements = LayerNode.group([
   FSUtil.node,
   Global.node,
   httpClient,
+  httpFetch,
   Image.node,
   InstructionDiscovery.node,
   Integration.node,

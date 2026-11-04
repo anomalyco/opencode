@@ -17,6 +17,8 @@ const Envelope = Schema.Struct({
   event: Schema.optional(
     Schema.Struct({
       type: Schema.String,
+      // Output item events name their response here instead of carrying a `response` object.
+      response_id: Schema.optional(Schema.String),
       item: Schema.optional(Item),
       response: Schema.optional(Schema.Struct({ id: Schema.String, status: Schema.optional(Schema.String) })),
     }),

@@ -22,7 +22,8 @@ export function HomeCommandPalette(props: {
   const dialog = useDialog()
   const global = useGlobal()
   const language = useLanguage()
-  const server = global.ensureServerCtx(props.server)
+  // A server that rejects our credentials lists no sessions; commands and settings still work.
+  const server = () => global.serverCtx(ServerConnection.key(props.server))
   const state: PaletteHighlight = { cleanup: undefined, committed: false }
   const settings = createSettingsPaletteEntries()
 
@@ -35,10 +36,13 @@ export function HomeCommandPalette(props: {
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
     known: createKnownServerSessions(server),
-    projects: server.projects.list,
+    projects: () => server()?.projects.list() ?? [],
     load: (search, signal) =>
-      server.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
-    get: (sessionID, signal) => server.sdk.api.session.get({ sessionID }, { signal }),
+      server()?.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }) ??
+      Promise.resolve({ data: [] }),
+    get: (sessionID, signal) =>
+      server()?.sdk.api.session.get({ sessionID }, { signal }) ??
+      Promise.reject(new Error(`Server ${ServerConnection.key(props.server)} is unavailable`)),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
     recentCategory: () => language.t("palette.group.recentSessions"),

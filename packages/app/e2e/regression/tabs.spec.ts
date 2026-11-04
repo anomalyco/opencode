@@ -19,6 +19,7 @@ import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
+import { openWithDirection } from "../utils/direction"
 
 const a = { id: "ses_tab_a", title: "Tab A session" }
 
@@ -80,6 +81,42 @@ test("recently closed shows ten sessions and searches older closures in close or
   await expect(items).toHaveCount(10)
   await search.press("Escape")
   await expect(menu).toBeHidden()
+})
+
+test("recently closed keeps the keyboard-focused session in view when the menu overflows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 360 })
+
+  const sessions = Array.from({ length: 11 }, (_, index) => ({
+    id: `ses_overflow_${index}`,
+    title: `Overflow session ${index}`,
+  }))
+
+  await mockWorkspace(page, {
+    name: "ClosedOverflow",
+    sessions,
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(1).map((item, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: item.id },
+          index,
+          info: { title: item.title, directory: "C:/OpenCode/ClosedOverflow", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText("Overflow session 0")
+  await page.getByRole("button", { name: "New session", exact: true }).click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const last = menu.getByRole("menuitem", { name: "C Overflow session 1", exact: true })
+
+  await expect(menu.getByRole("menuitem")).toHaveCount(10)
+  await menu.getByRole("searchbox", { name: "Search recently closed" }).press("ArrowDown")
+  await page.keyboard.press("End")
+  await expect(last).toBeFocused()
+  await expect(last).toBeInViewport({ ratio: 1 })
 })
 
 test("recently closed fills remaining slots in Home order without open or duplicate sessions", async ({ page }) => {
@@ -241,6 +278,86 @@ test("the browser title names the open session and resets after leaving it", asy
   await expectPath(page, "/")
   await expect(page).toHaveTitle("OpenCode")
 })
+
+for (const [tabLayout, direction, label] of [
+  ["horizontal", "ltr", "Close tabs to the right"],
+  ["horizontal", "rtl", "Close tabs to the left"],
+  ["vertical", "ltr", "Close tabs below"],
+] as const) {
+  test(`${tabLayout} ${direction} tab menus bulk close in visible order and reopen sessions`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [a, b, c],
+      seed: {
+        tabs: [a.id, { draft: "draft_bulk_close", directory: "C:/OpenCode/Tabs" }, b.id, c.id],
+        settings: { appearance: { tabLayout } },
+      },
+    })
+    await openWithDirection(page, sessionHref(a.id), direction)
+
+    const titles = page.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+
+    const draft = page.locator(`a[data-titlebar-tab-link][href="${draftHref("draft_bulk_close")}"]`)
+
+    const tabB = page.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+
+    const menu = page.getByRole("menu")
+
+    const active = page.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')
+
+    const modifier = await page.evaluate(() => (/Mac/.test(navigator.platform) ? "Meta" : "Control"))
+
+    await expect(titles).toHaveText([a.title, "Session", b.title, c.title])
+    await draft.click({ button: "right" })
+    await expect(menu.getByRole("menuitem")).toHaveText(["Close tab", "Close other tabs", label])
+    await menu.getByRole("menuitem", { name: label, exact: true }).click()
+    await expect(titles).toHaveText([a.title, "Session"])
+    await expect(active).toHaveText(a.title)
+
+    for (const expected of [
+      [a.title, "Session", b.title],
+      [a.title, "Session", b.title, c.title],
+    ]) {
+      await page.keyboard.press(`${modifier}+Shift+t`)
+      await expect(titles).toHaveText(expected)
+    }
+
+    await page.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]`).click()
+    await expect(active).toHaveText(a.title)
+    await tabB.click({ button: "right" })
+    await menu.getByRole("menuitem", { name: label, exact: true }).click()
+    await expect(titles).toHaveText([a.title, "Session", b.title])
+    await expect(active).toHaveText(a.title)
+    await page.keyboard.press(`${modifier}+Shift+t`)
+    await expect(titles).toHaveText([a.title, "Session", b.title, c.title])
+
+    await tabB.click({ button: "right" })
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Rename",
+      "Close tab",
+      "Close other tabs",
+      label,
+      "Delete session…",
+    ])
+    await menu.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
+    await expect(titles).toHaveText([b.title])
+    await expect(active).toHaveText(b.title)
+    await tabB.click({ button: "right" })
+    await expect(menu.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+    await expect(menu.getByRole("menuitem", { name: label, exact: true })).toBeDisabled()
+    await page.keyboard.press("Escape")
+
+    for (const expected of [
+      [a.title, b.title],
+      [a.title, b.title, c.title],
+    ]) {
+      await page.keyboard.press(`${modifier}+Shift+t`)
+      await expect(titles).toHaveText(expected)
+    }
+
+    await expect(draft).toHaveCount(0)
+  })
+}
 
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab can be renamed again while its previous rename is still saving`, async ({ page }) => {
@@ -1521,36 +1638,188 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   const sessions = Array.from({ length: 24 }, (_, index) => ({
     id: `ses_inbox_${String(index).padStart(2, "0")}`,
     title: `Inbox session ${index}`,
-    time: { created: T0, updated: T0 + index, idle: T0 + index },
+    directory: index === 14 ? "C:/OpenCode/Inbox/worktrees/unopened" : "C:/OpenCode/Inbox",
+    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index },
   }))
 
   await mockWorkspace(page, {
     name: "Inbox",
     sessions,
+    vcs: { current: "dev", default: "dev" },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       tabs: [],
-      // Every seeded session finished a run after the inbox was first used, so Recent lists them all.
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, since: 0 } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
   await page.goto("/")
 
   const list = page.locator('[data-slot="sidebar-inbox-scroll"]')
   const items = list.locator('[data-slot="sidebar-inbox-item"]')
-  const target = items.filter({ hasText: "Inbox session 0" })
-  await expect(items).toHaveCount(sessions.length)
+  const target = items.filter({ hasText: "Inbox session 14" })
+  await expect(items).toHaveCount(10)
+  await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
+  // Git metadata must load for an unopened worktree, not only after selecting its session.
+  await target.locator('[data-component="tooltip-v2-trigger"]:has(use[href="#opencode-v2-icon-branch"])').hover()
+  await expect(page.getByRole("tooltip")).toHaveText("dev")
   const offset = await list.evaluate((element) => element.scrollTop)
   expect(offset).toBeGreaterThan(0)
   const row = await target.elementHandle()
 
   await target.click()
-  await expectPath(page, sessionHref("ses_inbox_00"))
+  await expectPath(page, sessionHref("ses_inbox_14"))
   await expect(target).toHaveAttribute("data-state", "active")
   // Opening a session loads it into the client, which updates every section.
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})
+
+test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 41 * 60_000 })
+  await mockWorkspace(page, {
+    name: "ArchivedInbox",
+    sessions: [
+      { id: "ses_archive_active", title: "Active inbox session", time: { created: T0, updated: T0, idle: T0 } },
+      ...["First archived session", "Second archived session"].map((title, index) => ({
+        id: `ses_archive_${index}`,
+        title,
+        time: { created: T0 - 100, updated: T0 + index, idle: index ? T0 - 100 : T0, archived: T0 + 10 },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Active inbox session")
+  await expect(archived).toBeVisible()
+  await archived.focus()
+  await archived.press("Enter")
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await expect(search).toHaveAttribute("placeholder", "Search sessions")
+  await expect(dialog.getByText("Archived sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("option")).toHaveCount(2)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /Second archived session/ })).toBeVisible()
+  await search.fill("Active inbox session")
+  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
+  await search.fill("First archived")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toHaveAttribute("aria-selected", "true")
+  await search.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expectPath(page, sessionHref("ses_archive_0"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+})
+
+test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+  await openSession(page, {
+    name: "WorkingInbox",
+    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
+    sessionStatus: { ses_working_selected: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
+    },
+  })
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+
+  const toggle = shelf.getByRole("button", { name: "Working", exact: true })
+
+  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(row).toHaveCount(0)
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+  await expectPath(page, sessionHref("ses_working_selected"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await toggle.press("Enter")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+})
+
+test("sessions opened from Home and Search get a temporary Current session row without duplicating Recent", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "CurrentInbox",
+    sessions: [
+      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0 } },
+      { id: "ses_current_search", title: "Older Search session", time: { created: T0, updated: T0, idle: T0 } },
+      { id: "ses_current_recent", title: "Recent inbox session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `ses_current_extra_${index}`,
+        title: `Other recent session ${index}`,
+        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(10)
+  await page.locator('[data-component="home-session-row"]').filter({ hasText: "Older Home session" }).click()
+  await expectPath(page, sessionHref("ses_current_home"))
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveAttribute("data-state", "active")
+  await expect(inbox.getByText("Current session", { exact: true })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await rows.filter({ hasText: "Recent inbox session" }).click()
+  await expectPath(page, sessionHref("ses_current_recent"))
+  await expect(rows).toHaveCount(10)
+  await expect(rows.filter({ hasText: "Recent inbox session" })).toHaveAttribute("data-state", "active")
+  await page.getByRole("button", { name: "Search sessions", exact: true }).click()
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await search.fill("Older Search session")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await search.press("Enter")
+  await expectPath(page, sessionHref("ses_current_search"))
+  await expect(rows.filter({ hasText: "Older Search session" })).toHaveAttribute("data-state", "active")
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(rows).toHaveCount(10)
 })
