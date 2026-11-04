@@ -1,0 +1,290 @@
+[
+  {
+    "filetype": "javascript",
+    "aliases": [
+      "javascriptreact"
+    ],
+    "sources": [
+      "@opentui/core@0.8.1/assets/javascript/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "typescript",
+    "aliases": [],
+    "sources": [
+      "@opentui/core@0.8.1/assets/typescript/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "typescriptreact",
+    "aliases": [],
+    "sources": [
+      "@opentui/core@0.8.1/assets/typescriptreact/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "markdown",
+    "aliases": [],
+    "sources": [
+      "@opentui/core@0.8.1/assets/markdown/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "markdown_inline",
+    "aliases": [],
+    "sources": [
+      "@opentui/core@0.8.1/assets/markdown_inline/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "zig",
+    "aliases": [],
+    "sources": [
+      "@opentui/core@0.8.1/assets/zig/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "python",
+    "aliases": [],
+    "sources": [
+      "https://github.com/tree-sitter/tree-sitter-python/raw/refs/heads/master/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "rust",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/rust/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "go",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/go/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "cpp",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/cpp/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "csharp",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c_sharp/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "bash",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/bash/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "c",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/c/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "java",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/java/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "kotlin",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/fwcd/tree-sitter-kotlin/0.3.8/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "ruby",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ruby/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "php",
+    "aliases": [],
+    "sources": [
+      "https://github.com/tree-sitter/tree-sitter-php/raw/refs/heads/master/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "scala",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/scala/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "html",
+    "aliases": [],
+    "sources": [
+      "https://github.com/tree-sitter/tree-sitter-html/raw/refs/heads/master/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "vue",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/anomalyco/tree-sitter-vue/v0.1.2/queries/html_tags/highlights.scm",
+      "https://raw.githubusercontent.com/anomalyco/tree-sitter-vue/v0.1.2/queries/vue/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "hcl",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/hcl/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "json",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/json/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "yaml",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/yaml/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "haskell",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/haskell/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "css",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/css/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "julia",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/julia/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "lua",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-lua/v0.5.0/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "ocaml",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/ocaml/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "clojure",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/clojure/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "swift",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/main/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "toml",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/toml/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "nix",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/nix/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "diff",
+    "aliases": [
+      "udiff",
+      "patch"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-diff/2520c3f934b3179bb540d23e0ef45f75304b5fed/queries/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "elixir",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/elixir/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "fsharp",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/fsharp/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "r",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/r/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "make",
+    "aliases": [
+      "makefile"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/make/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "vim",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/vim/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "xml",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/xml/highlights.scm"
+    ]
+  },
+  {
+    "filetype": "agda",
+    "aliases": [],
+    "sources": [
+      "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/agda/highlights.scm"
+    ]
+  }
+]
