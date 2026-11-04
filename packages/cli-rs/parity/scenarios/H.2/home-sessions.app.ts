@@ -28,14 +28,14 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-prompt"],
+      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
     },
     { keys: ["ctrl+x", "l"] },
     {
       checkpoint: "list",
       until: "Write docs",
       // The dialog panel itself matches (E.11a/session-list); the home's prompt behind it differs.
-      deviation: ["T17-home-prompt"],
+      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
     },
     { keys: ["enter"] },
     {

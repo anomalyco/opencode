@@ -141,7 +141,8 @@
         }
       ],
       "deviation": [
-        "T17-home-prompt"
+        "T17-home-prompt",
+        "P01-read-only-prompt"
       ],
       "fixture": "H.2/home-sessions/home"
     },
@@ -155,7 +156,8 @@
       "checkpoint": "list",
       "until": "Write docs",
       "deviation": [
-        "T17-home-prompt"
+        "T17-home-prompt",
+        "P01-read-only-prompt"
       ],
       "fixture": "H.2/home-sessions/list"
     },

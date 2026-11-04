@@ -19,7 +19,7 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt", "T04-connection-footer"],
+      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
     },
     { type: "hello wrld" },
     { keys: ["left", "left", "left"] },
@@ -29,7 +29,7 @@ export default defineApp({
     {
       checkpoint: "typed",
       until: "second line",
-      deviation: ["V01-plain-transcript", "P01-read-only-prompt", "T04-connection-footer"],
+      deviation: ["V01-plain-transcript", "P01-read-only-prompt"],
     },
   ],
 })
