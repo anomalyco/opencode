@@ -265,7 +265,7 @@ describe("SessionRunnerLLM recorded", () => {
         "gen_ai.provider.name": "openai",
         "gen_ai.request.model": "gpt-4o-mini",
         "gen_ai.response.finish_reasons": ["stop"],
-        "gen_ai.usage.input_tokens": 465,
+        "gen_ai.usage.input_tokens": 595,
         "gen_ai.usage.output_tokens": 2,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
