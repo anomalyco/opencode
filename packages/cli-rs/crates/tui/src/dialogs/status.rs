@@ -9,6 +9,7 @@ use opencode_store::Catalog;
 use opencode_ui::dialog::{DialogCx, DialogOptions, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -44,7 +45,7 @@ pub fn install(tui: &Rc<Tui>) {
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer) {
+        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
             log::error!("status keymap layer: {error}");
         }
     }
@@ -68,9 +69,7 @@ pub fn show(tui: &Tui) {
                 open: Cell::new(true),
             });
             let closed = status.clone();
-            cx.on_close(opentui::keymap::Disposer::new(move || {
-                closed.open.set(false)
-            }));
+            cx.on_close(Disposer::new(move || closed.open.set(false)));
             status.load(&tui);
             layout(
                 cx,

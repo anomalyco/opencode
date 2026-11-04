@@ -46,12 +46,12 @@ fn oracle_key_sequences_run_the_commands_typescript_runs() {
             .unwrap()
         };
         let isolated = scenario["layout"] == "isolated";
-        let all = (!isolated).then(|| recorder(&names));
+        let _all = (!isolated).then(|| recorder(&names));
         let mut parser = Parser::standalone().unwrap();
         let mut now = Instant::now();
         for case in scenario["cases"].as_array().unwrap() {
             total += 1;
-            let layer = case["command"].as_str().map(|command| recorder(&[command]));
+            let _layer = case["command"].as_str().map(|command| recorder(&[command]));
             tui.keymap().clear_pending_sequence();
             calls.borrow_mut().clear();
             for key in case["keys"].as_array().unwrap() {
@@ -86,12 +86,6 @@ fn oracle_key_sequences_run_the_commands_typescript_runs() {
                     calls.borrow()
                 ));
             }
-            if let Some(layer) = layer {
-                layer.dispose();
-            }
-        }
-        if let Some(all) = all {
-            all.dispose();
         }
     }
     assert!(total > 2000, "the fixture has {total} cases");
@@ -174,13 +168,15 @@ fn modes_gate_layers_and_dispatch_passes_input() {
         commands: vec![TuiCommand::new("session.new", record("base"))],
         ..KeymapLayer::default()
     })
-    .unwrap();
+    .unwrap()
+    .forget();
     tui.layer(KeymapLayer {
         mode: Some("modal".to_owned()),
         commands: vec![TuiCommand::inline("x", record("modal"))],
         ..KeymapLayer::default()
     })
-    .unwrap();
+    .unwrap()
+    .forget();
     let active = Rc::new(Cell::new(true));
     let pop = tui.push_mode(
         "modal",
@@ -202,7 +198,7 @@ fn modes_gate_layers_and_dispatch_passes_input() {
     active.set(false);
     assert_eq!(tui.mode(), "base");
     assert_eq!(tui.dispatch("session.new", Some("arg")), RunResult::Ok);
-    pop.dispose();
+    drop(pop);
     assert_eq!(*calls.borrow(), ["modal:None", "base:Some(\"arg\")"]);
     assert_eq!(tui.shortcut("session.new").as_deref(), Some("ctrl+x n"));
     assert_eq!(tui.shortcut_all("app.exit"), None);

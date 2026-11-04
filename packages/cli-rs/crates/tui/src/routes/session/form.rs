@@ -755,7 +755,6 @@ impl Drop for FormPrompt {
             .chain(inner.mode.take())
             .collect();
         let Some(tui) = inner.tui.upgrade() else {
-            keys.into_iter().for_each(Disposer::dispose);
             return;
         };
         dispose_later(&tui.app, keys);
@@ -2224,12 +2223,11 @@ impl Inner {
 }
 
 /// Removes key registrations once the current event is done: a command may cause this while the keymap runs it.
-/// A dropped `Disposer` keeps its registration.
 pub(crate) fn dispose_later(app: &App, disposers: Vec<Disposer>) {
     if disposers.is_empty() {
         return;
     }
-    app.defer(move |_| disposers.into_iter().for_each(Disposer::dispose));
+    app.defer(move |_| drop(disposers));
 }
 
 fn review_max_height(height: u16) -> usize {

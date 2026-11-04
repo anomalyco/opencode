@@ -203,8 +203,7 @@ impl Drop for Composer {
         // A command may drop the view while the keymap runs it (a subagent navigates), so the layers go afterwards.
         let mut layers = std::mem::take(&mut *self.0.layers.borrow_mut());
         layers.extend(self.0.mode.borrow_mut().take());
-        tui.app
-            .defer(move |_| layers.into_iter().for_each(Disposer::dispose));
+        tui.app.defer(move |_| drop(layers));
     }
 }
 
@@ -370,8 +369,8 @@ impl Inner {
     fn toggled(&self, tui: &Tui, open: bool) {
         if open {
             *self.mode.borrow_mut() = Some(tui.keymap.push_mode(MODE, Condition::Always));
-        } else if let Some(mode) = self.mode.borrow_mut().take() {
-            mode.dispose();
+        } else {
+            self.mode.borrow_mut().take();
         }
         (self.on_toggle)(tui, open);
         // The session view hides the queued dock while the composer shows; a key that toggled it changed no store state.

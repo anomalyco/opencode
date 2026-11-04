@@ -265,7 +265,6 @@ impl Inner {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        // A dropped `Disposer` keeps its layer registered.
         super::form::dispose_later(&tui.app, self.layer.take().into_iter().collect());
         let stage = self.prompted.borrow().stage;
         let prompting = self.prompted.borrow().request.is_some();

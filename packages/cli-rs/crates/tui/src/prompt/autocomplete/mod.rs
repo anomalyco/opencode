@@ -303,9 +303,7 @@ impl Drop for State {
         let mode = self.mode.take();
         let layer = self.layer.take();
         if let Some(tui) = self.tui.upgrade() {
-            tui.app.defer(move |_| {
-                mode.into_iter().chain(layer).for_each(Disposer::dispose);
-            });
+            tui.app.defer(move |_| drop((mode, layer)));
         }
     }
 }
@@ -480,9 +478,7 @@ impl State {
         self.confirming.replace(None);
         self.requested.replace(None);
         self.visible.set(None);
-        if let Some(mode) = self.mode.take() {
-            mode.dispose();
-        }
+        self.mode.take();
         if let Some(tui) = self.tui.upgrade() {
             tui.keymap.sync_mode();
         }
