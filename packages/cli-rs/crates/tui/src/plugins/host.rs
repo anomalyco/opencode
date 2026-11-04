@@ -47,7 +47,7 @@ pub fn builtins() -> Vec<Definition<Tui>> {
         crate::dialogs::plugins::plugin(),
         super::stats::plugin(),
         empty("opencode.merman"), // P.3
-        empty("opencode.latex"),  // P.2
+        opencode_latex::plugin(),
         super::diffs::viewer::plugin(),
     ]
 }
