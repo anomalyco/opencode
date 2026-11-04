@@ -8,13 +8,20 @@ export type Route = {
   // An exact path, or a pattern where `:name` matches one segment (`/api/session/:id`).
   path: string
   status?: number
-  // Sent as `application/json`.
-  json?: unknown
+  // Sent as `application/json`. A function computes it from the request and the log so far, for replies
+  // that echo what a client generated (the prompt ID of `run`).
+  json?: unknown | ((entry: Logged, requests: Logged[]) => unknown)
   // Sent as is, with `headers` (default `text/plain`).
   body?: string
   headers?: Record<string, string>
   // An event stream: each event is one `data:` frame. The stream stays open until the server stops.
   events?: unknown[]
+  // Events pushed to every open `events` stream once this request is answered.
+  then?: (entry: Logged, requests: Logged[]) => unknown[]
+  // Waits this long (ms) before answering.
+  delay?: number
+  // Waits this long (ms) after answering before pushing `then`'s events.
+  thenDelay?: number
 }
 
 export type Logged = {
@@ -53,7 +60,15 @@ export async function startFakeServer(options: Options = {}) {
       const entry = await logEntry(request, url)
       requests.push(entry)
       const route = routes.find((route) => matches(route, request.method, url.pathname))
-      if (route) return respond(route, streams)
+      if (route) {
+        if (route.delay) await Bun.sleep(route.delay)
+        const response = respond(route, streams, entry, requests)
+        if (route.then) {
+          const frames = route.then(entry, requests).map((event) => encode(event))
+          setTimeout(() => streams.forEach((controller) => frames.forEach((frame) => controller.enqueue(frame))), route.thenDelay ?? 0)
+        }
+        return response
+      }
       const fallen = await Promise.resolve(fallback?.(url, request)).catch(() => undefined)
       if (fallen) return fallen
       entry.unmatched = true
@@ -94,10 +109,19 @@ function matches(route: Route, method: string, path: string) {
   return want.length === have.length && want.every((part, index) => part.startsWith(":") || part === have[index])
 }
 
-function respond(route: Route, streams: Set<ReadableStreamDefaultController<Uint8Array>>) {
+function encode(event: unknown) {
+  return new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+}
+
+function respond(
+  route: Route,
+  streams: Set<ReadableStreamDefaultController<Uint8Array>>,
+  entry: Logged,
+  requests: Logged[],
+) {
   const status = route.status ?? 200
   if (route.events) {
-    const frames = route.events.map((event) => new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`))
+    const frames = route.events.map(encode)
     let current: ReadableStreamDefaultController<Uint8Array> | undefined
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -111,7 +135,8 @@ function respond(route: Route, streams: Set<ReadableStreamDefaultController<Uint
     })
     return new Response(stream, { status, headers: { "content-type": "text/event-stream", ...route.headers } })
   }
-  if (route.json !== undefined) return Response.json(route.json, { status, headers: route.headers })
+  const json = typeof route.json === "function" ? route.json(entry, requests) : route.json
+  if (json !== undefined) return Response.json(json, { status, headers: route.headers })
   if (route.body !== undefined)
     return new Response(route.body, { status, headers: { "content-type": "text/plain", ...route.headers } })
   return new Response(null, { status: route.status ?? 204, headers: route.headers })
