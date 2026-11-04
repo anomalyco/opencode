@@ -6,7 +6,7 @@
 // The provider loads <state>/frecency.jsonl on mount, which rewrites it as TypeScript keeps it. Each path is
 // then opened once (`updateFrecency`). Prints the frequencies by absolute path, after the updates.
 
-import { statSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
 const [root, state, cwd] = process.argv.slice(2)
@@ -21,7 +21,8 @@ const { FrecencyProvider, useFrecency } = await load("./prompt/frecency")
 const paths: string[] = await Bun.stdin.json()
 
 let frecency: { updateFrecency(path: string): void; data(): Record<string, { frequency: number }> }
-const mounted = Date.now()
+// File times come from a coarse clock that can trail `Date.now()`, so the rewrite is told by a changed time.
+const written = existsSync(`${state}/frecency.jsonl`) ? statSync(`${state}/frecency.jsonl`).mtimeMs : 0
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd, home: state, state, worktree: cwd },
@@ -37,28 +38,30 @@ const app = await testRender(() =>
 )
 await app.renderOnce()
 // Waits for a condition, up to 30 s: a loaded machine can take seconds to read or write the file.
-const until = async (done: () => Promise<boolean> | boolean) => {
+const until = async (what: string, done: () => Promise<boolean> | boolean) => {
   const deadline = Date.now() + 30_000
-  while (!(await done()) && Date.now() < deadline) await Bun.sleep(5)
+  while (!(await done())) {
+    if (Date.now() >= deadline) return console.error(`timed out waiting for ${what}`)
+    await Bun.sleep(5)
+  }
 }
 // The provider reads the file on mount; wait until an existing file's entries are in.
 const file = Bun.file(`${state}/frecency.jsonl`)
 if ((await file.exists()) && (await file.text()).trim()) {
-  await until(() => Object.keys(frecency!.data()).length > 0)
+  await until("the load", () => Object.keys(frecency!.data()).length > 0)
   // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
-  await until(() => statSync(file.name!).mtimeMs >= mounted)
+  await until("the load's rewrite", () => statSync(file.name!).mtimeMs !== written)
 }
 const loaded = Object.keys(frecency!.data()).length
 for (const path of paths) frecency!.updateFrecency(path)
-// Appends write asynchronously: wait until the load's one line per path is followed by one line per update.
-const updated = paths.map((path) => resolve(cwd, path))
-await until(async () => {
+// Appends write asynchronously, in any order: wait until the load's one line per path is followed by one line
+// per update.
+const updated = JSON.stringify(paths.map((path) => resolve(cwd, path)).sort())
+await until("the appends", async () => {
   // A fresh handle: a `BunFile` can keep the size it first saw.
   const lines = (await Bun.file(file.name!).text()).split("\n").filter(Boolean)
-  return (
-    lines.length === loaded + paths.length &&
-    lines.slice(loaded).every((line, index) => JSON.parse(line).path === updated[index])
-  )
+  const appended = lines.slice(loaded).map((line) => JSON.parse(line).path)
+  return lines.length === loaded + paths.length && JSON.stringify(appended.sort()) === updated
 })
 app.renderer.destroy()
 console.log(
