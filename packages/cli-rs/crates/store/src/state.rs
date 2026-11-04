@@ -14,14 +14,17 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    PermissionRequest, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
-    SessionMessageID,
+    PermissionRequest, PermissionSavedInfo, Project, ProjectID, SessionID, SessionInboxCompaction,
+    SessionInboxInfo, SessionInfo, SessionMessageID,
 };
 use tokio::runtime::Handle;
 use tokio::sync::watch;
+use tokio::task::AbortHandle;
 
 use crate::changes::{Changes, Log};
+use crate::forms::Form;
 use crate::inbox::PendingUpdate;
+use crate::location::{Location, LocationData};
 use crate::messages::Transcript;
 
 /// A store error. Shared, because one keyed read answers every caller.
@@ -67,6 +70,12 @@ pub struct State {
     pub(crate) loading: HashSet<SessionID>,
     pub(crate) pending: HashMap<SessionID, Vec<SessionInboxInfo>>,
     pub(crate) permission: HashMap<SessionID, Vec<PermissionRequest>>,
+    /// Pending forms by owner: a session ID or [`crate::forms::GLOBAL`].
+    pub(crate) forms: HashMap<String, Vec<Form>>,
+    pub(crate) projects: HashMap<ProjectID, Project>,
+    pub(crate) project_permissions: HashMap<ProjectID, Vec<PermissionSavedInfo>>,
+    pub(crate) locations: HashMap<Location, LocationData>,
+    pub(crate) default_location: Location,
     pub(crate) omit_file_data: bool,
 
     pub(crate) log: Log,
@@ -91,6 +100,8 @@ pub struct State {
     pub(crate) deletion_epoch: u64,
     /// Deleted sessions by deletion epoch, oldest first.
     pub(crate) deleted_at: IndexMap<SessionID, u64>,
+    /// Trailing refetch timers by key, with the token of the newest.
+    pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
 }
 
 type ErrorHandler = Arc<dyn Fn(&Error) + Send + Sync>;
@@ -261,6 +272,7 @@ impl Data {
     pub fn with_runtime(client: Client, options: Options, runtime: Handle) -> Self {
         let state = State {
             omit_file_data: options.omit_tool_file_data,
+            default_location: Location::new(options.directory.clone()),
             ..State::default()
         };
         Self {
@@ -289,6 +301,9 @@ impl Data {
     /// Stops follow-up reads, as disposing the TS owner does.
     pub fn dispose(&self) {
         self.inner.disposed.store(true, Ordering::SeqCst);
+        for (_, (_, timer)) in self.lock().settling.drain() {
+            timer.abort();
+        }
     }
 
     /// Reads the state. Keep `f` short: it holds the store lock.
@@ -330,6 +345,10 @@ impl Data {
         if let Some(revision) = state.log.flush() {
             self.inner.revision.send_replace(revision);
         }
+    }
+
+    pub(crate) fn runtime(&self) -> &Handle {
+        &self.inner.runtime
     }
 
     pub(crate) fn live(&self) -> bool {
@@ -387,6 +406,22 @@ impl Data {
     where
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
+        self.sync_start(key, |_| (), move |data, _| load(data))
+    }
+
+    /// [`Data::sync_run`] with a synchronous start: `begin` runs under the lock when the load
+    /// starts at once, as the synchronous part of a TS load does, so no event after the call can
+    /// miss what it registers. A reload that waits for the load it replaces gets `None` and
+    /// registers when it starts.
+    pub(crate) fn sync_start<R, F>(
+        &self,
+        key: String,
+        begin: impl FnOnce(&mut State) -> R,
+        load: impl FnOnce(Data, Option<R>) -> F,
+    ) -> Task<()>
+    where
+        F: Future<Output = Result<(), Error>> + Send + 'static,
+    {
         let mut state = self.lock();
         let wait = match state.syncs.entries.get(&key) {
             Some(Entry::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
@@ -402,7 +437,8 @@ impl Data {
         };
         let token = state.token();
         let started = Arc::new(AtomicBool::new(wait.is_none()));
-        let load = load(self.clone());
+        let begun = wait.is_none().then(|| begin(&mut state));
+        let load = load(self.clone(), begun);
         let data = self.clone();
         let flag = started.clone();
         let settle = key.clone();
