@@ -12,7 +12,18 @@ import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import type { FileDiffInfo } from "@opencode/client/promise"
@@ -21,8 +32,14 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
-import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
+import { previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
+import {
+  EMPTY_REVIEW_COMMENT_MODES,
+  reviewFileCommentMode,
+  transitionReviewCommentModes,
+  type LineCommentEvent,
+} from "./line-comment-machine"
 import type { LineCommentEditorProps } from "./line-comment"
 import { normalize, text, type ViewDiff } from "./session-diff"
 
@@ -139,11 +156,6 @@ function diffId(file: string): string | undefined {
   return `session-review-diff-${sum}`
 }
 
-type SessionReviewSelection = {
-  file: string
-  range: SelectedLineRange
-}
-
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
   let focusToken = 0
@@ -157,21 +169,20 @@ export const SessionReview = (props: SessionReviewProps) => {
     open: string[]
     visible: Record<string, boolean | undefined>
     force: Record<string, boolean | undefined>
-    selection: SessionReviewSelection | null
-    commenting: SessionReviewSelection | null
-    opened: SessionReviewFocus | null
   }>({
     open: [],
     visible: {},
     force: {},
-    selection: null,
-    commenting: null,
-    opened: null,
   })
 
-  const selection = () => store.selection
-  const commenting = () => store.commenting
-  const opened = () => store.opened
+  const [commentModes, setCommentModes] = createSignal(EMPTY_REVIEW_COMMENT_MODES)
+
+  const dispatchComment = (file: string, event: LineCommentEvent) => {
+    const step = transitionReviewCommentModes(untrack(commentModes), file, event)
+    setCommentModes(step.modes)
+
+    return step.effects
+  }
 
   const open = () => props.open ?? store.open
 
@@ -240,9 +251,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const pinned = (file: string) =>
     props.focusedComment?.file === file ||
     props.focusedFile === file ||
-    selection()?.file === file ||
-    commenting()?.file === file ||
-    opened()?.file === file
+    reviewFileCommentMode(commentModes(), file).status !== "idle"
 
   const handleScroll: JSX.EventHandler<HTMLDivElement, Event> = (event) => {
     queue()
@@ -300,11 +309,9 @@ export const SessionReview = (props: SessionReviewProps) => {
       focusToken++
       const token = focusToken
 
-      setStore("opened", focus)
-
       const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
 
-      if (comment) setStore("selection", { file: comment.file, range: cloneSelectedLineRange(comment.selection) })
+      if (comment) dispatchComment(focus.file, { type: "comment.focused", id: comment.id, range: comment.selection })
 
       const current = open()
 
@@ -451,43 +458,16 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const isDeleted = () =>
                       diff().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
 
-                    const selectedLines = createMemo(() => {
-                      const current = selection()
-
-                      if (!current || current.file !== file) return null
-
-                      return current.range
-                    })
-
-                    const draftRange = createMemo(() => {
-                      const current = commenting()
-
-                      if (!current || current.file !== file) return null
-
-                      return current.range
-                    })
-
                     const commentsUi = createLineCommentController<SessionReviewComment>({
                       comments,
                       label: i18n.t("ui.lineComment.submit"),
                       draftKey: () => file,
                       mention: props.lineCommentMention,
-                      state: {
-                        opened: () => {
-                          const current = opened()
-
-                          if (!current || current.file !== file) return null
-
-                          return current.id
-                        },
-                        setOpened: (id) => setStore("opened", id ? { file, id } : null),
-                        selected: selectedLines,
-                        setSelected: (range) => setStore("selection", range ? { file, range } : null),
-                        commenting: draftRange,
-                        setCommenting: (range) => setStore("commenting", range ? { file, range } : null),
+                      machine: {
+                        mode: createMemo(() => reviewFileCommentMode(commentModes(), file)),
+                        dispatch: (event) => dispatchComment(file, event),
                       },
                       getSide: selectionSide,
-                      clearSelectionOnSelectionEndNull: false,
                       onSubmit: ({ comment, selection }) => {
                         props.onLineComment?.({
                           file,
@@ -693,7 +673,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderGutterUtility={
                                       props.onLineComment ? commentsUi.renderGutterUtility : undefined
                                     }
-                                    selectedLines={selectedLines()}
+                                    selectedLines={commentsUi.selected()}
                                     commentedLines={commentedLines()}
                                     media={{
                                       mode: "auto",
