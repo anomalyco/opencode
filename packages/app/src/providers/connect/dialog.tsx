@@ -557,6 +557,7 @@ function ProviderConnection(props: {
       showConnected()
     },
   })
+
   const view = controller.view
 
   function showConnected() {
@@ -1273,7 +1274,7 @@ function ProviderConnection(props: {
 
     if (!(event.currentTarget instanceof HTMLFormElement)) return
     const value = new FormData(event.currentTarget).get(name)
-    controller.submit(typeof value === "string" ? value : "")
+    controller.submit(value instanceof File || value === null ? "" : value)
   }
 
   function ApiAuthView() {

@@ -12,7 +12,9 @@ import {
 } from "./machine"
 
 const key: ProviderConnectMethod = { type: "key", label: "API key" }
+
 const oauth: ProviderConnectMethod = { id: "oauth", type: "oauth", label: "Sign in" }
+
 const command: ProviderConnectMethod = { id: "cli", type: "command", label: "CLI", command: ["login"] }
 
 const authorization = (mode: "auto" | "code", attemptID = "att_1"): ProviderAuthorization => ({
@@ -92,10 +94,12 @@ test.each([
 
 test("a request abandoned with Back does not settle the next request for the same method", () => {
   const first = submittingKey()
+
   const second = replay(
     [{ type: "back" }, { type: "method.selected", index: 0 }, { type: "entry.submitted", value: "sk-2" }],
     first.state,
   )
+
   expect(second.state.status).toBe("submitting")
 
   expect(transitionProviderConnect(second.state, { type: "submit.succeeded", attempt: first.attempt })).toEqual({
@@ -119,6 +123,7 @@ test("a rejected API key shows the server error and takes the next submit", () =
     attempt: sent.attempt,
     error: "Invalid API key",
   })
+
   expect(rejected.effects).toEqual([])
   expect(selectProviderConnectView(rejected.state)).toMatchObject({
     screen: "key",
@@ -153,11 +158,13 @@ test("Back during a pasted code request cancels the open attempt and ignores its
 
 test("a rejected code keeps the attempt open for another code", () => {
   const sent = submittingCode()
+
   const rejected = transitionProviderConnect(sent.state, {
     type: "submit.failed",
     attempt: sent.attempt,
     error: "Invalid code",
   })
+
   expect(rejected.effects).toEqual([])
   expect(selectProviderConnectView(rejected.state)).toMatchObject({
     screen: "code",
@@ -221,11 +228,13 @@ test("an unreachable OAuth status resumes the same attempt, and Back from it can
   const start = starting.effects.find((effect) => effect.type === "start")
 
   if (start?.type !== "start") throw new Error("expected a start effect")
+
   const waiting = transitionProviderConnect(starting.state, {
     type: "oauth.started",
     attempt: start.attempt,
     authorization: authorization("auto"),
   })
+
   expect(waiting.effects.map((effect) => effect.type)).toEqual(["open.browser", "poll"])
 
   const failed = transitionProviderConnect(waiting.state, {
@@ -233,6 +242,7 @@ test("an unreachable OAuth status resumes the same attempt, and Back from it can
     attempt: start.attempt,
     outcome: { status: "unreachable", error: "offline" },
   })
+
   expect(selectProviderConnectView(failed.state)).toMatchObject({ screen: "failed", error: "offline" })
 
   const resumed = transitionProviderConnect(failed.state, { type: "retry" })
@@ -252,11 +262,13 @@ test("a failed refresh retries the refresh, not the sign-in", () => {
   const refresh = stored.effects[0]
 
   if (refresh?.type !== "refresh") throw new Error("expected a refresh effect")
+
   const failed = transitionProviderConnect(stored.state, {
     type: "refresh.failed",
     attempt: refresh.attempt,
     error: "Could not load",
   })
+
   expect(failed.state.status).toBe("failed")
   expect(transitionProviderConnect(failed.state, { type: "retry" }).effects).toMatchObject([
     { type: "refresh", method: key },

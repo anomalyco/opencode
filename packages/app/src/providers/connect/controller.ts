@@ -112,10 +112,12 @@ export function createProviderConnectionController(options: {
 
     if (effect.type === "cancel") {
       const input = { integrationID: options.provider, attemptID: effect.attemptID, location }
+
       const cancel: Promise<unknown> =
         effect.target === "command"
           ? serverSDK.api.integration.command.cancel(input)
           : serverSDK.api.integration.oauth.cancel(input)
+
       void cancel.catch(() => undefined)
 
       return
@@ -136,6 +138,7 @@ export function createProviderConnectionController(options: {
               location,
               code: effect.value,
             })
+
       const fallback = effect.signIn.kind === "code" ? language.t("provider.connect.oauth.code.invalid") : undefined
       void request.then(
         () => dispatch({ type: "submit.succeeded", attempt: effect.attempt }),
@@ -156,15 +159,14 @@ export function createProviderConnectionController(options: {
   }
 
   const start = (effect: Extract<ProviderConnectEffect, { type: "start" }>) => {
-    const failed = (error: unknown) =>
-      dispatch({ type: "start.failed", attempt: effect.attempt, error: formatServerError(error, language.t) })
+    const failed = (error: string) => dispatch({ type: "start.failed", attempt: effect.attempt, error })
 
     if (effect.method.type === "command") {
       void serverSDK.api.integration.command
         .connect({ integrationID: options.provider, methodID: effect.method.id, location })
         .then(
           (response) => dispatch({ type: "command.started", attempt: effect.attempt, command: response.data }),
-          failed,
+          (error) => failed(formatServerError(error, language.t)),
         )
 
       return
@@ -173,9 +175,10 @@ export function createProviderConnectionController(options: {
     const input = { integrationID: options.provider, methodID: effect.method.id, answer: effect.answer, location }
 
     if (effect.method.type === "external") {
-      void serverSDK.api.integration.connect
-        .external(input)
-        .then(() => dispatch({ type: "external.saved", attempt: effect.attempt }), failed)
+      void serverSDK.api.integration.connect.external(input).then(
+        () => dispatch({ type: "external.saved", attempt: effect.attempt }),
+        (error) => failed(formatServerError(error, language.t)),
+      )
 
       return
     }
@@ -191,13 +194,7 @@ export function createProviderConnectionController(options: {
         dispatch({ type: "oauth.started", attempt: effect.attempt, authorization: { ...response.data, url: url.href } })
       },
       (error) =>
-        isConsole
-          ? dispatch({
-              type: "start.failed",
-              attempt: effect.attempt,
-              error: language.t("provider.connect.console.startFailed"),
-            })
-          : failed(error),
+        failed(isConsole ? language.t("provider.connect.console.startFailed") : formatServerError(error, language.t)),
     )
   }
 
