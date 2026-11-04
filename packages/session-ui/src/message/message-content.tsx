@@ -38,6 +38,7 @@ import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
+import { createDisclosure } from "../components/disclosure"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
 import { springStyle } from "@opencode/ui/motion/solid"
@@ -101,9 +102,7 @@ function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssis
 }
 
 function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
-  return (
-    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
-  )
+  return a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
 }
 
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
@@ -335,14 +334,13 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const [state, setState] = createStore({ expanded: false })
+  const fold = createDisclosure({
+    open: () => props.expanded,
+    onOpenChange: (expanded) => props.onExpandedChange?.(expanded),
+  })
 
-  const expanded = () => props.expanded ?? state.expanded
-
-  const setExpanded = (value: boolean) => {
-    if (props.onExpandedChange) return props.onExpandedChange(value)
-    setState("expanded", value)
-  }
+  const expanded = fold.open
+  const setExpanded = fold.setOpen
 
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
@@ -1290,8 +1288,6 @@ export function AssistantReasoningContent(props: {
   onContentRendered?: () => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createStore<{ open?: boolean }>({})
-  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
 
   const duration = createMemo(() => {
@@ -1318,13 +1314,13 @@ export function AssistantReasoningContent(props: {
         hasContent
         allowOpenWhilePending
         hideDetails={!props.content.text.trim()}
-        open={open()}
+        open={props.open}
+        defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
-          setState("open", value)
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
+        trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
@@ -1347,7 +1343,7 @@ export function AssistantReasoningContent(props: {
               </Show>
             </div>
           </div>
-        }
+        )}
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
       </BasicTool>
