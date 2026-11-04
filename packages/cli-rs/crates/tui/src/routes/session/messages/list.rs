@@ -80,6 +80,22 @@ struct Inner {
     layer: RefCell<Option<Disposer>>,
 }
 
+impl Drop for Inner {
+    fn drop(&mut self) {
+        if let Some(tui) = self.tui.upgrade() {
+            dispose(&tui, self.layer.take());
+        }
+    }
+}
+
+/// Unregisters the transcript's layer. A command may drop the view while the keymap runs it, so the layer goes
+/// afterwards; dropping a disposer does not unregister it.
+fn dispose(tui: &Tui, layer: Option<Disposer>) {
+    if let Some(layer) = layer {
+        tui.app.defer(move |_| layer.dispose());
+    }
+}
+
 /// The content height before rows mounted above, and the frame it is from.
 struct Pin {
     height: f32,
@@ -407,7 +423,7 @@ impl Inner {
             };
             inner.hide_thinking.set(!inner.hide_thinking.get());
             inner.render(&tui, |_| true);
-            inner.layer.take();
+            dispose(&tui, inner.layer.take());
             inner.register(&tui);
             tui.dialogs.clear();
         })
