@@ -93,7 +93,9 @@ impl Transport for Fixture {
             ("POST", path) if path.ends_with("/interrupt") => (200, json!({ "interrupted": true })),
             ("GET", path) if path.starts_with("/api/session/ses_") => {
                 let id = path.split('/').nth(3).unwrap_or_default();
-                let created = self.created.lock().unwrap().iter().any(|known| known == id);
+                // `ses_a` exists from the start: a not-found read of its inbox would delete it.
+                let created =
+                    id == "ses_a" || self.created.lock().unwrap().iter().any(|known| known == id);
                 match path.split('/').nth(4) {
                     _ if !created => missing(id),
                     None => (200, json!({ "data": session(id) })),
