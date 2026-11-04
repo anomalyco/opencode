@@ -78,7 +78,8 @@ const layer = Layer.effect(
       })
       const host = yield* PluginHost.make({ list }, plugin.id).pipe(Effect.provideContext(hostContext))
       const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
-        grouped,
+        // Ungrouped transforms rethrow on read, so a guarded plugin fails closed instead of being disabled.
+        (effect) => (plugin.guarded ? effect : grouped(effect)),
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
           Context.make(Scope.Scope, activation.scope).pipe(

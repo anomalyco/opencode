@@ -315,6 +315,7 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
           effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
           revision: "internal",
           source: { type: "builtin" },
+          guarded: guarded.has(plugin.id),
         }) satisfies Generation,
     )
   return {

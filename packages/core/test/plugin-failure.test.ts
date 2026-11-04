@@ -1,10 +1,17 @@
 import { expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
+import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
+import { Credential } from "@opencode/core/credential"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Provider } from "@opencode/core/provider"
 import { Rpc } from "@opencode/core/rpc"
+import { Session } from "@opencode/core/session"
+import { WebSearch } from "@opencode/core/websearch"
+import { organizationPolicy } from "./fixture/policy"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -255,6 +262,65 @@ it.live("continues failure reporting and cleanup after a plugin update observer 
     expect((yield* plugins.list()).map((entry) => entry.state.status)).toEqual(["failed", "failed"])
     expect(cleaned.toSorted()).toEqual(["first", "second"])
     expect(yield* commands.list()).toEqual([])
+  }),
+)
+
+it.live("keeps a guarded policy plugin's filters and hooks when one of its transforms throws", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const catalog = yield* Provider.Service
+    const hooks = yield* PluginHooks.Service
+    // Only the services: the plugin must keep its activation Scope, which the full test context would replace.
+    const services = Context.pick(
+      Bus.Service,
+      Credential.Service,
+      WebSearch.Service,
+    )(yield* Effect.context<Bus.Service | Credential.Service | WebSearch.Service>())
+    let fail = false
+    yield* catalog.transform((editor) => editor.update(Provider.ID.openai, () => {}))
+    yield* plugins.activate([
+      {
+        id: ConfigPolicyPlugin.Plugin.id,
+        revision: "1",
+        guarded: true,
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ConfigPolicyPlugin.Plugin.effect(ctx)
+            yield* ctx.provider.transform(() => {
+              if (fail) throw new Error("policy transform failed")
+            })
+          }).pipe(
+            Effect.provide(
+              Config.testLayer([
+                organizationPolicy([
+                  { action: "provider.use", resource: "openai", effect: "deny" },
+                  { action: "tool.use", resource: "shell:*", effect: "deny" },
+                ]),
+              ]),
+            ),
+            Effect.provide(services),
+          ),
+      },
+    ])
+    const evaluate = hooks.trigger("permission", "evaluate", {
+      sessionID: Session.ID.make("ses_policy"),
+      action: "shell",
+      resources: ["ls"],
+      effect: "allow",
+    })
+    expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
+
+    fail = true
+    yield* catalog.reload().pipe(Effect.exit)
+    yield* plugins.awaitActivation
+    // Reads of the failing state fail rather than returning the provider the policy denies.
+    expect(Exit.isFailure(yield* catalog.get(Provider.ID.openai).pipe(Effect.exit))).toBe(true)
+    expect((yield* evaluate).effect).toBe("deny")
+    expect((yield* plugins.list())[0]?.state.status).toBe("active")
+
+    fail = false
+    yield* catalog.reload()
+    expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
   }),
 )
 
