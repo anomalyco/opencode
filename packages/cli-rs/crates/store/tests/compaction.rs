@@ -293,7 +293,8 @@ async fn does_not_resurrect(kind: &str) {
     assert_eq!(messages[0]["type"], "compaction");
     assert_eq!(messages[0]["status"], "running");
     let model = json!({ "providerID": "demo", "id": "model" });
-    let tokens = json!({ "input": 10.0, "output": 4.0, "reasoning": 0.0, "cache": { "read": 3.0, "write": 0.0 } });
+    let tokens =
+        json!({ "input": 10, "output": 4, "reasoning": 0, "cache": { "read": 3, "write": 0 } });
     emit(
         &fixture.data,
         event(
