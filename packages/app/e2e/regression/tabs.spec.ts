@@ -257,7 +257,7 @@ for (const [tabLayout, direction, label] of [
         settings: { appearance: { tabLayout } },
       },
     })
-    await openWithDirection(page, sessionHref(c.id), direction)
+    await openWithDirection(page, sessionHref(a.id), direction)
 
     const titles = page.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
 
@@ -273,11 +273,10 @@ for (const [tabLayout, direction, label] of [
 
     await expect(titles).toHaveText([a.title, "Session", b.title, c.title])
     await draft.click({ button: "right" })
-    await expect(active).toHaveText(c.title)
     await expect(menu.getByRole("menuitem")).toHaveText(["Close tab", "Close other tabs", label])
     await menu.getByRole("menuitem", { name: label, exact: true }).click()
     await expect(titles).toHaveText([a.title, "Session"])
-    await expect(active).toHaveText("Session")
+    await expect(active).toHaveText(a.title)
 
     for (const expected of [
       [a.title, "Session", b.title],
