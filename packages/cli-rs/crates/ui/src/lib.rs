@@ -1,5 +1,6 @@
 //! UI kit on opentui: themes, keymap, dialogs, and content widgets.
 
+pub mod activity_calendar;
 pub mod alert;
 pub mod code;
 pub mod confirm;

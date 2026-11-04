@@ -4,7 +4,6 @@
 //! a calendar of active days, the best streak, the active days, and the sessions. Escape goes back.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
@@ -14,6 +13,7 @@ use opencode_api::generated::{
 };
 use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
+use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
@@ -140,7 +140,7 @@ fn load(tui: &Tui, content: &View) {
         .map_or(0, |start| start.timestamp_millis());
     let input = ExperimentalSessionStatsInput {
         from: Some(from as f64),
-        timezone: Some(timezone()),
+        timezone: Some(time_zone()),
         tools: Some(ExperimentalSessionStatsInputTools::None),
         ..ExperimentalSessionStatsInput::default()
     };
@@ -174,21 +174,6 @@ fn load(tui: &Tui, content: &View) {
             tui.app.request_redraw();
         },
     );
-}
-
-/// `Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"`: `TZ`, else the zone `/etc/localtime` links to.
-fn timezone() -> String {
-    std::env::var("TZ")
-        .ok()
-        .map(|zone| zone.trim_start_matches(':').to_owned())
-        .filter(|zone| !zone.is_empty())
-        .or_else(|| {
-            let link = std::fs::read_link("/etc/localtime").ok()?;
-            let link = link.to_string_lossy();
-            link.split_once("zoneinfo/")
-                .map(|(_, zone)| zone.to_owned())
-        })
-        .unwrap_or_else(|| "UTC".to_owned())
 }
 
 const DIGITS: [(char, [&str; 5]); 15] = [
@@ -321,17 +306,12 @@ fn poster(tui: &Tui, theme: &Theme, stats: &SessionStatsInfo) -> View {
 }
 
 fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32) -> View {
-    let days: Vec<(String, i64)> = stats
-        .activity
-        .iter()
-        .map(|day| (day.date.clone(), day.steps))
-        .collect();
-    let calendar = calendar(
-        &days,
-        local_ordinal(stats.range.from),
-        local_ordinal(stats.range.to - 1.0),
-        stats.range.to <= stats.range.from,
-        (i64::from(width) - 4) / 2,
+    let calendar = activity_calendar(
+        &Local,
+        &stats.activity,
+        stats.range.from as i64,
+        stats.range.to as i64,
+        f64::from(width.saturating_sub(4) / 2),
     );
     let accent = theme
         .categorical()
@@ -348,12 +328,12 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
         .months
         .iter()
         .map(|month| {
-            let label = if month.label.len() as i64 <= month.span * 2 {
+            let label = if month.label.len() <= month.span * 2 {
                 month.label
             } else {
                 ""
             };
-            format!("{label:<width$}", width = (month.span * 2) as usize)
+            format!("{label:<width$}", width = month.span * 2)
         })
         .collect();
     let root = View::new(app)
@@ -362,7 +342,7 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
     for (index, day) in ["M", "T", "W", "T", "F", "S", "S"].into_iter().enumerate() {
         let mut spans = vec![format!("{day}   ").fg(theme.text.muted)];
         for week in &calendar.weeks {
-            let level = week[index];
+            let level = week[index].level;
             let cell = match level {
                 -1 => "  ",
                 0 => "\u{b7} ",
@@ -384,111 +364,6 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
         );
     }
     root
-}
-
-/// `activityCalendar`'s result: a level per day of each week (-1 outside the range), month labels with the
-/// number of weeks each spans, and whether weeks before the range's end were left out.
-#[derive(Debug, PartialEq)]
-pub struct Calendar {
-    pub weeks: Vec<[i64; 7]>,
-    pub months: Vec<Month>,
-    pub clipped: bool,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Month {
-    pub week: i64,
-    pub label: &'static str,
-    pub span: i64,
-}
-
-/// The local date of a time, as days since the epoch (`ordinal`).
-fn local_ordinal(time: f64) -> i64 {
-    let date = Local
-        .timestamp_millis_opt(time as i64)
-        .single()
-        .map_or(NaiveDate::default(), |date| date.date_naive());
-    date.signed_duration_since(NaiveDate::default()).num_days()
-}
-
-/// `activityCalendar`, over local-date ordinals `from` to `to` (both included).
-pub fn calendar(
-    days: &[(String, i64)],
-    from: i64,
-    to: i64,
-    empty: bool,
-    max_weeks: i64,
-) -> Calendar {
-    let date = |ordinal: i64| NaiveDate::default() + chrono::Duration::days(ordinal);
-    let monday = from - i64::from(date(from).weekday().num_days_from_monday());
-    let total = if empty {
-        0
-    } else {
-        (to - monday).div_euclid(7) + 1
-    };
-    let count = total.min(53).min(max_weeks.max(1));
-    let start = monday + (total - count).max(0) * 7;
-    let levels: Vec<i64> = days
-        .iter()
-        .map(|(_, steps)| *steps)
-        .filter(|steps| *steps > 0)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let steps = |key: &str| {
-        days.iter()
-            .rev()
-            .find(|(day, _)| day == key)
-            .map_or(0, |(_, steps)| *steps)
-    };
-    let weeks = (0..count)
-        .map(|week| {
-            std::array::from_fn(|day| {
-                let ordinal = start + week * 7 + day as i64;
-                let value = steps(&date(ordinal).format("%Y-%m-%d").to_string());
-                if ordinal < from || ordinal > to {
-                    return -1;
-                }
-                if value == 0 {
-                    return 0;
-                }
-                let rank = levels
-                    .iter()
-                    .position(|level| *level == value)
-                    .map_or(0, |index| index + 1);
-                ((rank as f64 / levels.len() as f64 * 4.0).ceil() as i64).max(1)
-            })
-        })
-        .collect();
-    const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-    let mut months: Vec<Month> = Vec::new();
-    for week in 0..count {
-        // Thursday names the month that owns most of a week; edge weeks stay inside the range.
-        let label = MONTHS[date((start + week * 7 + 3).clamp(from, to)).month0() as usize];
-        if months.last().is_none_or(|month| month.label != label) {
-            months.push(Month {
-                week,
-                label,
-                span: 0,
-            });
-        }
-    }
-    let ends: Vec<i64> = months
-        .iter()
-        .skip(1)
-        .map(|month| month.week)
-        .chain([count])
-        .collect();
-    for (month, end) in months.iter_mut().zip(ends) {
-        month.span = end - month.week;
-    }
-    Calendar {
-        weeks,
-        months,
-        clipped: count < total,
-    }
 }
 
 /// `statsNumber`: compact notation with at most one fraction digit (`12.3K`, `1M`).
@@ -560,32 +435,5 @@ mod tests {
         for (value, want) in cases {
             assert_eq!(number(value), want, "{value}");
         }
-    }
-
-    #[test]
-    fn calendar_like_activity_calendar() {
-        // 2026-01-01 is a Thursday; the range is January 1 to 14.
-        let from = NaiveDate::from_ymd_opt(2026, 1, 1)
-            .unwrap()
-            .signed_duration_since(NaiveDate::default())
-            .num_days();
-        let days = [("2026-01-02".to_owned(), 3), ("2026-01-05".to_owned(), 9)];
-        let calendar = calendar(&days, from, from + 13, false, 53);
-        assert_eq!(calendar.weeks.len(), 3);
-        assert_eq!(calendar.weeks[0], [-1, -1, -1, 0, 2, 0, 0]);
-        assert_eq!(calendar.weeks[1][0], 4);
-        assert_eq!(calendar.weeks[2], [0, 0, 0, -1, -1, -1, -1]);
-        assert_eq!(
-            calendar.months,
-            [Month {
-                week: 0,
-                label: "Jan",
-                span: 3
-            }]
-        );
-        assert!(!calendar.clipped);
-        let clipped = super::calendar(&days, from, from + 13, false, 2);
-        assert_eq!(clipped.weeks.len(), 2);
-        assert!(clipped.clipped);
     }
 }
