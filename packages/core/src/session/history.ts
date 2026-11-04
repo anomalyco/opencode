@@ -87,9 +87,6 @@ const latestCompaction = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
 })
 
-export const hasInlineContent = (data: typeof SessionMessageTable.$inferSelect.data): boolean =>
-  "content" in data && Array.isArray(data.content) && data.content.length > 0
-
 /**
  * Puts each assistant row's `session_part` rows into its `data.content`, in ordinal order. Rows without parts keep
  * their inline content, so legacy rows read unchanged. A row an older build wrote inline content to after its parts
@@ -120,8 +117,9 @@ export const withParts = Effect.fnUntraced(function* (
   if (partsByMessage.size === 0) return rows
   return rows.map((row) => {
     const parts = partsByMessage.get(row.id)
-    if (!parts || !("content" in row.data)) return row
-    return { ...row, data: { ...row.data, content: [...parts, ...row.data.content] } }
+    if (!parts) return row
+    const inline = "content" in row.data ? row.data.content : undefined
+    return { ...row, data: { ...row.data, content: Array.isArray(inline) ? [...parts, ...inline] : parts } }
   })
 })
 

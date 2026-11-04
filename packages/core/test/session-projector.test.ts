@@ -2472,7 +2472,55 @@ describe("SessionProjector", () => {
         boundary: { type: "through", messageID: ids.at(-1)! },
       })
       expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(
+        yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.session_id, sessionID))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
     }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+
+  it.effect(
+    "hydrates parts when envelope content is omitted and returns MessageDecodeError when content is non-array",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* seedSession()
+        const store = yield* SessionStore.Service
+        const omittedID = SessionMessage.ID.make("msg_parts_omitted_content")
+        const corruptID = SessionMessage.ID.make("msg_parts_null_content")
+        yield* db
+          .insert(SessionMessageTable)
+          .values([
+            assistantRow(omittedID, 0, { created, completed: created }),
+            assistantRow(corruptID, 1, { created, completed: created }),
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionPartTable)
+          .values([textPart(omittedID, 0, "from part"), textPart(corruptID, 0, "from part")])
+          .run()
+          .pipe(Effect.orDie)
+
+        yield* db.run(sql`update session_message set data = json_remove(data, '$.content') where id = ${omittedID}`)
+        expect((yield* store.message(omittedID))?.message).toMatchObject({
+          content: [{ type: "text", text: "from part" }],
+        })
+
+        yield* db.run(
+          sql`update session_message set data = '{"time":{"created":0},"content":null}' where id = ${corruptID}`,
+        )
+        expect(yield* store.messages({ sessionID }).pipe(Effect.flip)).toMatchObject({
+          _tag: "Session.MessageDecodeError",
+          sessionID,
+          messageID: corruptID,
+        })
+      }),
   )
 })
 
