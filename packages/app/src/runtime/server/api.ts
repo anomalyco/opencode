@@ -6,6 +6,9 @@ export function authTokenFromCredentials(input: { password: string }) {
   return btoa(`opencode:${input.password}`)
 }
 
+// Dev builds only: lets reloading a review link (?auth_token=...) stay signed in. Never read or written in production.
+export const devAuthTokenKey = (serverUrl: string) => `opencode.dev.auth_token:${serverUrl}`
+
 export function authFromToken(token: string | null) {
   const decoded = decode64(token ?? undefined)
 
