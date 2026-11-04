@@ -14,11 +14,6 @@ const pending = (inbox: string, text: string, delivery: "queue" | "steer", creat
   time: { created },
 })
 
-// The prompt footer hints are E.14's (P01-read-only-prompt).
-const masks = [
-  { x: 50, y: 28, width: 50, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
-]
-
 export default defineApp({
   height: 30,
   config: { experimental: { "new-designs": true } },
@@ -42,24 +37,24 @@ export default defineApp({
     { method: "PATCH", path: `/api/session/${id}/inbox/:inbox`, status: 204 },
   ],
   steps: [
-    { checkpoint: "dock", until: "2 queued", masks },
+    { checkpoint: "dock", until: "2 queued" },
     { keys: ["ctrl+x", "q"] },
-    { checkpoint: "queued", until: "Search queued prompts", masks },
+    { checkpoint: "queued", until: "Search queued prompts" },
     { keys: ["down"] },
-    { checkpoint: "second", until: "2 of 2", masks },
+    { checkpoint: "second", until: "2 of 2" },
     { keys: ["enter"] },
-    { checkpoint: "steered", masks },
+    { checkpoint: "steered" },
     { click: [5, 20] },
-    { checkpoint: "dock-click", until: "Search queued prompts", masks },
+    { checkpoint: "dock-click", until: "Search queued prompts" },
     { keys: ["escape"] },
-    { checkpoint: "dock-closed", masks },
+    { checkpoint: "dock-closed" },
     { click: [5, 11] },
-    { checkpoint: "pending-steer", until: "Pending steer", masks },
+    { checkpoint: "pending-steer", until: "Pending steer" },
     { keys: ["enter"] },
-    { checkpoint: "moved", masks },
+    { checkpoint: "moved" },
     { click: [5, 3] },
-    { checkpoint: "message", until: "Message Actions", masks },
+    { checkpoint: "message", until: "Message Actions" },
     { keys: ["escape"] },
-    { checkpoint: "closed", masks },
+    { checkpoint: "closed" },
   ],
 })
