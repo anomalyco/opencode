@@ -3,6 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
+import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useSettingsSurface } from "@/settings/surface"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -34,7 +35,7 @@ export function createProjectActions() {
 
   // Resume the requested action with the saved connection after an expired HTTP pairing or plugin sign-in.
   function authenticate(conn: ServerConnection.Any, onConnected?: (conn: ServerConnection.Any) => void) {
-    if (conn.type !== "http" || !global.servers.health[ServerConnection.key(conn)]?.unauthorized)
+    if (conn.type !== "http" || !isServerUnauthorized(global.servers.health[ServerConnection.key(conn)]))
       return ServerConnection.authenticate(conn, () => onConnected?.(conn))
     editServer(conn, onConnected)
 

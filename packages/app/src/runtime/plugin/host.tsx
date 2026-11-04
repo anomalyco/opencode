@@ -51,6 +51,12 @@ import {
 } from "@opencode/plugin/gui"
 import { OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
+import {
+  createPluginDialogState,
+  transitionPluginDialog,
+  type PluginDialogEffect,
+  type PluginDialogEvent,
+} from "./dialog-machine"
 import { PluginAlertDialog, PluginConfirmDialog, PluginPromptDialog, PluginSelectDialog } from "./dialogs"
 import { selectDisabled, selectHostReady, selectInstalled, selectMainFailed, selectServersReady } from "./machine"
 import { createStartupGate } from "./startup"
@@ -156,6 +162,8 @@ type HostInput = {
   plugin?: (id: string) => PluginInput | undefined
   /** How many times an Ipc became available. Reactive. */
   generation?: (token: Ipc) => number
+  /** Main did not answer the window's subscribe to an Ipc. Reactive. */
+  ipcFailed?: (token: Ipc) => boolean
 }
 
 export function PluginHostProvider(props: ParentProps<HostInput>) {
@@ -331,62 +339,82 @@ function createHost(input: HostInput) {
         ended?: () => void,
       ): DialogHandle => {
         const id = `plugin:${plugin}:${sequence.value++}`
-        const waiting = { cancel: () => {} }
         // This open alone: once it aborts, a deferred open neither mounts nor replaces another dialog.
         const opening = new AbortController()
+        const edge = { state: createPluginDialogState(), cancel: () => {}, release: () => {} }
+        // Events an effect raises synchronously (the interface already mounted, the stack closing) wait behind it.
+        const queue: PluginDialogEvent[] = []
 
-        // Each handle names its own dialog, so it never closes one another plugin or instance opened. Closing a
-        // dialog that still waits for the app interface, or for its deferred open, cancels it.
-        const close = () => {
-          abort(opening)
-          waiting.cancel()
-          dialog.close(id)
-          ended?.()
+        const dispatch = (event: PluginDialogEvent) => {
+          queue.push(event)
+
+          if (queue.length === 1) drain()
         }
 
-        const handle = { close }
+        const drain = () => {
+          const event = queue[0]
 
-        if (context.signal.aborted) {
-          ended?.()
+          if (!event) return
 
-          return handle
+          const next = transitionPluginDialog(edge.state, event)
+
+          edge.state = next.state
+          next.effects.forEach(run)
+          queue.shift()
+          drain()
         }
 
-        // Closes this dialog, not whichever is on top, when the plugin or the scope that opened it goes away.
-        const release = register(close)
+        // Each handle names its own dialog, so it never closes one another plugin or instance opened.
+        const handle = { close: () => dispatch({ type: "close" }) }
 
-        // A dialog opened before the app interface mounts, as during setup, shows after its first render: never behind
-        // the startup screen, and never before a route that focuses itself as it mounts.
-        waiting.cancel = input.whenMounted(
-          () =>
-            void dialog[options?.replace ? "show" : "push"](
-              () => {
-                // The dialog's root disposes when it closes or another dialog replaces it.
-                onCleanup(() => void release())
+        const run = (effect: PluginDialogEffect) => {
+          // Closes this dialog, not whichever is on top, when the plugin or the scope that opened it goes away.
+          if (effect.type === "register") return void (edge.release = register(handle.close))
 
-                return (
-                  <ErrorBoundary
-                    fallback={(error) => {
-                      onMount(() => {
-                        dialog.close(id)
-                        fail(plugin, error, "render")
-                      })
+          // A dialog opened before the app interface mounts, as during setup, shows after its first render: never
+          // behind the startup screen, and never before a route that focuses itself as it mounts.
+          if (effect.type === "wait") return void (edge.cancel = input.whenMounted(() => dispatch({ type: "mounted" })))
 
-                      return null
-                    }}
-                  >
-                    <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
-                  </ErrorBoundary>
-                )
-              },
-              // Escape, a click outside, a replacing dialog, or an open the stack dropped.
-              ended,
-              id,
-              // The stack mounts in a later transition. Its handle, its owner or the plugin ending before then keeps
-              // it closed.
-              AbortSignal.any([opening.signal, context.signal]),
-            ),
-        )
+          if (effect.type === "cancel") return edge.cancel()
+
+          if (effect.type === "release") return void edge.release()
+
+          if (effect.type === "abort") return abort(opening)
+
+          if (effect.type === "close") return dialog.close(id)
+
+          if (effect.type === "ended") return ended?.()
+
+          void dialog[options?.replace ? "show" : "push"](
+            () => {
+              // The dialog's root disposes when it closes, another dialog replaces it, or the stack goes away.
+              onCleanup(() => dispatch({ type: "dismissed" }))
+
+              return (
+                <ErrorBoundary
+                  fallback={(error) => {
+                    onMount(() => {
+                      handle.close()
+                      fail(plugin, error, "render")
+                    })
+
+                    return null
+                  }}
+                >
+                  <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
+                </ErrorBoundary>
+              )
+            },
+            // Escape, a click outside, a replacing dialog, or an open the stack dropped.
+            () => dispatch({ type: "dismissed" }),
+            id,
+            // The stack mounts in a later transition. Its handle, its owner or the plugin ending before then keeps
+            // it closed.
+            AbortSignal.any([opening.signal, context.signal]),
+          )
+        }
+
+        dispatch({ type: "open", aborted: context.signal.aborted })
 
         return handle
       }
@@ -573,7 +601,12 @@ function createHost(input: HostInput) {
 
       const client = input.ipc(token)
 
-      if (!client) return absent(token.id, true)
+      if (!client) {
+        const reason = absent(token.id, true)
+
+        // A provider that may still start, but whose subscribe failed, is not coming until main provides it again.
+        return reason === pending && input.ipcFailed?.(token) ? inactive.failed : reason
+      }
 
       const generation = input.generation?.(token) ?? 1
       const cached = clients.get(token.id)

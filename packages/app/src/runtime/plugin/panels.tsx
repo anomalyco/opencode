@@ -223,6 +223,12 @@ export function createRegion(input: {
     return sibling ? sessionTabPane(tabs, sibling) : "side"
   }
 
+  const paneOfKey = (key: string) => {
+    const entry = byKey().get(key)
+
+    return entry ? paneOf(entry) : sessionTabPane(input.tabs().tabs(), key)
+  }
+
   // Narrow screens never select a transient tab: a stored one falls back like a missing tab.
   const desktop = createMediaQuery("(min-width: 768px)")
 
@@ -314,29 +320,61 @@ export function createRegion(input: {
     return entry ? paneOf(entry) : "side"
   })
 
-  // The host's new tab views: each shows in a pane, over the session and selection it opened over, so a tab that opens
-  // and selects itself replaces it. A view stops being live once the selection moves off what it opened over.
-  type NewTab = { id: string; pane: SessionPane; session: string; over: string | undefined }
+  // The host's new tab views, each listing the launchers in a pane until the user closes it or a tab selected from it
+  // replaces it. They belong to the session they opened in. A split or bottom pane closes with its last tab, and its
+  // New tabs go with it.
+  type NewTab = { id: string; pane: SessionPane; session: string }
 
   const [state, setState] = createStore<{
     adding: NewTab[]
+    // The New tab each pane shows over its selected tab; none shows the selected tab.
     chosen: Partial<Record<SessionPane, string>>
   }>({ adding: [], chosen: {} })
 
   let serial = 0
 
-  const live = (value: NewTab) => value.session === input.view().key && value.over === panes[value.pane].active()
+  const live = (value: NewTab) =>
+    value.session === input.view().key && (value.pane === "side" || panes[value.pane].keys().length > 0)
+
   const newTabs = (pane: SessionPane) => state.adding.filter((value) => value.pane === pane && live(value))
 
+  // A pane with no tab of its own shows its newest New tab.
   const shownNewTab = (pane: SessionPane) => {
     const list = newTabs(pane)
+    const chosen = list.find((value) => value.id === state.chosen[pane])
 
-    return list.find((value) => value.id === state.chosen[pane]) ?? list.at(-1)
+    if (chosen) return chosen
+
+    if (panes[pane].active() !== undefined) return undefined
+
+    return list.at(-1)
   }
 
   createEffect(() => {
     if (state.adding.some((value) => !live(value))) setState("adding", (list) => list.filter(live))
   })
+
+  // A tab that selects itself while a New tab shows replaces that New tab, as one a launcher in it opens does. The other
+  // New tabs stay. Selecting a tab in the strip unchooses the New tab first, and the pane falling back to another tab
+  // after its selected tab closes or moves away keeps it.
+  for (const pane of ["side", "split", "bottom"] as const) {
+    createEffect(
+      on(
+        () => ({
+          key: panes[pane].active(),
+          keys: panes[pane].keys(),
+          chosen: state.chosen[pane],
+          shown: shownNewTab(pane)?.id,
+        }),
+        (next, prev) => {
+          if (!prev?.shown || !next.key || next.key === prev.key || next.chosen !== prev.chosen) return
+
+          if (prev.key && !next.keys.includes(prev.key)) return
+          setState("adding", (list) => list.filter((value) => value.id !== prev.shown))
+        },
+      ),
+    )
+  }
 
   const empty = createMemo(() => strip().length === 0)
 
@@ -355,9 +393,18 @@ export function createRegion(input: {
     input.onEmptied?.()
   }
 
-  // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
+  // Closing the shown New tab shows the New tab after it, else the one before, as a browser does. Closing the last New
+  // tab of a strip with no tabs closes the region, as closing its last tab does.
   const dismissNewTab = (id: string) =>
     batch(() => {
+      const closing = state.adding.find((value) => value.id === id)
+
+      if (closing && state.chosen[closing.pane] === id) {
+        const list = newTabs(closing.pane)
+        const index = list.findIndex((value) => value.id === id)
+        setState("chosen", closing.pane, (list[index + 1] ?? list[index - 1])?.id)
+      }
+
       setState("adding", (list) => list.filter((value) => value.id !== id))
 
       if (empty() && !state.adding.some(live)) emptied()
@@ -379,21 +426,21 @@ export function createRegion(input: {
       return key ? byKey().get(key) : undefined
     }),
     pane: (pane: SessionPane) => panes[pane],
-    paneOf: (key: string): SessionPane => {
-      const entry = byKey().get(key)
-
-      return entry ? paneOf(entry) : sessionTabPane(input.tabs().tabs(), key)
-    },
+    paneOf: paneOfKey,
     wide: createMemo(() => providers().some((item) => item.value.wide)),
     /** A plugin's tab ids in the stored strip. */
     openFor: (plugin: string) =>
       stored().flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
+    /** Selects a tab and shows it over the New tab its pane showed, which stays in the strip. */
     select(key: string) {
-      input.tabs().setActive(key)
+      batch(() => {
+        setState("chosen", paneOfKey(key), undefined)
+        input.tabs().setActive(key)
+      })
     },
     /** The live new tab views of a pane, in strip order. */
     newTabs,
-    /** The new tab view a pane shows: the selected one, else the newest. */
+    /** The new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */
     shownNewTab,
     newTab: (pane: SessionPane) => shownNewTab(pane) !== undefined,
     selectNewTab(pane: SessionPane, id: string) {
@@ -404,7 +451,7 @@ export function createRegion(input: {
       const id = `new:${++serial}`
 
       batch(() => {
-        setState("adding", (list) => [...list, { id, pane, session: input.view().key, over: panes[pane].active() }])
+        setState("adding", (list) => [...list, { id, pane, session: input.view().key }])
         setState("chosen", pane, id)
       })
     },
@@ -451,10 +498,11 @@ export function createRegion(input: {
       const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
 
       if (closed) input.closed.push(input.view(), closed)
+      // New tabs left in the strip keep the region open.
       batch(() => {
         input.tabs().close(key)
 
-        if (last) emptied()
+        if (last && !state.adding.some(live)) emptied()
       })
 
       if (entry)

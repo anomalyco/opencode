@@ -4,6 +4,7 @@ import { ErrorPage } from "@/shell/errors/error"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { ServerUnavailablePanel } from "./server-unavailable-panel"
@@ -19,7 +20,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
 
   return (
     <Show
-      when={!activeServer.health?.incompatible}
+      when={!isServerIncompatible(activeServer.health)}
       fallback={<ServerUnavailablePanel reason="incompatible" onClose={props.sessionID ? closeSession : undefined} />}
     >
       <Show

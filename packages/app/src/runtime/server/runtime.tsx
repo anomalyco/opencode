@@ -23,6 +23,7 @@ import {
 } from "./machine"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
+import { selectServerHostname } from "@/runtime/server/health-machine"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
 import { createData, createSessionRetention } from "@opencode/client/solid"
@@ -89,15 +90,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
 
     const serverHealth = useServerHealth(
       () => server.list,
-      () => true,
-      (probe) =>
-        dispatch({
-          type: "health.reported",
-          key: probe.key,
-          auth: probe.auth,
-          healthy: probe.health.healthy,
-          unauthorized: !!probe.health.unauthorized,
-        }),
+      (probe) => dispatch({ type: "health.reported", key: probe.key, auth: probe.auth, result: probe.result }),
     )
 
     // Runs during updates, so listed servers have a controller before anything reads them, including on first render.
@@ -117,7 +110,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     createEffect(() => {
       for (const conn of server.list) {
         const key = ServerConnection.key(conn)
-        const hostname = serverHealth.status[key]?.hostname
+        const hostname = selectServerHostname(serverHealth.status[key])
 
         if (hostname) server.setHostname(key, hostname)
       }
@@ -267,7 +260,7 @@ function createServerController(
   function withLocalMeta(project: Project): Project {
     if (project.id !== "global") return project
 
-    return { ...project, ...sync.child(project.worktree, { bootstrap: false })[0].projectMeta }
+    return { ...project, ...sync.child(project.worktree)[0].projectMeta }
   }
 
   const list = createMemo(() => sync.data.project.map(withLocalMeta))

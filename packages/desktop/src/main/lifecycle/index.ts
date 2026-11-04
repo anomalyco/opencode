@@ -183,6 +183,9 @@ const runtime = Layer.effect(
       restart: driver.restart,
       createWindow,
       restoreWindows: () => {
+        // A quit that started while the layers loaded (the user closed the first window) opens no new window.
+        if (!restoresWindows(driver.state())) return []
+
         if (!windowsWired) {
           windowsWired = true
           app.on("window-all-closed", windowAllClosed)

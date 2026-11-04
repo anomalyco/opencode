@@ -13,6 +13,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
 import { FileIcon } from "@opencode/ui/file-icon"
@@ -98,6 +99,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
   let controlsContent!: HTMLDivElement
   const [overflow, setOverflow] = createStore({ start: false, end: false })
   const [historyLayout, setHistoryLayout] = createStore<{ height?: number }>({})
+  // Phones and tablets, whatever their width: a narrow desktop window keeps the desktop composer.
+  const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
+  // The shell's slot at the bottom of the screen; without one (a story), the touch bar stays under the composer.
+  const [dock, setDock] = createSignal<HTMLElement>()
+
+  onMount(() => setDock(document.querySelector<HTMLElement>('[data-slot="composer-touch-bar-mount"]') ?? undefined))
 
   createEffect(() => {
     if (state.popover.type !== "history") setHistoryLayout("height", undefined)
@@ -297,6 +304,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               contenteditable={!props.disabled && !props.readOnly}
               autocapitalize={state.mode === "normal" ? "sentences" : "off"}
               autocorrect={state.mode === "normal" ? "on" : "off"}
+              enterkeyhint={touch() ? "enter" : undefined}
               spellcheck={state.mode === "normal"}
               // @ts-expect-error
               autocomplete="off"
@@ -318,6 +326,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 )
               }}
               onKeyDown={(event) => {
+                // A touch keyboard's Return only ever adds a line, even over suggestions; the touch bar sends. iOS
+                // also reports Shift on Return whenever autocapitalization arms it, which used to flip Return
+                // between sending and a newline. Only a hardware keyboard (an iPad's) has Cmd or Ctrl, and
+                // Cmd+Return sends there.
+                if (touch() && event.key === "Enter" && !event.metaKey && !event.ctrlKey) return
+
                 // Capture the opening footprint before the controller applies its first history preview.
                 const height =
                   state.popover.type === "closed" && event.shiftKey && event.key === "ArrowUp"
@@ -338,12 +352,24 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   return
                 }
 
-                if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                // Safari delivers the Enter that confirms an IME candidate after compositionend, so only its
+                // keyCode 229 shows it belongs to the composition.
+                if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
                   event.preventDefault()
 
                   if (event.repeat) return
-                  props.controller.submit(mod ? { alternate: true } : undefined)
+                  // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
+                  props.controller.submit(mod && !touch() ? { alternate: true } : undefined)
                 }
+              }}
+              // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
+              // paragraph, which would wrap the next line in a <div> the parser joins without a newline; replace it
+              // with the line break Shift+Enter inserts. Only beforeinput is cancelled, so iOS still applies its
+              // autocorrection and capitalization around the Return.
+              onBeforeInput={(event) => {
+                if (event.inputType !== "insertParagraph") return
+                event.preventDefault()
+                document.execCommand("insertLineBreak")
               }}
               onKeyUp={updateCursor}
               onPointerUp={updateCursor}
@@ -385,34 +411,37 @@ export function ComposerEditor(props: ComposerEditorProps) {
           </div>
         </div>
 
-        <div class="flex h-11 shrink-0 items-center px-2">
-          <div
-            class="flex shrink-0 items-center"
-            aria-hidden={state.mode === "shell"}
-            inert={state.mode === "shell" ? true : undefined}
-            style={buttons()}
-          >
-            <ComposerEditorAddMenu
-              disabled={view.draftOnly || state.mode === "shell"}
-              title={i18n.t("ui.promptInput.add")}
-              keybind={props.attachKeybind ?? ["Mod", "U"]}
-              attachLabel={i18n.t("ui.promptInput.attachments")}
-              attachShortcut={props.attachShortcut ?? "Mod+U"}
-              commandsLabel={i18n.t("ui.promptInput.commands")}
-              contextLabel={i18n.t("ui.promptInput.context")}
-              shellLabel={i18n.t("ui.promptInput.shell")}
-              onAttach={props.controller.attach}
-              onCommands={props.controller.openCommands}
-              onContext={props.controller.openContext}
-              onShell={props.controller.openShell}
-            />
-          </div>
+        <div class="flex h-11 shrink-0 items-center px-2" classList={{ hidden: touch() && state.mode === "shell" }}>
+          <Show when={!touch()}>
+            <div
+              class="flex shrink-0 items-center"
+              aria-hidden={state.mode === "shell"}
+              inert={state.mode === "shell" ? true : undefined}
+              style={buttons()}
+            >
+              <ComposerEditorAddMenu
+                disabled={view.draftOnly || state.mode === "shell"}
+                title={i18n.t("ui.promptInput.add")}
+                keybind={props.attachKeybind ?? ["Mod", "U"]}
+                attachLabel={i18n.t("ui.promptInput.attachments")}
+                attachShortcut={props.attachShortcut ?? "Mod+U"}
+                commandsLabel={i18n.t("ui.promptInput.commands")}
+                contextLabel={i18n.t("ui.promptInput.context")}
+                shellLabel={i18n.t("ui.promptInput.shell")}
+                onAttach={props.controller.attach}
+                onCommands={props.controller.openCommands}
+                onContext={props.controller.openContext}
+                onShell={props.controller.openShell}
+              />
+            </div>
+          </Show>
           <div
             ref={controlsViewport}
             data-slot="composer-controls"
             data-overflow-start={overflow.start}
             data-overflow-end={overflow.end}
-            class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            class="h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            classList={{ "ms-1 me-3": !touch() }}
             onScroll={updateOverflow}
             // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
             onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
@@ -449,44 +478,55 @@ export function ComposerEditor(props: ComposerEditorProps) {
               </Show>
             </div>
           </div>
-          <div data-slot="composer-actions" class="flex shrink-0 items-center">
-            <Show when={state.mode === "normal"}>
-              <ComposerEditorAlternateDelivery
-                controller={props.controller}
-                keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+          <Show when={!touch()}>
+            <div data-slot="composer-actions" class="flex shrink-0 items-center">
+              <Show when={state.mode === "normal"}>
+                <ComposerEditorAlternateDelivery
+                  controller={props.controller}
+                  keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+                />
+              </Show>
+              <Show when={state.mode === "shell"}>
+                <Button
+                  data-action="composer-exit-shell"
+                  type="button"
+                  variant="ghost-faint"
+                  size="small"
+                  class="me-3 gap-1.5 px-1.5"
+                  onClick={() => {
+                    props.controller.dispatch({ type: "mode.normal" })
+                    props.controller.restoreFocus()
+                  }}
+                >
+                  {i18n.t("ui.promptInput.exitShell")}
+                  <span class="hidden sm:block">
+                    <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
+                  </span>
+                </Button>
+              </Show>
+              <ComposerEditorSubmitButton
+                mode={state.mode}
+                stopping={view.submit.stopping()}
+                busy={view.submit.busy?.() ?? false}
+                disabled={!props.controller.canSubmit()}
+                sendLabel={i18n.t("ui.promptInput.send")}
+                stopLabel={i18n.t("ui.promptInput.stop")}
+                onSubmit={() => props.controller.submit()}
+                onStop={props.controller.stop}
               />
-            </Show>
-            <Show when={state.mode === "shell"}>
-              <Button
-                data-action="composer-exit-shell"
-                type="button"
-                variant="ghost-faint"
-                size="small"
-                class="me-3 gap-1.5 px-1.5"
-                onClick={() => {
-                  props.controller.dispatch({ type: "mode.normal" })
-                  props.controller.restoreFocus()
-                }}
-              >
-                {i18n.t("ui.promptInput.exitShell")}
-                <span class="hidden sm:block">
-                  <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
-                </span>
-              </Button>
-            </Show>
-            <ComposerEditorSubmitButton
-              mode={state.mode}
-              stopping={view.submit.stopping()}
-              busy={view.submit.busy?.() ?? false}
-              disabled={!props.controller.canSubmit()}
-              sendLabel={i18n.t("ui.promptInput.send")}
-              stopLabel={i18n.t("ui.promptInput.stop")}
-              onSubmit={() => props.controller.submit()}
-              onStop={props.controller.stop}
-            />
-          </div>
+            </div>
+          </Show>
         </div>
       </form>
+      <Show when={touch()}>
+        <Show when={dock()} fallback={<ComposerEditorTouchBar controller={props.controller} />}>
+          {(mount) => (
+            <Portal mount={mount()}>
+              <ComposerEditorTouchBar controller={props.controller} docked />
+            </Portal>
+          )}
+        </Show>
+      </Show>
     </div>
   )
 }
@@ -1473,6 +1513,159 @@ function ComposerEditorSubmitButton(props: {
         }}
       />
     </Tooltip>
+  )
+}
+
+// The composer's actions on a touch device, where Return only adds a line: this bar is the one way to send, steer,
+// queue or stop, and every target is at least 44px. Docked, it spans the bottom of the shell, which is the top of the
+// keyboard while one is open. Buttons keep the editor focused so the keyboard stays open.
+function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked?: boolean }) {
+  const i18n = useI18n()
+  const state = props.controller.state
+  const view = props.controller.view
+  const keep = (event: MouseEvent) => event.preventDefault()
+
+  // Docked, the bar is the bottom edge and pads itself for the home indicator, so the shell's main area and a bottom
+  // titlebar stop doing so.
+  onMount(() => {
+    if (!props.docked) return
+    const root = document.documentElement
+
+    root.style.setProperty("--shell-safe-area-bottom", "0px")
+    onCleanup(() => root.style.removeProperty("--shell-safe-area-bottom"))
+  })
+
+  // The delivery the desktop toolbar offers on Mod+Enter.
+  const alternate = createMemo(() => {
+    const queue = view.submit.queue
+
+    if (state.mode !== "normal" || !queue || !props.controller.canSubmit()) return undefined
+
+    if (queue.editing()) return "steer" as const
+
+    return queue.alternate()
+  })
+
+  const label = () => {
+    const queue = view.submit.queue
+
+    if (state.mode !== "normal" || !queue) return i18n.t("ui.promptInput.send")
+
+    // A submit while editing puts the prompt back in the queue; the alternate steers it.
+    if (queue.editing()) return i18n.t("ui.promptInput.queue")
+
+    if (!queue.alternate()) return i18n.t("ui.promptInput.send")
+
+    return queue.delivery() === "queue" ? i18n.t("ui.promptInput.queue") : i18n.t("ui.promptInput.steer")
+  }
+
+  const busy = () => (view.submit.busy?.() ?? false) && !view.submit.stopping()
+
+  return (
+    <div
+      data-slot="composer-touch-bar"
+      class="flex shrink-0 items-center gap-1 bg-v2-background-bg-base"
+      classList={{
+        "mt-2 h-14 rounded-xl border border-v2-border-border-base px-1.5": !props.docked,
+        "box-content h-14 border-t border-v2-border-border-base px-2 pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))]":
+          !!props.docked,
+      }}
+    >
+      <Show
+        when={state.mode === "normal"}
+        fallback={
+          <Button
+            data-action="composer-exit-shell"
+            variant="ghost-muted"
+            class="h-11 rounded-lg px-3 text-[15px] leading-5"
+            onMouseDown={keep}
+            onClick={() => {
+              props.controller.dispatch({ type: "mode.normal" })
+              props.controller.restoreFocus()
+            }}
+          >
+            {i18n.t("ui.promptInput.exitShell")}
+          </Button>
+        }
+      >
+        <IconButton
+          data-action="composer-attach-file"
+          variant="ghost-muted"
+          class="size-11 rounded-lg"
+          icon={<Icon name="plus" />}
+          aria-label={i18n.t("ui.promptInput.add")}
+          disabled={view.draftOnly}
+          onMouseDown={keep}
+          onClick={props.controller.attach}
+        />
+        <For
+          each={
+            [
+              { action: "composer-commands", glyph: "/", label: "ui.promptInput.commands", run: "openCommands" },
+              { action: "composer-context", glyph: "@", label: "ui.promptInput.context", run: "openContext" },
+              { action: "composer-shell", glyph: "!", label: "ui.promptInput.shell", run: "openShell" },
+            ] as const
+          }
+        >
+          {(key) => (
+            <IconButton
+              data-action={key.action}
+              variant="ghost-muted"
+              class="size-11 rounded-lg"
+              icon={<span class="font-mono text-[17px] leading-5">{key.glyph}</span>}
+              aria-label={i18n.t(key.label)}
+              disabled={view.draftOnly}
+              onMouseDown={keep}
+              onClick={() => props.controller[key.run]()}
+            />
+          )}
+        </For>
+      </Show>
+      <div class="flex-1" />
+      <Show
+        when={!view.submit.stopping()}
+        fallback={
+          <Button
+            data-action="composer-submit"
+            variant="neutral"
+            class="h-11 gap-2 rounded-xl px-4 text-[15px] leading-5"
+            onMouseDown={keep}
+            onClick={props.controller.stop}
+          >
+            <Icon name="stop" size="small" />
+            {i18n.t("ui.promptInput.stop")}
+          </Button>
+        }
+      >
+        <Show when={alternate()} keyed>
+          {(delivery) => (
+            <Button
+              data-action="composer-alternate-delivery"
+              variant="neutral"
+              class="h-11 rounded-xl px-4 text-[15px] leading-5"
+              onMouseDown={keep}
+              onClick={() => props.controller.submit({ alternate: true })}
+            >
+              {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
+            </Button>
+          )}
+        </Show>
+        <Button
+          data-action="composer-submit"
+          variant="submit"
+          class="h-11 gap-1.5 rounded-xl px-4 text-[15px] leading-5"
+          disabled={!props.controller.canSubmit()}
+          aria-busy={busy()}
+          onMouseDown={keep}
+          onClick={() => props.controller.submit()}
+        >
+          {label()}
+          <Show when={busy()} fallback={<Icon name={state.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}>
+            <Loader class="size-4" />
+          </Show>
+        </Button>
+      </Show>
+    </div>
   )
 }
 

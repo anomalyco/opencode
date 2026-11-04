@@ -237,6 +237,8 @@ export function mountPlugins(input: {
   plugins?: readonly PluginInfo[]
   /** The client of an Ipc while main provides it, as a desktop window's bridge reports it. Omitted: the web. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
+  /** Whether main failed to answer the window's subscribe to an Ipc. */
+  ipcFailed?: (token: Ipc) => boolean
 }) {
   const held = Promise.withResolvers<void>()
   const saved = { ...input.stored }
@@ -312,6 +314,7 @@ export function mountPlugins(input: {
               apis={fakeApis(storage)}
               whenMounted={mounted}
               ipc={input.ipc}
+              ipcFailed={input.ipcFailed}
             >
               <Capture />
             </PluginHostProvider>

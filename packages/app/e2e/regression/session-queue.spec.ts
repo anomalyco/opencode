@@ -260,6 +260,50 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
   expect(mock.prompts).toEqual([])
 })
 
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("the touch bar stops, queues and steers a running session while Return only adds a line", async ({ page }) => {
+    const mock = createQueueMock([])
+    const view = await openQueue(page, mock, "steer")
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+    const stop = bar.getByRole("button", { name: "Stop", exact: true })
+
+    const interrupted = page.waitForRequest((request) =>
+      new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+    )
+
+    await stop.tap()
+    await interrupted
+
+    await view.input.fill("check the logs")
+    await expect(stop).toHaveCount(0)
+    await view.input.press("Enter")
+    await view.input.pressSequentially("then the tests")
+    expect(mock.prompts).toEqual([])
+    await bar.getByRole("button", { name: "Queue", exact: true }).tap()
+    await expect
+      .poll(() => mock.prompts.map((prompt) => [prompt.delivery, prompt.text]))
+      .toEqual([["queue", "check the logs\nthen the tests"]])
+
+    await view.input.fill("use the staging database")
+    await bar.getByRole("button", { name: "Steer", exact: true }).tap()
+    await expect
+      .poll(() => mock.prompts.map((prompt) => [prompt.delivery, prompt.text]))
+      .toEqual([
+        ["queue", "check the logs\nthen the tests"],
+        ["steer", "use the staging database"],
+      ])
+    await expect(view.input).toBeEmpty()
+
+    // Editing a queued prompt: the primary action puts it back in the queue, the other steers it.
+    await view.rows.filter({ hasText: "check the logs" }).locator('[data-action="session-queue-edit"]').tap()
+    await expect(view.input).toHaveText(/check the logs/)
+    await expect(bar.locator('[data-action="composer-alternate-delivery"]')).toHaveText("Steer")
+    await expect(bar.locator('[data-action="composer-submit"]')).toHaveText("Queue")
+  })
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {

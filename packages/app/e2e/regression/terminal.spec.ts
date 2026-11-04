@@ -266,7 +266,7 @@ test("after a server restart, showing the terminal again restores it from a new 
 
   // Showing the tab again takes a new snapshot and reconnects.
   await side(page).getByRole("button", { name: "Add tab", exact: true }).click()
-  await expect(side(page).getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "false")
   await side(page).getByRole("tab", { name: "Build", exact: true }).click()
   await expect.poll(() => terminalText(page, screen)).toBe("before-restart\nafter-restart")
   await expect(side(page).getByText("Terminal disconnected", { exact: true })).toHaveCount(0)

@@ -1,5 +1,5 @@
 import { normalizeServerUrl, ServerConnection } from "@/runtime/server/registry"
-import type { ServerHealth } from "@/runtime/server/health"
+import type { ServerProbeResult } from "@/runtime/server/health-machine"
 
 export type ServerFormValues = {
   url: string
@@ -7,9 +7,7 @@ export type ServerFormValues = {
   password: string
 }
 
-export function createServerHealthPreview(
-  check: (server: ServerConnection.HttpBase) => Promise<Pick<ServerHealth, "healthy">>,
-) {
+export function createServerHealthPreview(check: (server: ServerConnection.HttpBase) => Promise<ServerProbeResult>) {
   let generation = 0
 
   const cancel = () => {
@@ -35,7 +33,7 @@ export function createServerHealthPreview(
     const result = await check(http)
 
     if (current !== generation) return
-    setStatus(result.healthy)
+    setStatus(result.type === "healthy")
   }
 
   return { cancel, preview }

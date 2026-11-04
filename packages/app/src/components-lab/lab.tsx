@@ -31,6 +31,7 @@ import { ModelsProvider } from "@/providers/models/models"
 import { Contribution } from "@/runtime/plugin/render"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerHealthy } from "@/runtime/server/health-machine"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionRouteFrame } from "@/session/session-frame"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
@@ -526,7 +527,7 @@ function Workspace(props: { children: JSX.Element }) {
   const healthy = createMemo((picked?: ServerConnection.Any) =>
     picked && servers.list.some((conn) => ServerConnection.key(conn) === ServerConnection.key(picked))
       ? picked
-      : servers.list.find((conn) => global.servers.health[ServerConnection.key(conn)]?.healthy),
+      : servers.list.find((conn) => isServerHealthy(global.servers.health[ServerConnection.key(conn)])),
   )
 
   return (

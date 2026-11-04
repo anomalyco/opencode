@@ -11,6 +11,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { Project } from "../project.js"
@@ -129,7 +130,8 @@ const layer = Layer.effect(
                     const stored = media
                       ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
                       : messages
-                    yield* db.insert(SessionMessageTable).values(stored).run().pipe(Effect.orDie)
+                    for (const batch of DatabaseBatch.insertBatches(SessionMessageTable, stored))
+                      yield* db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie)
                     if (media)
                       yield* Effect.forEach(
                         stored,

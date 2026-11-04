@@ -42,6 +42,8 @@ import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -59,6 +61,29 @@ const it = testEffect(
       Project.node.replace(globalProjectNode),
       LocationServiceMap.node.replace(promptLocationNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
+    ],
+  ),
+)
+// Durable Object SQLite, which rejects statements that bind more than 100 parameters.
+const durableIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      SessionTransfer.node,
+      InstructionEntry.node,
+    ]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Project.node.replace(globalProjectNode),
+      LocationServiceMap.node.replace(promptLocationNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      Database.node.replace(
+        Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+      ),
     ],
   ),
 )
@@ -358,9 +383,7 @@ describe("Session.create", () => {
       const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
 
       expect(created.location.directory).toBe(location.directory)
-      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([
-        created.id,
-      ])
+      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([created.id])
     }),
   )
 
@@ -852,9 +875,10 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const parent = yield* session.create({ location })
 
-      expect(
-        yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
+      expect(yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.ForkEmptyError",
+        sessionID: parent.id,
+      })
     }),
   )
 
@@ -969,7 +993,12 @@ describe("Session.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* db.update(SessionTable).set({ agent: Agent.defaultID }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ agent: Agent.defaultID })
+        .where(eq(SessionTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
 
       expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
     }),
@@ -1562,6 +1591,30 @@ describe("SessionTransfer", () => {
         viewed: DateTime.makeUnsafe(200),
       })
       expect(imported.outcome).toBe("succeeded")
+    }),
+  )
+
+  durableIt.effect("imports a long transcript in statements under 100 bound parameters", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location })
+      const sessionID = Session.ID.create()
+      const messages = Array.from({ length: 30 }, (_, index) =>
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.create(),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: Array.from({ length: 30 }, (_, ordinal) => ({ type: "text" as const, text: `${index}:${ordinal}` })),
+          time: { created: DateTime.makeUnsafe(index), completed: DateTime.makeUnsafe(index) },
+        }),
+      )
+
+      yield* transfer.import({ data: { info: { ...template, id: sessionID }, messages }, location })
+      expect(yield* session.messages({ sessionID, order: "asc" })).toMatchObject(
+        messages.map((message) => ({ id: message.id, content: message.content })),
+      )
     }),
   )
 })

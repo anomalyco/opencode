@@ -20,7 +20,14 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
-import { type ServerHealth } from "@/runtime/server/health"
+import {
+  isServerFailed,
+  isServerHealthy,
+  isServerIncompatible,
+  isServerUnauthorized,
+  selectServerVersion,
+  type ServerHealth,
+} from "@/runtime/server/health-machine"
 import { ProjectMenuItems } from "./menu"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import "./view.css"
@@ -32,7 +39,10 @@ const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerCo
 // Plugin servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
 // pairing link or password.
 const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
-  (server.type === "plugin" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+  (server.type === "plugin" && server.status.type === "auth") ||
+  (server.type === "http" && isServerUnauthorized(health))
+
+const connecting = (server: ServerConnection.Any) => server.type === "plugin" && server.status.type === "starting"
 
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
@@ -201,7 +211,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 size="large"
                 class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
                 icon={<Icon name="folder-add-left" />}
-                disabled={props.serverHealth(props.servers[0])?.healthy === false}
+                disabled={isServerFailed(props.serverHealth(props.servers[0]))}
                 onClick={() => props.onChooseProject(props.servers[0])}
                 aria-label={props.language.t("home.project.add")}
               />
@@ -236,11 +246,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           <Show
             when={
               props.servers.length > 1 ||
-              props.servers.some(
-                (server) =>
-                  signInRequired(server, props.serverHealth(server)) ||
-                  (server.type === "plugin" && server.connecting),
-              )
+              props.servers.some((server) => signInRequired(server, props.serverHealth(server)) || connecting(server))
             }
             fallback={
               <Show when={props.servers[0]}>
@@ -253,7 +259,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                           type="button"
                           data-action="home-add-project-row"
                           class="mt-1 disabled:opacity-60"
-                          disabled={props.serverHealth(server())?.healthy === false}
+                          disabled={isServerFailed(props.serverHealth(server()))}
                           onClick={() => props.onChooseProject(server())}
                         >
                           <Icon name="folder-add-left" size="small" />
@@ -270,11 +276,10 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
               <For each={props.servers}>
                 {(item) => {
                   const projects = () => props.projectsForServer(item)
-                  const healthy = () => !!props.serverHealth(item)?.healthy
+                  const healthy = () => isServerHealthy(props.serverHealth(item))
                   const hasProjects = () => projects().length > 0
                   const collapsed = () => props.collapsed(item)
                   const authentication = () => signInRequired(item, props.serverHealth(item))
-                  const connecting = () => item.type === "plugin" && item.connecting
 
                   return (
                     <div class="flex min-w-0 flex-col gap-1">
@@ -286,7 +291,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                         collapsed={collapsed()}
                         health={props.serverHealth(item)}
                       />
-                      <Show when={authentication() || connecting()}>
+                      <Show when={authentication() || connecting(item)}>
                         <div class="mx-3 h-px bg-v2-border-border-base" />
                         <div class="px-1.5 py-1">
                           <Button
@@ -294,18 +299,20 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                             class="w-full"
                             size="small"
                             variant="neutral"
-                            disabled={connecting()}
-                            aria-busy={!!connecting()}
+                            disabled={connecting(item)}
+                            aria-busy={connecting(item)}
                             onClick={() => props.onAuthenticateServer?.(item)}
                           >
-                            <Show when={connecting()}>
+                            <Show when={connecting(item)}>
                               <Loader class="size-3.5" />
                             </Show>
-                            {props.language.t(connecting() ? "server.status.connecting" : "server.action.authenticate")}
+                            {props.language.t(
+                              connecting(item) ? "server.status.connecting" : "server.action.authenticate",
+                            )}
                           </Button>
                         </div>
                       </Show>
-                      <Show when={healthy() && !authentication() && !connecting() && hasProjects() && !collapsed()}>
+                      <Show when={healthy() && !authentication() && !connecting(item) && hasProjects() && !collapsed()}>
                         <div class="mx-3 h-px bg-v2-border-border-base" />
                         <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
                       </Show>
@@ -376,9 +383,9 @@ function HomeServerRow(props: {
   collapsed: boolean
   health: ServerHealth | undefined
 }) {
-  const healthy = () => !!props.health?.healthy
+  const healthy = () => isServerHealthy(props.health)
   const authentication = () => signInRequired(props.server, props.health)
-  const incompatible = () => !!props.health?.incompatible
+  const incompatible = () => isServerIncompatible(props.health)
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
   onCleanup(() => {
@@ -397,7 +404,7 @@ function HomeServerRow(props: {
       value={
         authentication()
           ? props.language.t("server.status.authentication")
-          : props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })
+          : props.language.t("server.row.incompatible", { version: selectServerVersion(props.health) ?? "1" })
       }
     >
       <div
@@ -444,11 +451,7 @@ function HomeServerRow(props: {
             />
           </span>
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
-            <ServerHealthIndicator
-              health={props.health}
-              connecting={props.server.type === "plugin" && props.server.connecting}
-              authenticationRequired={authentication()}
-            />
+            <ServerHealthIndicator health={props.health} />
           </div>
           <span
             data-slot="home-row-label"
@@ -496,7 +499,7 @@ function HomeServerRow(props: {
               size="small"
               icon={<Icon name="folder-add-left" />}
               aria-label={props.language.t("home.project.add")}
-              disabled={props.health?.healthy === false && !authentication()}
+              disabled={isServerFailed(props.health) && !authentication()}
               onClick={() => props.onChooseProject(props.server)}
             />
           </Tooltip>
@@ -570,7 +573,7 @@ function HomeProjectSlot(props: HomeProjectListProps & { worktree: string }) {
 }
 
 function HomeProjectEmpty(props: HomeProjectsViewProps & { server: ServerConnection.Any }) {
-  const unreachable = () => props.serverHealth(props.server)?.healthy === false
+  const unreachable = () => isServerFailed(props.serverHealth(props.server))
 
   return (
     <HomeProjectNavButton
@@ -595,7 +598,7 @@ function HomeProjectRow(
       unread: boolean
     },
 ) {
-  const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
+  const serverUnreachable = () => isServerFailed(props.serverHealth(props.server))
 
   const contextMenuID = () => projectContextMenuID(props.server, props.project.worktree)
   onCleanup(() => {
