@@ -1,7 +1,7 @@
 //! Markdown wrapper (U.4a, U.4c): assistant text as the transcript shows it (`TextPart`,
 //! `packages/tui/src/routes/session/message-parts.tsx`), on opentui-rust's `Markdown` widget.
 //!
-//! The widget has its own parser and styles spans through `MarkdownColors`, not Core's `markup.*` scopes;
+//! The widget has its own parser and styles spans through the syntax theme's `markup.*` scopes, as Core does;
 //! `parity/deviations/V03-markdown-widget.md` lists what differs.
 
 use std::rc::Rc;
@@ -32,8 +32,9 @@ impl CodeBlockRenderers {
     }
 }
 
-/// The widget's colors from the TUI theme's `markdown` tokens. The widget colors bold text with `emphasis` and the
-/// label of a link with `link`, so those take the tokens Core uses for `markup.strong` and `markup.link.label`.
+/// The widget's colors from the TUI theme's `markdown` tokens, for the parts the syntax theme leaves unstyled. The
+/// widget colors bold text with `emphasis` and the label of a link with `link`, so those take the tokens Core uses
+/// for `markup.strong` and `markup.link.label`.
 pub fn colors(theme: &Theme) -> MarkdownColors {
     let markdown = &theme.markdown;
     MarkdownColors {
@@ -49,8 +50,8 @@ pub fn colors(theme: &Theme) -> MarkdownColors {
     }
 }
 
-/// Markdown in the theme's colors with `TextPart`'s options: code fences highlighted by `syntax` (see
-/// [`crate::code::syntax_theme`]) or drawn by `renderers`, grid tables with one column of cell padding, markers
+/// Markdown in the theme's colors with `TextPart`'s options: text styled and code fences highlighted by `syntax`
+/// (see [`crate::code::syntax_theme`]), fences drawn by `renderers` where one is registered, grid tables with one column of cell padding, markers
 /// hidden when `conceal` (`session.markdown` is `rendered`), and incremental parsing while `streaming` (the message
 /// has not completed). Stream text into it with [`Markdown::append`] or [`Markdown::set_markdown`], and call
 /// [`Markdown::streaming`] with `false` once the message completes.
@@ -65,6 +66,7 @@ pub fn view(
     let markdown = Markdown::new(app)
         .colors(colors(theme))
         .syntax_theme(syntax.clone())
+        .scope_styles(true)
         .table_options(MarkdownTableOptions {
             style: MarkdownTableStyle::Grid,
             cell_padding_x: Some(1),
