@@ -19,6 +19,7 @@ import { emptyThemeSource } from "../../../tui/test/fixture/fixture"
 import { createApi, createEventStream, createFetch, json } from "../../../tui/test/fixture/tui-client"
 import { TestTuiContexts } from "../../../tui/test/fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../../tui/test/fixture/tui-runtime"
+import { withNewDesigns } from "../lib/app"
 import { renderComponent } from "../lib/component"
 
 const directory = "/tmp/opencode/app"
@@ -74,7 +75,7 @@ async function render(fixture: string, open: () => JSX.Element, ready: (frame: s
     height: 30,
     bare: () => (
       <TestTuiContexts directory={directory}>
-        <ConfigProvider config={createTuiResolvedConfig({ animations: false })}>
+        <ConfigProvider config={createTuiResolvedConfig(withNewDesigns({ animations: false }))}>
           <Keymap.Provider>
             <ToastProvider>
               <RouteProvider initialRoute={{ type: "home" }}>

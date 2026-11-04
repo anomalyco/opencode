@@ -6,7 +6,7 @@ import { DialogConfig } from "../../../tui/src/component/dialog-config"
 import { DialogExperiments } from "../../../tui/src/component/dialog-experiments"
 import { renderComponent } from "../lib/component"
 
-const settings = { width: 80, height: 30, dialog: () => <DialogConfig />, ready: (f: string) => f.includes("Settings") }
+const settings = { width: 80, height: 30, dialog: () => <DialogConfig />, ready: (f: string) => f.includes("esc") && f.includes("Scroll") }
 
 await renderComponent({ ...settings, fixture: "E.18a/settings" })
 await renderComponent({

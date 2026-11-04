@@ -51,7 +51,7 @@ for (const [fixture, moves] of [
     width: 80,
     height: 20,
     element: () => <Commands open={() => <CommandPaletteDialog />} />,
-    ready: (frame) => frame.includes("Commands"),
+    ready: (frame) => frame.includes("Search commands"),
     act: (setup) => {
       for (let i = 0; i < moves; i++) setup.mockInput.pressArrow("down")
     },

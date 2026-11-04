@@ -28,6 +28,7 @@ import { emptyThemeSource } from "../../../tui/test/fixture/fixture"
 import { createApi, createEventStream, createFetch, directory, json } from "../../../tui/test/fixture/tui-client"
 import { TestTuiContexts } from "../../../tui/test/fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../../tui/test/fixture/tui-runtime"
+import { withNewDesigns } from "../lib/app"
 import { readCells, writeFixture } from "../lib/cells"
 
 const location = { directory }
@@ -174,7 +175,7 @@ async function capture(options: {
       <TestTuiContexts paths={{ state }}>
         <ArgsProvider>
           <ConfigProvider
-            config={createTuiResolvedConfig({ theme: { name: "opencode", mode: "dark" }, animations: false })}
+            config={createTuiResolvedConfig(withNewDesigns({ theme: { name: "opencode", mode: "dark" }, animations: false }))}
           >
             <Keymap.Provider>
               <ThemeProvider mode="dark" source={emptyThemeSource}>
@@ -243,12 +244,12 @@ const size = { width: 90, height: 34 }
 // Tall enough for the whole model list: TS does not scroll to a current model below the first screen
 // (parity/deviations/DLG13-model-scroll.md).
 const tall = { width: 90, height: 60 }
-await capture({ ...tall, fixture: "model", dialog: () => <DialogModel />, ready: (f) => f.includes("Usage") })
+await capture({ ...tall, fixture: "model", dialog: () => <DialogModel />, ready: (f) => f.includes("usage") })
 await capture({
   ...tall,
   fixture: "model-filter",
   dialog: () => <DialogModel />,
-  ready: (f) => f.includes("Usage"),
+  ready: (f) => f.includes("usage"),
   act: (setup) => setup.mockInput.typeText("gpt"),
 })
 await capture({ ...size, fixture: "agent", dialog: () => <DialogAgent />, ready: (f) => f.includes("plan") })
