@@ -200,8 +200,11 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
 /// `mediaHashFromUri`: the 64 hex digits of `media:<hash>`.
 fn media_hash(uri: &str) -> Option<&str> {
     let hash = uri.strip_prefix("media:")?;
-    (hash.len() == 64 && hash.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
-        .then_some(hash)
+    (hash.len() == 64
+        && hash
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
+    .then_some(hash)
 }
 
 /// The bytes of a base64 `data:` URI.

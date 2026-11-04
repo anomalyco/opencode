@@ -10,7 +10,8 @@ use std::time::Duration;
 
 use chrono::{Local as Clock, TimeZone};
 use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo, SessionStructuredError,
+    SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo,
+    SessionStructuredError,
 };
 use opentui::prelude::*;
 
@@ -52,7 +53,8 @@ impl ExecutionError {
         if let SessionMessageInfo::Idle(idle) = message
             && let Some(error) = &idle.error
         {
-            self.text.set_text(format!("Error: {}", self::message(error)));
+            self.text
+                .set_text(format!("Error: {}", self::message(error)));
         }
     }
 }
@@ -186,7 +188,11 @@ impl StepError {
                         &View::new(app)
                             .column()
                             .padding_edge(Edge::Top, 1)
-                            .child(&Text::new(app, label.as_str()).fg(muted).wrap(WrapMode::Word))
+                            .child(
+                                &Text::new(app, label.as_str())
+                                    .fg(muted)
+                                    .wrap(WrapMode::Word),
+                            )
                             .child(&Text::new(app, href.as_str()).fg(base)),
                     );
                 }
@@ -241,16 +247,17 @@ impl Retry {
         self.0.root.visible(retry.is_some());
         if self.0.render() > 0 {
             let weak = self.0.this.clone();
-            self.0
-                .timer
-                .set(Some(self.0.app.set_interval(Duration::from_secs(1), move |_| {
+            self.0.timer.set(Some(self.0.app.set_interval(
+                Duration::from_secs(1),
+                move |_| {
                     let Some(inner) = weak.upgrade() else { return };
                     if inner.render() == 0
                         && let Some(timer) = inner.timer.take()
                     {
                         inner.app.cancel_timer(timer);
                     }
-                })));
+                },
+            )));
         }
     }
 }
@@ -290,14 +297,19 @@ fn limit_notice(
     error: &SessionStructuredError,
 ) -> Option<LimitNotice> {
     let local = &cx.tui.local;
-    let body = error.response.as_ref().map(|response| response.body.as_str());
+    let body = error
+        .response
+        .as_ref()
+        .map(|response| response.body.as_str());
     let reset = body.and_then(refusal_reset).or_else(|| {
         retry_reset(
             error.retry_after_ms.map(|delay| delay as f64),
             message.time.completed.unwrap_or(message.time.created),
         )
     });
-    let resets = reset.map_or_else(String::new, |at| format!("Resets {}. ", usage::format_reset(at)));
+    let resets = reset.map_or_else(String::new, |at| {
+        format!("Resets {}. ", usage::format_reset(at))
+    });
     let key = Some(
         cx.keys
             .model_list
@@ -307,7 +319,9 @@ fn limit_notice(
     let models = local.models();
     let name = models
         .iter()
-        .find(|model| model.provider_id == message.model.provider_id && model.id == message.model.id)
+        .find(|model| {
+            model.provider_id == message.model.provider_id && model.id == message.model.id
+        })
         .map_or_else(|| message.model.id.clone(), |model| model.name.clone());
     match error.r#type.as_str() {
         "provider.go-limit" => {
@@ -350,7 +364,9 @@ fn limit_notice(
             link: None,
         }),
         _ if error.status == Some(402)
-            && usage::served_by_console(local.provider(message.model.provider_id.as_str()).as_ref()) =>
+            && usage::served_by_console(
+                local.provider(message.model.provider_id.as_str()).as_ref(),
+            ) =>
         {
             let workspace = local
                 .usage()
@@ -373,7 +389,8 @@ fn limit_notice(
 
 /// `freeLimitReset`: the time when that is today and within a day, else the time and date.
 pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<String> {
-    let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
+    let delay =
+        delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
     let at = base + delay;
     let date = Clock.timestamp_millis_opt(at as i64).single()?;
     let today = Clock.timestamp_millis_opt(now as i64).single()?;
@@ -395,7 +412,8 @@ fn refusal_reset(body: &str) -> Option<f64> {
 
 /// `retryReset`: `retry-after` from `base`; nothing past 45 days, as a bad header.
 fn retry_reset(delay: Option<f64>, base: f64) -> Option<f64> {
-    let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 45.0 * DAY_MS)?;
+    let delay =
+        delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 45.0 * DAY_MS)?;
     Some(base + delay)
 }
 
@@ -406,7 +424,9 @@ fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
     while let Some(at) = rest.find(&needle) {
         rest = &rest[at + needle.len()..];
         let value = rest.trim_start();
-        let Some(value) = value.strip_prefix(':') else { continue };
+        let Some(value) = value.strip_prefix(':') else {
+            continue;
+        };
         let Some(value) = value.trim_start().strip_prefix('"') else {
             continue;
         };
@@ -450,7 +470,11 @@ impl Stop {
 
 impl LimitWatch {
     /// The new limit stops among the visible messages, after a store flush.
-    pub fn check(&self, messages: &[SessionMessageInfo], pending: &dyn Fn(&str) -> bool) -> Vec<Stop> {
+    pub fn check(
+        &self,
+        messages: &[SessionMessageInfo],
+        pending: &dyn Fn(&str) -> bool,
+    ) -> Vec<Stop> {
         let mut stops = Vec::new();
         for (index, message) in messages.iter().enumerate() {
             let SessionMessageInfo::Assistant(assistant) = message else {
@@ -471,9 +495,16 @@ impl LimitWatch {
             let recalled = messages[..index]
                 .iter()
                 .rev()
-                .take_while(|item| !matches!(item, SessionMessageInfo::Shell(_) | SessionMessageInfo::Idle(_)))
+                .take_while(|item| {
+                    !matches!(
+                        item,
+                        SessionMessageInfo::Shell(_) | SessionMessageInfo::Idle(_)
+                    )
+                })
                 .find_map(|item| match item {
-                    SessionMessageInfo::User(user) if !pending(user.id.as_str()) => Some(user.text.clone()),
+                    SessionMessageInfo::User(user) if !pending(user.id.as_str()) => {
+                        Some(user.text.clone())
+                    }
                     _ => None,
                 });
             let reset = free_limit_reset(
@@ -543,7 +574,8 @@ mod tests {
         assert_eq!(free_limit_reset(Some(-1.0), 0.0, 0.0), None);
         assert_eq!(free_limit_reset(Some(8.0 * DAY_MS), 0.0, 0.0), None);
         // Over a day away is always the time and the date.
-        let far = free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
+        let far =
+            free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
         assert!(far.contains(" · "), "{far}");
     }
 }
