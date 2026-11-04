@@ -14,6 +14,10 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["string"] }
+clap_complete.workspace = true
+url.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
 opencode-drive.workspace = true
@@ -23,3 +27,6 @@ opencode-service.workspace = true
 opencode-store.workspace = true
 opencode-tui.workspace = true
 opencode-ui.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

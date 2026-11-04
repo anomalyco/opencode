@@ -10,7 +10,7 @@ the same commands, aliases, arguments, flags, and descriptions. The help layout 
   `help` so they equal the TypeScript strings.
 - `script/gen/commands.ts` dumps the TypeScript `Spec` tree to `crates/cli/tests/fixtures/commands.json`: per
   node its name, aliases, description, global flags, arguments, and flags (name, aliases, type, choices,
-  description, hidden, optional, repeated with bounds, optional value, default). `crates/cli/tests/tree.rs`
+  description, hidden, optional, repeated with bounds, optional value, default). `crates/cli/src/tests/tree.rs`
   walks the clap `Command` and compares the same facts. A change on either side fails the test until the
   other side follows.
 - The type of a flag is carried by its clap value name, which help shows: `string`, `integer`, `key=value`,
