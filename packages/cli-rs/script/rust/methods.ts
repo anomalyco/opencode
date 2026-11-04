@@ -34,7 +34,11 @@ export function emitMethod(types: Types, method: Method) {
   const input = method.fields.length === 0 ? undefined : types.name(`${method.prefix}Input`)
   if (input !== undefined) {
     const lines = method.fields.map((field) => {
-      const hint = `${method.prefix}Input${pascal(field.name)}`
+      // Every endpoint shares the `location` query shape; name it for what it is, not for the first endpoint.
+      const hint =
+        field.source === "query" && field.name === "location"
+          ? "LocationQueryInput"
+          : `${method.prefix}Input${pascal(field.name)}`
       const type =
         method.binaryBody && field.source === "payload"
           ? "bytes::Bytes"

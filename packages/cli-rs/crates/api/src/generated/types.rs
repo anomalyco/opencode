@@ -59,7 +59,7 @@ pub struct PairingSession {
 pub type ServerConnectOutput = PairingSession;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct LocationGetInputLocation {
+pub struct LocationQueryInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directory: Option<String>,
 }
@@ -67,7 +67,7 @@ pub struct LocationGetInputLocation {
 /// Input of [`Client::location_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct LocationGetInput {
-    pub location: Option<LocationGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `AbsolutePath`
@@ -144,16 +144,10 @@ pub struct LocationPublicInfo {
 /// Output of [`Client::location_get`].
 pub type LocationGetOutput = LocationPublicInfo;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AgentListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::agent_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AgentListInput {
-    pub location: Option<AgentListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -231,24 +225,6 @@ pub struct ModelRef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ProviderSettingsTimeout {
-    Number(f64),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ProviderSettingsHeaderTimeout {
-    Number(f64),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ProviderSettingsChunkTimeout {
     Number(f64),
     Bool(bool),
     /// A shape this client does not know, kept as it arrived.
@@ -435,13 +411,13 @@ pub struct ProviderSettings {
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub header_timeout: Option<ProviderSettingsHeaderTimeout>,
+    pub header_timeout: Option<ProviderSettingsTimeout>,
     #[serde(
         rename = "chunkTimeout",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub chunk_timeout: Option<ProviderSettingsChunkTimeout>,
+    pub chunk_timeout: Option<ProviderSettingsTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<ProviderCompaction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -613,17 +589,11 @@ pub struct AgentListOutput {
     pub data: Vec<AgentInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AgentGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::agent_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AgentGetInput {
     pub agent_id: AgentID,
-    pub location: Option<AgentGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -632,16 +602,10 @@ pub struct AgentGetOutput {
     pub data: AgentInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::plugin_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginListInput {
-    pub location: Option<PluginListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `Plugin.ID`
@@ -787,16 +751,10 @@ pub struct PluginListOutput {
     pub data: Vec<PluginInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginGuiInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::plugin_gui`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginGuiInput {
-    pub location: Option<PluginGuiInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub id: PluginID,
 }
 
@@ -813,16 +771,10 @@ pub struct PluginGuiOutput {
     pub data: PluginGuiBundle,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginCheckInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::plugin_check`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginCheckInput {
-    pub location: Option<PluginCheckInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub target: Option<String>,
 }
 
@@ -832,16 +784,10 @@ pub struct PluginCheckOutput {
     pub data: Vec<PluginInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginUpdateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::plugin_update`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginUpdateInput {
-    pub location: Option<PluginUpdateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub targets: Vec<String>,
 }
 
@@ -1654,11 +1600,6 @@ pub struct SessionSyntheticInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxSyntheticTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxSyntheticPayload {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1672,7 +1613,7 @@ pub struct SessionInboxSynthetic {
     pub id: SessionMessageID,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub time: SessionInboxSyntheticTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub payload: SessionInboxSyntheticPayload,
     pub delivery: SessionInboxDelivery,
@@ -1698,11 +1639,6 @@ pub struct SessionCompactInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxCompactionTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxCompactionPayload {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1710,7 +1646,7 @@ pub struct SessionInboxCompaction {
     pub id: SessionMessageID,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub time: SessionInboxCompactionTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub payload: SessionInboxCompactionPayload,
     pub delivery: SessionInboxDelivery,
@@ -1749,16 +1685,11 @@ pub struct SessionContextInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAgentSelectedTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAgentSelected {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageAgentSelectedTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub agent: AgentID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1766,25 +1697,15 @@ pub struct SessionMessageAgentSelected {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageModelSelectedTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageModelSelected {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageModelSelectedTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub model: ModelRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<ModelRef>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageLocationSwitchedTime {
-    pub created: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1801,7 +1722,7 @@ pub struct SessionMessageLocationSwitched {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageLocationSwitchedTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     #[serde(rename = "projectID", default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<ProjectID>,
@@ -1817,16 +1738,11 @@ pub struct SessionMessageLocationSwitched {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageUserTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageUser {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageUserTime,
+    pub time: SessionInboxUserTime,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<Vec<PromptFileAttachment>>,
@@ -1838,25 +1754,15 @@ pub struct SessionMessageUser {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageSyntheticTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageSynthetic {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageSyntheticTime,
+    pub time: SessionInboxUserTime,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub r#type: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageSystemTime {
-    pub created: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1864,7 +1770,7 @@ pub struct SessionMessageSystem {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageSystemTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1872,16 +1778,11 @@ pub struct SessionMessageSystem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageSkillTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageSkill {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageSkillTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub skill: SkillID,
     pub name: SkillName,
@@ -2025,20 +1926,13 @@ pub struct SessionMessageAssistantText {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAssistantReasoningTime {
-    pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed: Option<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantReasoning {
     pub r#type: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub time: Option<SessionMessageAssistantReasoningTime>,
+    pub time: Option<SessionMessageShellTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -2260,11 +2154,6 @@ pub struct SessionMessageAssistant {
     pub retry: Option<SessionMessageAssistantRetry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageCompactionRunningTime {
-    pub created: f64,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SessionMessageCompactionRunningReason {
     Auto,
@@ -2311,55 +2200,10 @@ pub struct SessionMessageCompactionRunning {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageCompactionRunningTime,
+    pub time: SessionInboxUserTime,
     pub status: String,
     pub reason: SessionMessageCompactionRunningReason,
     pub summary: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageCompactionCompletedTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageCompactionCompletedReason {
-    Auto,
-    Manual,
-    Unknown(String),
-}
-
-impl SessionMessageCompactionCompletedReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageCompactionCompletedReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageCompactionCompletedReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageCompactionCompletedReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2368,9 +2212,9 @@ pub struct SessionMessageCompactionCompleted {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageCompactionCompletedTime,
+    pub time: SessionInboxUserTime,
     pub status: String,
-    pub reason: SessionMessageCompactionCompletedReason,
+    pub reason: SessionMessageCompactionRunningReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2382,60 +2226,15 @@ pub struct SessionMessageCompactionCompleted {
     pub tokens: Option<TokenUsageInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageCompactionFailedTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageCompactionFailedReason {
-    Auto,
-    Manual,
-    Unknown(String),
-}
-
-impl SessionMessageCompactionFailedReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageCompactionFailedReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageCompactionFailedReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageCompactionFailedReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageCompactionFailed {
     pub r#type: String,
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageCompactionFailedTime,
+    pub time: SessionInboxUserTime,
     pub status: String,
-    pub reason: SessionMessageCompactionFailedReason,
+    pub reason: SessionMessageCompactionRunningReason,
     pub error: SessionStructuredError,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
@@ -2466,62 +2265,14 @@ impl<'de> Deserialize<'de> for SessionMessageCompaction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageIdleTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageIdleOutcome {
-    Succeeded,
-    Failed,
-    Interrupted,
-    Unknown(String),
-}
-
-impl SessionMessageIdleOutcome {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Succeeded => "succeeded",
-            Self::Failed => "failed",
-            Self::Interrupted => "interrupted",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageIdleOutcome {
-    fn from(value: &str) -> Self {
-        match value {
-            "succeeded" => Self::Succeeded,
-            "failed" => Self::Failed,
-            "interrupted" => Self::Interrupted,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageIdleOutcome {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageIdleOutcome {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageIdle {
     pub id: SessionMessageID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
-    pub time: SessionMessageIdleTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
-    pub outcome: SessionMessageIdleOutcome,
+    pub outcome: SessionInfoOutcome,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<SessionStructuredError>,
 }
@@ -2567,11 +2318,6 @@ pub struct SessionInboxListInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxMoveTime {
-    pub created: f64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionInboxMovePayload {
     #[serde(rename = "projectID")]
     pub project_id: ProjectID,
@@ -2585,7 +2331,7 @@ pub struct SessionInboxMove {
     pub id: SessionMessageID,
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub time: SessionInboxMoveTime,
+    pub time: SessionInboxUserTime,
     pub r#type: String,
     pub delivery: SessionInboxDelivery,
     pub payload: SessionInboxMovePayload,
@@ -3252,14 +2998,6 @@ pub struct SessionCreated {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionAgentSelectedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionAgentSelectedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -3275,18 +3013,10 @@ pub struct SessionAgentSelected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionAgentSelectedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionAgentSelectedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionModelSelectedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3305,18 +3035,10 @@ pub struct SessionModelSelected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionModelSelectedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionModelSelectedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMovedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3337,18 +3059,10 @@ pub struct SessionMoved {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionMovedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionMovedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRenamedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3365,18 +3079,10 @@ pub struct SessionRenamed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionRenamedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionRenamedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMetadataUpdatedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3393,18 +3099,10 @@ pub struct SessionMetadataUpdated {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionMetadataUpdatedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionMetadataUpdatedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionPermissionsDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3421,18 +3119,10 @@ pub struct SessionPermissions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionPermissionsDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionPermissionsData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionViewedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3449,18 +3139,10 @@ pub struct SessionViewed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionViewedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionViewedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionArchivedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3476,24 +3158,10 @@ pub struct SessionArchived {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionArchivedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionArchivedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionUnarchivedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionUnarchivedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3503,10 +3171,10 @@ pub struct SessionUnarchived {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionUnarchivedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionUnarchivedData,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3515,12 +3183,6 @@ pub struct SessionDeletedDurable {
     pub aggregate_id: String,
     pub seq: EventSeq,
     pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionDeletedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3533,15 +3195,7 @@ pub struct SessionDeleted {
     pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionDeletedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionForkedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
+    pub data: SessionArchivedData,
 }
 
 /// `Instruction.Hash`
@@ -3607,18 +3261,10 @@ pub struct SessionForked {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionForkedDurable,
+    pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionForkedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxDeliveredDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3636,18 +3282,10 @@ pub struct SessionInboxDelivered {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionInboxDeliveredDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionInboxDeliveredData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxEnqueuedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3750,26 +3388,10 @@ pub struct SessionInboxEnqueued {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionInboxEnqueuedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionInboxEnqueuedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxCancelledDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxCancelledData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    #[serde(rename = "inboxID")]
-    pub inbox_id: SessionMessageID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3779,18 +3401,10 @@ pub struct SessionInboxCancelled {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionInboxCancelledDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionInboxCancelledData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxDeliveryChangedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
+    pub data: SessionInboxDeliveredData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -3809,24 +3423,10 @@ pub struct SessionInboxDeliveryChanged {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionInboxDeliveryChangedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionInboxDeliveryChangedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionStartedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3836,24 +3436,10 @@ pub struct SessionExecutionStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionExecutionStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionExecutionStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionSucceededDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionSucceededData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3863,18 +3449,10 @@ pub struct SessionExecutionSucceeded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionExecutionSucceededDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionExecutionSucceededData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionFailedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3891,18 +3469,10 @@ pub struct SessionExecutionFailed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionExecutionFailedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionExecutionFailedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionExecutionInterruptedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -3965,18 +3535,10 @@ pub struct SessionExecutionInterrupted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionExecutionInterruptedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionExecutionInterruptedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInstructionsUpdatedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3995,18 +3557,10 @@ pub struct SessionInstructionsUpdated {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionInstructionsUpdatedDurable,
+    pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionInstructionsUpdatedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionSyntheticDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4027,18 +3581,10 @@ pub struct SessionSynthetic {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionSyntheticDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionSyntheticData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionSkillActivatedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4057,64 +3603,10 @@ pub struct SessionSkillActivated {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionSkillActivatedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionSkillActivatedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionShellStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ShellInfoStatus {
-    Running,
-    Exited,
-    Timeout,
-    Killed,
-    Unknown(String),
-}
-
-impl ShellInfoStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Timeout => "timeout",
-            Self::Killed => "killed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ShellInfoStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            "timeout" => Self::Timeout,
-            "killed" => Self::Killed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ShellInfoStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ShellInfoStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4127,7 +3619,7 @@ pub struct ShellInfoTime {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellInfo {
     pub id: ShellID,
-    pub status: ShellInfoStatus,
+    pub status: SessionMessageShellStatus,
     pub command: String,
     pub cwd: String,
     pub shell: String,
@@ -4156,26 +3648,10 @@ pub struct SessionShellStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionShellStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionShellStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionShellEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionShellEndedDataOutput {
-    pub output: String,
-    pub cursor: i64,
-    pub size: i64,
-    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4183,7 +3659,7 @@ pub struct SessionShellEndedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     pub shell: ShellInfo,
-    pub output: SessionShellEndedDataOutput,
+    pub output: SessionMessageShellOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4193,18 +3669,10 @@ pub struct SessionShellEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionShellEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionShellEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionStepStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4227,18 +3695,10 @@ pub struct SessionStepStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionStepStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionStepStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionStepStreamedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4256,70 +3716,10 @@ pub struct SessionStepStreamed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionStepStreamedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionStepStreamedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionStepEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionStepEndedDataFinish {
-    Stop,
-    Length,
-    ToolCalls,
-    ContentFilter,
-    Error,
-    Unknown2,
-    Unknown(String),
-}
-
-impl SessionStepEndedDataFinish {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Stop => "stop",
-            Self::Length => "length",
-            Self::ToolCalls => "tool-calls",
-            Self::ContentFilter => "content-filter",
-            Self::Error => "error",
-            Self::Unknown2 => "unknown",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionStepEndedDataFinish {
-    fn from(value: &str) -> Self {
-        match value {
-            "stop" => Self::Stop,
-            "length" => Self::Length,
-            "tool-calls" => Self::ToolCalls,
-            "content-filter" => Self::ContentFilter,
-            "error" => Self::Error,
-            "unknown" => Self::Unknown2,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionStepEndedDataFinish {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionStepEndedDataFinish {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// `Session.Message.Native_1`
@@ -4331,7 +3731,7 @@ pub struct SessionStepEndedData {
     pub session_id: SessionID,
     #[serde(rename = "assistantMessageID")]
     pub assistant_message_id: SessionMessageID,
-    pub finish: SessionStepEndedDataFinish,
+    pub finish: SessionMessageAssistantFinish,
     #[serde(rename = "rawFinish", default, skip_serializing_if = "Option::is_none")]
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4351,18 +3751,10 @@ pub struct SessionStepEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionStepEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionStepEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionStepFailedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4395,18 +3787,10 @@ pub struct SessionStepFailed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionStepFailedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionStepFailedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionTextStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4425,18 +3809,10 @@ pub struct SessionTextStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionTextStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionTextStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionTextEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4458,18 +3834,10 @@ pub struct SessionTextEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionTextEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionTextEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionReasoningStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4490,30 +3858,10 @@ pub struct SessionReasoningStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionReasoningStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionReasoningStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionReasoningEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionReasoningEndedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    #[serde(rename = "assistantMessageID")]
-    pub assistant_message_id: SessionMessageID,
-    pub ordinal: i64,
-    pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub native: Option<SessionMessageNative1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4523,18 +3871,10 @@ pub struct SessionReasoningEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionReasoningEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionReasoningEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionToolInputStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
+    pub data: SessionTextEndedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4554,18 +3894,10 @@ pub struct SessionToolInputStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionToolInputStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolInputStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionToolInputEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4585,18 +3917,10 @@ pub struct SessionToolInputEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionToolInputEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolInputEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionToolCalledDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4619,18 +3943,10 @@ pub struct SessionToolCalled {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionToolCalledDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolCalledData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionToolSuccessDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4655,18 +3971,10 @@ pub struct SessionToolSuccess {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionToolSuccessDurable,
+    pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolSuccessData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionToolFailedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4693,18 +4001,10 @@ pub struct SessionToolFailed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionToolFailedDurable,
+    pub durable: SessionDeletedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionToolFailedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRetryScheduledDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4725,65 +4025,17 @@ pub struct SessionRetryScheduled {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionRetryScheduledDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionRetryScheduledData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionCompactionStartedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionCompactionStartedDataReason {
-    Auto,
-    Manual,
-    Unknown(String),
-}
-
-impl SessionCompactionStartedDataReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionCompactionStartedDataReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionCompactionStartedDataReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionCompactionStartedDataReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionStartedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub reason: SessionCompactionStartedDataReason,
+    pub reason: SessionMessageCompactionRunningReason,
     #[serde(rename = "inputID", default, skip_serializing_if = "Option::is_none")]
     pub input_id: Option<SessionMessageID>,
 }
@@ -4795,65 +4047,17 @@ pub struct SessionCompactionStarted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionCompactionStartedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionCompactionStartedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionCompactionEndedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionCompactionEndedDataReason {
-    Auto,
-    Manual,
-    Unknown(String),
-}
-
-impl SessionCompactionEndedDataReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionCompactionEndedDataReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionCompactionEndedDataReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionCompactionEndedDataReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionEndedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub reason: SessionCompactionEndedDataReason,
+    pub reason: SessionMessageCompactionRunningReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4872,65 +4076,17 @@ pub struct SessionCompactionEnded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionCompactionEndedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionCompactionEndedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionCompactionFailedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionCompactionFailedDataReason {
-    Auto,
-    Manual,
-    Unknown(String),
-}
-
-impl SessionCompactionFailedDataReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionCompactionFailedDataReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionCompactionFailedDataReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionCompactionFailedDataReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionCompactionFailedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
-    pub reason: SessionCompactionFailedDataReason,
+    pub reason: SessionMessageCompactionRunningReason,
     pub error: SessionStructuredError,
     #[serde(rename = "inputID", default, skip_serializing_if = "Option::is_none")]
     pub input_id: Option<SessionMessageID>,
@@ -4947,18 +4103,10 @@ pub struct SessionCompactionFailed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionCompactionFailedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionCompactionFailedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRevertStagedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4975,24 +4123,10 @@ pub struct SessionRevertStaged {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionRevertStagedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionRevertStagedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRevertClearedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRevertClearedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5002,18 +4136,10 @@ pub struct SessionRevertCleared {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionRevertClearedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionRevertClearedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionRevertCommittedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5030,18 +4156,10 @@ pub struct SessionRevertCommitted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionRevertCommittedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionRevertCommittedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionUsageRecordedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -5100,18 +4218,10 @@ pub struct SessionUsageRecorded {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionUsageRecordedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionUsageRecordedData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageContentUpdatedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5123,20 +4233,13 @@ pub struct SessionMessageAssistantText1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAssistantReasoning1Time {
-    pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed: Option<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessageAssistantReasoning1 {
     pub r#type: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub time: Option<SessionMessageAssistantReasoning1Time>,
+    pub time: Option<SessionMessageShellTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5190,15 +4293,6 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantTool1State {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionMessageAssistantTool1Time {
-    pub created: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ran: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed: Option<f64>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionMessageAssistantTool1 {
     pub r#type: String,
@@ -5209,7 +4303,7 @@ pub struct SessionMessageAssistantTool1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative1>,
     pub state: SessionMessageAssistantTool1State,
-    pub time: SessionMessageAssistantTool1Time,
+    pub time: SessionMessageAssistantToolTime,
 }
 
 /// `Session.Message.AssistantContent.Encoded`, tagged by `type`.
@@ -5251,7 +4345,7 @@ pub struct SessionMessageContentUpdated {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: SessionMessageContentUpdatedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: SessionMessageContentUpdatedData,
@@ -5588,16 +4682,10 @@ pub struct SessionMessagesResponse {
 /// Output of [`Client::message_list`].
 pub type MessageListOutput = SessionMessagesResponse;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::model_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModelListInput {
-    pub location: Option<ModelListInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub types: Option<Vec<String>>,
 }
 
@@ -5961,16 +5049,10 @@ pub struct ModelListOutput {
     pub data: Vec<ModelInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelDefaultInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::model_default`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModelDefaultInput {
-    pub location: Option<ModelDefaultInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -6421,16 +5503,10 @@ pub struct ExperimentalVoiceSessionOutput {
     pub transport: VoiceTransport,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ProviderListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::provider_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProviderListInput {
-    pub location: Option<ProviderListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `Integration.ID`
@@ -6593,17 +5669,11 @@ pub struct ProviderListOutput {
     pub data: Vec<ProviderInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ProviderGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::provider_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProviderGetInput {
     pub provider_id: ProviderID,
-    pub location: Option<ProviderGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -6612,16 +5682,10 @@ pub struct ProviderGetOutput {
     pub data: ProviderInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationListInput {
-    pub location: Option<IntegrationListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `Integration.MethodID`
@@ -6856,17 +5920,11 @@ pub struct IntegrationListOutput {
     pub data: Vec<IntegrationInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationGetInput {
     pub integration_id: IntegrationID,
-    pub location: Option<IntegrationGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -6875,49 +5933,31 @@ pub struct IntegrationGetOutput {
     pub data: IntegrationInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationConnectKeyInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_connect_key`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationConnectKeyInput {
     pub integration_id: IntegrationID,
-    pub location: Option<IntegrationConnectKeyInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub key: String,
     pub answer: Option<FormAnswer1>,
     pub label: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationConnectExternalInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::integration_connect_external`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationConnectExternalInput {
     pub integration_id: IntegrationID,
-    pub location: Option<IntegrationConnectExternalInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub method_id: IntegrationMethodID,
     pub answer: Option<FormAnswer1>,
     pub label: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationOauthConnectInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::integration_oauth_connect`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthConnectInput {
     pub integration_id: IntegrationID,
-    pub location: Option<IntegrationOauthConnectInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub method_id: IntegrationMethodID,
     pub answer: Option<FormAnswer1>,
     pub label: Option<String>,
@@ -7014,67 +6054,37 @@ pub struct IntegrationOauthConnectOutput {
     pub data: IntegrationAttempt,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationOauthStatusInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_oauth_status`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthStatusInput {
     pub integration_id: IntegrationID,
     pub attempt_id: IntegrationAttemptID,
-    pub location: Option<IntegrationOauthStatusInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationAttemptStatusPendingTime {
-    pub created: f64,
-    pub expires: f64,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusPending {
     pub status: String,
-    pub time: IntegrationAttemptStatusPendingTime,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationAttemptStatusCompleteTime {
-    pub created: f64,
-    pub expires: f64,
+    pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusComplete {
     pub status: String,
-    pub time: IntegrationAttemptStatusCompleteTime,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationAttemptStatusFailedTime {
-    pub created: f64,
-    pub expires: f64,
+    pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusFailed {
     pub status: String,
     pub message: String,
-    pub time: IntegrationAttemptStatusFailedTime,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationAttemptStatusExpiredTime {
-    pub created: f64,
-    pub expires: f64,
+    pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationAttemptStatusExpired {
     pub status: String,
-    pub time: IntegrationAttemptStatusExpiredTime,
+    pub time: IntegrationAttemptTime,
 }
 
 /// `Integration.AttemptStatus`, tagged by `status`.
@@ -7108,25 +6118,13 @@ pub struct IntegrationOauthStatusOutput {
     pub data: IntegrationAttemptStatus,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationOauthCompleteInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_oauth_complete`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthCompleteInput {
     pub integration_id: IntegrationID,
     pub attempt_id: IntegrationAttemptID,
-    pub location: Option<IntegrationOauthCompleteInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub code: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationOauthCancelInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::integration_oauth_cancel`].
@@ -7134,35 +6132,23 @@ pub struct IntegrationOauthCancelInputLocation {
 pub struct IntegrationOauthCancelInput {
     pub integration_id: IntegrationID,
     pub attempt_id: IntegrationAttemptID,
-    pub location: Option<IntegrationOauthCancelInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationCommandConnectInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::integration_command_connect`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandConnectInput {
     pub integration_id: IntegrationID,
-    pub location: Option<IntegrationCommandConnectInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub method_id: IntegrationMethodID,
     pub label: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationCommandAttemptTime {
-    pub created: f64,
-    pub expires: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationCommandAttempt {
     #[serde(rename = "attemptID")]
     pub attempt_id: IntegrationAttemptID,
-    pub time: IntegrationCommandAttemptTime,
+    pub time: IntegrationAttemptTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7171,42 +6157,18 @@ pub struct IntegrationCommandConnectOutput {
     pub data: IntegrationCommandAttempt,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationCommandStatusInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_command_status`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandStatusInput {
     pub integration_id: IntegrationID,
     pub attempt_id: IntegrationAttemptID,
-    pub location: Option<IntegrationCommandStatusInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusPendingTimeCreated {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusPendingTimeExpires {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusPendingTime {
-    pub created: IntegrationCommandAttemptStatusPendingTimeCreated,
-    pub expires: IntegrationCommandAttemptStatusPendingTimeExpires,
+    pub created: SessionMessageShellExit,
+    pub expires: SessionMessageShellExit,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -7218,94 +6180,22 @@ pub struct IntegrationCommandAttemptStatusPending {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusCompleteTimeCreated {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusCompleteTimeExpires {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IntegrationCommandAttemptStatusCompleteTime {
-    pub created: IntegrationCommandAttemptStatusCompleteTimeCreated,
-    pub expires: IntegrationCommandAttemptStatusCompleteTimeExpires,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusComplete {
     pub status: String,
-    pub time: IntegrationCommandAttemptStatusCompleteTime,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusFailedTimeCreated {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusFailedTimeExpires {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IntegrationCommandAttemptStatusFailedTime {
-    pub created: IntegrationCommandAttemptStatusFailedTimeCreated,
-    pub expires: IntegrationCommandAttemptStatusFailedTimeExpires,
+    pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusFailed {
     pub status: String,
     pub message: String,
-    pub time: IntegrationCommandAttemptStatusFailedTime,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusExpiredTimeCreated {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum IntegrationCommandAttemptStatusExpiredTimeExpires {
-    Number(f64),
-    String(String),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IntegrationCommandAttemptStatusExpiredTime {
-    pub created: IntegrationCommandAttemptStatusExpiredTimeCreated,
-    pub expires: IntegrationCommandAttemptStatusExpiredTimeExpires,
+    pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegrationCommandAttemptStatusExpired {
     pub status: String,
-    pub time: IntegrationCommandAttemptStatusExpiredTime,
+    pub time: IntegrationCommandAttemptStatusPendingTime,
 }
 
 /// `Integration.CommandAttemptStatus`, tagged by `status`.
@@ -7339,43 +6229,25 @@ pub struct IntegrationCommandStatusOutput {
     pub data: IntegrationCommandAttemptStatus,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationCommandCancelInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::integration_command_cancel`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandCancelInput {
     pub integration_id: IntegrationID,
     pub attempt_id: IntegrationAttemptID,
-    pub location: Option<IntegrationCommandCancelInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalIntegrationWellknownAddInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::experimental_integration_wellknown_add`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalIntegrationWellknownAddInput {
-    pub location: Option<ExperimentalIntegrationWellknownAddInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub url: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct McpListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::mcp_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct McpListInput {
-    pub location: Option<McpListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7451,16 +6323,10 @@ pub struct McpListOutput {
     pub data: Vec<McpServer>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct McpResourceCatalogInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::mcp_resource_catalog`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct McpResourceCatalogInput {
-    pub location: Option<McpResourceCatalogInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7496,12 +6362,6 @@ pub struct McpResourceCatalog {
 pub struct McpResourceCatalogOutput {
     pub location: LocationPublicRef,
     pub data: McpResourceCatalog,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpAddInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7602,16 +6462,6 @@ pub enum ExperimentalMcpAddInputConfigRemoteOauth {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpAddInputConfigRemoteTimeout {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub startup: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExperimentalMcpAddInputConfigRemote {
     pub r#type: String,
     pub url: String,
@@ -7624,7 +6474,7 @@ pub struct ExperimentalMcpAddInputConfigRemote {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codemode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<ExperimentalMcpAddInputConfigRemoteTimeout>,
+    pub timeout: Option<ExperimentalMcpAddInputConfigLocalTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<McpProtocol>,
 }
@@ -7653,59 +6503,35 @@ impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalMcpAddInput {
     pub server: String,
-    pub location: Option<ExperimentalMcpAddInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub config: ExperimentalMcpAddInputConfig,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpRemoveInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::experimental_mcp_remove`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpRemoveInput {
     pub server: String,
-    pub location: Option<ExperimentalMcpRemoveInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpConnectInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::experimental_mcp_connect`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpConnectInput {
     pub server: String,
-    pub location: Option<ExperimentalMcpConnectInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpDisconnectInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::experimental_mcp_disconnect`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpDisconnectInput {
     pub server: String,
-    pub location: Option<ExperimentalMcpDisconnectInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalMcpClientTokenInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::experimental_mcp_client_token`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpClientTokenInput {
-    pub location: Option<ExperimentalMcpClientTokenInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub name: String,
     pub x_opencode_ticket: Option<String>,
 }
@@ -7911,16 +6737,10 @@ pub struct ProjectUpdateInput {
 /// Output of [`Client::project_update`].
 pub type ProjectUpdateOutput = Project;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FormListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::form_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FormListInput {
-    pub location: Option<FormListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7929,16 +6749,10 @@ pub struct FormListOutput {
     pub data: Vec<FormInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PermissionRequestListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::permission_request_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionRequestListInput {
-    pub location: Option<PermissionRequestListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `Permission.ID`
@@ -8163,29 +6977,17 @@ pub struct PermissionReplyInput {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FileReadInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::file_read`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileReadInput {
-    pub location: Option<FileReadInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FileListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::file_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileListInput {
-    pub location: Option<FileListInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: Option<String>,
 }
 
@@ -8241,58 +7043,12 @@ pub struct FileListOutput {
     pub data: Vec<FileSystemEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct FileFindInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FileFindInputType {
-    File,
-    Directory,
-    Unknown(String),
-}
-
-impl FileFindInputType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::File => "file",
-            Self::Directory => "directory",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FileFindInputType {
-    fn from(value: &str) -> Self {
-        match value {
-            "file" => Self::File,
-            "directory" => Self::Directory,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FileFindInputType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FileFindInputType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 /// Input of [`Client::file_find`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileFindInput {
-    pub location: Option<FileFindInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub query: String,
-    pub r#type: Option<FileFindInputType>,
+    pub r#type: Option<FileSystemEntryType>,
     pub limit: Option<i64>,
 }
 
@@ -8302,16 +7058,10 @@ pub struct FileFindOutput {
     pub data: Vec<FileSystemEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalFileWriteInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_file_write`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileWriteInput {
-    pub location: Option<ExperimentalFileWriteInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: String,
     pub payload: bytes::Bytes,
 }
@@ -8327,42 +7077,24 @@ pub struct ExperimentalFileWriteOutput {
     pub data: FileSystemWrite,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalFileWatchInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_file_watch`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileWatchInput {
-    pub location: Option<ExperimentalFileWatchInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalFileUnwatchInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::experimental_file_unwatch`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileUnwatchInput {
-    pub location: Option<ExperimentalFileUnwatchInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CommandListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::command_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CommandListInput {
-    pub location: Option<CommandListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8378,16 +7110,10 @@ pub struct CommandListOutput {
     pub data: Vec<CommandInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SkillListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::skill_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SkillListInput {
-    pub location: Option<SkillListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8408,18 +7134,12 @@ pub struct SkillListOutput {
     pub data: Vec<SkillInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct RpcCallInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::rpc_call`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RpcCallInput {
     pub rpc_id: String,
     pub method: String,
-    pub location: Option<RpcCallInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub input: Option<serde_json::Value>,
 }
 
@@ -8462,9 +7182,6 @@ pub struct LocationShutdown {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelsDevRefreshedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelsDevRefreshed {
     pub id: EventID,
     pub created: f64,
@@ -8473,11 +7190,8 @@ pub struct ModelsDevRefreshed {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ModelsDevRefreshedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CredentialUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CredentialUpdated {
@@ -8488,7 +7202,7 @@ pub struct CredentialUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: CredentialUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8512,9 +7226,6 @@ pub struct CredentialSwitched {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationUpdatedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationUpdated {
     pub id: EventID,
     pub created: f64,
@@ -8523,11 +7234,8 @@ pub struct IntegrationUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: IntegrationUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ProviderUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderUpdated {
@@ -8538,11 +7246,8 @@ pub struct ProviderUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ProviderUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelUpdated {
@@ -8553,11 +7258,8 @@ pub struct ModelUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ModelUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AgentUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentUpdated {
@@ -8568,7 +7270,7 @@ pub struct AgentUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: AgentUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8614,16 +7316,6 @@ pub struct SessionTextDelta {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionReasoningDeltaData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    #[serde(rename = "assistantMessageID")]
-    pub assistant_message_id: SessionMessageID,
-    pub ordinal: i64,
-    pub delta: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionReasoningDelta {
     pub id: EventID,
     pub created: f64,
@@ -8632,7 +7324,7 @@ pub struct SessionReasoningDelta {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionReasoningDeltaData,
+    pub data: SessionTextDeltaData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8760,9 +7452,6 @@ pub struct FilesystemChanged {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ReferenceUpdatedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceUpdated {
     pub id: EventID,
     pub created: f64,
@@ -8771,7 +7460,7 @@ pub struct ReferenceUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ReferenceUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8825,9 +7514,6 @@ pub struct PermissionReplied {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginUpdatedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginUpdated {
     pub id: EventID,
     pub created: f64,
@@ -8836,7 +7522,7 @@ pub struct PluginUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: PluginUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8886,14 +7572,6 @@ pub struct WorktreeUpdated {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct WorktreeResolvedDurable {
-    #[serde(rename = "aggregateID")]
-    pub aggregate_id: String,
-    pub seq: EventSeq,
-    pub version: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WorktreeResolvedData {
     #[serde(rename = "projectID")]
     pub project_id: ProjectID,
@@ -8910,14 +7588,11 @@ pub struct WorktreeResolved {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<BTreeMap<String, serde_json::Value>>,
     pub r#type: String,
-    pub durable: WorktreeResolvedDurable,
+    pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
     pub data: WorktreeResolvedData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CommandUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CommandUpdated {
@@ -8928,11 +7603,8 @@ pub struct CommandUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: CommandUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigUpdated {
@@ -8943,11 +7615,8 @@ pub struct ConfigUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ConfigUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SkillUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillUpdated {
@@ -8958,7 +7627,7 @@ pub struct SkillUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SkillUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 /// `Pty.ID`
@@ -9061,11 +7730,6 @@ pub struct PtyCreated {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PtyUpdatedData {
-    pub info: Pty,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PtyUpdated {
     pub id: EventID,
     pub created: f64,
@@ -9074,7 +7738,7 @@ pub struct PtyUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: PtyUpdatedData,
+    pub data: PtyCreatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9113,46 +7777,6 @@ pub struct PtyDeleted {
     pub data: PtyDeletedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PersistentPtyInfoStatus {
-    Running,
-    Exited,
-    Unknown(String),
-}
-
-impl PersistentPtyInfoStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for PersistentPtyInfoStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for PersistentPtyInfoStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for PersistentPtyInfoStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PersistentPtyInfoSize {
     pub cols: i64,
@@ -9172,7 +7796,7 @@ pub struct PersistentPtyInfo {
     pub command: String,
     pub args: Vec<String>,
     pub cwd: String,
-    pub status: PersistentPtyInfoStatus,
+    pub status: PtyStatus,
     pub pid: i64,
     #[serde(rename = "exitCode", default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i64>,
@@ -9226,13 +7850,6 @@ pub struct PersistentPtyRemoved {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PersistentPtyUpdatedData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub terminal: PersistentPtyInfo,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistentPtyUpdated {
     pub id: EventID,
     pub created: f64,
@@ -9241,7 +7858,7 @@ pub struct PersistentPtyUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: PersistentPtyUpdatedData,
+    pub data: PersistentPtyAddedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -9261,58 +7878,12 @@ pub struct ShellCreated {
     pub data: ShellCreatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ShellExitedDataStatus {
-    Running,
-    Exited,
-    Timeout,
-    Killed,
-    Unknown(String),
-}
-
-impl ShellExitedDataStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Timeout => "timeout",
-            Self::Killed => "killed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ShellExitedDataStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            "timeout" => Self::Timeout,
-            "killed" => Self::Killed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ShellExitedDataStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ShellExitedDataStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellExitedData {
     pub id: ShellID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit: Option<f64>,
-    pub status: ShellExitedDataStatus,
+    pub status: SessionMessageShellStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -9418,9 +7989,6 @@ pub struct FormCancelled {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct WebsearchUpdatedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebsearchUpdated {
     pub id: EventID,
     pub created: f64,
@@ -9429,11 +7997,8 @@ pub struct WebsearchUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: WebsearchUpdatedData,
+    pub data: LocationShutdownData,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ArtifactUpdatedData {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactUpdated {
@@ -9444,7 +8009,7 @@ pub struct ArtifactUpdated {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: ArtifactUpdatedData,
+    pub data: LocationShutdownData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9521,12 +8086,6 @@ pub struct SessionStatusUpdated {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionIdleData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionIdle {
     pub id: EventID,
     pub created: f64,
@@ -9535,7 +8094,7 @@ pub struct SessionIdle {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionIdleData,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9641,12 +8200,6 @@ pub struct TuiToastShow {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct TuiSessionSelectData {
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TuiSessionSelect {
     pub id: EventID,
     pub created: f64,
@@ -9655,7 +8208,7 @@ pub struct TuiSessionSelect {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: TuiSessionSelectData,
+    pub data: SessionArchivedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9676,11 +8229,6 @@ pub struct InstallationUpdated {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct InstallationUpdateAvailableData {
-    pub version: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InstallationUpdateAvailable {
     pub id: EventID,
     pub created: f64,
@@ -9689,7 +8237,7 @@ pub struct InstallationUpdateAvailable {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: InstallationUpdateAvailableData,
+    pub data: InstallationUpdatedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9728,11 +8276,6 @@ pub struct McpStatusChanged {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct McpResourcesChangedData {
-    pub server: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct McpResourcesChanged {
     pub id: EventID,
     pub created: f64,
@@ -9741,7 +8284,7 @@ pub struct McpResourcesChanged {
     pub r#type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: McpResourcesChangedData,
+    pub data: McpStatusChangedData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9756,9 +8299,6 @@ pub struct V2EventRpc {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct V2EventServerConnectedData {}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventServerConnected {
     pub id: EventID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9766,7 +8306,7 @@ pub struct V2EventServerConnected {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationPublicRef>,
     pub r#type: String,
-    pub data: V2EventServerConnectedData,
+    pub data: LocationShutdownData,
 }
 
 /// `V2Event`, tagged by `type`.
@@ -10057,16 +8597,10 @@ impl<'de> Deserialize<'de> for V2Event {
 /// Output of [`Client::event_subscribe`].
 pub type EventSubscribeOutput = V2Event;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::pty_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyListInput {
-    pub location: Option<PtyListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -10075,16 +8609,10 @@ pub struct PtyListOutput {
     pub data: Vec<Pty>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyCreateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::pty_create`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyCreateInput {
-    pub location: Option<PtyCreateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub command: Option<String>,
     pub args: Option<Vec<String>>,
     pub cwd: Option<String>,
@@ -10098,29 +8626,17 @@ pub struct PtyCreateOutput {
     pub data: Pty,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::pty_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyGetInput {
     pub pty_id: PtyID,
-    pub location: Option<PtyGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PtyGetOutput {
     pub location: LocationPublicRef,
     pub data: Pty,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyUpdateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -10133,7 +8649,7 @@ pub struct PtyUpdateInputSize {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyUpdateInput {
     pub pty_id: PtyID,
-    pub location: Option<PtyUpdateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub title: Option<String>,
     pub size: Option<PtyUpdateInputSize>,
 }
@@ -10144,30 +8660,18 @@ pub struct PtyUpdateOutput {
     pub data: Pty,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyRemoveInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::pty_remove`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyRemoveInput {
     pub pty_id: PtyID,
-    pub location: Option<PtyRemoveInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PtyConnectTokenInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::pty_connect_token`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyConnectTokenInput {
     pub pty_id: PtyID,
-    pub location: Option<PtyConnectTokenInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub x_opencode_ticket: Option<String>,
 }
 
@@ -10224,12 +8728,6 @@ pub struct ExperimentalPersistentPtyListInput {
 /// Output of [`Client::experimental_persistent_pty_list`].
 pub type ExperimentalPersistentPtyListOutput = Vec<PersistentPtyInfo>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalPersistentPtyCreateInputSize {
-    pub cols: i64,
-    pub rows: i64,
-}
-
 /// Input of [`Client::experimental_persistent_pty_create`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyCreateInput {
@@ -10239,7 +8737,7 @@ pub struct ExperimentalPersistentPtyCreateInput {
     pub cwd: Option<String>,
     pub title: String,
     pub env: BTreeMap<String, String>,
-    pub size: Option<ExperimentalPersistentPtyCreateInputSize>,
+    pub size: Option<PersistentPtyInfoSize>,
 }
 
 /// Output of [`Client::experimental_persistent_pty_create`].
@@ -10270,18 +8768,12 @@ pub struct ExperimentalPersistentPtyGetInput {
 /// Output of [`Client::experimental_persistent_pty_get`].
 pub type ExperimentalPersistentPtyGetOutput = PersistentPtyInfo;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalPersistentPtyUpdateInputSize {
-    pub cols: i64,
-    pub rows: i64,
-}
-
 /// Input of [`Client::experimental_persistent_pty_update`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyUpdateInput {
     pub pty_id: PtyID,
     pub attachment_id: Option<String>,
-    pub size: Option<ExperimentalPersistentPtyUpdateInputSize>,
+    pub size: Option<PersistentPtyInfoSize>,
     pub title: Option<Option<String>>,
 }
 
@@ -10294,18 +8786,12 @@ pub struct ExperimentalPersistentPtySnapshotInput {
     pub pty_id: PtyID,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PersistentPtySnapshotCursor {
-    pub x: i64,
-    pub y: i64,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistentPtySnapshot {
     pub info: PersistentPtyInfo,
     pub text: String,
     pub checkpoint: String,
-    pub cursor: PersistentPtySnapshotCursor,
+    pub cursor: PersistentPtyReadResultScreenCursor,
 }
 
 /// Output of [`Client::experimental_persistent_pty_snapshot`].
@@ -10710,12 +9196,6 @@ impl<'de> Deserialize<'de> for ScheduleOutcome {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleInfoTime {
-    pub created: f64,
-    pub updated: f64,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleInfo {
     pub id: ScheduleID,
@@ -10761,7 +9241,7 @@ pub struct ScheduleInfo {
         skip_serializing_if = "Option::is_none"
     )]
     pub last_output: Option<String>,
-    pub time: ScheduleInfoTime,
+    pub time: PermissionSavedInfoTime,
 }
 
 /// Output of [`Client::experimental_schedule_create`].
@@ -10809,16 +9289,10 @@ pub struct ExperimentalScheduleDeleteInput {
     pub schedule_id: ScheduleID,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsProvidersInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_artifacts_providers`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsProvidersInput {
-    pub location: Option<ExperimentalArtifactsProvidersInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `Artifact.Capability`
@@ -10882,12 +9356,6 @@ pub struct ExperimentalArtifactsProvidersOutput {
     pub data: Vec<ArtifactProvider>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// `Artifact.ProviderID`
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -10920,7 +9388,7 @@ impl From<&str> for ArtifactProviderID {
 /// Input of [`Client::experimental_artifacts_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsListInput {
-    pub location: Option<ExperimentalArtifactsListInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub session_id: Option<SessionID>,
     pub provider: Option<ArtifactProviderID>,
 }
@@ -10978,16 +9446,10 @@ pub struct ExperimentalArtifactsListOutput {
     pub data: Vec<ArtifactInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsCreateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_artifacts_create`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsCreateInput {
-    pub location: Option<ExperimentalArtifactsCreateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub title: String,
     pub files: BTreeMap<String, String>,
     pub entry: Option<String>,
@@ -11001,17 +9463,11 @@ pub struct ExperimentalArtifactsCreateOutput {
     pub data: ArtifactInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_artifacts_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsGetInput {
     pub artifact_id: ArtifactID,
-    pub location: Option<ExperimentalArtifactsGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11026,17 +9482,11 @@ pub struct ExperimentalArtifactsGetOutput {
     pub data: ArtifactContent,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsUpdateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_artifacts_update`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsUpdateInput {
     pub artifact_id: ArtifactID,
-    pub location: Option<ExperimentalArtifactsUpdateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub title: Option<String>,
     pub files: BTreeMap<String, String>,
     pub entry: Option<String>,
@@ -11049,30 +9499,18 @@ pub struct ExperimentalArtifactsUpdateOutput {
     pub data: ArtifactInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsDeleteInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_artifacts_delete`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsDeleteInput {
     pub artifact_id: ArtifactID,
-    pub location: Option<ExperimentalArtifactsDeleteInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalArtifactsViewInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::experimental_artifacts_view`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsViewInput {
     pub artifact_id: ArtifactID,
-    pub location: Option<ExperimentalArtifactsViewInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub path: String,
 }
 
@@ -11254,75 +9692,16 @@ impl<'de> Deserialize<'de> for JobInfo {
 /// Output of [`Client::experimental_job_list`].
 pub type ExperimentalJobListOutput = Vec<JobInfo>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::shell_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellListInput {
-    pub location: Option<ShellListInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ShellInfo1Status {
-    Running,
-    Exited,
-    Timeout,
-    Killed,
-    Unknown(String),
-}
-
-impl ShellInfo1Status {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Timeout => "timeout",
-            Self::Killed => "killed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ShellInfo1Status {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            "timeout" => Self::Timeout,
-            "killed" => Self::Killed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ShellInfo1Status {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ShellInfo1Status {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellInfo1Time {
-    pub started: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completed: Option<f64>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellInfo1 {
     pub id: ShellID,
-    pub status: ShellInfo1Status,
+    pub status: SessionMessageShellStatus,
     pub command: String,
     pub cwd: String,
     pub shell: String,
@@ -11334,7 +9713,7 @@ pub struct ShellInfo1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<String>,
     pub metadata: BTreeMap<String, serde_json::Value>,
-    pub time: ShellInfo1Time,
+    pub time: ShellInfoTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11343,16 +9722,10 @@ pub struct ShellListOutput {
     pub data: Vec<ShellInfo1>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellCreateInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::shell_create`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellCreateInput {
-    pub location: Option<ShellCreateInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub command: String,
     pub cwd: Option<String>,
     pub timeout: Option<i64>,
@@ -11365,17 +9738,11 @@ pub struct ShellCreateOutput {
     pub data: ShellInfo1,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::shell_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellGetInput {
     pub id: ShellID,
-    pub location: Option<ShellGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -11384,58 +9751,32 @@ pub struct ShellGetOutput {
     pub data: ShellInfo1,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellOutputInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::shell_output`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellOutputInput {
     pub id: ShellID,
-    pub location: Option<ShellOutputInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub cursor: Option<i64>,
     pub limit: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellOutputOutputData {
-    pub output: String,
-    pub cursor: i64,
-    pub size: i64,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellOutputOutput {
     pub location: LocationPublicRef,
-    pub data: ShellOutputOutputData,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ShellRemoveInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub data: SessionMessageShellOutput,
 }
 
 /// Input of [`Client::shell_remove`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellRemoveInput {
     pub id: ShellID,
-    pub location: Option<ShellRemoveInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ReferenceListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// Input of [`Client::reference_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ReferenceListInput {
-    pub location: Option<ReferenceListInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11541,29 +9882,17 @@ pub struct WorktreeRefreshInput {
     pub project_id: ProjectID,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsInitInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::vcs_init`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsInitInput {
-    pub location: Option<VcsInitInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub provider: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// Input of [`Client::vcs_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsGetInput {
-    pub location: Option<VcsGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11587,16 +9916,10 @@ pub struct VcsGetOutput {
     pub data: VcsInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsBaseInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::vcs_base`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsBaseInput {
-    pub location: Option<VcsBaseInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11653,59 +9976,10 @@ pub struct VcsBaseOutput {
     pub data: Option<VcsBase>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsStatusInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::vcs_status`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsStatusInput {
-    pub location: Option<VcsStatusInputLocation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VcsFileStatusStatus {
-    Added,
-    Deleted,
-    Modified,
-    Unknown(String),
-}
-
-impl VcsFileStatusStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Added => "added",
-            Self::Deleted => "deleted",
-            Self::Modified => "modified",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for VcsFileStatusStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "added" => Self::Added,
-            "deleted" => Self::Deleted,
-            "modified" => Self::Modified,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for VcsFileStatusStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for VcsFileStatusStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -11713,7 +9987,7 @@ pub struct VcsFileStatus {
     pub file: String,
     pub additions: i64,
     pub deletions: i64,
-    pub status: VcsFileStatusStatus,
+    pub status: FileDiffInfoStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -11722,16 +9996,10 @@ pub struct VcsStatusOutput {
     pub data: Vec<VcsFileStatus>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsBranchListInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::vcs_branch_list`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsBranchListInput {
-    pub location: Option<VcsBranchListInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub search: Option<String>,
     pub limit: Option<i64>,
 }
@@ -11743,12 +10011,6 @@ pub type VcsBranchList = Vec<String>;
 pub struct VcsBranchListOutput {
     pub location: LocationPublicRef,
     pub data: VcsBranchList,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct VcsDiffInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
 }
 
 /// `Vcs.Mode`
@@ -11839,7 +10101,7 @@ impl<'de> Deserialize<'de> for VcsUntracked {
 /// Input of [`Client::vcs_diff`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct VcsDiffInput {
-    pub location: Option<VcsDiffInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub mode: VcsMode,
     pub base: Option<String>,
     pub context: Option<i64>,
@@ -11880,16 +10142,10 @@ pub struct DebugHeapDumpOutput {
 /// Output of [`Client::debug_location_list`].
 pub type DebugLocationListOutput = Vec<LocationPublicRef>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct DebugLocationEvictInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::debug_location_evict`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DebugLocationEvictInput {
-    pub location: Option<DebugLocationEvictInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11983,16 +10239,10 @@ impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
 /// Output of [`Client::experimental_migration_v1_status`].
 pub type ExperimentalMigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput2;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct WebsearchProvidersInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::websearch_providers`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WebsearchProvidersInput {
-    pub location: Option<WebsearchProvidersInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 /// `WebSearch.ID`
@@ -12036,16 +10286,10 @@ pub struct WebsearchProvidersOutput {
     pub data: Vec<WebSearchProvider>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct WebsearchQueryInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::websearch_query`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WebsearchQueryInput {
-    pub location: Option<WebsearchQueryInputLocation>,
+    pub location: Option<LocationQueryInput>,
     pub query: String,
     pub provider_id: Option<WebSearchID>,
 }
@@ -12079,16 +10323,10 @@ pub struct WebsearchQueryOutput {
     pub data: WebsearchQueryOutputData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ExperimentalUsageLimitsInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::experimental_usage_limits`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalUsageLimitsInput {
-    pub location: Option<ExperimentalUsageLimitsInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12283,16 +10521,10 @@ pub struct ExperimentalUsageLimitsOutput {
     pub data: Option<UsageLimitsInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigGetInputLocation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<String>,
-}
-
 /// Input of [`Client::config_get`].
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ConfigGetInput {
-    pub location: Option<ConfigGetInputLocation>,
+    pub location: Option<LocationQueryInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12511,24 +10743,6 @@ pub struct ConfigEntryDocumentInfoPoliciesItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoAgentsValueModelObject {
-    #[serde(rename = "providerID")]
-    pub provider_id: String,
-    pub model: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variant: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigEntryDocumentInfoAgentsValueModel {
-    String(String),
-    Object(ConfigEntryDocumentInfoAgentsValueModelObject),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoAgentsValueRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headers: Option<BTreeMap<String, String>>,
@@ -12536,53 +10750,10 @@ pub struct ConfigEntryDocumentInfoAgentsValueRequest {
     pub body: Option<BTreeMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoAgentsValueMode {
-    Subagent,
-    Primary,
-    All,
-    Unknown(String),
-}
-
-impl ConfigEntryDocumentInfoAgentsValueMode {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Subagent => "subagent",
-            Self::Primary => "primary",
-            Self::All => "all",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConfigEntryDocumentInfoAgentsValueMode {
-    fn from(value: &str) -> Self {
-        match value {
-            "subagent" => Self::Subagent,
-            "primary" => Self::Primary,
-            "all" => Self::All,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoAgentsValueMode {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoAgentsValueMode {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoAgentsValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<ConfigEntryDocumentInfoAgentsValueModel>,
+    pub model: Option<ConfigEntryDocumentInfoModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<ConfigEntryDocumentInfoAgentsValueRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12590,7 +10761,7 @@ pub struct ConfigEntryDocumentInfoAgentsValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<ConfigEntryDocumentInfoAgentsValueMode>,
+    pub mode: Option<AgentInfoMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12693,122 +10864,11 @@ pub struct ConfigEntryDocumentInfoToolOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpTimeout {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub startup: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpServersValueLocalTimeout {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub startup: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpServersValueLocal {
-    pub r#type: String,
-    pub command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub environment: Option<BTreeMap<String, String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codemode: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<ConfigEntryDocumentInfoMcpServersValueLocalTimeout>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<McpProtocol>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpServersValueRemoteOauthObject {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_secret: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub callback_port: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub redirect_uri: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth_server_metadata_url: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigEntryDocumentInfoMcpServersValueRemoteOauth {
-    Object(ConfigEntryDocumentInfoMcpServersValueRemoteOauthObject),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpServersValueRemoteTimeout {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub startup: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoMcpServersValueRemote {
-    pub r#type: String,
-    pub url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub headers: Option<BTreeMap<String, String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oauth: Option<ConfigEntryDocumentInfoMcpServersValueRemoteOauth>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codemode: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<ConfigEntryDocumentInfoMcpServersValueRemoteTimeout>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<McpProtocol>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum ConfigEntryDocumentInfoMcpServersValue {
-    Local(ConfigEntryDocumentInfoMcpServersValueLocal),
-    Remote(ConfigEntryDocumentInfoMcpServersValueRemote),
-    /// A member this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoMcpServersValue {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("local") => crate::de::variant(value).map(Self::Local),
-            Some("remote") => crate::de::variant(value).map(Self::Remote),
-            _ => Ok(Self::Unknown(value)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoMcp {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<ConfigEntryDocumentInfoMcpTimeout>,
+    pub timeout: Option<ExperimentalMcpAddInputConfigLocalTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub servers: Option<BTreeMap<String, ConfigEntryDocumentInfoMcpServersValue>>,
+    pub servers: Option<BTreeMap<String, ExperimentalMcpAddInputConfig>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12866,24 +10926,6 @@ pub struct ConfigEntryDocumentInfoCompaction {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoCommandsValueModelObject {
-    #[serde(rename = "providerID")]
-    pub provider_id: String,
-    pub model: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variant: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigEntryDocumentInfoCommandsValueModel {
-    String(String),
-    Object(ConfigEntryDocumentInfoCommandsValueModelObject),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoCommandsValue {
     pub template: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12891,7 +10933,7 @@ pub struct ConfigEntryDocumentInfoCommandsValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<ConfigEntryDocumentInfoCommandsValueModel>,
+    pub model: Option<ConfigEntryDocumentInfoModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12982,49 +11024,22 @@ pub enum ConfigEntryDocumentInfoWarming {
     Unknown(serde_json::Value),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigProviderSettingsTimeout {
-    Number(f64),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigProviderSettingsHeaderTimeout {
-    Number(f64),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigProviderSettingsChunkTimeout {
-    Number(f64),
-    Bool(bool),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<ConfigProviderSettingsTimeout>,
+    pub timeout: Option<ProviderSettingsTimeout>,
     #[serde(
         rename = "headerTimeout",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub header_timeout: Option<ConfigProviderSettingsHeaderTimeout>,
+    pub header_timeout: Option<ProviderSettingsTimeout>,
     #[serde(
         rename = "chunkTimeout",
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    pub chunk_timeout: Option<ConfigProviderSettingsChunkTimeout>,
+    pub chunk_timeout: Option<ProviderSettingsTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<ProviderCompaction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13130,12 +11145,6 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueVariantsItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectTier {
-    pub r#type: String,
-    pub size: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub read: Option<MoneyUSDPerMillionTokens>,
@@ -13146,42 +11155,18 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObject {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tier: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectTier>,
+    pub tier: Option<ModelCostTier>,
     pub input: MoneyUSDPerMillionTokens,
     pub output: MoneyUSDPerMillionTokens,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItemTier {
-    pub r#type: String,
-    pub size: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItemCache {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub read: Option<MoneyUSDPerMillionTokens>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub write: Option<MoneyUSDPerMillionTokens>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItem {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tier: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItemTier>,
-    pub input: MoneyUSDPerMillionTokens,
-    pub output: MoneyUSDPerMillionTokens,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache: Option<ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItemCache>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ConfigEntryDocumentInfoProvidersValueModelsValueCost {
     Object(ConfigEntryDocumentInfoProvidersValueModelsValueCostObject),
-    Array(Vec<ConfigEntryDocumentInfoProvidersValueModelsValueCostArrayItem>),
+    Array(Vec<ConfigEntryDocumentInfoProvidersValueModelsValueCostObject>),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
@@ -13257,27 +11242,9 @@ pub struct ConfigEntryDocumentInfoProvidersValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoExperimentalImageGenerateObjectModelObject {
-    #[serde(rename = "providerID")]
-    pub provider_id: String,
-    pub model: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variant: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConfigEntryDocumentInfoExperimentalImageGenerateObjectModel {
-    String(String),
-    Object(ConfigEntryDocumentInfoExperimentalImageGenerateObjectModelObject),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoExperimentalImageGenerateObject {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<ConfigEntryDocumentInfoExperimentalImageGenerateObjectModel>,
+    pub model: Option<ConfigEntryDocumentInfoModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -13287,111 +11254,6 @@ pub enum ConfigEntryDocumentInfoExperimentalImageGenerate {
     Object(ConfigEntryDocumentInfoExperimentalImageGenerateObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoExperimentalPoliciesItemAction {
-    ProviderUse,
-    ToolUse,
-    IntegrationConnect,
-    IntegrationUse,
-    McpUse,
-    SkillUse,
-    PluginUse,
-    WebsearchUse,
-    Unknown(String),
-}
-
-impl ConfigEntryDocumentInfoExperimentalPoliciesItemAction {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::ProviderUse => "provider.use",
-            Self::ToolUse => "tool.use",
-            Self::IntegrationConnect => "integration.connect",
-            Self::IntegrationUse => "integration.use",
-            Self::McpUse => "mcp.use",
-            Self::SkillUse => "skill.use",
-            Self::PluginUse => "plugin.use",
-            Self::WebsearchUse => "websearch.use",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConfigEntryDocumentInfoExperimentalPoliciesItemAction {
-    fn from(value: &str) -> Self {
-        match value {
-            "provider.use" => Self::ProviderUse,
-            "tool.use" => Self::ToolUse,
-            "integration.connect" => Self::IntegrationConnect,
-            "integration.use" => Self::IntegrationUse,
-            "mcp.use" => Self::McpUse,
-            "skill.use" => Self::SkillUse,
-            "plugin.use" => Self::PluginUse,
-            "websearch.use" => Self::WebsearchUse,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoExperimentalPoliciesItemAction {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalPoliciesItemAction {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoExperimentalPoliciesItemEffect {
-    Allow,
-    Deny,
-    Unknown(String),
-}
-
-impl ConfigEntryDocumentInfoExperimentalPoliciesItemEffect {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Allow => "allow",
-            Self::Deny => "deny",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConfigEntryDocumentInfoExperimentalPoliciesItemEffect {
-    fn from(value: &str) -> Self {
-        match value {
-            "allow" => Self::Allow,
-            "deny" => Self::Deny,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoExperimentalPoliciesItemEffect {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalPoliciesItemEffect {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ConfigEntryDocumentInfoExperimentalPoliciesItem {
-    pub action: ConfigEntryDocumentInfoExperimentalPoliciesItemAction,
-    pub resource: String,
-    pub effect: ConfigEntryDocumentInfoExperimentalPoliciesItemEffect,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -13415,7 +11277,7 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location_idle_timeout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub policies: Option<Vec<ConfigEntryDocumentInfoExperimentalPoliciesItem>>,
+    pub policies: Option<Vec<ConfigEntryDocumentInfoPoliciesItem>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
