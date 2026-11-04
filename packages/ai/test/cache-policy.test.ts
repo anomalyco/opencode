@@ -18,7 +18,7 @@ import {
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as Gemini from "../src/protocols/gemini.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import { applyCachePolicy } from "../src/cache-policy.js"
+import { applyCachePolicy, keepAlive } from "../src/cache-policy.js"
 import { it } from "./lib/effect.js"
 
 const anthropicModel = AnthropicMessages.route
@@ -574,5 +574,47 @@ describe("applyCachePolicy", () => {
       cache: "none",
     })
     expect(applyCachePolicy(request)).toBe(request)
+  })
+})
+
+describe("keepAlive", () => {
+  const conversation = {
+    system: "You are concise.",
+    messages: [Message.user("list the files"), Message.assistant("README.md"), Message.user("and the tests?")],
+    generation: { maxTokens: 32_000, temperature: 0.2 },
+  }
+
+  it.effect("resends the same prompt with a one-token output limit", () =>
+    Effect.gen(function* () {
+      const request = ai.request({
+        model: anthropicModel,
+        ...conversation,
+        providerOptions: { thinking: { type: "adaptive" } },
+      })
+      const refresh = keepAlive(request)
+      expect(refresh?.ttl).toBe("5m")
+      const original = (yield* compileRequest(request)).body as Record<string, unknown>
+      const replay = (yield* compileRequest(refresh!.request)).body as Record<string, unknown>
+      expect(replay).toEqual({ ...original, max_tokens: 1 })
+    }),
+  )
+
+  test("reports the lifetime the request asked for", () => {
+    expect(keepAlive(ai.request({ model: anthropicModel, ...conversation, cache: { ttl: "1h" } }))?.ttl).toBe("1h")
+  })
+
+  test("skips routes that cache without markers", () => {
+    expect(keepAlive(ai.request({ model: openaiModel, ...conversation }))).toBeUndefined()
+    expect(keepAlive(ai.request({ model: geminiModel, ...conversation }))).toBeUndefined()
+    expect(keepAlive(ai.request({ model: anthropicModel, ...conversation, cache: "none" }))).toBeUndefined()
+  })
+
+  test("skips a thinking budget fitted to the output limit", () => {
+    const budgeted = ai.request({
+      model: anthropicModel,
+      ...conversation,
+      providerOptions: { thinking: { type: "enabled", budgetTokens: 8_000 } },
+    })
+    expect(keepAlive(budgeted)).toBeUndefined()
   })
 })

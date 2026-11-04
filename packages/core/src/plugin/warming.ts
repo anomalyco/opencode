@@ -1,26 +1,48 @@
 export * as WarmingPlugin from "./warming.js"
 
+import { LLMClient, keepAlive } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import { ConfigWarming } from "@opencode/schema/config/warming"
 import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
 import { Config } from "../config.js"
+import { SessionWarmup } from "../session/warmup.js"
 import { resolveModel } from "./optimize.js"
 
 const decodeWarming = Schema.decodeUnknownOption(ConfigWarming.Warming)
 
 const defaults = {
-  prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
-  interval: Duration.minutes(4),
+  interval: "auto" as Duration.Duration | "auto",
   duration: Duration.minutes(30),
+  // Once a turn ends, the chance that the next prompt arrives within one more interval falls below what a refresh
+  // costs after about three refreshes, so an idle Session stops sooner than a running turn.
+  idle: Duration.minutes(15),
 }
+
+type Settings = typeof defaults
+
+interface Entry {
+  settings: Settings
+  // When the provider last read the cached prompt: the step request's or a refresh's send time. The cache lifetime runs
+  // from there, not from the end of a long response.
+  touched: number
+  expires: number
+  // Bumped by each step request, so a refresh that raced one doesn't judge the new prompt by the old one.
+  generation: number
+}
+
+// A refresh that reaches the provider this close to expiry may find the entry gone and rewrite the whole prompt.
+const EXPIRY_MARGIN = Duration.seconds(10)
+// How often to look again while a model request runs; the request may end the turn after the entry has expired.
+const BUSY_POLL = Duration.seconds(5)
 
 export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const llm = yield* LLMClient.Service
+    const warmup = yield* SessionWarmup.Service
     // A model's or provider's `cache.warming` overrides the top-level `warming`.
     const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
       // Warming must never fail the request it hooks, so an unreadable catalog falls back to the top-level setting.
@@ -32,32 +54,38 @@ export const Plugin = define({
         })
       const global = Config.latest(yield* config.entries(), "warming")
       if (!(local ?? global)) return
-      // The keep-alive prompt is only set at the top level; a model's setting changes timing.
-      const settings = {
+      const settings: Settings = {
         ...defaults,
         ...(typeof global === "object" ? global : {}),
         ...(typeof local === "object" ? local : {}),
       }
-      const interval = settings.interval === "auto" ? autoInterval(cache?.ttl) : settings.interval
-      // "auto" doesn't warm a model without a cache.ttl.
-      if (interval === undefined) return
-      const { duration } = settings
       const valid =
-        Duration.isFinite(duration) &&
-        Duration.isGreaterThan(interval, Duration.zero) &&
-        Duration.isLessThan(interval, duration)
-      if (valid) return { ...settings, interval }
-      yield* Effect.logWarning("warming interval must be positive and shorter than a finite duration", {
-        interval,
-        duration,
-      })
+        Duration.isFinite(settings.duration) &&
+        Duration.isGreaterThan(settings.duration, Duration.zero) &&
+        Duration.isFinite(settings.idle) &&
+        Duration.isGreaterThan(settings.idle, Duration.zero) &&
+        (settings.interval === "auto" ||
+          (Duration.isGreaterThan(settings.interval, Duration.zero) &&
+            Duration.isLessThan(settings.interval, settings.duration)))
+      if (valid) return settings
+      yield* Effect.logWarning(
+        "warming interval must be positive and shorter than a finite duration, and idle must be finite",
+        settings,
+      )
     })
 
     const scope = yield* Scope.Scope
-    const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
-    // A ping during a model request would compete with the request it keeps warm, which stalls single-slot local models.
+    const sessions = new Map<Session.ID, Entry>()
+    // A refresh during a model request would compete with the request it keeps warm.
     // A request counts from its context hook, because `session.step.started` waits for the first response chunk.
     const requesting = new Set<Session.ID>()
+
+    const stop = Effect.fn("WarmingPlugin.stop")(function* (sessionID: Session.ID, reason?: string) {
+      sessions.delete(sessionID)
+      yield* warmup.forget(sessionID)
+      if (reason) yield* Effect.logInfo("stopped session warming", { sessionID, reason })
+    })
+
     // A turn always ends with an execution event, so a step that ends without its own event can't stay in flight.
     yield* ctx.event
       .subscribe({
@@ -67,107 +95,115 @@ export const Plugin = define({
           "session.execution.succeeded",
           "session.execution.failed",
           "session.execution.interrupted",
+          "session.compaction.ended",
         ],
       })
       .pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
+            // A compaction replaces the prompt the next step sends, so the cached one is no longer worth keeping, unless
+            // a step request has already armed warming again since.
+            if (event.type === "session.compaction.ended") {
+              const current = sessions.get(event.data.sessionID)
+              if (current && current.touched > event.created) return
+              return yield* stop(event.data.sessionID)
+            }
             requesting.delete(event.data.sessionID)
-            // Count the next interval from the end of the response, not from when a long request started.
+            if (!event.type.startsWith("session.execution.")) return
             const current = sessions.get(event.data.sessionID)
-            if (current) current.last = yield* Clock.currentTimeMillis
+            if (!current) return
+            const now = yield* Clock.currentTimeMillis
+            current.expires = Math.min(current.expires, now + Duration.toMillis(current.settings.idle))
           }),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
-    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
-      function* (sessionID) {
-        const current = sessions.get(sessionID)
-        if (!current) return
 
+    const loop: (sessionID: Session.ID, current: Entry) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
+      function* (sessionID, current) {
+        // A stopped and re-armed Session has a new entry with its own loop.
+        if (sessions.get(sessionID) !== current) return
         const now = yield* Clock.currentTimeMillis
-        const next = Math.min(current.last + Duration.toMillis(current.settings.interval), current.expires)
-        if (now < next) {
-          yield* Effect.sleep(Duration.millis(next - now))
-          return yield* loop(sessionID)
-        }
-        if (now >= current.expires) {
-          sessions.delete(sessionID)
-          return
+        if (now >= current.expires) return yield* stop(sessionID)
+
+        // The runner records the step request after its context hook, so read it when a refresh is due.
+        const sent = yield* warmup.latest(sessionID)
+        const refresh = sent && keepAlive(sent.request)
+        const ttl = refresh && parseTTL(refresh.ttl)
+        const interval =
+          current.settings.interval === "auto" ? ttl && ttl * 0.9 : Duration.toMillis(current.settings.interval)
+        const due = current.touched + (interval ?? 0)
+        if (now < due) {
+          yield* Effect.sleep(Duration.millis(Math.min(due, current.expires) - now))
+          return yield* loop(sessionID, current)
         }
         if (requesting.has(sessionID)) {
-          yield* Effect.sleep(current.settings.interval)
-          return yield* loop(sessionID)
+          yield* Effect.sleep(BUSY_POLL)
+          return yield* loop(sessionID, current)
         }
+        // Routes that cache implicitly, or whose thinking budget follows the output limit, aren't refreshed.
+        if (!sent || !refresh || ttl === undefined || interval === undefined) return yield* stop(sessionID)
+        if (now >= current.touched + ttl - Duration.toMillis(EXPIRY_MARGIN))
+          return yield* stop(sessionID, "the cache entry has expired")
 
-        const last = current.last
-        yield* Effect.logInfo("warming session", { sessionID, last })
-        yield* ctx.session
-          .generate({ sessionID, prompt: current.settings.prompt })
-          .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to warm session", { sessionID, cause })))
-        const latest = sessions.get(sessionID)
-        if (latest === current && latest.last === last) latest.last = yield* Clock.currentTimeMillis
-        return yield* loop(sessionID)
+        const generation = current.generation
+        current.touched = now
+        yield* Effect.logInfo("warming session", { sessionID })
+        const usage = yield* llm.generate(refresh.request, sent.options).pipe(
+          Effect.map((response) => response.usage),
+          Effect.catchCause((cause) =>
+            Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
+          ),
+        )
+        if (sessions.get(sessionID) !== current) return
+        if (current.generation === generation) {
+          if (!usage) return yield* stop(sessionID, "the refresh failed")
+          // A refresh that read nothing or wrote anything found the entry gone; each further one would rewrite it.
+          if (!(usage.cacheReadInputTokens ?? 0) || (usage.cacheWriteInputTokens ?? 0) > 0)
+            return yield* stop(sessionID, "the refresh missed the cache")
+        }
+        return yield* loop(sessionID, current)
       },
     )
 
-    const hook = (event: SessionHooks["context"]) =>
+    yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
+        requesting.add(event.sessionID)
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+        // Subagents finish and are rarely resumed; their parent stays warm while it waits on them.
         if (session.parentID) return
-
-        const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings(event)
-        if (!settings) {
-          sessions.delete(event.sessionID)
-          return
-        }
+        if (!settings) return yield* stop(event.sessionID)
 
-        // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
-        const message = event.messages.at(-1)
-        if (
-          message?.role === "user" &&
-          message.content.length === 1 &&
-          message.content[0]?.type === "text" &&
-          (message.content[0].text === active?.settings.prompt || message.content[0].text === settings.prompt)
-        ) {
-          if (active) active.settings = settings
-          return
-        }
-
+        yield* warmup.watch(event.sessionID)
         const now = yield* Clock.currentTimeMillis
-        const duration = Duration.toMillis(settings.duration)
+        const expires = now + Duration.toMillis(settings.duration)
+        const active = sessions.get(event.sessionID)
         if (active) {
-          active.last = now
-          active.expires = now + duration
           active.settings = settings
+          active.touched = now
+          active.expires = expires
+          active.generation++
           return
         }
-        sessions.set(event.sessionID, { last: now, expires: now + duration, settings })
-        yield* Effect.logInfo("scheduled session warming", {
-          sessionID: event.sessionID,
-          interval: settings.interval,
-          expires: now + duration,
-        })
-        yield* loop(event.sessionID).pipe(
+        const entry = { settings, touched: now, expires, generation: 0 }
+        sessions.set(event.sessionID, entry)
+        yield* Effect.logInfo("scheduled session warming", { sessionID: event.sessionID, expires })
+        yield* loop(event.sessionID, entry).pipe(
           Effect.catchCause((cause) =>
             Effect.logError("session warming loop failed", { sessionID: event.sessionID, cause }),
           ),
           Effect.forkIn(scope),
         )
-      })
-    yield* ctx.session.hook("context", (event) =>
-      Effect.sync(() => requesting.add(event.sessionID)).pipe(Effect.andThen(hook(event))),
+      }),
     )
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
   }),
 })
 
 const units = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
 
-/** 90% of a cache TTL such as "5m", so the ping lands before the cache expires. */
-function autoInterval(ttl: Provider.CacheTTL | undefined) {
-  const match = ttl?.match(/^([\d.]+)(ms|s|m|h|d)$/)
-  if (match) return Duration.millis(Number(match[1]) * units[match[2] as keyof typeof units] * 0.9)
+/** Milliseconds in a cache lifetime such as "5m". */
+function parseTTL(ttl: string) {
+  const match = ttl.match(/^(\d+)(ms|s|m|h|d)$/)
+  if (match) return Number(match[1]) * units[match[2] as keyof typeof units]
 }
