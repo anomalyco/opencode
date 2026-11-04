@@ -14,6 +14,9 @@ use opentui::prelude::*;
 use std::cell::Cell;
 use std::rc::{Rc, Weak};
 
+/// Builds the content above the field.
+pub type Description = Rc<dyn Fn(&DialogCx) -> AnyWidget>;
+
 /// `DialogPromptAction`: a footer action whose command is bound while the field has focus.
 #[derive(Clone)]
 pub struct PromptAction {
@@ -32,13 +35,13 @@ pub struct PromptProps {
     /// Muted line below the title, under `new-designs`.
     pub subtitle: Option<String>,
     /// Content above the field.
-    pub description: Option<Rc<dyn Fn(&DialogCx) -> AnyWidget>>,
+    pub description: Option<Description>,
     pub placeholder: Option<String>,
     pub value: Option<String>,
     pub busy: bool,
     pub busy_text: Option<String>,
     pub actions: Vec<PromptAction>,
-    pub on_confirm: Option<Rc<dyn Fn(&str)>>,
+    pub on_confirm: Option<crate::select::OnText>,
     pub on_cancel: Option<Rc<dyn Fn()>>,
 }
 
