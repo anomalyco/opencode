@@ -3,7 +3,7 @@ import { VideoRenderable, type Clock, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect } from "bun:test"
 import path from "node:path"
-import type { JSX } from "solid-js"
+import { createSignal, Show, type JSX } from "solid-js"
 import "../../src/component/media/viewer"
 import type { MediaItem } from "../../src/component/media/model"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
@@ -52,6 +52,7 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     },
   }
   let contexts: ReturnType<typeof probe> | undefined
+  const [mounted, setMounted] = createSignal(true)
   function Probe() {
     contexts = probe()
     return null
@@ -64,12 +65,14 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
             <Keymap.Provider>
               <ToastProvider>
                 <DialogProvider>
-                  <MediaProvider directory={path.join(temporary.path, "media")}>
-                    <Probe />
-                    {view()}
-                    <MediaHost />
-                    <Toast />
-                  </MediaProvider>
+                  <Show when={mounted()}>
+                    <MediaProvider directory={path.join(temporary.path, "media")}>
+                      <Probe />
+                      {view()}
+                      <MediaHost />
+                      <Toast />
+                    </MediaProvider>
+                  </Show>
                 </DialogProvider>
               </ToastProvider>
             </Keymap.Provider>
@@ -107,6 +110,8 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     press,
     find,
     directory: path.join(temporary.path, "media"),
+    /** Unmounts the media provider and everything inside it. */
+    unmount: () => setMounted(false),
     setRichMedia: (enabled: boolean) =>
       contexts!.config.update((draft) => (draft.experimental = { "rich-media": enabled })),
     frame: () => app.captureCharFrame(),
