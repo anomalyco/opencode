@@ -1,4 +1,4 @@
-import { Show, type ParentProps } from "solid-js"
+import { Show, type JSX, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { ServerConnection } from "./registry"
 import { useGlobal, type ServerCtx } from "./runtime"
@@ -27,13 +27,18 @@ const context = createSimpleContext({
 
 export const useServer = context.use
 
-// Keyed by controller: children unmount while the server rejects our credentials, and remount with the controller its
-// new credentials start.
-export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any }>) {
+// Keyed by controller: while the server rejects our credentials the children unmount and `signedOut` shows instead,
+// and they mount again with the controller its new credentials start.
+export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any; signedOut?: JSX.Element }>) {
   const global = useGlobal()
+  const key = ServerConnection.key(props.conn)
 
   return (
-    <Show when={global.serverCtx(ServerConnection.key(props.conn))} keyed>
+    <Show
+      when={global.serverCtx(key)}
+      keyed
+      fallback={<Show when={global.serverSignedOut(key)}>{props.signedOut}</Show>}
+    >
       {(ctx) => (
         <context.provider conn={props.conn} ctx={ctx}>
           {props.children}

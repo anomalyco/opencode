@@ -16,6 +16,7 @@ import { createServerProjects, ServerConnection, useServers } from "./registry"
 import {
   createServerControllersState,
   selectServerCtx,
+  selectServerSignedOut,
   serverCredentials,
   transitionServerControllers,
   type ServerControllersEvent,
@@ -134,6 +135,10 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
       serverCtx(key: ServerConnection.Key) {
         return selectServerCtx(controllers(), key)
+      },
+      /** The server rejects our credentials and waits for the user to sign in again. Reactive. */
+      serverSignedOut(key: ServerConnection.Key) {
+        return selectServerSignedOut(controllers(), key)
       },
     }
   },

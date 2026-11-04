@@ -612,6 +612,9 @@ export const dict = {
   "session.error.unreachable": "Can't reach this server",
   "session.error.unreachable.description":
     "{{server}} isn't responding, so this session can't load. It will open automatically once the server is reachable again.",
+  "session.error.signedOut": "Signed out of this server",
+  "session.error.signedOut.description": "{{server}} no longer accepts this app's sign-in. Sign in again to continue.",
+  "session.error.signedOut.signIn": "Sign in again",
   "session.background.moveRunning": "Move to background",
   "session.background.moveInline": "Press {{keybind}} to move running work to the background",
   "command.session.background": "Move to background",

@@ -4,6 +4,7 @@ import type { ServerConnection } from "./registry"
 import {
   createServerControllersState,
   selectServerCtx,
+  selectServerSignedOut,
   serverCredentials,
   transitionServerControllers,
   type ServerControllersEvent,
@@ -124,12 +125,14 @@ test("a listed server starts one controller and reads it once it is live", () =>
 test("a server that rejects its credentials has no controller until it gets new ones", () => {
   const start = live(http("pw1"))
   expect(selectServerCtx(start, key)?.name).toBe("ctx1")
+  expect(selectServerSignedOut(start, key)).toBe(false)
 
-  // The health check answers 401: the controller goes away and nothing reads it again.
+  // The health check answers 401: the controller goes away, nothing reads it again, and the routes ask to sign in.
   const unauthorized = run(start, reported(http("pw1"), rejected))
   expect(unauthorized.state.get(key)?.type).toBe("unauthorized")
   expect(unauthorized.log).toEqual(["dispose ctx1"])
   expect(selectServerCtx(unauthorized.state, key)).toBeUndefined()
+  expect(selectServerSignedOut(unauthorized.state, key)).toBe(true)
 
   // The server list syncs again with the rejected credentials: no controller retries them.
   const resynced = transitionServerControllers(unauthorized.state, synced(http("pw1")))
@@ -140,6 +143,7 @@ test("a server that rejects its credentials has no controller until it gets new 
   const signedIn = run(resynced.state, synced(http("pw2")))
   expect(signedIn.log).toEqual(["create ctx2"])
   expect(selectServerCtx(signedIn.state, key)?.name).toBe("ctx2")
+  expect(selectServerSignedOut(signedIn.state, key)).toBe(false)
 })
 
 test("a rejection of credentials the server has since replaced changes nothing", () => {

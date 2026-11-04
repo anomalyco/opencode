@@ -134,6 +134,11 @@ export function selectServerCtx<T>(state: ServerControllersState<T>, key: Server
   return slot?.type === "live" ? slot.ctx : undefined
 }
 
+/** The server answered our current credentials with HTTP 401, so it has no controller until it signs in again. */
+export function selectServerSignedOut<T>(state: ServerControllersState<T>, key: ServerConnection.Key) {
+  return state.get(key)?.type === "unauthorized"
+}
+
 const unlisted = { type: "server.unlisted" } as const
 
 function apply<T>(
