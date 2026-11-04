@@ -29,6 +29,13 @@ It correctly bundles Solid in production mode and optimizes the build for the be
 The build is minified and the filenames include the hashes.<br>
 Your app is ready to be deployed!
 
+## Review
+
+The review file header's **Copy file contents** action copies the complete reviewed snapshot when the diff includes it,
+including an empty file. If no snapshot is available, it reads the current file from disk. Deleted files use the old
+snapshot or a complete deletion diff instead of reading the missing path. Binary or unavailable content leaves the
+clipboard unchanged.
+
 ## E2E Testing
 
 Locally, Playwright starts the Vite dev server automatically via `webServer`, or reuses one already running at the configured address. The browser suite uses isolated API fixtures rather than a live opencode backend.
