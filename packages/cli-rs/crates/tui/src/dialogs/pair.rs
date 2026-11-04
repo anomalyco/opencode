@@ -12,8 +12,6 @@ use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, head
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
-use qrcode::bits::Bits;
-use qrcode::{EcLevel, QrCode, Version};
 
 use crate::app::Tui;
 
@@ -217,7 +215,7 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
             .align_items(Align::Center);
     }
     if let Some(url) = value.links.first() {
-        code.add(&Text::new(app, render_qr(url)).fg(theme.text.base));
+        code.add(&Text::new(app, opencode_ui::qr::render_unicode_compact(url, 1)).fg(theme.text.base));
     }
 
     let row = View::new(app).gap(2).child(&side).child(&code);
@@ -234,45 +232,4 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
         .height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
     scroll.add(&row);
     View::new(app).child(&scroll)
-}
-
-/// `renderUnicodeCompact(text, { border: 1 })`: byte mode at level L in the smallest version, two modules per
-/// cell with half blocks. Light modules draw as blocks and dark ones as the background.
-pub fn render_qr(text: &str) -> String {
-    let Some(code) = (1..=40).find_map(|version| {
-        let mut bits = Bits::new(Version::Normal(version));
-        bits.push_byte_data(text.as_bytes()).ok()?;
-        bits.push_terminator(EcLevel::L).ok()?;
-        QrCode::with_bits(bits, EcLevel::L).ok()
-    }) else {
-        return String::new();
-    };
-    let width = code.width();
-    let colors = code.to_colors();
-    // With the quiet zone of one module; `true` is dark.
-    let size = width + 2;
-    let dark = |x: usize, y: usize| {
-        (1..=width).contains(&x)
-            && (1..=width).contains(&y)
-            && colors[(y - 1) * width + (x - 1)] == qrcode::Color::Dark
-    };
-    (0..size.div_ceil(2))
-        .map(|line| {
-            (0..size)
-                .map(|x| {
-                    let top = dark(x, line * 2);
-                    // The symbol has an odd number of rows, so the last line's missing bottom half shows the
-                    // terminal background.
-                    let bottom = line * 2 + 1 >= size || dark(x, line * 2 + 1);
-                    match (top, bottom) {
-                        (true, true) => ' ',
-                        (true, false) => '\u{2584}',
-                        (false, true) => '\u{2580}',
-                        (false, false) => '\u{2588}',
-                    }
-                })
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
