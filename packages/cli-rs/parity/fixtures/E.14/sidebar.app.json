@@ -1,0 +1,938 @@
+{
+  "scenario": "E.14/sidebar",
+  "width": 140,
+  "height": 34,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "experimental": {
+      "new-designs": true
+    },
+    "animations": false
+  },
+  "args": {
+    "sessionID": "ses_s"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_s",
+      "json": {
+        "data": {
+          "id": "ses_s",
+          "title": "Plan the release",
+          "projectID": "proj_test",
+          "cost": 0.42,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_s/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_2",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "The release plan is ready."
+              },
+              {
+                "type": "tool",
+                "id": "call_1",
+                "name": "todowrite",
+                "state": {
+                  "status": "completed",
+                  "input": {
+                    "todos": [
+                      {
+                        "content": "Write the changelog",
+                        "status": "completed"
+                      },
+                      {
+                        "content": "Tag the release",
+                        "status": "in_progress"
+                      },
+                      {
+                        "content": "Announce it",
+                        "status": "pending"
+                      }
+                    ]
+                  },
+                  "content": []
+                },
+                "time": {
+                  "created": 2,
+                  "ran": 2,
+                  "completed": 3
+                }
+              }
+            ],
+            "finish": "stop",
+            "time": {
+              "created": 2,
+              "completed": 3
+            },
+            "cost": 0.42,
+            "tokens": {
+              "input": 20000,
+              "output": 500,
+              "reasoning": 0,
+              "cache": {
+                "read": 4500,
+                "write": 0
+              }
+            }
+          },
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Plan it",
+            "time": {
+              "created": 1
+            }
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_s/inbox",
+      "json": {
+        "data": []
+      }
+    },
+    {
+      "path": "/api/model",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": [
+          {
+            "id": "model",
+            "modelID": "model",
+            "providerID": "provider",
+            "name": "Model",
+            "capabilities": {
+              "tools": true,
+              "input": [
+                "text"
+              ],
+              "output": [
+                "text"
+              ]
+            },
+            "variants": [],
+            "time": {
+              "released": 0
+            },
+            "cost": [
+              {
+                "input": 3,
+                "output": 15,
+                "cache": {
+                  "read": 0.3,
+                  "write": 3.75
+                }
+              }
+            ],
+            "status": "active",
+            "enabled": true,
+            "limit": {
+              "context": 200000,
+              "output": 32000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/integration",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": [
+          {
+            "id": "anthropic",
+            "name": "Anthropic",
+            "methods": [],
+            "connections": []
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/mcp",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": [
+          {
+            "name": "github",
+            "status": {
+              "status": "connected"
+            }
+          },
+          {
+            "name": "linear",
+            "status": {
+              "status": "failed",
+              "error": "spawn ENOENT"
+            }
+          },
+          {
+            "name": "figma",
+            "status": {
+              "status": "needs_auth",
+              "error": "sign in"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "docked",
+      "until": "Getting started",
+      "masks": [
+        {
+          "x": 0,
+          "y": 8,
+          "width": 96,
+          "height": 9,
+          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
+        }
+      ],
+      "fixture": "E.14/sidebar/docked"
+    },
+    {
+      "click": [
+        100,
+        9
+      ]
+    },
+    {
+      "checkpoint": "folded",
+      "until": "(1 active, 2 errors)",
+      "masks": [
+        {
+          "x": 0,
+          "y": 8,
+          "width": 96,
+          "height": 9,
+          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
+        }
+      ],
+      "fixture": "E.14/sidebar/folded"
+    },
+    {
+      "keys": [
+        "ctrl+x",
+        "b"
+      ]
+    },
+    {
+      "checkpoint": "hidden",
+      "masks": [
+        {
+          "x": 0,
+          "y": 8,
+          "width": 140,
+          "height": 9,
+          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
+        }
+      ],
+      "fixture": "E.14/sidebar/hidden"
+    },
+    {
+      "keys": [
+        "ctrl+x",
+        "b"
+      ]
+    },
+    {
+      "checkpoint": "shown",
+      "until": "Getting started",
+      "masks": [
+        {
+          "x": 0,
+          "y": 8,
+          "width": 96,
+          "height": 9,
+          "reason": "the transcript's todowrite block is E.7b's (not ported yet)"
+        }
+      ],
+      "fixture": "E.14/sidebar/shown"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_s/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": [
+            {
+              "id": "anthropic",
+              "name": "Anthropic",
+              "methods": [],
+              "connections": []
+            }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": [
+            {
+              "name": "github",
+              "status": {
+                "status": "connected"
+              }
+            },
+            {
+              "name": "linear",
+              "status": {
+                "status": "failed",
+                "error": "spawn ENOENT"
+              }
+            },
+            {
+              "name": "figma",
+              "status": {
+                "status": "needs_auth",
+                "error": "sign in"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": [
+            {
+              "id": "model",
+              "modelID": "model",
+              "providerID": "provider",
+              "name": "Model",
+              "capabilities": {
+                "tools": true,
+                "input": [
+                  "text"
+                ],
+                "output": [
+                  "text"
+                ]
+              },
+              "variants": [],
+              "time": {
+                "released": 0
+              },
+              "cost": [
+                {
+                  "input": 3,
+                  "output": 15,
+                  "cache": {
+                    "read": 0.3,
+                    "write": 3.75
+                  }
+                }
+              ],
+              "status": "active",
+              "enabled": true,
+              "limit": {
+                "context": 200000,
+                "output": 32000
+              }
+            }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_s"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_s",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_s",
+            "title": "Plan the release",
+            "projectID": "proj_test",
+            "cost": 0.42,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_s/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_s/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_s/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_2",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The release plan is ready."
+                },
+                {
+                  "type": "tool",
+                  "id": "call_1",
+                  "name": "todowrite",
+                  "state": {
+                    "status": "completed",
+                    "input": {
+                      "todos": [
+                        {
+                          "content": "Write the changelog",
+                          "status": "completed"
+                        },
+                        {
+                          "content": "Tag the release",
+                          "status": "in_progress"
+                        },
+                        {
+                          "content": "Announce it",
+                          "status": "pending"
+                        }
+                      ]
+                    },
+                    "content": []
+                  },
+                  "time": {
+                    "created": 2,
+                    "ran": 2,
+                    "completed": 3
+                  }
+                }
+              ],
+              "finish": "stop",
+              "time": {
+                "created": 2,
+                "completed": 3
+              },
+              "cost": 0.42,
+              "tokens": {
+                "input": 20000,
+                "output": 500,
+                "reasoning": 0,
+                "cache": {
+                  "read": 4500,
+                  "write": 0
+                }
+              }
+            },
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Plan it",
+              "time": {
+                "created": 1
+              }
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_s/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_s"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
