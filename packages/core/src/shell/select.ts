@@ -164,7 +164,23 @@ function info(file: string, options?: Options, bin?: string): Item {
 export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  if (ps(file))
+    return [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      // PowerShell never propagates a native command's exit code: the process exits 1 when the
+      // last statement leaves $? false (which `2>&1` does for any native stderr), otherwise 0.
+      // Recover the true code after the body, but only when the last statement itself was
+      // native: $LASTEXITCODE is stale once a successful native command is followed by a
+      // failing PowerShell statement. Merged native stderr appends $error records whose
+      // FullyQualifiedErrorId is "NativeCommandError"; any other new $error record means a
+      // real PowerShell failure, which keeps the 1. $LASTEXITCODE is $null until a native
+      // command runs, so pure PowerShell failures also keep the 1. Every branch exits
+      // explicitly because a bare trailing statement would reset $? and force exit 0.
+      "-Command",
+      `$__e = $error.Count\n${command}\nif ($?) { exit 0 } elseif ($LASTEXITCODE -ne $null -and $error.Count -ge $__e -and @($error | Select-Object -Skip $__e | Where-Object { $_.FullyQualifiedErrorId -ne "NativeCommandError" }).Count -eq 0) { exit $LASTEXITCODE } else { exit 1 }`,
+    ]
   return ["-c", command]
 }
 

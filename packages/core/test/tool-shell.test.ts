@@ -191,6 +191,18 @@ const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
+const nativeExitCommand = isWindows ? 'cmd /c "exit 3"' : "exit 3"
+const nativeExitStderrCommand = isWindows
+  ? 'cmd /c "echo boom 1>&2 & exit 3" 2>&1'
+  : "{ echo boom >&2; exit 3; } 2>&1"
+const stderrMergeCommand = isWindows
+  ? 'cmd /c "echo x 1>&2 & exit 0" 2>&1'
+  : "{ echo x 1>&2; exit 0; } 2>&1"
+const psFailAfterNativeCommand = isWindows
+  ? 'cmd /c "exit 0"; Get-Item definitely-missing-xyz'
+  : "true; cat definitely-missing-xyz"
+const psFailOnlyCommand = isWindows ? "Get-Item definitely-missing-xyz" : "cat definitely-missing-xyz"
+const failThenOkCommand = isWindows ? 'cmd /c "exit 3"; "ok"' : "false; echo ok"
 const overflowCommand = (bytes: number) =>
   isWindows
     ? `[Console]::Out.Write('output-start' + ('x' * ${bytes}) + 'output-end'); Start-Sleep -Milliseconds 100`
@@ -1253,6 +1265,108 @@ describe("ShellTool", () => {
             expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
             expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
             expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("reports a failing native command's own exit code", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: nativeExitCommand }, "call-native-exit")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 3, truncated: false })
+            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 3")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("keeps exit 0 for a successful native command whose stderr is merged with 2>&1", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: stderrMergeCommand }, "call-stderr-merge")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
+            expect(settled.content?.[0]?.type === "text" && settled.content[0].text).toContain("x")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("keeps exit 1 when a failing statement follows a successful native command", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: psFailAfterNativeCommand }, "call-ps-fail-after-native")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 1, truncated: false })
+            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 1")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("keeps exit 1 for a shell failure that runs no native command", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: psFailOnlyCommand }, "call-ps-fail-only")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 1, truncated: false })
+            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 1")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("reports a failing native command's exit code when its stderr is merged with 2>&1", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: nativeExitStderrCommand }, "call-native-exit-stderr")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 3, truncated: false })
+            expect(settled.content?.[0]?.type === "text" && settled.content[0].text).toContain("boom")
+            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 3")))
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("keeps exit 0 when a successful statement follows a failing native command", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        executeTool(registry, call({ command: failThenOkCommand }, "call-fail-then-ok")),
+      ).pipe(
+        Effect.andThen((settled) =>
+          Effect.sync(() => {
+            expect(settled.status).toBe("completed")
+            expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
           }),
         ),
       )
