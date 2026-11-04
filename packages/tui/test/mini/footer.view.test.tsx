@@ -2471,6 +2471,30 @@ test("direct permission buttons use secondary text over the native V2 light pane
   }
 })
 
+test("direct permission shows the reason given with the request", async () => {
+  const app = await renderFooter({
+    height: 16,
+    view: {
+      type: "permission",
+      request: {
+        id: "per_reason",
+        sessionID: "ses_reason",
+        action: "plugin.guard",
+        resources: ["package.json"],
+        message: "Changing package.json needs the user's approval.",
+      },
+    },
+  })
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Call tool plugin.guard")
+    expect(frame).toContain("Changing package.json needs the user's approval.")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct agent panel shows eligible agents and marks the current agent", async () => {
   const theme = await nativeLightTheme()
   const [agents] = createSignal<RunAgent[]>([

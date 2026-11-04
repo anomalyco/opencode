@@ -409,6 +409,15 @@ export function RunPermissionBody(props: {
                       {info().title}
                     </text>
                   </box>
+                  <Show when={props.request.message}>
+                    {(message) => (
+                      <box width="100%" paddingLeft={compact() ? 0 : 1} flexShrink={0}>
+                        <text width="100%" fg={props.theme.muted} wrapMode="word" flexShrink={0}>
+                          {message()}
+                        </text>
+                      </box>
+                    )}
+                  </Show>
                   <Show
                     when={info().diff}
                     fallback={
