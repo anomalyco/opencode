@@ -1,0 +1,2095 @@
+{
+  "parts": [
+    {
+      "label": "shell completed",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "ls -la",
+            "description": "List"
+          },
+          "metadata": {
+            "exit": 0
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "a\nb\n"
+            },
+            {
+              "type": "text",
+              "text": "Command exited with code 0."
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "ls -la",
+        "mode": "block",
+        "body": "a\nb"
+      }
+    },
+    {
+      "label": "shell running",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "running",
+          "input": {
+            "command": "sleep 1"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "sleep 1",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "shell error",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "error",
+          "input": {
+            "command": "false"
+          },
+          "error": {
+            "type": "unknown",
+            "message": "boom"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "false",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "shell streaming",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "streaming",
+          "input": "{\"command\":\"l"
+        },
+        "time": {
+          "created": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "shell legacy bash",
+      "part": {
+        "type": "tool",
+        "id": "bash-1",
+        "name": "bash",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "pwd"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": "  /work/project  \n"
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "pwd",
+        "mode": "block",
+        "body": "/work/project"
+      }
+    },
+    {
+      "label": "shell no command",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "completed",
+          "input": {},
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "",
+        "mode": "block",
+        "body": ""
+      }
+    },
+    {
+      "label": "shell unknown status",
+      "part": {
+        "type": "tool",
+        "id": "shell-1",
+        "name": "shell",
+        "state": {
+          "status": "paused",
+          "input": {
+            "command": "ls"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "$",
+        "title": "ls",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "write inside",
+      "part": {
+        "type": "tool",
+        "id": "write-1",
+        "name": "write",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/work/project/src/a.ts",
+            "content": "x"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": "Wrote file"
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Write src/a.ts",
+        "mode": "block",
+        "body": "Wrote file"
+      }
+    },
+    {
+      "label": "write outside",
+      "part": {
+        "type": "tool",
+        "id": "write-1",
+        "name": "write",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/etc/hosts",
+            "content": "x"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Write /etc/hosts",
+        "mode": "block",
+        "body": ""
+      }
+    },
+    {
+      "label": "write relative",
+      "part": {
+        "type": "tool",
+        "id": "write-1",
+        "name": "write",
+        "state": {
+          "status": "running",
+          "input": {
+            "path": "src/../b.ts",
+            "content": "x"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Write b.ts",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "edit with files",
+      "part": {
+        "type": "tool",
+        "id": "edit-1",
+        "name": "edit",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/work/project/a.ts"
+          },
+          "metadata": {
+            "files": [
+              {
+                "type": "update",
+                "filePath": "/work/project/a.ts",
+                "relativePath": "a.ts",
+                "patch": "@@ -1 +1 @@\n-a\n+b"
+              }
+            ]
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Edit a.ts",
+        "mode": "block",
+        "body": "@@ -1 +1 @@\n-a\n+b"
+      }
+    },
+    {
+      "label": "edit with diff",
+      "part": {
+        "type": "tool",
+        "id": "edit-1",
+        "name": "edit",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/work/project/a.ts"
+          },
+          "metadata": {
+            "diff": "--- a\n+++ b"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Edit a.ts",
+        "mode": "block",
+        "body": "--- a\n+++ b"
+      }
+    },
+    {
+      "label": "edit running",
+      "part": {
+        "type": "tool",
+        "id": "edit-1",
+        "name": "edit",
+        "state": {
+          "status": "running",
+          "input": {
+            "filePath": "/work/project/a.ts",
+            "oldString": "a",
+            "newString": "b"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "←",
+        "title": "Edit a.ts",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "patch two files",
+      "part": {
+        "type": "tool",
+        "id": "apply_patch-1",
+        "name": "apply_patch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "patchText": "*** Begin Patch"
+          },
+          "metadata": {
+            "files": [
+              {
+                "type": "add",
+                "relativePath": "a.ts"
+              },
+              {
+                "type": "move",
+                "filePath": "/x/b.ts",
+                "relativePath": "c.ts"
+              }
+            ]
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "Patch 2 files"
+      }
+    },
+    {
+      "label": "patch one file",
+      "part": {
+        "type": "tool",
+        "id": "patch-1",
+        "name": "patch",
+        "state": {
+          "status": "completed",
+          "input": {},
+          "metadata": {
+            "files": [
+              {
+                "file": "a.ts",
+                "status": "modified"
+              }
+            ]
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "Patch 1 file"
+      }
+    },
+    {
+      "label": "patch nameless files",
+      "part": {
+        "type": "tool",
+        "id": "patch-1",
+        "name": "patch",
+        "state": {
+          "status": "completed",
+          "input": {},
+          "metadata": {
+            "files": [
+              {
+                "patch": "x"
+              }
+            ]
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "Patch"
+      }
+    },
+    {
+      "label": "patch no files",
+      "part": {
+        "type": "tool",
+        "id": "patch-1",
+        "name": "patch",
+        "state": {
+          "status": "running",
+          "input": {
+            "patchText": "*** Begin Patch"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "Patch"
+      }
+    },
+    {
+      "label": "patch error",
+      "part": {
+        "type": "tool",
+        "id": "patch-1",
+        "name": "patch",
+        "state": {
+          "status": "error",
+          "input": {
+            "patchText": "x"
+          },
+          "error": {
+            "type": "unknown",
+            "message": "bad patch"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "Patch"
+      }
+    },
+    {
+      "label": "batch two",
+      "part": {
+        "type": "tool",
+        "id": "batch-1",
+        "name": "batch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "tool_calls": [
+              {},
+              {}
+            ]
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": "done"
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "#",
+        "title": "Batch 2 tools",
+        "mode": "block",
+        "body": "done"
+      }
+    },
+    {
+      "label": "batch one",
+      "part": {
+        "type": "tool",
+        "id": "batch-1",
+        "name": "batch",
+        "state": {
+          "status": "running",
+          "input": {
+            "tool_calls": [
+              {}
+            ]
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "#",
+        "title": "Batch 1 tool",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "batch none",
+      "part": {
+        "type": "tool",
+        "id": "batch-1",
+        "name": "batch",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "#",
+        "title": "Batch",
+        "mode": "block"
+      }
+    },
+    {
+      "label": "subagent completed",
+      "part": {
+        "type": "tool",
+        "id": "task-1",
+        "name": "task",
+        "state": {
+          "status": "completed",
+          "input": {
+            "subagent_type": "explore",
+            "description": "Inspect the repo"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✓",
+        "title": "Inspect the repo",
+        "description": "Explore Agent"
+      }
+    },
+    {
+      "label": "subagent running",
+      "part": {
+        "type": "tool",
+        "id": "subagent-1",
+        "name": "subagent",
+        "state": {
+          "status": "running",
+          "input": {
+            "agent": "general",
+            "description": "Work"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "•",
+        "title": "Work",
+        "description": "General Agent"
+      }
+    },
+    {
+      "label": "subagent error",
+      "part": {
+        "type": "tool",
+        "id": "subagent-1",
+        "name": "subagent",
+        "state": {
+          "status": "error",
+          "input": {
+            "agent": "code-review"
+          },
+          "error": {
+            "type": "unknown",
+            "message": "boom"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✗",
+        "title": "Code-Review Subagent"
+      }
+    },
+    {
+      "label": "subagent no agent",
+      "part": {
+        "type": "tool",
+        "id": "subagent-1",
+        "name": "subagent",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "•",
+        "title": "Unknown Subagent"
+      }
+    },
+    {
+      "label": "subagent agent not a string",
+      "part": {
+        "type": "tool",
+        "id": "subagent-1",
+        "name": "subagent",
+        "state": {
+          "status": "running",
+          "input": {
+            "agent": 7
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "⚙",
+        "title": "subagent {\"agent\":7}"
+      }
+    },
+    {
+      "label": "todowrite",
+      "part": {
+        "type": "tool",
+        "id": "todowrite-1",
+        "name": "todowrite",
+        "state": {
+          "status": "completed",
+          "input": {
+            "todos": [
+              {
+                "content": "one",
+                "status": "completed"
+              },
+              {
+                "content": "two",
+                "status": "in_progress"
+              },
+              {
+                "content": "three",
+                "status": "cancelled"
+              },
+              {
+                "content": "four",
+                "status": "weird"
+              },
+              {
+                "content": "",
+                "status": "pending"
+              },
+              "bad"
+            ]
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "#",
+        "title": "Todos",
+        "mode": "block",
+        "body": "[✓] one\n[•] two\n[-] three\n[ ] four"
+      }
+    },
+    {
+      "label": "todowrite empty",
+      "part": {
+        "type": "tool",
+        "id": "todowrite-1",
+        "name": "todowrite",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "#",
+        "title": "Todos",
+        "mode": "block",
+        "body": ""
+      }
+    },
+    {
+      "label": "question one",
+      "part": {
+        "type": "tool",
+        "id": "question-1",
+        "name": "question",
+        "state": {
+          "status": "completed",
+          "input": {
+            "questions": [
+              {
+                "question": "Why?"
+              }
+            ]
+          },
+          "metadata": {
+            "answers": [
+              [
+                "Because"
+              ]
+            ]
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Asked 1 question"
+      }
+    },
+    {
+      "label": "question three",
+      "part": {
+        "type": "tool",
+        "id": "question-1",
+        "name": "question",
+        "state": {
+          "status": "running",
+          "input": {
+            "questions": [
+              {},
+              {},
+              {}
+            ]
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Asked 3 questions"
+      }
+    },
+    {
+      "label": "question none",
+      "part": {
+        "type": "tool",
+        "id": "question-1",
+        "name": "question",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Asked 0 questions"
+      }
+    },
+    {
+      "label": "read with range",
+      "part": {
+        "type": "tool",
+        "id": "read-1",
+        "name": "read",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/work/project/src/a.ts",
+            "offset": 10,
+            "limit": 20
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"type\":\"text-page\",\"content\":\"hello\"}"
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Read src/a.ts",
+        "description": "[filePath=/work/project/src/a.ts, offset=10, limit=20]"
+      }
+    },
+    {
+      "label": "read outside",
+      "part": {
+        "type": "tool",
+        "id": "read-1",
+        "name": "read",
+        "state": {
+          "status": "completed",
+          "input": {
+            "filePath": "/tmp/x.txt"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Read /tmp/x.txt",
+        "description": "[filePath=/tmp/x.txt]"
+      }
+    },
+    {
+      "label": "read flags",
+      "part": {
+        "type": "tool",
+        "id": "read-1",
+        "name": "read",
+        "state": {
+          "status": "running",
+          "input": {
+            "path": "a.ts",
+            "raw": true,
+            "encoding": "utf8"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Read a.ts",
+        "description": "[raw=true, encoding=utf8]"
+      }
+    },
+    {
+      "label": "read no path",
+      "part": {
+        "type": "tool",
+        "id": "read-1",
+        "name": "read",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Read "
+      }
+    },
+    {
+      "label": "glob full",
+      "part": {
+        "type": "tool",
+        "id": "glob-1",
+        "name": "glob",
+        "state": {
+          "status": "completed",
+          "input": {
+            "pattern": "*.ts",
+            "path": "/work/project/src"
+          },
+          "metadata": {
+            "count": 3
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Glob \"*.ts\"",
+        "description": "in src · 3 matches"
+      }
+    },
+    {
+      "label": "glob one match",
+      "part": {
+        "type": "tool",
+        "id": "glob-1",
+        "name": "glob",
+        "state": {
+          "status": "completed",
+          "input": {
+            "pattern": "*.md"
+          },
+          "metadata": {
+            "count": 1
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Glob \"*.md\"",
+        "description": "1 match"
+      }
+    },
+    {
+      "label": "glob no count",
+      "part": {
+        "type": "tool",
+        "id": "glob-1",
+        "name": "glob",
+        "state": {
+          "status": "running",
+          "input": {
+            "pattern": "**/*"
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Glob \"**/*\""
+      }
+    },
+    {
+      "label": "glob null count",
+      "part": {
+        "type": "tool",
+        "id": "glob-1",
+        "name": "glob",
+        "state": {
+          "status": "completed",
+          "input": {
+            "pattern": "x",
+            "path": "/elsewhere"
+          },
+          "metadata": {
+            "count": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Glob \"x\"",
+        "description": "in /elsewhere · null matches"
+      }
+    },
+    {
+      "label": "glob bad path",
+      "part": {
+        "type": "tool",
+        "id": "glob-1",
+        "name": "glob",
+        "state": {
+          "status": "running",
+          "input": {
+            "pattern": "x",
+            "path": 5
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "⚙",
+        "title": "glob {\"pattern\":\"x\",\"path\":5}"
+      }
+    },
+    {
+      "label": "grep full",
+      "part": {
+        "type": "tool",
+        "id": "grep-1",
+        "name": "grep",
+        "state": {
+          "status": "completed",
+          "input": {
+            "pattern": "needle",
+            "path": "src"
+          },
+          "metadata": {
+            "matches": 0
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Grep \"needle\"",
+        "description": "in src · 0 matches"
+      }
+    },
+    {
+      "label": "grep one",
+      "part": {
+        "type": "tool",
+        "id": "grep-1",
+        "name": "grep",
+        "state": {
+          "status": "completed",
+          "input": {
+            "pattern": "needle"
+          },
+          "metadata": {
+            "matches": 1
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✱",
+        "title": "Grep \"needle\"",
+        "description": "1 match"
+      }
+    },
+    {
+      "label": "list path",
+      "part": {
+        "type": "tool",
+        "id": "list-1",
+        "name": "list",
+        "state": {
+          "status": "completed",
+          "input": {
+            "path": "/work/project/src"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "List src"
+      }
+    },
+    {
+      "label": "list none",
+      "part": {
+        "type": "tool",
+        "id": "list-1",
+        "name": "list",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "List"
+      }
+    },
+    {
+      "label": "lsp full",
+      "part": {
+        "type": "tool",
+        "id": "lsp-1",
+        "name": "lsp",
+        "state": {
+          "status": "completed",
+          "input": {
+            "operation": "hover",
+            "filePath": "/work/project/a.ts",
+            "line": 3,
+            "character": 7
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "LSP hover a.ts:3:7"
+      }
+    },
+    {
+      "label": "lsp no position",
+      "part": {
+        "type": "tool",
+        "id": "lsp-1",
+        "name": "lsp",
+        "state": {
+          "status": "running",
+          "input": {
+            "operation": "definition",
+            "filePath": "b.ts",
+            "line": 3
+          },
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "LSP definition b.ts"
+      }
+    },
+    {
+      "label": "lsp no file",
+      "part": {
+        "type": "tool",
+        "id": "lsp-1",
+        "name": "lsp",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "LSP request"
+      }
+    },
+    {
+      "label": "webfetch",
+      "part": {
+        "type": "tool",
+        "id": "webfetch-1",
+        "name": "webfetch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "url": "https://example.com",
+            "format": "markdown"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "WebFetch https://example.com"
+      }
+    },
+    {
+      "label": "webfetch none",
+      "part": {
+        "type": "tool",
+        "id": "webfetch-1",
+        "name": "webfetch",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "%",
+        "title": "WebFetch"
+      }
+    },
+    {
+      "label": "websearch exa",
+      "part": {
+        "type": "tool",
+        "id": "websearch-1",
+        "name": "websearch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "query": "rust serde"
+          },
+          "metadata": {
+            "provider": "exa"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "◈",
+        "title": "Web Search via Exa \"rust serde\""
+      }
+    },
+    {
+      "label": "websearch opencode",
+      "part": {
+        "type": "tool",
+        "id": "websearch-1",
+        "name": "websearch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "query": "x"
+          },
+          "metadata": {
+            "provider": "opencode"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "◈",
+        "title": "Web Search via OpenCode \"x\""
+      }
+    },
+    {
+      "label": "websearch none",
+      "part": {
+        "type": "tool",
+        "id": "websearch-1",
+        "name": "websearch",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "◈",
+        "title": "Web Search"
+      }
+    },
+    {
+      "label": "skill metadata",
+      "part": {
+        "type": "tool",
+        "id": "skill-1",
+        "name": "skill",
+        "state": {
+          "status": "completed",
+          "input": {
+            "id": "tigerstyle"
+          },
+          "metadata": {
+            "name": "effect"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Skill \"effect\""
+      }
+    },
+    {
+      "label": "skill input",
+      "part": {
+        "type": "tool",
+        "id": "skill-1",
+        "name": "skill",
+        "state": {
+          "status": "completed",
+          "input": {
+            "id": "tigerstyle"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Skill \"tigerstyle\""
+      }
+    },
+    {
+      "label": "skill none",
+      "part": {
+        "type": "tool",
+        "id": "skill-1",
+        "name": "skill",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "→",
+        "title": "Skill \"\""
+      }
+    },
+    {
+      "label": "invalid",
+      "part": {
+        "type": "tool",
+        "id": "invalid-1",
+        "name": "invalid",
+        "state": {
+          "status": "completed",
+          "input": {
+            "tool": "nope"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": "Invalid tool nope"
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "✗",
+        "title": "Invalid Tool",
+        "mode": "block",
+        "body": "Invalid tool nope"
+      }
+    },
+    {
+      "label": "unknown tool",
+      "part": {
+        "type": "tool",
+        "id": "mcp_search-1",
+        "name": "mcp_search",
+        "state": {
+          "status": "completed",
+          "input": {
+            "query": "x",
+            "limit": 5,
+            "nested": {
+              "a": [
+                1,
+                2
+              ]
+            }
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "⚙",
+        "title": "mcp_search {\"query\":\"x\",\"limit\":5,\"nested\":{\"a\":[1,2]}}"
+      }
+    },
+    {
+      "label": "unknown tool empty",
+      "part": {
+        "type": "tool",
+        "id": "mcp_search-1",
+        "name": "mcp_search",
+        "state": {
+          "status": "running",
+          "input": {},
+          "metadata": {}
+        },
+        "time": {
+          "created": 1,
+          "ran": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "⚙",
+        "title": "mcp_search Unknown"
+      }
+    },
+    {
+      "label": "unknown tool streaming",
+      "part": {
+        "type": "tool",
+        "id": "mcp_search-1",
+        "name": "mcp_search",
+        "state": {
+          "status": "streaming",
+          "input": "{"
+        },
+        "time": {
+          "created": 1
+        }
+      },
+      "directory": "/work/project",
+      "expected": {
+        "icon": "⚙",
+        "title": "mcp_search Unknown"
+      }
+    },
+    {
+      "label": "no directory",
+      "part": {
+        "type": "tool",
+        "id": "webfetch-1",
+        "name": "webfetch",
+        "state": {
+          "status": "completed",
+          "input": {
+            "url": "https://a.b"
+          },
+          "metadata": {},
+          "content": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        },
+        "time": {
+          "created": 1,
+          "ran": 1,
+          "completed": 2
+        }
+      },
+      "expected": {
+        "icon": "%",
+        "title": "WebFetch https://a.b"
+      }
+    }
+  ],
+  "helpers": {
+    "toolOutputText": [
+      {
+        "name": "shell",
+        "content": [
+          {
+            "type": "text",
+            "text": "out\n"
+          },
+          {
+            "type": "text",
+            "text": "Command exited with code 0."
+          }
+        ],
+        "expected": "out\n"
+      },
+      {
+        "name": "bash",
+        "content": [
+          {
+            "type": "image"
+          },
+          {
+            "type": "text",
+            "text": ""
+          }
+        ],
+        "expected": ""
+      },
+      {
+        "name": "grep",
+        "content": [
+          {
+            "type": "text",
+            "text": "a"
+          },
+          {
+            "type": "text",
+            "text": ""
+          },
+          {
+            "type": "file"
+          },
+          {
+            "type": "text",
+            "text": "b"
+          }
+        ],
+        "expected": "a\nb"
+      },
+      {
+        "name": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"type\":\"text-page\",\"content\":\"page\"}"
+          }
+        ],
+        "expected": "page"
+      },
+      {
+        "name": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"encoding\":\"utf8\",\"content\":\"utf\"}"
+          }
+        ],
+        "expected": "utf"
+      },
+      {
+        "name": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"entries\":[\"a\",{\"path\":\"b\"},{\"x\":1},3]}"
+          }
+        ],
+        "expected": "a\nb"
+      },
+      {
+        "name": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "{not json"
+          }
+        ],
+        "expected": "{not json"
+      },
+      {
+        "name": "read",
+        "content": [
+          {
+            "type": "text",
+            "text": "plain"
+          }
+        ],
+        "expected": "plain"
+      }
+    ],
+    "readDisplayText": [
+      {
+        "input": "{\"content\":\"x\"}",
+        "expected": null
+      },
+      {
+        "input": "{\"type\":\"text-page\",\"content\":\"y\"}",
+        "expected": "y"
+      },
+      {
+        "input": "[]",
+        "expected": null
+      },
+      {
+        "input": "{}",
+        "expected": null
+      },
+      {
+        "input": "{\"entries\":[]}",
+        "expected": ""
+      }
+    ],
+    "toolPath": [
+      {
+        "input": "src/a.ts",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "src/a.ts"
+      },
+      {
+        "input": "/work/project/src/a.ts",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "src/a.ts"
+      },
+      {
+        "input": "/work/project",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "."
+      },
+      {
+        "input": "../shared/x",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "/work/shared/x"
+      },
+      {
+        "input": "..cache/x",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "..cache/x"
+      },
+      {
+        "input": "/work/./project/../other//x",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "/work/./project/../other//x"
+      },
+      {
+        "input": "C:\\Users\\x",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "C:/Users/x"
+      },
+      {
+        "input": "\\\\server\\share",
+        "directory": "/work/project",
+        "home": null,
+        "expected": "//server/share"
+      },
+      {
+        "input": "/home/user/notes.md",
+        "directory": "/work/project",
+        "home": "/home/user",
+        "expected": "~/notes.md"
+      },
+      {
+        "input": "/home/user",
+        "directory": "/work/project",
+        "home": "/home/user",
+        "expected": "~"
+      },
+      {
+        "input": "/home/username/x",
+        "directory": "/work/project",
+        "home": "/home/user",
+        "expected": "/home/username/x"
+      },
+      {
+        "input": "",
+        "directory": "/work/project",
+        "home": null,
+        "expected": ""
+      }
+    ],
+    "primitiveInputSummary": [
+      {
+        "input": {
+          "b": 1,
+          "a": "x y",
+          "c": true,
+          "d": null,
+          "e": [
+            1
+          ],
+          "f": {
+            "g": 1
+          },
+          "h": 1.5
+        },
+        "omit": [],
+        "expected": "[b=1, a=x y, c=true, h=1.5]"
+      },
+      {
+        "input": {
+          "path": "a",
+          "offset": 1
+        },
+        "omit": [
+          "path"
+        ],
+        "expected": "[offset=1]"
+      },
+      {
+        "input": {},
+        "omit": [],
+        "expected": ""
+      }
+    ],
+    "executeCalls": [
+      {
+        "input": [
+          {
+            "tool": "read",
+            "status": "completed",
+            "input": {
+              "path": "a b\n c"
+            }
+          },
+          {
+            "tool": "x",
+            "status": "weird"
+          },
+          "bad",
+          {
+            "tool": "glob",
+            "status": "running"
+          }
+        ],
+        "expected": [
+          "read [path=a b c]",
+          "glob"
+        ]
+      },
+      {
+        "input": "not an array",
+        "expected": []
+      }
+    ],
+    "webSearchProviderLabel": [
+      {
+        "provider": "exa",
+        "expected": "Web Search via Exa"
+      },
+      {
+        "provider": "opencode",
+        "expected": "Web Search via OpenCode"
+      },
+      {
+        "provider": "",
+        "expected": "Web Search"
+      },
+      {
+        "provider": null,
+        "expected": "Web Search"
+      },
+      {
+        "provider": 3,
+        "expected": "Web Search"
+      },
+      {
+        "provider": "ñandu",
+        "expected": "Web Search via Ñandu"
+      }
+    ]
+  }
+}
