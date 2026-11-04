@@ -61,6 +61,7 @@ fn main() -> ExitCode {
             }
             telemetry::install(telemetry::Options::from_env(global.log_level));
             signals::install();
+            let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
             let args = serde_json::to_string(
                 &std::env::args_os()
                     .skip(1)
