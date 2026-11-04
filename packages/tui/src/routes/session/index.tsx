@@ -64,6 +64,7 @@ import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
+import { clickedLink, LinkedText } from "../../ui/link"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
@@ -2395,8 +2396,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
           onMouseOut={() => {
             setHover(false)
           }}
-          onMouseUp={() => {
+          onMouseUp={(event) => {
             if (renderer.getSelection()?.getSelectedText()) return
+            if (clickedLink(renderer, event)) return
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
@@ -2423,7 +2425,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <text fg={theme.text.base}>
+            <LinkedText text={props.message.text} linkFg={theme.markdown.link} />
+          </text>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
