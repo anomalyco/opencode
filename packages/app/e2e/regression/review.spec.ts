@@ -914,6 +914,40 @@ test("a file changed during its read shows the change", async ({ page }) => {
   await expect(panel.getByText("before change", { exact: true })).toHaveCount(0)
 })
 
+test("rereads a file each time the file browser opens it", async ({ page }) => {
+  const directory = "C:/OpenCode/BrowserReopen"
+  const file = { content: "first draft" }
+
+  await openSession(page, {
+    name: "BrowserReopen",
+    fileList: (path) => (path ? [] : [fileNode(directory, "shopping.txt")]),
+    fileContent: () => file,
+    seed: {
+      panes: { ses_browserreopen: { review: true } },
+      storage: reviewTabs(directory, "ses_browserreopen"),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = panel.getByRole("tab", { name: "shopping.txt" })
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "shopping.txt" }).click()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
+
+  // A closed tab no longer watches its file, so no event reports this change.
+  await tab.locator("..").getByRole("button", { name: "Close tab" }).click()
+  await expect(tab).toHaveCount(0)
+  file.content = "second draft"
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "shopping.txt" }).click()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
+  await expect(panel.getByText("first draft", { exact: true })).toHaveCount(0)
+})
+
 test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
   page,
   context,

@@ -245,7 +245,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     // to the first tab and reselects it.
     layout.open(key(screen.file, path), session, options)
     dispatchPicker({ type: "file.opened", sessionKey: session.key })
-    void screen.file.sync(path)
+    // A closed tab stops watching its file, so a cached copy can be stale: always reread, as links do.
+    void screen.file.sync(path, { force: true })
   }
 
   const applySelection = (session: MountedSession, files: Files, path: string, selection: LineRange | undefined) => {
