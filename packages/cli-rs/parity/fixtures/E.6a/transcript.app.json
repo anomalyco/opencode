@@ -1,0 +1,693 @@
+{
+  "scenario": "E.6a/transcript",
+  "width": 100,
+  "height": 30,
+  "directory": "/tmp/opencode/packages/tui",
+  "config": {
+    "debug": {
+      "turn_tokens": true
+    },
+    "animations": false
+  },
+  "args": {
+    "sessionID": "ses_e"
+  },
+  "routes": [
+    {
+      "path": "/api/session/ses_e",
+      "json": {
+        "data": {
+          "id": "ses_e",
+          "title": "Fix the parser",
+          "projectID": "proj_test",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 2,
+            "updated": 2
+          },
+          "location": {
+            "directory": "/tmp/opencode/packages/tui"
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/session/ses_e/message",
+      "json": {
+        "data": [
+          {
+            "id": "msg_2",
+            "type": "assistant",
+            "agent": "build",
+            "model": {
+              "providerID": "provider",
+              "id": "model"
+            },
+            "content": [
+              {
+                "type": "reasoning",
+                "text": "**Reading the parser**\n\nThe loop stops one token early.",
+                "time": {
+                  "created": 1500,
+                  "completed": 3000
+                }
+              },
+              {
+                "type": "text",
+                "text": "The parser drops the **last** token in `next()`.\n\n- check the bound\n- add a test"
+              }
+            ],
+            "finish": "stop",
+            "tokens": {
+              "input": 1200,
+              "output": 50,
+              "reasoning": 0,
+              "cache": {
+                "read": 3000,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1500,
+              "streamed": 3000,
+              "completed": 4000
+            }
+          },
+          {
+            "id": "msg_1",
+            "type": "user",
+            "text": "Why does the parser fail?",
+            "time": {
+              "created": 1000
+            },
+            "files": [
+              {
+                "data": "",
+                "mime": "text/plain",
+                "name": "parser.rs",
+                "source": {
+                  "type": "inline"
+                }
+              }
+            ],
+            "skills": [
+              {
+                "id": "skl_1",
+                "name": "rust"
+              }
+            ]
+          }
+        ],
+        "cursor": {}
+      }
+    },
+    {
+      "path": "/api/session/ses_e/inbox",
+      "json": {
+        "data": []
+      }
+    }
+  ],
+  "steps": [
+    {
+      "checkpoint": "open",
+      "until": "Tokens",
+      "deviation": [
+        "V01-plain-transcript",
+        "P01-read-only-prompt",
+        "T04-connection-footer"
+      ],
+      "fixture": "E.6a/transcript/open"
+    }
+  ],
+  "requests": {
+    "writes": [],
+    "reads": [
+      {
+        "method": "GET",
+        "path": "/api/agent",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/command",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/config",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/migration/v1",
+        "query": {},
+        "status": 200,
+        "json": {
+          "status": "completed"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/experimental/session/ses_e/terminal",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/form",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/list",
+        "query": {
+          "location[directory]": [
+            "<cwd>"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/info",
+        "query": {},
+        "status": 200,
+        "json": {
+          "version": "test",
+          "pid": 0,
+          "urls": [],
+          "paths": {
+            "tmp": "/tmp"
+          },
+          "capabilities": {
+            "persistentPty": true
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/integration",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/location",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/mcp/resource",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "resources": [],
+            "templates": []
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/model",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/plugin",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/project",
+        "query": {},
+        "status": 200,
+        "json": []
+      },
+      {
+        "method": "GET",
+        "path": "/api/provider",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/reference",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode/packages/tui",
+              "canonical": "/tmp/opencode/packages/tui"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session",
+        "query": {
+          "limit": [
+            "200"
+          ],
+          "order": [
+            "desc"
+          ],
+          "parentID": [
+            "ses_e"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/active",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_e",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": {
+            "id": "ses_e",
+            "title": "Fix the parser",
+            "projectID": "proj_test",
+            "cost": 0,
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 2,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/tmp/opencode/packages/tui"
+            }
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_e/form",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_e/inbox",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_e/message",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "order": [
+            "desc"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "data": [
+            {
+              "id": "msg_2",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "provider",
+                "id": "model"
+              },
+              "content": [
+                {
+                  "type": "reasoning",
+                  "text": "**Reading the parser**\n\nThe loop stops one token early.",
+                  "time": {
+                    "created": 1500,
+                    "completed": 3000
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "The parser drops the **last** token in `next()`.\n\n- check the bound\n- add a test"
+                }
+              ],
+              "finish": "stop",
+              "tokens": {
+                "input": 1200,
+                "output": 50,
+                "reasoning": 0,
+                "cache": {
+                  "read": 3000,
+                  "write": 0
+                }
+              },
+              "time": {
+                "created": 1500,
+                "streamed": 3000,
+                "completed": 4000
+              }
+            },
+            {
+              "id": "msg_1",
+              "type": "user",
+              "text": "Why does the parser fail?",
+              "time": {
+                "created": 1000
+              },
+              "files": [
+                {
+                  "data": "",
+                  "mime": "text/plain",
+                  "name": "parser.rs",
+                  "source": {
+                    "type": "inline"
+                  }
+                }
+              ],
+              "skills": [
+                {
+                  "id": "skl_1",
+                  "name": "rust"
+                }
+              ]
+            }
+          ],
+          "cursor": {}
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/session/ses_e/permission",
+        "query": {},
+        "status": 200,
+        "json": {
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/shell",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/skill",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": []
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/vcs",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "status": 200,
+        "json": {
+          "location": {
+            "directory": "/tmp/opencode/packages/tui",
+            "project": {
+              "id": "proj_test",
+              "directory": "/tmp/opencode",
+              "canonical": "/tmp/opencode"
+            }
+          },
+          "data": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          }
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/api/rpc/opencode.goal/get",
+        "query": {
+          "location[directory]": [
+            "/tmp/opencode/packages/tui"
+          ]
+        },
+        "body": {
+          "input": {
+            "sessionID": "ses_e"
+          }
+        },
+        "status": 200,
+        "json": {
+          "output": null
+        }
+      }
+    ]
+  }
+}
