@@ -4,7 +4,14 @@ import { defineCli } from "../../cli/run"
 import { server, textStep } from "./fixture"
 
 export default defineCli({
-  args: ["run", "-w=feature", "--title", "", "--archived", "a message that is longer than fifty characters in total, surely"],
+  args: [
+    "run",
+    "-w=feature",
+    "--title",
+    "",
+    "--archived",
+    "a message that is longer than fifty characters in total, surely",
+  ],
   server: server({
     events: () => textStep("ok"),
     routes: [

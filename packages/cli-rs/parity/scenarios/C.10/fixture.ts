@@ -36,23 +36,31 @@ export const succeeded = () => event("session.execution.succeeded", {}, 90)
 // A text step of assistant message `msg_a`.
 export function textStep(text: string, extra: unknown[] = []) {
   return [
-    event("session.step.started", {
-      assistantMessageID: "msg_a",
-      agent: "build",
-      model: { id: "model", providerID: "demo" },
-      snapshot: "snap_1",
-      started: 11,
-    }, 11),
+    event(
+      "session.step.started",
+      {
+        assistantMessageID: "msg_a",
+        agent: "build",
+        model: { id: "model", providerID: "demo" },
+        snapshot: "snap_1",
+        started: 11,
+      },
+      11,
+    ),
     event("session.text.started", { assistantMessageID: "msg_a", ordinal: 0 }, 12),
     event("session.text.ended", { assistantMessageID: "msg_a", ordinal: 0, text }, 13),
     ...extra,
-    event("session.step.ended", {
-      assistantMessageID: "msg_a",
-      finish: "stop",
-      cost: 0.0012,
-      tokens: { input: 5, output: 7, reasoning: 0, cache: { read: 0, write: 0 } },
-      snapshot: "snap_2",
-    }, 20),
+    event(
+      "session.step.ended",
+      {
+        assistantMessageID: "msg_a",
+        finish: "stop",
+        cost: 0.0012,
+        tokens: { input: 5, output: 7, reasoning: 0, cache: { read: 0, write: 0 } },
+        snapshot: "snap_2",
+      },
+      20,
+    ),
   ]
 }
 

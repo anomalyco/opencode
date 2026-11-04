@@ -45,6 +45,8 @@ export type CliCase = {
   // Replacements applied to stdout and stderr after the normalizers, for values that differ per run (a
   // `Date.now()` timestamp). Each says why in the scenario.
   masks?: { pattern: RegExp; replacement: string }[]
+  // Sends `name` to the client once a request for `after` (a path) has reached the fake server.
+  signal?: { after: string; name: NodeJS.Signals }
 }
 
 export function defineCli(value: CliCase) {
@@ -67,6 +69,16 @@ export async function runCli(side: Side, value: CliCase) {
     stderr: "pipe",
     timeout: value.timeout ?? 30_000,
   })
+  if (value.signal && server) {
+    const signal = value.signal
+    void (async () => {
+      while (!server.requests.some((entry) => entry.path === signal.after) && proc.exitCode === null)
+        await Bun.sleep(20)
+      // Let the client finish handling the answer before the signal.
+      await Bun.sleep(200)
+      proc.kill(signal.name)
+    })()
+  }
   const [stdout, stderr, exit] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
