@@ -18,6 +18,7 @@ import { emptyThemeSource } from "../../../tui/test/fixture/fixture"
 import { createApi, createEventStream, createFetch } from "../../../tui/test/fixture/tui-client"
 import { TestTuiContexts } from "../../../tui/test/fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../../tui/test/fixture/tui-runtime"
+import { withNewDesigns } from "./app"
 import { readCells, writeFixture } from "./cells"
 
 type Setup = Awaited<ReturnType<typeof testRender>>
@@ -69,11 +70,13 @@ export async function renderComponent(options: ComponentOptions) {
 
 function Providers(props: ComponentOptions) {
   const api = createApi(createFetch(undefined, createEventStream()).fetch)
-  const config = createTuiResolvedConfig({
-    theme: { name: props.theme ?? "opencode", mode: props.mode ?? "dark" },
-    animations: false,
-    ...props.config,
-  })
+  const config = createTuiResolvedConfig(
+    withNewDesigns({
+      theme: { name: props.theme ?? "opencode", mode: props.mode ?? "dark" },
+      animations: false,
+      ...props.config,
+    }),
+  )
   return (
     <TestTuiContexts>
       <ConfigProvider config={config}>

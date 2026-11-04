@@ -57,6 +57,13 @@ export function defineApp(scenario: AppScenario) {
   return scenario
 }
 
+// The Rust client implements the TUI with the `new-designs` experiment on, and only that, so every recording
+// turns it on. A config that sets the experiment itself keeps its value.
+export function withNewDesigns(config: Record<string, unknown>) {
+  const experimental = (config.experimental ?? {}) as Record<string, unknown>
+  return { ...config, experimental: { "new-designs": true, ...experimental } }
+}
+
 // Wire objects with fixed times, as the server sends them.
 
 export function session(id: string, title: string, input: { updated?: number; directory?: string } = {}) {
