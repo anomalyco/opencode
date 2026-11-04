@@ -167,7 +167,8 @@ impl Setup {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(method, _, _)| method == "POST")
+            // The goal footer's RPC `get` is a read (E.14).
+            .filter(|(method, path, _)| method == "POST" && !path.starts_with("/api/rpc/"))
             .map(|(_, path, body)| (path.clone(), body.clone()))
             .collect()
     }

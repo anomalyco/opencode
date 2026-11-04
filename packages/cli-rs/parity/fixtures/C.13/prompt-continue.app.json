@@ -250,7 +250,6 @@
       "checkpoint": "sent",
       "until": "Fix the parser",
       "deviation": [
-        "P01-read-only-prompt",
         "C01-startup-prompt-cells"
       ],
       "fixture": "C.13/prompt-continue/sent"
@@ -284,7 +283,7 @@
         "path": "/api/session/ses_b/prompt",
         "query": {},
         "body": {
-          "id": "msg_1a85ce068001UM7wrjyqfwSRxO",
+          "id": "msg_1a86d21fa001fcHiXedAT00Fom",
           "text": "hello",
           "files": [],
           "agents": [],

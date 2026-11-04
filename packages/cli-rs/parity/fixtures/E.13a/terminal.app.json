@@ -135,15 +135,6 @@
     {
       "checkpoint": "session",
       "until": "Open a terminal",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/session"
     },
     {
@@ -155,15 +146,6 @@
     {
       "checkpoint": "shown",
       "until": "fake shell",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/shown"
     },
     {
@@ -177,15 +159,6 @@
     {
       "checkpoint": "typed",
       "until": "echo hi",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/typed"
     },
     {
@@ -195,15 +168,6 @@
     },
     {
       "checkpoint": "output",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/output"
     },
     {
@@ -214,15 +178,6 @@
     },
     {
       "checkpoint": "closed",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/closed"
     },
     {
@@ -234,15 +189,6 @@
     {
       "checkpoint": "reopened",
       "until": "fake shell",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/reopened"
     },
     {
@@ -253,15 +199,6 @@
     {
       "checkpoint": "disconnected",
       "until": "Terminal disconnected",
-      "masks": [
-        {
-          "x": 0,
-          "y": 28,
-          "width": 100,
-          "height": 1,
-          "reason": "prompt footer hints and label width (P01-read-only-prompt)"
-        }
-      ],
       "fixture": "E.13a/terminal/disconnected"
     }
   ],
