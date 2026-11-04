@@ -8,8 +8,9 @@ import {
   type StartupGateTimer,
 } from "./machine"
 
-// How long the window waits for each phase before it shows anyway.
-const timeouts: Record<StartupGateTimer, number> = { preferences: 5_000, activation: 10_000, servers: 10_000 }
+// How long the window waits for each phase before it shows anyway. Servers wait longest: listing WSL distributions
+// can take many seconds.
+const timeouts: Record<StartupGateTimer, number> = { preferences: 5_000, activation: 10_000, servers: 20_000 }
 
 /**
  * Runs the startup gate for the owner's lifetime: asks main for the enable settings, keeps them current as main pushes
