@@ -103,6 +103,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     // Snapshot, then clear before any request: text typed meanwhile survives, and history records
     // exactly what was sent.
     let entry = prompt.snapshot();
+    let skills =
+        Some(crate::dialogs::skill::attachments(&entry, &text)).filter(|skills| !skills.is_empty());
     if !trimmed.is_empty() {
         prompt.reset();
     }
@@ -184,6 +186,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 session_id: target.clone(),
                 name,
                 text: arguments,
+                skills,
                 delivery: Some(Some(delivery)),
                 ..SessionCommandInput::default()
             };
@@ -209,6 +212,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 input: SessionPromptInput {
                     session_id: target.clone(),
                     text,
+                    skills,
                     delivery: Some(Some(delivery)),
                     ..SessionPromptInput::default()
                 },
