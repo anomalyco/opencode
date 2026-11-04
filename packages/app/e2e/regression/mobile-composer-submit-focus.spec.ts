@@ -16,6 +16,9 @@ for (const { width, direction } of [
 
     const editor = page.getByRole("textbox", { name: "Prompt", exact: true })
     await expect(editor).toBeEditable()
+    // A narrow window with a mouse is not a phone: it keeps the desktop toolbar and Enter to send.
+    await expect(page.locator('[data-action="composer-attach"]')).toBeVisible()
+    await expect(page.locator('[data-slot="composer-touch-bar"]')).toHaveCount(0)
     await editor.fill("Please check focus after sending.")
     await expect(editor).toBeFocused()
 
