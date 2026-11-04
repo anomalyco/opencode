@@ -200,12 +200,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       navigate(href)
     }
 
+    const disposeTab = (tab: Tab) => {
+      const key = tabKey(tab)
+
+      memory.remove(key)
+      removeInfo(key)
+      removeRegions(key)
+
+      if (tab.type === "draft") removeDraftPersisted(tab.draftID)
+    }
+
     const removeTab = (index: number) => {
       const tab = store[index]
 
       if (!tab) return
       const key = tabKey(tab)
-      const draftID = tab.type === "draft" ? tab.draftID : undefined
       const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
       closing.add(key)
       void startTransition(() => {
@@ -222,11 +231,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (nextTab) navigateTab(nextTab)
       }).finally(() => closing.delete(key))
-      memory.remove(key)
-      removeInfo(key)
-      removeRegions(key)
-
-      if (draftID) removeDraftPersisted(draftID)
+      disposeTab(tab)
     }
 
     const actions = {
@@ -418,6 +423,36 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
         removeTab(index)
+      },
+      closeTabs(keys: string[], keep: Tab) {
+        const removed = new Set(keys)
+
+        const entries = store.flatMap((tab, index) => (removed.has(tabKey(tab)) ? [{ tab, index }] : []))
+
+        // Recording right-to-left lets successive reopens restore the original positions.
+        updateClosed((stack) =>
+          entries
+            .toReversed()
+            .reduce((stack, entry) => pushClosedTab(stack, entry.tab, entry.index, info[tabKey(entry.tab)]), stack),
+        )
+
+        const active = recentKey()
+
+        entries.forEach((entry) => closing.add(tabKey(entry.tab)))
+        void startTransition(() => {
+          setStore((tabs) => tabs.filter((tab) => !removed.has(tabKey(tab))))
+
+          if (!active || !removed.has(active)) return
+
+          if (location.pathname === "/") {
+            setRecentKey(tabKey(keep))
+
+            return
+          }
+
+          navigateTab(keep)
+        }).finally(() => entries.forEach((entry) => closing.delete(tabKey(entry.tab))))
+        entries.forEach((entry) => disposeTab(entry.tab))
       },
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
         if (!closedReady()) {
