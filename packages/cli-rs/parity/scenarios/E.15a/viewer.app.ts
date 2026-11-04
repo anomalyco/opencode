@@ -24,7 +24,10 @@ const files = await repoDiff(
   },
 )
 
-const here = { directory: "/tmp/opencode/packages/tui", project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
+const here = {
+  directory: "/tmp/opencode/packages/tui",
+  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
+}
 
 export default defineApp({
   width: 140,
@@ -35,7 +38,10 @@ export default defineApp({
     { path: "/api/session/ses_d", json: { data: session("ses_d", "Review the parser", { updated: 2 }) } },
     {
       path: "/api/session/ses_d/message",
-      json: { data: [assistant("msg_2", "The parser changes are ready."), user("msg_1", "Show me the diff")], cursor: {} },
+      json: {
+        data: [assistant("msg_2", "The parser changes are ready."), user("msg_1", "Show me the diff")],
+        cursor: {},
+      },
     },
     { path: "/api/session/ses_d/inbox", json: { data: [] } },
     { path: "/api/vcs/base", json: { location: here, data: { name: "main", ref: "main", source: "default" } } },

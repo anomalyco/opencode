@@ -22,14 +22,20 @@ const files = await repoDiff(
   },
 )
 
-const here = { directory: "/tmp/opencode/packages/tui", project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
+const here = {
+  directory: "/tmp/opencode/packages/tui",
+  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
+}
 
 export default defineApp({
   width: 120,
   height: 30,
   config: { experimental: { "new-designs": true } },
   routes: [
-    { path: "/api/vcs/base", json: { location: here, data: { name: "origin/main", ref: "origin/main", source: "reflog" } } },
+    {
+      path: "/api/vcs/base",
+      json: { location: here, data: { name: "origin/main", ref: "origin/main", source: "reflog" } },
+    },
     { path: "/api/vcs/diff", json: { location: here, data: files } },
   ],
   steps: [
@@ -58,7 +64,15 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "Ask anything",
-      masks: [{ x: 26, y: 16, width: 94, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" }],
+      masks: [
+        {
+          x: 26,
+          y: 16,
+          width: 94,
+          height: 1,
+          reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+        },
+      ],
     },
   ],
 })
