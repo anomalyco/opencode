@@ -25,8 +25,10 @@ indexmap.workspace = true
 log.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+unicode-width.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
 opencode-parity.workspace = true
 tempfile.workspace = true
+opencode-parity.workspace = true
