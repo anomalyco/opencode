@@ -1861,7 +1861,7 @@ test("a pairing code with several addresses keeps the first one that works with 
 
 test("the Side tabs interface mode switches to vertical tabs and survives reload", async ({ page }) => {
   const { settings } = await open(page)
-  const layout = settings.getByRole("group", { name: "Interface" })
+  const layout = settings.getByRole("group", { name: "Interface layout", exact: true })
   await expect(layout.getByRole("radio", { name: "Top tabs", exact: true })).toBeChecked()
   await layout.getByText("Side tabs", { exact: true }).click()
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
