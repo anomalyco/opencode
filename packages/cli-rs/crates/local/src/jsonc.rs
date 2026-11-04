@@ -307,8 +307,9 @@ impl<'a> Scanner<'a> {
                                 if (0xD800..0xDC00).contains(&unit) {
                                     high = Some(unit);
                                 } else {
-                                    result
-                                        .push(char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}'));
+                                    result.push(
+                                        char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}'),
+                                    );
                                 }
                             }
                         }
@@ -902,11 +903,8 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
                 }
                 (None, None) => Ok(text.to_string()),
                 (None, Some(value)) => {
-                    let property = format!(
-                        "{}: {}",
-                        stringify(&Value::String(key)),
-                        stringify(&value)
-                    );
+                    let property =
+                        format!("{}: {}", stringify(&Value::String(key)), stringify(&value));
                     let (offset, content) = match parent_node.children.last() {
                         Some(&previous) => (end(previous), format!(",{property}")),
                         None => (parent_node.offset + 1, property),
@@ -919,17 +917,20 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
             let children = &parent_node.children;
             match value {
                 None => {
-                    if index >= children.len() {
-                        return Err(EditError::ArrayIndex("remove", index));
-                    }
+                    // As in `edit.js`, a one-item array loses its item whatever the index.
                     let (offset, length) = if children.len() == 1 {
                         (parent_node.offset + 1, parent_node.length - 2)
-                    } else if children.len() - 1 == index {
+                    } else if index > 0 && children.len() - 1 == index {
                         let offset = end(children[index - 1]);
-                        (offset, parent_node.offset + parent_node.length - 2 - offset)
-                    } else {
+                        (
+                            offset,
+                            (parent_node.offset + parent_node.length).saturating_sub(2 + offset),
+                        )
+                    } else if index + 1 < children.len() {
                         let offset = tree.node(children[index]).offset;
                         (offset, tree.node(children[index + 1]).offset - offset)
+                    } else {
+                        return Err(EditError::ArrayIndex("remove", index));
                     };
                     Ok(with_formatting(text, offset, length, ""))
                 }
@@ -1165,7 +1166,10 @@ mod tests {
             Some(json!({"a": [1, 2], "b": {"c": null}}))
         );
         assert_eq!(parse("{\"a\": 1, \"a\": 2}"), Some(json!({"a": 2})));
-        assert_eq!(parse("{\"a\": \"\\ud83d\\ude00\"}"), Some(json!({"a": "😀"})));
+        assert_eq!(
+            parse("{\"a\": \"\\ud83d\\ude00\"}"),
+            Some(json!({"a": "😀"}))
+        );
         assert_eq!(parse(""), None);
         assert_eq!(parse("{\"a\" 1}"), None);
         assert_eq!(parse("{a: 1}"), None);
@@ -1205,10 +1209,7 @@ mod tests {
             modify(text, &key(&["a"]), Some(&json!("x"))).unwrap(),
             "{\n  // keep\n  \"a\": \"x\"\n}\n"
         );
-        assert_eq!(
-            modify(text, &key(&["a"]), None).unwrap(),
-            "{\n}\n"
-        );
+        assert_eq!(modify(text, &key(&["a"]), None).unwrap(), "{\n}\n");
         assert_eq!(
             modify("", &key(&["a"]), Some(&json!(1))).unwrap(),
             "{\n  \"a\": 1\n}"
