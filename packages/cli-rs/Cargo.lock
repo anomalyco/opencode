@@ -1052,6 +1052,7 @@ dependencies = [
  "opencode-store",
  "opencode-tui",
  "opencode-ui",
+ "regex",
  "serde_json",
  "tokio",
  "url",

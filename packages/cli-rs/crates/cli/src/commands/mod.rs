@@ -4,6 +4,7 @@
 pub mod acp;
 pub mod api;
 pub mod auth;
+pub mod client;
 pub mod debug;
 pub mod default;
 pub mod mcp;

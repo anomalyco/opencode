@@ -204,7 +204,9 @@ impl Client {
         Ok(response)
     }
 
-    pub(crate) async fn json<T: DeserializeOwned>(
+    /// Sends `call` and decodes the JSON body as `T`. Public so a caller can read a response as
+    /// `serde_json::Value`, as the TypeScript Promise client returns it, without the typed decode.
+    pub async fn json<T: DeserializeOwned>(
         &self,
         call: Call,
         options: &RequestOptions,
