@@ -40,7 +40,7 @@ export function createWslServersController(options: WslServersControllerOptions)
   const t = options.t
   const runtime = options.runtime
   const listeners = new Set<() => void>()
-  const waiters = new Map<string, PromiseWithResolvers<void>>()
+  const waiters = new Map<string, { readonly resolve: () => void; readonly reject: (cause: Error) => void }>()
   // Process handles by start attempt, for stopping them only. Stopping one aborts its CLI discovery and health
   // polling and waits until its process exited, so a restart, reload, disable or quit never leaves a sidecar running.
   const starts = new Map<string, { readonly abort: AbortController; readonly done: Promise<void> }>()
