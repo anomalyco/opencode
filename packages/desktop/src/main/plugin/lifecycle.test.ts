@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
+import { createDriver } from "../lifecycle/machine"
 import { createLifecycle, type Instance, type Revision } from "./lifecycle"
 
 // The host's cleanup deadline and setup stall log, as `lifecycle.ts` sets them.
@@ -122,6 +123,21 @@ function world() {
       }
     }
 
+  // The app machine around the lifecycle, as the host wires it: stopping and resuming go through the real lifecycle.
+  const stops: Promise<void>[] = []
+
+  const app = createDriver({
+    stop: () => {
+      const stopped = lifecycle.stop()
+      stops.push(stopped)
+
+      return stopped
+    },
+    resume: () => Promise.all([...revisions.keys()].map((id) => lifecycle.activate(id))).then(() => undefined),
+    exit: () => {},
+    quitting: () => {},
+  })
+
   const lifecycle = createLifecycle({
     loader: (id) => {
       const current = revisions.get(id)
@@ -137,6 +153,8 @@ function world() {
     },
     enabled: (id) => enabled.get(id) ?? true,
     changed: () => void notices.changed++,
+    state: app.state,
+    restart: app.restart,
     log: (message, data) => logs.push({ message, data }),
   })
 
@@ -151,6 +169,13 @@ function world() {
 
   return {
     lifecycle,
+    app,
+    /** Electron's `will-quit`: settles once every stop it started has. */
+    quit() {
+      app.dispatch({ type: "will.quit" })
+
+      return Promise.all(stops)
+    },
     logs,
     stats,
     notices,
@@ -335,7 +360,7 @@ describe("plugin lifecycle contracts", () => {
       if (row.queued) void w.lifecycle.activate("a")
 
       if (row.teardown) void w.lifecycle.deactivate("a")
-      const quit = settled(w.lifecycle.dispose())
+      const quit = settled(w.quit())
       expect(w.live()).toEqual([])
       expect(w.contributions.size).toBe(0)
       await advance(CLEANUP_MS + 20)
@@ -345,34 +370,61 @@ describe("plugin lifecycle contracts", () => {
     },
   )
 
-  test("a restart handoff keeps its scope's instance through quitting until the handoff settles", async () => {
+  test("a restart handoff keeps its scope's instance, and a failed one starts the others again", async () => {
     const w = world()
     w.revise("a")
     w.revise("b")
+    w.revise("c")
+    w.enabled.set("c", false)
     await Promise.all([w.lifecycle.activate("a"), w.lifecycle.activate("b")])
     const [a, b] = w.made
-    const handoff = { reject: (_: Error) => {} }
+    const handoff = { ran: 0, reject: (_: Error) => {} }
 
-    const restart = settled(
-      w.lifecycle.restart(a.instance.scope, async () => {
-        await w.lifecycle.dispose()
-        await new Promise<void>((_, reject) => (handoff.reject = reject))
-      }),
-    )
+    const install = () =>
+      new Promise<void>((_, reject) => {
+        handoff.ran++
+        handoff.reject = reject
+      })
 
-    await advance(CLEANUP_MS)
+    const restart = settled(w.lifecycle.restart(a.instance.scope, install))
+    await advance(100)
+    expect(handoff.ran).toBe(1)
     expect(w.live()).toEqual([a])
     expect([...w.contributions].filter((entry) => entry.made === b)).toEqual([])
     expect([...w.contributions].some((entry) => entry.made === a)).toBe(true)
+    // Enabled during the handoff: it starts with the others if the handoff fails.
+    w.enabled.set("c", true)
+    await w.lifecycle.activate("c")
+    expect(w.live("c")).toEqual([])
     handoff.reject(new Error("install failed"))
-    await advance(10)
+    await advance(100)
+    // The others are back before the caller hears of the failure, so it can retry at once.
     expect(restart).toEqual({ settled: true, rejected: true })
+    expect(w.app.state().status).toBe("running")
+    expect(w.live("a")).toEqual([a])
+    expect(w.live("b").map((item) => item.label)).toEqual(["b1#3"])
+    expect(w.live("c").map((item) => item.label)).toEqual(["c1#4"])
+    check(w)
+    // Reload and enable work as before the handoff.
+    w.revise("b")
+    await w.lifecycle.reload("b")
+    expect(w.live("b").map((item) => item.label)).toEqual(["b2#5"])
+    w.enabled.set("c", false)
+    await w.lifecycle.deactivate("c")
+    w.enabled.set("c", true)
+    await w.lifecycle.activate("c")
+    expect(w.live("c").map((item) => item.label)).toEqual(["c1#6"])
+    // A retry stops the others again, and quitting during its handoff stops the caller too.
+    const retry = settled(w.lifecycle.restart(a.instance.scope, install))
+    await advance(100)
+    expect(handoff.ran).toBe(2)
     expect(w.live()).toEqual([a])
-    // Once the handoff settled, quitting stops it like any other.
-    const quit = settled(w.lifecycle.dispose())
+    const quit = settled(w.quit())
     await advance(10)
     expect(quit.settled).toBe(true)
+    expect(retry).toEqual({ settled: true, rejected: true })
     expect(w.live()).toEqual([])
+    check(w)
   })
 
   test("a restart handoff rejects a scope that is not an instance's", async () => {
@@ -564,7 +616,7 @@ async function fuzz(seed: number, trace: string[]) {
     quit: () => {
       model.quitting = true
       IDS.forEach(supersede)
-      run("quit", w.lifecycle.dispose())
+      run("quit", w.quit())
     },
     wait: () => {},
   } satisfies Record<string, (id: string) => void>
