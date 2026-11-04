@@ -14,6 +14,7 @@ import type { createNotificationCoordinator } from "@/shell/notifications/coordi
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
+import { createRequestRecovery } from "@/shell/notifications/request-recovery"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
@@ -362,6 +363,13 @@ export function createServerNotificationState(input: {
     }
 
     if (event.type === "session.execution.succeeded") handleSessionIdle(event.data.sessionID, event.id)
+  })
+
+  // Recover requests whose live event this client missed, so a waiting session still alerts.
+  createRequestRecovery({
+    sdk: input.sdk,
+    data: input.data,
+    onRequest: (kind, sessionID, requestID) => void handleRequest(kind, sessionID, requestID),
   })
 
   onCleanup(() => {
