@@ -41,6 +41,8 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
+import { Command } from "@opencode/core/command"
+import { CommandPlugin } from "@opencode/core/plugin/command"
 import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
 import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -75,6 +77,7 @@ import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
+import { host } from "./plugin/host"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
@@ -362,6 +365,7 @@ function resourceMcpLayer(
     /** The configured server's name; "resources" unless given. */
     name?: string
     credentials?: Partial<Credential.Interface>
+    bus?: Layer.Layer<Bus.Service>
   },
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
@@ -406,20 +410,23 @@ function resourceMcpLayer(
               }),
             ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
-        Layer.mock(Bus.Service, {
-          subscribe: overrides?.subscribe ?? (() => Stream.never),
-          publish: (definition, data) =>
-            Effect.suspend(() => {
-              const event = {
-                id: ID.create(),
-                type: definition.type,
-                data,
-              } as Payload<typeof definition>
-              overrides?.published?.push(event.type)
-              if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
-              return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
-            }),
-        }),
+        overrides?.bus ??
+          Layer.mock(Bus.Service, {
+            subscribe: overrides?.subscribe ?? (() => Stream.never),
+            publish: (definition, data) =>
+              Effect.suspend(() => {
+                const event = {
+                  id: ID.create(),
+                  type: definition.type,
+                  data,
+                } as Payload<typeof definition>
+                overrides?.published?.push(event.type)
+                if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
+                return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(
+                  Effect.as(event),
+                )
+              }),
+          }),
         Layer.mock(Integration.Service, {
           revision: () => 0,
           transform: () => Effect.succeed({ dispose: Effect.void }),
@@ -3207,6 +3214,7 @@ describe("MCP pool", () => {
       environment?: Layer.Layer<Environment.Service>
       name?: string
       credentials?: Partial<Credential.Interface>
+      bus?: Layer.Layer<Bus.Service>
     } = {},
   ) =>
     Effect.gen(function* () {
@@ -3220,6 +3228,7 @@ describe("MCP pool", () => {
           environment: overrides.environment,
           name: overrides.name,
           credentials: overrides.credentials,
+          bus: overrides.bus,
         }),
         scope,
       )
@@ -3502,6 +3511,64 @@ describe("MCP pool", () => {
       expect(calls).toEqual([null, "Bearer signed-in", null])
     }),
   )
+
+  for (const shared of [true, false])
+    live(
+      `registers a server's prompt commands again after reconnecting${shared ? " to a connection another Location holds" : ""}`,
+      () =>
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern: true, resources: false })
+          const config = shared
+            ? pooled(server.url)
+            : new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" })
+          const pool = yield* makePool
+          yield* open(config, pool, directories[0])
+          // The second Location gets a working bus, so the command plugin hears its MCP events.
+          const hub = yield* PubSub.unbounded<{ readonly type: string }>()
+          const bus = Layer.mock(Bus.Service, {
+            publish: (definition, data) =>
+              Effect.suspend(() => {
+                const event = { id: ID.create(), type: definition.type, data } as Payload<typeof definition>
+                return PubSub.publish(hub, event).pipe(Effect.as(event))
+              }),
+            subscribe: ((definition?: { readonly type: string }) =>
+              Stream.fromPubSub(hub).pipe(
+                Stream.filter((event) => !definition || event.type === definition.type),
+              )) as Bus.Interface["subscribe"],
+          })
+          const b = yield* open(config, pool, directories[1], { bus })
+          const command = Context.get(yield* Layer.build(Command.layer.pipe(Layer.provide(bus))), Command.Service)
+          yield* CommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: command.reload,
+              },
+            }),
+          ).pipe(
+            Effect.provideService(Mcp.Service, b.mcp),
+            Effect.provide(bus),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(directories[1]) })),
+            ),
+          )
+          const registered = (expected: boolean) =>
+            command.get("resources:greet").pipe(
+              Effect.filterOrFail((found) => (found !== undefined) === expected),
+              Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+            )
+          yield* registered(true)
+          yield* b.mcp.disconnect("resources")
+          yield* registered(false)
+          yield* b.mcp.connect("resources")
+          expect(yield* status(b.mcp)).toEqual({ status: "connected" })
+          yield* registered(true)
+          // A shared reconnect joins the open connection instead of listing again.
+          expect(server.state.toolLists).toBe(shared ? 1 : 3)
+        }),
+    )
 
   live("routes an elicitation to the Location whose call caused it", () =>
     Effect.gen(function* () {

@@ -422,9 +422,12 @@ export const layer = (options?: Options) =>
               connected: Effect.gen(function* () {
                 entry.status = { status: "connected" }
                 yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
-                // The tool registry reads on this event; a late-connecting server has no other way to appear.
+                // Announce every list a consumer may read, since each reads them only on these events. A
+                // connection another Location already holds has loaded its prompts, and no later change
+                // would tell this one; prompts still loading read empty now and announce themselves later.
                 yield* bus.publish(McpEvent.ToolsChanged, { server: name })
                 yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
+                yield* bus.publish(PromptsChanged, { server: name })
                 yield* bus.publish(McpEvent.StatusChanged, { server: name })
               }),
               failed: (failure) =>
