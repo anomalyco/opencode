@@ -135,6 +135,9 @@ fn home_lists_sessions_and_enter_opens_the_transcript() {
     app.press("ctrl+p");
     let palette = wait_for(&app, "Switch session");
     assert!(palette.contains("Commands"), "{palette}");
+    // The prompt's commands push the shell's below the fold; search for them.
+    app.type_text("exit");
+    wait_for(&app, "Exit the app");
     app.press("escape");
     assert!(!tui.dialogs.is_open());
 }

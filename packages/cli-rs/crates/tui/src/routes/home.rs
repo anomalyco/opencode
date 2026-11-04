@@ -20,6 +20,7 @@ pub struct Home {
     list: Select,
     empty: Text,
     ids: Rc<RefCell<Vec<SessionID>>>,
+    prompt: crate::prompt::editor::Prompt,
 }
 
 impl Home {
@@ -68,6 +69,8 @@ impl Home {
                 });
             });
         }
+        // E.2's prompt starts a new session; Tab moves between it and the list.
+        let prompt = crate::prompt::editor::mount(tui, None);
         let body = View::new(app)
             .column()
             .grow(1.0)
@@ -79,6 +82,7 @@ impl Home {
             .child(&title)
             .child(&empty)
             .child(&list)
+            .child(prompt.root())
             .child(&hint);
         let root = View::new(app)
             .column()
@@ -88,12 +92,13 @@ impl Home {
         crate::features::update_notification::mount(tui, &root);
         crate::features::home_forms::mount(tui, &root);
         crate::plugins::home_footer::mount(tui, &root);
-        load(tui, &empty);
+        load(tui, &empty, prompt.textarea());
         Self {
             root,
             list,
             empty,
             ids,
+            prompt,
         }
     }
 }
@@ -104,6 +109,7 @@ impl RouteView for Home {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
+        self.prompt.sync(tui, changes);
         if !changes.sessions() {
             return;
         }
@@ -135,7 +141,7 @@ impl RouteView for Home {
 }
 
 /// Reads the root sessions of the directory into the store; the next sync lists them.
-fn load(tui: &Tui, empty: &Text) {
+fn load(tui: &Tui, empty: &Text, prompt: &Textarea) {
     let client = tui.data.client().clone();
     let input = SessionListInput {
         limit: Some(LIMIT),
@@ -147,6 +153,7 @@ fn load(tui: &Tui, empty: &Text) {
     };
     let weak = tui.weak();
     let empty = empty.clone();
+    let prompt = prompt.clone();
     tui.app.spawn(
         async move {
             client
@@ -158,6 +165,7 @@ fn load(tui: &Tui, empty: &Text) {
             match result {
                 Ok(response) if response.data.is_empty() => {
                     empty.set_text("No sessions yet");
+                    tui.app.focus(&prompt);
                 }
                 Ok(response) => {
                     for session in response.data {
