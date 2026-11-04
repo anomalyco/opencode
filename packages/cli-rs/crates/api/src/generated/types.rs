@@ -2395,12 +2395,12 @@ pub struct SessionMessageIdle {
     pub error: Option<SessionStructuredError>,
 }
 
-/// `Session.Message.Info`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// `Session.Message.Info`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SessionMessageInfo {
-    AgentSelected(SessionMessageAgentSelected),
-    ModelSelected(SessionMessageModelSelected),
+    AgentSwitched(SessionMessageAgentSelected),
+    ModelSwitched(SessionMessageModelSelected),
     LocationSwitched(SessionMessageLocationSwitched),
     User(SessionMessageUser),
     Synthetic(SessionMessageSynthetic),
@@ -2410,8 +2410,51 @@ pub enum SessionMessageInfo {
     Assistant(SessionMessageAssistant),
     Compaction(SessionMessageCompaction),
     Idle(SessionMessageIdle),
-    /// A shape this client does not know, kept as it arrived.
+    /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for SessionMessageInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        match value.get("type").and_then(serde_json::Value::as_str) {
+            Some("agent-switched") => crate::de::variant(value).map(Self::AgentSwitched),
+            Some("model-switched") => crate::de::variant(value).map(Self::ModelSwitched),
+            Some("location-switched") => crate::de::variant(value).map(Self::LocationSwitched),
+            Some("user") => crate::de::variant(value).map(Self::User),
+            Some("synthetic") => crate::de::variant(value).map(Self::Synthetic),
+            Some("system") => crate::de::variant(value).map(Self::System),
+            Some("skill") => crate::de::variant(value).map(Self::Skill),
+            Some("shell") => crate::de::variant(value).map(Self::Shell),
+            Some("assistant") => crate::de::variant(value).map(Self::Assistant),
+            Some("compaction") => crate::de::variant(value).map(Self::Compaction),
+            Some("idle") => crate::de::variant(value).map(Self::Idle),
+            _ => Ok(Self::Unknown(value)),
+        }
+    }
+}
+
+impl SessionMessageInfo {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::AgentSwitched(value) => value.r#type.as_str(),
+            Self::ModelSwitched(value) => value.r#type.as_str(),
+            Self::LocationSwitched(value) => value.r#type.as_str(),
+            Self::User(value) => value.r#type.as_str(),
+            Self::Synthetic(value) => value.r#type.as_str(),
+            Self::System(value) => value.r#type.as_str(),
+            Self::Skill(value) => value.r#type.as_str(),
+            Self::Shell(value) => value.r#type.as_str(),
+            Self::Assistant(value) => value.r#type.as_str(),
+            Self::Compaction(_) => "compaction",
+            Self::Idle(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default(),
+        }
+    }
 }
 
 /// Output of [`Client::session_context`].
