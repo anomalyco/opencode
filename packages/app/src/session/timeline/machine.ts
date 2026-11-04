@@ -63,6 +63,7 @@ export type FollowEvent =
 type Unanchored = Exclude<FollowState, { type: "anchored" }>
 
 const FOLLOWING: FollowState = Object.freeze({ type: "following" })
+
 const DETACHED: FollowState = Object.freeze({ type: "detached", endPending: false })
 
 export function createFollowState(): FollowState {

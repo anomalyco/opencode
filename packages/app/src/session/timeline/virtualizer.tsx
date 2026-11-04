@@ -44,10 +44,15 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 const upwardKeys = new Set(["up", "page-up", "home"])
 
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
+
 const settledAtEndEvent = { type: "scroll.settled", atReachableEnd: true } as const
+
 const touchEndEvent = { type: "touch.end", scrolling: false } as const
+
 const touchMomentumEvent = { type: "touch.end", scrolling: true } as const
+
 const pointerDownEvent = { type: "pointer.down" } as const
+
 const pointerUpEvent = { type: "pointer.up" } as const
 
 const cache = new Map<
