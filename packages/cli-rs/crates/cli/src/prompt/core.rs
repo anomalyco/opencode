@@ -89,6 +89,14 @@ const ERASE_LINE: &str = "\x1b[2K\x1b[G";
 /// Keypresses that arrived after the last prompt finished wait here for the next one.
 static KEYS: Mutex<Option<Keys>> = Mutex::new(None);
 
+/// Runs `read` with stdin in raw mode and the keypresses the prompts share, for prompts drawn elsewhere (the
+/// wizard draws Effect CLI's prompts, not Clack's).
+pub fn with_keys<R>(read: impl FnOnce(&mut Keys) -> R) -> R {
+    let _raw = Raw::enable();
+    let mut keys = KEYS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    read(keys.get_or_insert_with(Keys::new))
+}
+
 /// Runs a prompt until it is submitted or cancelled.
 pub fn run(
     prompt: &mut dyn Prompt,

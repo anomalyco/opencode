@@ -223,6 +223,12 @@ impl Keys {
         }
     }
 
+    /// Drops what was read but not delivered yet. Effect CLI's prompts lose the rest of a chunk when one ends.
+    pub fn discard(&mut self) {
+        self.chars.clear();
+        self.bytes.clear();
+    }
+
     /// The next keypress, or `None` at the end of input.
     pub fn next(&mut self) -> Option<Press> {
         loop {
