@@ -2,7 +2,7 @@ export * as SessionRunnerLLM from "./llm.js"
 
 import { AIError, AuthenticationError, Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
-import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Cause, Clock, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
@@ -238,6 +238,8 @@ const layer = Layer.effect(
       let initial: SessionContext.Selection | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      // The assistant a retry started; a later failure before the next request must settle it.
+      let retrying: SessionMessage.ID | undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const selected = initial ?? (yield* prepareContext(sessionID))
@@ -245,18 +247,33 @@ const layer = Layer.effect(
         const result = yield* context.load(selected).pipe(Effect.result)
         if (result._tag === "Failure") {
           const failure = result.failure
-          if (!(failure instanceof ModelResolver.AuthorizationError)) return yield* failure
           const error = toSessionError(failure)
-          const decision = yield* retry.decide({
-            cause: new AIError({ reason: new AuthenticationError({ message: failure.message, cause: failure }) }),
-            error,
+          const decision =
+            failure instanceof ModelResolver.AuthorizationError
+              ? yield* retry.decide({
+                  cause: new AIError({ reason: new AuthenticationError({ message: failure.message, cause: failure }) }),
+                  error,
+                  agent: selected.agent.id,
+                  model: failure.model,
+                  credentialID: failure.credentialID,
+                  hook: (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
+                  retry: false,
+                })
+              : undefined
+          if (!(failure instanceof ModelResolver.AuthorizationError) || !decision?.retry) {
+            if (retrying === assistantMessageID)
+              yield* bus.publish(SessionEvent.Step.Failed, { sessionID, assistantMessageID, error })
+            return yield* failure
+          }
+          // Retry status attaches to an assistant, and no request has started one yet.
+          yield* bus.publish(SessionEvent.Step.Started, {
+            sessionID,
             agent: selected.agent.id,
             model: failure.model,
-            credentialID: failure.credentialID,
-            hook: (event) => hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
-            retry: false,
+            assistantMessageID,
+            started: yield* Clock.currentTimeMillis,
           })
-          if (!decision.retry) return yield* failure
+          retrying = assistantMessageID
           yield* retry.wait({ decision, error, assistantMessageID })
           continue
         }
@@ -341,12 +358,14 @@ const layer = Layer.effect(
               )
             return outcome.needsContinuation
           }),
-          Retry: (outcome) =>
-            retry.wait({
+          Retry: (outcome) => {
+            retrying = assistantMessageID
+            return retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-            }),
+            })
+          },
           Continue: Effect.fnUntraced(function* (outcome) {
             yield* retry.wait({
               decision: outcome.decision,

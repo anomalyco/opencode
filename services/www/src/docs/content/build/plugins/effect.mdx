@@ -1398,6 +1398,10 @@ The initial `decision` is OpenCode's policy, so hooks may make a normally termin
 proposed retry. Multiple hooks run in registration order and later hooks see the current decision. The built-in maximum
 attempt count remains a hard limit. `attempt` is the physical attempt being proposed; the initial request is attempt `1`,
 so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
+
+The hook also runs when the model's credential fails to resolve, for example a rejected OAuth refresh, before any request
+is sent. These events set `credentialID` to the failed credential and start with `{ retry: false }`. Activate another
+credential or switch the model before retrying, or the same failure repeats.
 Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
 
 #### Reference

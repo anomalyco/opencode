@@ -132,11 +132,15 @@ export interface SessionWebSocketReceive {
 
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
+/**
+ * Runs before a failed step is retried. It also runs when resolving the model's credential fails, such as a
+ * rejected OAuth refresh, before any request is sent; those events carry `credentialID` and default to no retry.
+ */
 export interface SessionRetry {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
-  /** The credential whose resolution failed before a model request, when known. */
+  /** Set only when credential resolution failed before a request: the credential that failed. */
   readonly credentialID?: Credential.ID
   readonly error: SessionError.Error
   readonly attempt: number
