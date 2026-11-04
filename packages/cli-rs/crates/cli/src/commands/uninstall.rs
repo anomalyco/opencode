@@ -1,8 +1,10 @@
-//! `uninstall`, delegated to the TypeScript CLI.
+//! `uninstall`, delegated to the TypeScript CLI (D.1).
 
-use super::{Context, not_built};
+use opencode_service::delegate;
+
+use super::Context;
 use crate::args::UninstallArgs;
 
 pub fn run(_context: &Context, _args: &UninstallArgs) -> anyhow::Result<()> {
-    not_built("uninstall", "D.1")
+    Err(delegate::forward().into())
 }

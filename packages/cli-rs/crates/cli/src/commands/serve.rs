@@ -1,8 +1,10 @@
-//! `serve`, delegated to the TypeScript CLI.
+//! `serve`, delegated to the TypeScript CLI (D.1).
 
-use super::{Context, not_built};
+use opencode_service::delegate;
+
+use super::Context;
 use crate::args::ServeArgs;
 
 pub fn run(_context: &Context, _args: &ServeArgs) -> anyhow::Result<()> {
-    not_built("serve", "D.1")
+    Err(delegate::forward().into())
 }
