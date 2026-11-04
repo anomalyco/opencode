@@ -6,6 +6,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { usePlatform } from "@/runtime/platform/platform"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { uuid } from "@opencode/util/uuid"
 import { DialogMcpSignIn } from "./mcp-sign-in"
 
 export type McpControls = {
@@ -68,24 +69,31 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
 
         if (attempt.data.paste) {
           const integrationID = current.integrationID
-          void dialog.push(() => (
-            <DialogMcpSignIn
-              name={name}
-              integrationID={integrationID}
-              attemptID={attempt.data.attemptID}
-              url={attempt.data.url}
-              location={ref}
-              onDone={async () => {
-                data.location.mcp.server.invalidate(ref)
-                data.location.mcp.resource.invalidate(ref)
-                await Promise.all([
-                  data.location.mcp.server.sync(ref),
-                  data.location.mcp.resource.sync(ref),
-                  onSuccess?.(),
-                ])
-              }}
-            />
-          ))
+          const dialogID = uuid()
+          void dialog.push(
+            () => (
+              <DialogMcpSignIn
+                name={name}
+                integrationID={integrationID}
+                attemptID={attempt.data.attemptID}
+                url={attempt.data.url}
+                lifetime={attempt.data.time.expires - attempt.data.time.created}
+                location={ref}
+                onDone={async () => {
+                  data.location.mcp.server.invalidate(ref)
+                  data.location.mcp.resource.invalidate(ref)
+                  await Promise.all([
+                    data.location.mcp.server.sync(ref),
+                    data.location.mcp.resource.sync(ref),
+                    onSuccess?.(),
+                  ])
+                  dialog.close(dialogID)
+                }}
+              />
+            ),
+            undefined,
+            dialogID,
+          )
         }
       }
 

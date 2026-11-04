@@ -1,7 +1,6 @@
 import { createUniqueId, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
 import { TextInput } from "@opencode/ui/text-input"
@@ -19,10 +18,11 @@ export function DialogMcpSignIn(props: {
   integrationID: string
   attemptID: string
   url: string
+  /** The attempt's lifetime in milliseconds, from the server's `time`; the two clocks may disagree. */
+  lifetime: number
   location: { directory: string } | undefined
   onDone: () => Promise<void>
 }) {
-  const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
@@ -36,7 +36,14 @@ export function DialogMcpSignIn(props: {
 
   let input: HTMLInputElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = Date.now() + props.lifetime
   let disposed = false
+  let settled = false
+
+  const fail = (message: string) => {
+    settled = true
+    setStore("failed", message)
+  }
 
   const poll = async () => {
     const result = await serverSDK.api.integration.oauth
@@ -46,18 +53,23 @@ export function DialogMcpSignIn(props: {
 
     if (disposed) return
 
-    if (!result.ok) return setStore("failed", formatServerError(result.error, language.t))
-
-    if (result.status.status === "complete") {
-      await props.onDone()
-      dialog.close()
+    // A failed request says nothing about the attempt, which may still be pending, so keep polling until it expires.
+    if (!result.ok) {
+      if (Date.now() >= deadline) return fail(formatServerError(result.error, language.t))
+      timer = setTimeout(() => void poll(), 1_000)
 
       return
     }
 
-    if (result.status.status === "failed") return setStore("failed", result.status.message)
+    if (result.status.status === "complete") {
+      settled = true
 
-    if (result.status.status === "expired") return setStore("failed", language.t("provider.connect.oauth.expired"))
+      return props.onDone()
+    }
+
+    if (result.status.status === "failed") return fail(result.status.message)
+
+    if (result.status.status === "expired") return fail(language.t("provider.connect.oauth.expired"))
     timer = setTimeout(() => void poll(), 1_000)
   }
 
@@ -81,9 +93,13 @@ export function DialogMcpSignIn(props: {
     input?.focus({ preventScroll: true })
     void poll()
   })
+  // Like the TUI, dismissing the dialog ends the attempt, so a late browser callback cannot connect the server.
   onCleanup(() => {
     disposed = true
     clearTimeout(timer)
+
+    if (settled) return
+    void serverSDK.api.integration.oauth.cancel(attempt).catch(() => undefined)
   })
 
   return (
