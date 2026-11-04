@@ -883,9 +883,7 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
-        const line = Array.from(range.getClientRects()).reduce((last, rect) =>
-          rect.bottom > last.bottom ? rect : last,
-        )
+        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
@@ -918,11 +916,14 @@ test.describe("touch keyboard", () => {
 
   test("Return only adds a line, even over suggestions; the touch bar and Cmd+Return send", async ({ page }) => {
     const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
     const view = await openSession(page, {
       name: "ComposerTouchReturn",
       onPrompt: (input) => void prompts.push(input.body),
     })
+
     const bar = page.locator('[data-slot="composer-touch-bar"]')
+
     await expect(bar).toBeVisible()
     await expect(page.locator('[data-action="composer-attach"]')).toHaveCount(0)
     await expect(view.editor).toHaveAttribute("enterkeyhint", "enter")

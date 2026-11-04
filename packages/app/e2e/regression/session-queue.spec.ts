@@ -268,6 +268,7 @@ test.describe("touch keyboard", () => {
     const view = await openQueue(page, mock, "steer")
     const bar = page.locator('[data-slot="composer-touch-bar"]')
     const stop = bar.getByRole("button", { name: "Stop", exact: true })
+
     const interrupted = page.waitForRequest((request) =>
       new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
     )

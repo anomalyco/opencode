@@ -1525,12 +1525,14 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
   const view = props.controller.view
   const keep = (event: MouseEvent) => event.preventDefault()
 
-  // The bar pads itself for the home indicator, so the shell's main area stops doing so while it is docked.
+  // Docked, the bar is the bottom edge and pads itself for the home indicator, so the shell's main area and a bottom
+  // titlebar stop doing so.
   onMount(() => {
     if (!props.docked) return
     const root = document.documentElement
-    root.style.setProperty("--composer-touch-bar-main-inset", "0px")
-    onCleanup(() => root.style.removeProperty("--composer-touch-bar-main-inset"))
+
+    root.style.setProperty("--shell-safe-area-bottom", "0px")
+    onCleanup(() => root.style.removeProperty("--shell-safe-area-bottom"))
   })
 
   // The delivery the desktop toolbar offers on Mod+Enter.

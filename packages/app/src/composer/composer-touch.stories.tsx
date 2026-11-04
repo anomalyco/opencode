@@ -93,19 +93,23 @@ const text = (content: string): ComposerPersistedState["prompt"] => [
 
 function TouchComposer(props: { state: State }) {
   const working = ["working", "steer", "queue", "editing"].includes(props.state)
-  const [session, setSession] = createStore({
+
+  const [session, setSession] = createStore<{ working: boolean; fresh: boolean; log: string[]; variant: string }>({
     working,
     fresh: props.state.startsWith("new"),
-    log: [] as string[],
+    log: [],
     variant: "high",
   })
+
   const prompt = text(drafts[props.state])
+
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt,
     cursor: promptLength(prompt),
     model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: "high" },
     context: { items: [] },
   })
+
   const blank = () => !draft.prompt.some((part) => "content" in part && part.content.trim())
   const record = (entry: string) => setSession("log", (log) => [...log, entry])
 
@@ -240,7 +244,11 @@ function TouchStates(props: { state: State }) {
           aria-label="Composer state"
           class="h-9 min-w-0 flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 text-14-regular"
           value={view.state}
-          onChange={(event) => setView({ state: event.currentTarget.value as State, generation: view.generation + 1 })}
+          onChange={(event) => {
+            const next = states.find((state) => state.id === event.currentTarget.value)
+
+            if (next) setView({ state: next.id, generation: view.generation + 1 })
+          }}
         >
           <For each={states}>{(state) => <option value={state.id}>{state.name}</option>}</For>
         </select>

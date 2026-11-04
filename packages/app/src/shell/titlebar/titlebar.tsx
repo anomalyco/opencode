@@ -199,7 +199,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
         height:
           platform.platform === "web"
             ? bottom()
-              ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
+              ? "calc(28px + max(8px, var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))))"
               : mobileTop()
                 ? `calc(28px + ${mobileTopClearance} + env(safe-area-inset-top, 0px))`
                 : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
@@ -209,7 +209,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
           : mobileTop()
             ? `calc(${mobileTopClearance} + env(safe-area-inset-top, 0px))`
             : "env(safe-area-inset-top, 0px)",
-        "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
+        // A docked composer touch bar below takes over the safe area.
+        "padding-bottom": bottom()
+          ? "var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))"
+          : "0px",
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
@@ -645,7 +648,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
                   "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows() && !mobileTop(),
-                  "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
+                  "pb-[max(0px,calc(8px-var(--shell-safe-area-bottom,var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))))]":
+                    bottom(),
                   "pl-2.5": macTrafficLights(),
                   // The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows.
                   "ps-[calc(var(--sidebar-inset-start)-2px)]": windows() && !!props.verticalTabs,

@@ -52,6 +52,12 @@ test.describe("touch submission", () => {
     await editor.fill("Please dismiss the keyboard after sending.")
     await expect(editor).toBeFocused()
 
+    // With the titlebar at the bottom, the touch bar still sits on the bottom edge, where the keyboard opens.
+    const titlebar = (await page.locator('[data-slot="titlebar-v2"]').boundingBox())!
+    const bar = (await page.locator('[data-slot="composer-touch-bar"]').boundingBox())!
+
+    expect(bar.y).toBeGreaterThanOrEqual(titlebar.y + titlebar.height)
+
     const admitted = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
