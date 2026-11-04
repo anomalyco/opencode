@@ -123,8 +123,7 @@
       "until": "Tokens",
       "deviation": [
         "V01-plain-transcript",
-        "P01-read-only-prompt",
-        "T04-connection-footer"
+        "P01-read-only-prompt"
       ],
       "fixture": "E.6a/transcript/open"
     }

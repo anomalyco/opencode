@@ -7,8 +7,11 @@ const here = { directory: "/tmp/opencode/packages/tui" }
 const event = (id: string, type: string, data: unknown, location: unknown = here) => ({
   event: { id, created: 3, type, location, data },
 })
-// The logo and the prompt rows, the only rows the home differs in until E.2's prompt (T17-home-prompt).
-const prompt = { x: 0, y: 9, width: 100, height: 12, reason: "the home prompt is T.1's stand-in (T17-home-prompt)" }
+// The home prompt's placeholder row (T17-home-prompt) and the prompt footer hints (P01-read-only-prompt).
+const prompt = [
+  { x: 16, y: 16, width: 84, height: 1, reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)" },
+  { x: 50, y: 20, width: 50, height: 1, reason: "the prompt footer hints are E.14's (P01-read-only-prompt)" },
+]
 
 export default defineApp({
   // With tabs on, the tab strip (E.12) handles `session.deleted` first and goes home without the toast.
@@ -22,14 +25,14 @@ export default defineApp({
     { path: "/api/session/ses_b/inbox", json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "home", until: "Ask anything", masks: [prompt] },
+    { checkpoint: "home", until: "Ask anything", masks: prompt },
     event("evt_1", "tui.toast.show", { title: "Elsewhere", message: "Not for this location", variant: "error" }, {
       directory: "/somewhere/else",
     }),
     // No title: TS merges a replacing toast into the old one (T21-toast-replace-merge), and the deleted toast
     // below has none either.
     event("evt_2", "tui.toast.show", { message: "Deployed to staging", variant: "success" }),
-    { checkpoint: "toast", until: "Deployed to staging", masks: [prompt] },
+    { checkpoint: "toast", until: "Deployed to staging", masks: prompt },
     event("evt_3", "tui.session.select", { sessionID: "ses_b" }),
     {
       checkpoint: "selected",
@@ -46,13 +49,13 @@ export default defineApp({
         data: { sessionID: "ses_b" },
       },
     },
-    { checkpoint: "deleted", until: "was deleted", masks: [prompt] },
+    { checkpoint: "deleted", until: "was deleted", masks: prompt },
     event("evt_5", "tui.command.execute", { command: "help.show" }),
     {
       checkpoint: "command",
       until: "Help",
       masks: [{ line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }],
-      deviation: ["T17-home-prompt"],
+      deviation: ["T17-home-prompt", "P01-read-only-prompt"],
     },
   ],
 })

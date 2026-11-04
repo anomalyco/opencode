@@ -10,7 +10,68 @@
   "env": {
     "OPENCODE_ROUTE": "{\"type\":\"plugin\",\"id\":\"acme.tools\",\"name\":\"board\"}"
   },
-  "routes": [],
+  "routes": [
+    {
+      "path": "/api/model",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": []
+      }
+    },
+    {
+      "path": "/api/provider",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": []
+      }
+    },
+    {
+      "path": "/api/agent",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": []
+      }
+    },
+    {
+      "path": "/api/integration",
+      "json": {
+        "location": {
+          "directory": "/tmp/opencode/packages/tui",
+          "project": {
+            "id": "proj_test",
+            "directory": "/tmp/opencode",
+            "canonical": "/tmp/opencode"
+          }
+        },
+        "data": []
+      }
+    },
+    {
+      "path": "/api/config",
+      "json": []
+    }
+  ],
   "steps": [
     {
       "checkpoint": "missing",

@@ -187,10 +187,14 @@ fn column(line: &str, needle: &str) -> u16 {
 /// The footer of the row titled `title`.
 fn footer(app: &TestApp, title: &str) -> String {
     let screen = app.text();
+    // The home behind the dialog shows at the start of some rows (the prompt's `┃`).
     let line = screen
         .lines()
-        .map(|line| line.trim_start().trim_start_matches("● "))
-        .find(|line| line.starts_with(title))
+        .find_map(|line| {
+            let at = line.find(title)?;
+            let gutter = line[..at].trim().trim_end_matches('●').trim();
+            matches!(gutter, "" | "┃").then(|| &line[at..])
+        })
         .unwrap_or_else(|| panic!("no {title:?} row:\n{screen}"));
     line[title.len()..].trim().to_owned()
 }
