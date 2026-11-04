@@ -6,13 +6,15 @@ use std::rc::Rc;
 use indexmap::{IndexMap, IndexSet};
 
 use super::labels::{LabelLayout, edge_label_layout, route_label_layout};
-use super::types::{Diagram, Edge, Endpoint, FlowDirection, LabelSide, NodeBounds, Route, Subgraph, SubgraphBounds};
+use super::types::{
+    Diagram, Edge, Endpoint, FlowDirection, LabelSide, NodeBounds, Route, Subgraph, SubgraphBounds,
+};
 use crate::core::geometry::{
     Axis, Bounds, Direction, Lane, Point, Side, advance_coordinate, after_farthest_coordinate,
-    before_nearest_coordinate, bounds_border_point, bounds_center, bounds_side_point, center_coordinate, coordinate,
-    js_round, keep_after, keep_before, lane, opposite_side, orthogonal_path, orthogonal_path_points, path_through,
-    path_via_lane, point, segment_between, segment_span, shift_point, side_for_direction, snap_coordinate,
-    with_coordinate,
+    before_nearest_coordinate, bounds_border_point, bounds_center, bounds_side_point,
+    center_coordinate, coordinate, js_round, keep_after, keep_before, lane, opposite_side,
+    orthogonal_path, orthogonal_path_points, path_through, path_via_lane, point, segment_between,
+    segment_span, shift_point, side_for_direction, snap_coordinate, with_coordinate,
 };
 use crate::core::text::{split_lines, width};
 
@@ -43,28 +45,49 @@ struct Endpoints<'a> {
 
 impl<'a> Endpoints<'a> {
     fn get(&self, id: &str) -> Option<Endpoint<'a>> {
-        self.nodes
-            .get(id)
-            .map(Endpoint::Node)
-            .or_else(|| self.frames.and_then(|frames| frames.get(id)).map(Endpoint::Subgraph))
+        self.nodes.get(id).map(Endpoint::Node).or_else(|| {
+            self.frames
+                .and_then(|frames| frames.get(id))
+                .map(Endpoint::Subgraph)
+        })
     }
 }
 
 fn vertical_travel(from: &Bounds, to: &Bounds) -> Direction {
-    if center_coordinate(to, Axis::Y) >= center_coordinate(from, Axis::Y) { Direction::Down } else { Direction::Up }
+    if center_coordinate(to, Axis::Y) >= center_coordinate(from, Axis::Y) {
+        Direction::Down
+    } else {
+        Direction::Up
+    }
 }
 
 fn is_vertical_back_edge(from: &Bounds, to: &Bounds, direction: FlowDirection) -> bool {
-    if direction == FlowDirection::BT { to.center_y > from.center_y } else { to.center_y < from.center_y }
+    if direction == FlowDirection::BT {
+        to.center_y > from.center_y
+    } else {
+        to.center_y < from.center_y
+    }
 }
 
 fn is_horizontal_back_edge(from: &Bounds, to: &Bounds, direction: FlowDirection) -> bool {
-    if direction == FlowDirection::RL { to.center_x > from.center_x } else { to.center_x < from.center_x }
+    if direction == FlowDirection::RL {
+        to.center_x > from.center_x
+    } else {
+        to.center_x < from.center_x
+    }
 }
 
 fn horizontal_travel(from: &Bounds, to: &Bounds, direction: FlowDirection) -> Direction {
-    let right = if direction == FlowDirection::RL { to.center_x > from.center_x } else { to.center_x >= from.center_x };
-    if right { Direction::Right } else { Direction::Left }
+    let right = if direction == FlowDirection::RL {
+        to.center_x > from.center_x
+    } else {
+        to.center_x >= from.center_x
+    };
+    if right {
+        Direction::Right
+    } else {
+        Direction::Left
+    }
 }
 
 pub(crate) fn title_bounds(frame: &SubgraphBounds) -> Bounds {
@@ -78,7 +101,11 @@ pub(crate) fn title_bounds(frame: &SubgraphBounds) -> Bounds {
     Bounds {
         left: frame.bounds.left + 2,
         top,
-        width: lines.iter().map(|line| width(&format!(" {line} "))).max().unwrap_or(0),
+        width: lines
+            .iter()
+            .map(|line| width(&format!(" {line} ")))
+            .max()
+            .unwrap_or(0),
         height,
         center_x: 0,
         center_y: 0,
@@ -121,8 +148,11 @@ fn side_point(endpoint: Endpoint, side: Side, role: Role) -> Point {
 fn vertical_back_edge_path(from: Endpoint, to: Endpoint, left_boundary: Option<i32>) -> Vec<Point> {
     let start = side_point(from, Side::Left, Role::Source);
     let end = side_point(to, Side::Left, Role::Target);
-    let preferred = after_farthest_coordinate(&[start, end], Axis::X, Direction::Left, BUS_CLEARANCE);
-    let bus = left_boundary.map_or(preferred, |boundary| preferred.min(boundary - BUS_CLEARANCE * 2));
+    let preferred =
+        after_farthest_coordinate(&[start, end], Axis::X, Direction::Left, BUS_CLEARANCE);
+    let bus = left_boundary.map_or(preferred, |boundary| {
+        preferred.min(boundary - BUS_CLEARANCE * 2)
+    });
     path_via_lane(start, lane(Axis::X, bus), end)
 }
 
@@ -170,16 +200,34 @@ fn self_edge_path(endpoint: Endpoint, offset: i32) -> Vec<Point> {
     let end = side_point(endpoint, Side::Bottom, Role::Target);
     let right = bounds.left + bounds.width + BUS_CLEARANCE + offset;
     let bottom = bounds.top + bounds.height + 1 + offset;
-    vec![start, point(right, start.y), point(right, bottom), point(end.x, bottom), end]
+    vec![
+        start,
+        point(right, start.y),
+        point(right, bottom),
+        point(end.x, bottom),
+        end,
+    ]
 }
 
 fn parallel_edge_path(from: Endpoint, to: Endpoint, axis: Axis, coordinate: i32) -> Vec<Point> {
-    let side = if axis == Axis::Y { Side::Bottom } else { Side::Right };
-    path_via_lane(side_point(from, side, Role::Source), lane(axis, coordinate), side_point(to, side, Role::Target))
+    let side = if axis == Axis::Y {
+        Side::Bottom
+    } else {
+        Side::Right
+    };
+    path_via_lane(
+        side_point(from, side, Role::Source),
+        lane(axis, coordinate),
+        side_point(to, side, Role::Target),
+    )
 }
 
 fn label_height(edge: &Edge) -> i32 {
-    if edge.label.is_empty() { 0 } else { split_lines(&edge.label).len() as i32 }
+    if edge.label.is_empty() {
+        0
+    } else {
+        split_lines(&edge.label).len() as i32
+    }
 }
 
 fn right_render_extent(route: &Route) -> i32 {
@@ -192,10 +240,19 @@ fn right_render_extent(route: &Route) -> i32 {
 }
 
 fn parallel_lane_axis(from: &Bounds, to: &Bounds) -> Axis {
-    if (to.center_x - from.center_x).abs() >= (to.center_y - from.center_y).abs() { Axis::Y } else { Axis::X }
+    if (to.center_x - from.center_x).abs() >= (to.center_y - from.center_y).abs() {
+        Axis::Y
+    } else {
+        Axis::X
+    }
 }
 
-fn edge_path(from: Endpoint, to: Endpoint, direction: FlowDirection, left_boundary: Option<i32>) -> Vec<Point> {
+fn edge_path(
+    from: Endpoint,
+    to: Endpoint,
+    direction: FlowDirection,
+    left_boundary: Option<i32>,
+) -> Vec<Point> {
     if from.id() == to.id() {
         return self_edge_path(from, 0);
     }
@@ -204,7 +261,11 @@ fn edge_path(from: Endpoint, to: Endpoint, direction: FlowDirection, left_bounda
     }
     let (f, t) = (from.bounds(), to.bounds());
     if f.top < t.top + t.height && t.top < f.top + f.height {
-        let travel = if t.center_x >= f.center_x { Direction::Right } else { Direction::Left };
+        let travel = if t.center_x >= f.center_x {
+            Direction::Right
+        } else {
+            Direction::Left
+        };
         return orthogonal_path(
             side_point(from, side_for_direction(travel), Role::Source),
             side_point(to, opposite_side(side_for_direction(travel)), Role::Target),
@@ -277,7 +338,11 @@ fn target_fan_in_lane(sources: &[Point], target: Point, axis: Axis, travel: Dire
         after_farthest_coordinate(sources, axis, travel, NODE_CLEARANCE),
         travel,
     );
-    keep_before(unclamped, advance_coordinate(coordinate(target, axis), travel, -1), travel)
+    keep_before(
+        unclamped,
+        advance_coordinate(coordinate(target, axis), travel, -1),
+        travel,
+    )
 }
 
 fn port_for_travel(endpoint: Endpoint, travel: Direction, role: Role) -> Point {
@@ -289,7 +354,11 @@ fn port_for_travel(endpoint: Endpoint, travel: Direction, role: Role) -> Point {
     side_point(endpoint, side, role)
 }
 
-pub(crate) fn subgraph_contains_member(subgraphs: &[Subgraph], subgraph: &Subgraph, endpoint: &str) -> bool {
+pub(crate) fn subgraph_contains_member(
+    subgraphs: &[Subgraph],
+    subgraph: &Subgraph,
+    endpoint: &str,
+) -> bool {
     subgraph.node_ids.iter().any(|id| id == endpoint)
         || subgraphs.iter().any(|child| {
             child.parent_id.as_deref() == Some(&subgraph.id)
@@ -297,7 +366,11 @@ pub(crate) fn subgraph_contains_member(subgraphs: &[Subgraph], subgraph: &Subgra
         })
 }
 
-fn forward_records(edges: &[Rc<Edge>], endpoints: &Endpoints, direction: FlowDirection) -> Vec<Record> {
+fn forward_records(
+    edges: &[Rc<Edge>],
+    endpoints: &Endpoints,
+    direction: FlowDirection,
+) -> Vec<Record> {
     let travel = match direction {
         FlowDirection::RL => Direction::Left,
         FlowDirection::LR => Direction::Right,
@@ -328,19 +401,31 @@ fn forward_records(edges: &[Rc<Edge>], endpoints: &Endpoints, direction: FlowDir
 fn horizontal_subgraph<'a>(diagram: &'a Diagram, edge: &Edge, exit: bool) -> Option<&'a Subgraph> {
     let subgraphs = &diagram.subgraphs;
     subgraphs.iter().rev().find(|subgraph| {
-        if !matches!(subgraph.direction, Some(FlowDirection::LR | FlowDirection::RL)) {
+        if !matches!(
+            subgraph.direction,
+            Some(FlowDirection::LR | FlowDirection::RL)
+        ) {
             return false;
         }
         if subgraph.id == edge.from || subgraph.id == edge.to {
             return false;
         }
-        let (inside, outside) = if exit { (&edge.from, &edge.to) } else { (&edge.to, &edge.from) };
-        subgraph_contains_member(subgraphs, subgraph, inside) && !subgraph_contains_member(subgraphs, subgraph, outside)
+        let (inside, outside) = if exit {
+            (&edge.from, &edge.to)
+        } else {
+            (&edge.to, &edge.from)
+        };
+        subgraph_contains_member(subgraphs, subgraph, inside)
+            && !subgraph_contains_member(subgraphs, subgraph, outside)
     })
 }
 
 fn entry_travel(subgraph: &Subgraph) -> Direction {
-    if subgraph.direction == Some(FlowDirection::RL) { Direction::Left } else { Direction::Right }
+    if subgraph.direction == Some(FlowDirection::RL) {
+        Direction::Left
+    } else {
+        Direction::Right
+    }
 }
 
 fn entry_lane(subgraph: &Subgraph, frame: &Bounds) -> i32 {
@@ -355,11 +440,19 @@ fn join_y(from: &Bounds, target: &Bounds) -> i32 {
     if from.center_y <= target.center_y {
         let start = from.top + from.height;
         let end = target.top - 1;
-        return if start <= end { (start + end).div_euclid(2) } else { start };
+        return if start <= end {
+            (start + end).div_euclid(2)
+        } else {
+            start
+        };
     }
     let start = target.top + target.height;
     let end = from.top - 1;
-    if start <= end { (start + end).div_euclid(2) } else { end }
+    if start <= end {
+        (start + end).div_euclid(2)
+    } else {
+        end
+    }
 }
 
 fn exit_join_y(from: &Bounds, target: Point, below: bool) -> i32 {
@@ -367,15 +460,26 @@ fn exit_join_y(from: &Bounds, target: Point, below: bool) -> i32 {
         let outside = from.top + from.height;
         let before = target.y - 1;
         let preferred = target.y - BUS_CLEARANCE;
-        return if outside <= before { outside.max(preferred).min(before) } else { before };
+        return if outside <= before {
+            outside.max(preferred).min(before)
+        } else {
+            before
+        };
     }
     let outside = from.top - 1;
     let after = target.y + 1;
     let preferred = target.y + BUS_CLEARANCE;
-    if after <= outside { outside.min(preferred).max(after) } else { after }
+    if after <= outside {
+        outside.min(preferred).max(after)
+    } else {
+        after
+    }
 }
 
-fn group<T>(items: impl IntoIterator<Item = T>, key: impl Fn(&T) -> String) -> IndexMap<String, Vec<T>> {
+fn group<T>(
+    items: impl IntoIterator<Item = T>,
+    key: impl Fn(&T) -> String,
+) -> IndexMap<String, Vec<T>> {
     let mut groups: IndexMap<String, Vec<T>> = IndexMap::new();
     for item in items {
         groups.entry(key(&item)).or_default().push(item);
@@ -400,7 +504,11 @@ impl Router<'_> {
     fn horizontal_fan_out(&mut self, records: &[Record], direction: FlowDirection) {
         let mut reserved = HashSet::new();
         let mut owners: IndexMap<String, String> = IndexMap::new();
-        let travel = if direction == FlowDirection::RL { Direction::Left } else { Direction::Right };
+        let travel = if direction == FlowDirection::RL {
+            Direction::Left
+        } else {
+            Direction::Right
+        };
         for (source_id, group) in group(records.iter(), |record| record.edge.from.clone()) {
             if group.len() < 2 {
                 continue;
@@ -410,21 +518,47 @@ impl Router<'_> {
             let bus = reserve_fan_out_lane(source, &targets, Axis::X, travel, &mut reserved);
             for record in group {
                 let owner = owners.get(&record.edge.to).cloned();
-                owners.insert(record.edge.to.clone(), owner.clone().unwrap_or_else(|| source_id.clone()));
+                owners.insert(
+                    record.edge.to.clone(),
+                    owner.clone().unwrap_or_else(|| source_id.clone()),
+                );
                 let target = self.endpoints.get(&record.edge.to);
                 // A target another fan already reaches from the side gets this edge on its top or bottom.
-                let Some(target) = target.filter(|_| owner.is_some_and(|owner| owner != source_id)) else {
-                    self.routes.push(fan_route(&record.edge, source, record.target_port, lane(Axis::X, bus)));
+                let Some(target) = target.filter(|_| owner.is_some_and(|owner| owner != source_id))
+                else {
+                    self.routes.push(fan_route(
+                        &record.edge,
+                        source,
+                        record.target_port,
+                        lane(Axis::X, bus),
+                    ));
                     self.handled.insert(record.edge.id);
                     continue;
                 };
-                let side = if source.y < record.target_port.y { Side::Top } else { Side::Bottom };
+                let side = if source.y < record.target_port.y {
+                    Side::Top
+                } else {
+                    Side::Bottom
+                };
                 let target_point = side_point(target, side, Role::Target);
-                let approach =
-                    shift_point(target_point, if side == Side::Top { Direction::Up } else { Direction::Down }, 1);
+                let approach = shift_point(
+                    target_point,
+                    if side == Side::Top {
+                        Direction::Up
+                    } else {
+                        Direction::Down
+                    },
+                    1,
+                );
                 self.routes.push(Route::new(
                     record.edge.clone(),
-                    path_through(&[source, point(bus, source.y), point(bus, approach.y), approach, target_point]),
+                    path_through(&[
+                        source,
+                        point(bus, source.y),
+                        point(bus, approach.y),
+                        approach,
+                        target_point,
+                    ]),
                 ));
                 self.handled.insert(record.edge.id);
             }
@@ -438,7 +572,9 @@ impl Router<'_> {
             FlowDirection::BT => Direction::Up,
             FlowDirection::TB | FlowDirection::TD => Direction::Down,
         };
-        let unhandled = records.iter().filter(|record| !self.handled.contains(&record.edge.id));
+        let unhandled = records
+            .iter()
+            .filter(|record| !self.handled.contains(&record.edge.id));
         for (_, group) in group(unhandled, |record| record.edge.to.clone()) {
             let group: Vec<Record> = if axis == Axis::Y {
                 align_clustered_sources(&group)
@@ -459,14 +595,23 @@ impl Router<'_> {
             let sources: Vec<Point> = group.iter().map(|record| record.source_port).collect();
             let bus = target_fan_in_lane(&sources, target, axis, travel);
             for record in &group {
-                self.routes.push(fan_route(&record.edge, record.source_port, target, lane(axis, bus)));
+                self.routes.push(fan_route(
+                    &record.edge,
+                    record.source_port,
+                    target,
+                    lane(axis, bus),
+                ));
                 self.handled.insert(record.edge.id);
             }
         }
     }
 
     fn vertical_fan_out(&mut self, records: &[Record], direction: FlowDirection) {
-        let travel = if direction == FlowDirection::BT { Direction::Up } else { Direction::Down };
+        let travel = if direction == FlowDirection::BT {
+            Direction::Up
+        } else {
+            Direction::Down
+        };
         for (_, group) in group(records.iter(), |record| record.edge.from.clone()) {
             if group.len() < 2 {
                 continue;
@@ -475,7 +620,12 @@ impl Router<'_> {
             let targets: Vec<Point> = group.iter().map(|record| record.target_port).collect();
             let bus = source_fan_out_lane(source, &targets, Axis::Y, travel);
             for record in group {
-                self.routes.push(fan_route(&record.edge, source, record.target_port, lane(Axis::Y, bus)));
+                self.routes.push(fan_route(
+                    &record.edge,
+                    source,
+                    record.target_port,
+                    lane(Axis::Y, bus),
+                ));
                 self.handled.insert(record.edge.id);
             }
         }
@@ -487,16 +637,24 @@ impl Router<'_> {
         direction_for: &dyn Fn(&Edge) -> FlowDirection,
         direction_aligned: bool,
     ) {
-        for (_, edges) in group(diagram.edges.iter(), |edge| format!("{}:{}", edge.from, edge.to)) {
+        for (_, edges) in group(diagram.edges.iter(), |edge| {
+            format!("{}:{}", edge.from, edge.to)
+        }) {
             if edges.len() < 2 {
                 continue;
             }
-            let (Some(from), Some(to)) = (self.endpoints.get(&edges[0].from), self.endpoints.get(&edges[0].to)) else {
+            let (Some(from), Some(to)) = (
+                self.endpoints.get(&edges[0].from),
+                self.endpoints.get(&edges[0].to),
+            ) else {
                 continue;
             };
             if from.id() == to.id() {
                 for (offset, edge) in edges.iter().enumerate() {
-                    self.routes.push(Route::new((*edge).clone(), self_edge_path(from, offset as i32)));
+                    self.routes.push(Route::new(
+                        (*edge).clone(),
+                        self_edge_path(from, offset as i32),
+                    ));
                     self.handled.insert(edge.id);
                 }
                 continue;
@@ -518,7 +676,12 @@ impl Router<'_> {
                             + i32::from(direction_aligned)
                     }
                     (Some(previous), Axis::Y) => {
-                        previous.points.iter().map(|p| p.y).max().unwrap_or(i32::MIN)
+                        previous
+                            .points
+                            .iter()
+                            .map(|p| p.y)
+                            .max()
+                            .unwrap_or(i32::MIN)
                             + if height > 1 { height + 1 } else { 1 }
                     }
                     (None, Axis::Y) => {
@@ -553,14 +716,21 @@ impl Router<'_> {
             let Some(subgraph) = horizontal_subgraph(diagram, edge, true) else {
                 continue;
             };
-            let (Some(source), Some(_)) = (self.endpoints.get(&edge.from), self.endpoints.get(&edge.to)) else {
+            let (Some(source), Some(_)) =
+                (self.endpoints.get(&edge.from), self.endpoints.get(&edge.to))
+            else {
                 continue;
             };
-            groups.entry(format!("{}:{}", subgraph.id, edge.to)).or_default().push((edge.clone(), subgraph, source));
+            groups
+                .entry(format!("{}:{}", subgraph.id, edge.to))
+                .or_default()
+                .push((edge.clone(), subgraph, source));
         }
         for group in groups.values() {
             let subgraph = group[0].1;
-            let (Some(frame), Some(target)) = (frames.get(&subgraph.id), self.endpoints.get(&group[0].0.to)) else {
+            let (Some(frame), Some(target)) =
+                (frames.get(&subgraph.id), self.endpoints.get(&group[0].0.to))
+            else {
                 continue;
             };
             let frame = frame.bounds;
@@ -571,11 +741,17 @@ impl Router<'_> {
                 frame.left + frame.width + BUS_CLEARANCE
             };
             let target_subgraph = horizontal_subgraph(diagram, &group[0].0, false);
-            let target_frame = target_subgraph.and_then(|subgraph| frames.get(&subgraph.id)).map(|frame| frame.bounds);
+            let target_frame = target_subgraph
+                .and_then(|subgraph| frames.get(&subgraph.id))
+                .map(|frame| frame.bounds);
             let below = target.bounds().center_y >= frame.center_y;
             let target_port = match target_subgraph {
                 Some(subgraph) => port_for_travel(target, entry_travel(subgraph), Role::Target),
-                None => side_point(target, if below { Side::Top } else { Side::Bottom }, Role::Target),
+                None => side_point(
+                    target,
+                    if below { Side::Top } else { Side::Bottom },
+                    Role::Target,
+                ),
             };
             let join = match &target_frame {
                 Some(target_frame) => join_y(&frame, target_frame),
@@ -614,17 +790,28 @@ impl Router<'_> {
             let Some(subgraph) = horizontal_subgraph(diagram, edge, false) else {
                 continue;
             };
-            let (Some(frame), Some(from), Some(to)) =
-                (frames.get(&subgraph.id), self.endpoints.get(&edge.from), self.endpoints.get(&edge.to))
-            else {
+            let (Some(frame), Some(from), Some(to)) = (
+                frames.get(&subgraph.id),
+                self.endpoints.get(&edge.from),
+                self.endpoints.get(&edge.to),
+            ) else {
                 continue;
             };
             let target_port = port_for_travel(to, entry_travel(subgraph), Role::Target);
             let entry = entry_lane(subgraph, &frame.bounds);
-            let source_port = port_for_travel(from, vertical_travel(from.bounds(), to.bounds()), Role::Source);
+            let source_port = port_for_travel(
+                from,
+                vertical_travel(from.bounds(), to.bounds()),
+                Role::Source,
+            );
             self.routes.push(Route::new(
                 edge.clone(),
-                path_through(&[source_port, point(entry, source_port.y), point(entry, target_port.y), target_port]),
+                path_through(&[
+                    source_port,
+                    point(entry, source_port.y),
+                    point(entry, target_port.y),
+                    target_port,
+                ]),
             ));
             self.handled.insert(edge.id);
         }
@@ -635,7 +822,8 @@ fn align_clustered_sources(records: &[&Record]) -> Vec<Record> {
     let xs: Vec<i32> = records.iter().map(|record| record.source_port.x).collect();
     let min = xs.iter().copied().min().unwrap_or(0);
     let max = xs.iter().copied().max().unwrap_or(0);
-    let aligned = (max - min <= 1).then(|| js_round(f64::from(xs.iter().sum::<i32>()) / xs.len() as f64));
+    let aligned =
+        (max - min <= 1).then(|| js_round(f64::from(xs.iter().sum::<i32>()) / xs.len() as f64));
     records
         .iter()
         .map(|record| Record {
@@ -672,7 +860,11 @@ fn path_intersects_bounds(points: &[Point], bounds: &Bounds, contact: Option<Con
             if top > bottom_overlap {
                 continue;
             }
-            let source = allows_source && index == 1 && top == bottom_overlap && from.x == first.x && top == first.y;
+            let source = allows_source
+                && index == 1
+                && top == bottom_overlap
+                && from.x == first.x
+                && top == first.y;
             let target = allows_target
                 && index == points.len() - 1
                 && top == bottom_overlap
@@ -691,9 +883,16 @@ fn path_intersects_bounds(points: &[Point], bounds: &Bounds, contact: Option<Con
         if left > right_overlap {
             continue;
         }
-        let source = allows_source && index == 1 && left == right_overlap && left == first.x && from.y == first.y;
-        let target =
-            allows_target && index == points.len() - 1 && left == right_overlap && left == last.x && to.y == last.y;
+        let source = allows_source
+            && index == 1
+            && left == right_overlap
+            && left == first.x
+            && from.y == first.y;
+        let target = allows_target
+            && index == points.len() - 1
+            && left == right_overlap
+            && left == last.x
+            && to.y == last.y;
         if !source && !target {
             return true;
         }
@@ -709,7 +908,14 @@ fn label_intersects_bounds(label: &LabelLayout, bounds: &Bounds) -> bool {
 }
 
 fn label_rect(label: &LabelLayout) -> Bounds {
-    Bounds { left: label.point.x, top: label.point.y, width: label.width, height: label.height, center_x: 0, center_y: 0 }
+    Bounds {
+        left: label.point.x,
+        top: label.point.y,
+        width: label.width,
+        height: label.height,
+        center_x: 0,
+        center_y: 0,
+    }
 }
 
 fn label_intersects_frame(label: &LabelLayout, bounds: &Bounds) -> bool {
@@ -728,11 +934,17 @@ fn label_intersects_frame(label: &LabelLayout, bounds: &Bounds) -> bool {
 }
 
 fn route_length(route: &Route) -> i32 {
-    route.points.windows(2).map(|pair| (pair[1].x - pair[0].x).abs() + (pair[1].y - pair[0].y).abs()).sum()
+    route
+        .points
+        .windows(2)
+        .map(|pair| (pair[1].x - pair[0].x).abs() + (pair[1].y - pair[0].y).abs())
+        .sum()
 }
 
 fn label_intersects_labels(label: &LabelLayout, others: &[LabelLayout]) -> bool {
-    others.iter().any(|other| label_intersects_bounds(label, &label_rect(other)))
+    others
+        .iter()
+        .any(|other| label_intersects_bounds(label, &label_rect(other)))
 }
 
 /// The inner cells of each label line, without its padding.
@@ -750,19 +962,28 @@ fn label_line_rects(label: &LabelLayout) -> impl Iterator<Item = Bounds> + '_ {
     })
 }
 
-fn label_intersects_route_paths<'a>(label: &LabelLayout, routes: impl Iterator<Item = &'a Route> + Clone) -> bool {
-    label_line_rects(label).any(|rect| routes.clone().any(|route| path_intersects_bounds(&route.points, &rect, None)))
+fn label_intersects_route_paths<'a>(
+    label: &LabelLayout,
+    routes: impl Iterator<Item = &'a Route> + Clone,
+) -> bool {
+    label_line_rects(label).any(|rect| {
+        routes
+            .clone()
+            .any(|route| path_intersects_bounds(&route.points, &rect, None))
+    })
 }
 
 fn route_intersects_labels(route: &Route, labels: &[LabelLayout]) -> bool {
-    labels
-        .iter()
-        .any(|label| label_line_rects(label).any(|rect| path_intersects_bounds(&route.points, &rect, None)))
+    labels.iter().any(|label| {
+        label_line_rects(label).any(|rect| path_intersects_bounds(&route.points, &rect, None))
+    })
 }
 
 fn paths_intersect(left: &[Point], right: &[Point]) -> bool {
     let occupied: HashSet<Point> = orthogonal_path_points(left).into_iter().collect();
-    orthogonal_path_points(right).iter().any(|point| occupied.contains(point))
+    orthogonal_path_points(right)
+        .iter()
+        .any(|point| occupied.contains(point))
 }
 
 fn endpoint_disjoint(left: &Edge, right: &Edge) -> bool {
@@ -773,7 +994,9 @@ fn endpoint_conflicts<'a>(route: &Route, others: impl Iterator<Item = &'a Route>
     let (Some(&source), Some(&target)) = (route.points.first(), route.points.last()) else {
         return false;
     };
-    others.into_iter().any(|other| other.points.first() == Some(&target) || other.points.last() == Some(&source))
+    others
+        .into_iter()
+        .any(|other| other.points.first() == Some(&target) || other.points.last() == Some(&source))
 }
 
 fn path_runs_along_frame(points: &[Point], bounds: &Bounds) -> bool {
@@ -816,8 +1039,16 @@ pub fn source_connector(from: &Bounds, source: Point) -> Connector {
     let side = side_for_outside_point(from, source);
     let border = bounds_border_point(from, side);
     Connector {
-        x: if matches!(side, Side::Top | Side::Bottom) { source.x } else { border.x },
-        y: if matches!(side, Side::Left | Side::Right) { source.y } else { border.y },
+        x: if matches!(side, Side::Top | Side::Bottom) {
+            source.x
+        } else {
+            border.x
+        },
+        y: if matches!(side, Side::Left | Side::Right) {
+            source.y
+        } else {
+            border.y
+        },
         ch: match side {
             Side::Left => "┤",
             Side::Right => "├",
@@ -828,11 +1059,19 @@ pub fn source_connector(from: &Bounds, source: Point) -> Connector {
 }
 
 fn shortest(candidates: &[Route], accept: impl Fn(&Route) -> bool) -> Option<Route> {
-    candidates.iter().filter(|candidate| accept(candidate)).min_by_key(|candidate| route_length(candidate)).cloned()
+    candidates
+        .iter()
+        .filter(|candidate| accept(candidate))
+        .min_by_key(|candidate| route_length(candidate))
+        .cloned()
 }
 
 fn sorted_unique(values: impl IntoIterator<Item = i32>, descending: bool) -> Vec<i32> {
-    let mut values: Vec<i32> = values.into_iter().collect::<IndexSet<_>>().into_iter().collect();
+    let mut values: Vec<i32> = values
+        .into_iter()
+        .collect::<IndexSet<_>>()
+        .into_iter()
+        .collect();
     values.sort_unstable();
     if descending {
         values.reverse();
@@ -846,25 +1085,38 @@ struct ObstacleContext<'a> {
     diagram: &'a Diagram,
 }
 
-fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes: &[Route], index: usize) -> Route {
+fn avoid_node_obstacles(
+    context: &ObstacleContext,
+    endpoints: &Endpoints,
+    routes: &[Route],
+    index: usize,
+) -> Route {
     let route = &routes[index];
     let nodes: Vec<&NodeBounds> = context.nodes.values().collect();
-    let frames: Vec<&SubgraphBounds> = context.frames.map(|frames| frames.values().collect()).unwrap_or_default();
+    let frames: Vec<&SubgraphBounds> = context
+        .frames
+        .map(|frames| frames.values().collect())
+        .unwrap_or_default();
     let subgraphs = &context.diagram.subgraphs;
     let has = |subgraph: &Subgraph, id: &str| subgraph_contains_member(subgraphs, subgraph, id);
     let owner = subgraphs.iter().rev().find(|subgraph| {
         if !has(subgraph, &route.edge.from) || !has(subgraph, &route.edge.to) {
             return false;
         }
-        let children: Vec<&Subgraph> =
-            subgraphs.iter().filter(|child| child.parent_id.as_deref() == Some(&subgraph.id)).collect();
+        let children: Vec<&Subgraph> = subgraphs
+            .iter()
+            .filter(|child| child.parent_id.as_deref() == Some(&subgraph.id))
+            .collect();
         let holds = |child: &Subgraph, id: &str| child.id == id || has(child, id);
         children.iter().any(|child| holds(child, &route.edge.from))
             && children.iter().any(|child| holds(child, &route.edge.to))
-            && !children.iter().any(|child| holds(child, &route.edge.from) && holds(child, &route.edge.to))
+            && !children
+                .iter()
+                .any(|child| holds(child, &route.edge.from) && holds(child, &route.edge.to))
     });
-    let owner_bounds =
-        owner.and_then(|owner| context.frames.and_then(|frames| frames.get(&owner.id))).map(|frame| frame.bounds);
+    let owner_bounds = owner
+        .and_then(|owner| context.frames.and_then(|frames| frames.get(&owner.id)))
+        .map(|frame| frame.bounds);
     let leaves_owner = |candidate: &Route| {
         owner_bounds.is_some_and(|owner| {
             candidate.points.iter().any(|p| {
@@ -875,9 +1127,17 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
             })
         })
     };
-    let others = || routes.iter().enumerate().filter(move |(other, _)| *other != index).map(|(_, route)| route);
-    let other_labels: Vec<LabelLayout> =
-        others().filter(|other| !other.edge.label.is_empty()).map(route_label_layout).collect();
+    let others = || {
+        routes
+            .iter()
+            .enumerate()
+            .filter(move |(other, _)| *other != index)
+            .map(|(_, route)| route)
+    };
+    let other_labels: Vec<LabelLayout> = others()
+        .filter(|other| !other.edge.label.is_empty())
+        .map(route_label_layout)
+        .collect();
     let intersects_node = |candidate: &Route| {
         nodes.iter().any(|bound| {
             let source = bound.id == route.edge.from;
@@ -894,7 +1154,9 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
     let source_frame = if context.nodes.contains_key(&route.edge.from) {
         None
     } else {
-        context.frames.and_then(|frames| frames.get(&route.edge.from))
+        context
+            .frames
+            .and_then(|frames| frames.get(&route.edge.from))
     };
     let intersects_source_title = |candidate: &Route| {
         let Some(frame) = source_frame else {
@@ -922,7 +1184,8 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         intersects_structural(candidate)
             || endpoint_conflicts(candidate, others())
             || others().any(|other| {
-                endpoint_disjoint(&candidate.edge, &other.edge) && paths_intersect(&candidate.points, &other.points)
+                endpoint_disjoint(&candidate.edge, &other.edge)
+                    && paths_intersect(&candidate.points, &other.points)
             })
     };
     let intersects = |candidate: &Route| {
@@ -930,8 +1193,12 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         leaves_owner(candidate)
             || intersects_routing(candidate)
             || label.as_ref().is_some_and(|label| {
-                nodes.iter().any(|bound| label_intersects_bounds(label, &bound.bounds))
-                    || frames.iter().any(|frame| label_intersects_frame(label, &frame.bounds))
+                nodes
+                    .iter()
+                    .any(|bound| label_intersects_bounds(label, &bound.bounds))
+                    || frames
+                        .iter()
+                        .any(|frame| label_intersects_frame(label, &frame.bounds))
                     || label_intersects_labels(label, &other_labels)
                     || label_intersects_route_paths(label, others())
             })
@@ -941,49 +1208,100 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         return route.clone();
     }
 
-    let (Some(from), Some(to)) = (endpoints.get(&route.edge.from), endpoints.get(&route.edge.to)) else {
+    let (Some(from), Some(to)) = (
+        endpoints.get(&route.edge.from),
+        endpoints.get(&route.edge.to),
+    ) else {
         return route.clone();
     };
-    let routing_bounds: Vec<Bounds> =
-        nodes.iter().map(|node| node.bounds).chain(frames.iter().map(|frame| frame.bounds)).collect();
-    let right_bus = routing_bounds.iter().map(|b| b.left + b.width - 1).max().unwrap_or(i32::MIN) + BUS_CLEARANCE;
-    let left_bus = routing_bounds.iter().map(|b| b.left).min().unwrap_or(i32::MAX) - BUS_CLEARANCE;
-    let top_bus = routing_bounds.iter().map(|b| b.top).min().unwrap_or(i32::MAX) - BUS_CLEARANCE;
-    let bottom_bus = routing_bounds.iter().map(|b| b.top + b.height - 1).max().unwrap_or(i32::MIN) + BUS_CLEARANCE;
+    let routing_bounds: Vec<Bounds> = nodes
+        .iter()
+        .map(|node| node.bounds)
+        .chain(frames.iter().map(|frame| frame.bounds))
+        .collect();
+    let right_bus = routing_bounds
+        .iter()
+        .map(|b| b.left + b.width - 1)
+        .max()
+        .unwrap_or(i32::MIN)
+        + BUS_CLEARANCE;
+    let left_bus = routing_bounds
+        .iter()
+        .map(|b| b.left)
+        .min()
+        .unwrap_or(i32::MAX)
+        - BUS_CLEARANCE;
+    let top_bus = routing_bounds
+        .iter()
+        .map(|b| b.top)
+        .min()
+        .unwrap_or(i32::MAX)
+        - BUS_CLEARANCE;
+    let bottom_bus = routing_bounds
+        .iter()
+        .map(|b| b.top + b.height - 1)
+        .max()
+        .unwrap_or(i32::MIN)
+        + BUS_CLEARANCE;
     let owner_value = |value: fn(&Bounds) -> i32| owner_bounds.as_ref().map(value);
     let right_buses = sorted_unique(
         std::iter::once(right_bus)
             .chain(owner_value(|o| o.left + o.width - 2))
-            .chain(other_labels.iter().map(|l| right_bus.max(l.point.x + l.width - 1 + NODE_CLEARANCE))),
+            .chain(
+                other_labels
+                    .iter()
+                    .map(|l| right_bus.max(l.point.x + l.width - 1 + NODE_CLEARANCE)),
+            ),
         false,
     );
     let left_buses = sorted_unique(
         std::iter::once(left_bus)
             .chain(owner_value(|o| o.left + 1))
-            .chain(other_labels.iter().map(|l| left_bus.min(l.point.x - NODE_CLEARANCE))),
+            .chain(
+                other_labels
+                    .iter()
+                    .map(|l| left_bus.min(l.point.x - NODE_CLEARANCE)),
+            ),
         true,
     );
     let top_buses = sorted_unique(
         std::iter::once(top_bus)
             .chain(owner_value(|o| o.top + 1))
-            .chain(other_labels.iter().map(|l| top_bus.min(l.point.y - NODE_CLEARANCE))),
+            .chain(
+                other_labels
+                    .iter()
+                    .map(|l| top_bus.min(l.point.y - NODE_CLEARANCE)),
+            ),
         true,
     );
     let bottom_buses = sorted_unique(
         std::iter::once(bottom_bus)
             .chain(owner_value(|o| o.top + o.height - 2))
-            .chain(other_labels.iter().map(|l| bottom_bus.max(l.point.y + l.height - 1 + NODE_CLEARANCE))),
+            .chain(
+                other_labels
+                    .iter()
+                    .map(|l| bottom_bus.max(l.point.y + l.height - 1 + NODE_CLEARANCE)),
+            ),
         false,
     );
     let limit = 1.max(f64::from(CANDIDATE_BUDGET / 4).sqrt().floor() as usize);
     let cap = |values: Vec<i32>| values.into_iter().take(limit).collect::<Vec<_>>();
-    let (left_buses, right_buses, top_buses, bottom_buses) =
-        (cap(left_buses), cap(right_buses), cap(top_buses), cap(bottom_buses));
+    let (left_buses, right_buses, top_buses, bottom_buses) = (
+        cap(left_buses),
+        cap(right_buses),
+        cap(top_buses),
+        cap(bottom_buses),
+    );
     let buses: Vec<Lane> = left_buses
         .iter()
         .chain(&right_buses)
         .map(|&c| lane(Axis::X, c))
-        .chain(top_buses.iter().chain(&bottom_buses).map(|&c| lane(Axis::Y, c)))
+        .chain(
+            top_buses
+                .iter()
+                .chain(&bottom_buses)
+                .map(|&c| lane(Axis::Y, c)),
+        )
         .collect();
     let with_points = |points: Vec<Point>, label_axis: Option<Axis>| Route {
         edge: route.edge.clone(),
@@ -1004,11 +1322,32 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
             1,
         );
         let points = if bus.axis == Axis::X {
-            path_through(&[start, point(bus.coordinate, start.y), point(bus.coordinate, approach.y), approach, end])
+            path_through(&[
+                start,
+                point(bus.coordinate, start.y),
+                point(bus.coordinate, approach.y),
+                approach,
+                end,
+            ])
         } else {
-            path_through(&[start, point(start.x, bus.coordinate), point(approach.x, bus.coordinate), approach, end])
+            path_through(&[
+                start,
+                point(start.x, bus.coordinate),
+                point(approach.x, bus.coordinate),
+                approach,
+                end,
+            ])
         };
-        with_points(points, route.label_axis.map(|_| if bus.axis == Axis::X { Axis::Y } else { Axis::X }))
+        with_points(
+            points,
+            route.label_axis.map(|_| {
+                if bus.axis == Axis::X {
+                    Axis::Y
+                } else {
+                    Axis::X
+                }
+            }),
+        )
     };
 
     if from.id() == to.id() {
@@ -1018,7 +1357,13 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         for &x in &right_buses {
             for &y in &bottom_buses {
                 loops.push(with_points(
-                    path_through(&[side(Side::Right), point(x, b.center_y), point(x, y), point(b.center_x, y), side(Side::Bottom)]),
+                    path_through(&[
+                        side(Side::Right),
+                        point(x, b.center_y),
+                        point(x, y),
+                        point(b.center_x, y),
+                        side(Side::Bottom),
+                    ]),
                     route.label_axis,
                 ));
             }
@@ -1026,7 +1371,13 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         for &y in &bottom_buses {
             for &x in &left_buses {
                 loops.push(with_points(
-                    path_through(&[side(Side::Bottom), point(b.center_x, y), point(x, y), point(x, b.center_y), side(Side::Left)]),
+                    path_through(&[
+                        side(Side::Bottom),
+                        point(b.center_x, y),
+                        point(x, y),
+                        point(x, b.center_y),
+                        side(Side::Left),
+                    ]),
                     route.label_axis,
                 ));
             }
@@ -1034,7 +1385,13 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         for &x in &left_buses {
             for &y in &top_buses {
                 loops.push(with_points(
-                    path_through(&[side(Side::Left), point(x, b.center_y), point(x, y), point(b.center_x, y), side(Side::Top)]),
+                    path_through(&[
+                        side(Side::Left),
+                        point(x, b.center_y),
+                        point(x, y),
+                        point(b.center_x, y),
+                        side(Side::Top),
+                    ]),
                     route.label_axis,
                 ));
             }
@@ -1042,7 +1399,13 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         for &y in &top_buses {
             for &x in &right_buses {
                 loops.push(with_points(
-                    path_through(&[side(Side::Top), point(b.center_x, y), point(x, y), point(x, b.center_y), side(Side::Right)]),
+                    path_through(&[
+                        side(Side::Top),
+                        point(b.center_x, y),
+                        point(x, y),
+                        point(x, b.center_y),
+                        side(Side::Right),
+                    ]),
                     route.label_axis,
                 ));
             }
@@ -1055,19 +1418,38 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
     let sides = [Side::Left, Side::Right, Side::Top, Side::Bottom];
     let start = route.points[0];
     let current_side = side_for_outside_point(to.bounds(), *route.points.last().unwrap_or(&start));
-    let preserved_targets: Vec<Route> = buses.iter().map(|&bus| via_bus(start, current_side, bus)).collect();
+    let preserved_targets: Vec<Route> = buses
+        .iter()
+        .map(|&bus| via_bus(start, current_side, bus))
+        .collect();
     let same_side = |side: Side, bus: Lane, axis: Axis| {
         with_points(
-            path_via_lane(side_point(from, side, Role::Source), bus, side_point(to, side, Role::Target)),
+            path_via_lane(
+                side_point(from, side, Role::Source),
+                bus,
+                side_point(to, side, Role::Target),
+            ),
             route.label_axis.map(|_| axis),
         )
     };
     let same_sides: Vec<Route> = right_buses
         .iter()
         .map(|&x| same_side(Side::Right, lane(Axis::X, x), Axis::Y))
-        .chain(left_buses.iter().map(|&x| same_side(Side::Left, lane(Axis::X, x), Axis::Y)))
-        .chain(top_buses.iter().map(|&y| same_side(Side::Top, lane(Axis::Y, y), Axis::X)))
-        .chain(bottom_buses.iter().map(|&y| same_side(Side::Bottom, lane(Axis::Y, y), Axis::X)))
+        .chain(
+            left_buses
+                .iter()
+                .map(|&x| same_side(Side::Left, lane(Axis::X, x), Axis::Y)),
+        )
+        .chain(
+            top_buses
+                .iter()
+                .map(|&y| same_side(Side::Top, lane(Axis::Y, y), Axis::X)),
+        )
+        .chain(
+            bottom_buses
+                .iter()
+                .map(|&y| same_side(Side::Bottom, lane(Axis::Y, y), Axis::X)),
+        )
         .collect();
     let mut preserved_sources: Vec<Route> = Vec::new();
     for &side in &sides {
@@ -1115,20 +1497,31 @@ fn avoid_label_overlap(
     if route.edge.label.is_empty() {
         return route.clone();
     }
-    let other_labels: Vec<LabelLayout> =
-        others.iter().filter(|other| !other.edge.label.is_empty()).map(|other| route_label_layout(other)).collect();
+    let other_labels: Vec<LabelLayout> = others
+        .iter()
+        .filter(|other| !other.edge.label.is_empty())
+        .map(|other| route_label_layout(other))
+        .collect();
     let connectors: Vec<Bounds> = others
         .iter()
         .filter_map(|other| {
             let source = endpoints.get(&other.edge.from)?;
             let first = *other.points.first()?;
             let connector = source_connector(source.bounds(), first);
-            Some([Bounds::rect(connector.x, connector.y, 1, 1), Bounds::rect(first.x, first.y, 1, 1)])
+            Some([
+                Bounds::rect(connector.x, connector.y, 1, 1),
+                Bounds::rect(first.x, first.y, 1, 1),
+            ])
         })
         .flatten()
         .collect();
-    let has_parallel = others.iter().any(|other| other.edge.from == route.edge.from && other.edge.to == route.edge.to);
-    let frames: Vec<&SubgraphBounds> = context.frames.map(|frames| frames.values().collect()).unwrap_or_default();
+    let has_parallel = others
+        .iter()
+        .any(|other| other.edge.from == route.edge.from && other.edge.to == route.edge.to);
+    let frames: Vec<&SubgraphBounds> = context
+        .frames
+        .map(|frames| frames.values().collect())
+        .unwrap_or_default();
     let intersects = |label: &LabelLayout| {
         target_width.is_some_and(|target| {
             if has_parallel || !include_label_width {
@@ -1136,17 +1529,27 @@ fn avoid_label_overlap(
             } else {
                 label.point.x + label.width > target
             }
-        }) || context.nodes.values().any(|node| label_intersects_bounds(label, &node.bounds))
-            || frames.iter().any(|frame| label_intersects_frame(label, &frame.bounds))
+        }) || context
+            .nodes
+            .values()
+            .any(|node| label_intersects_bounds(label, &node.bounds))
+            || frames
+                .iter()
+                .any(|frame| label_intersects_frame(label, &frame.bounds))
             || label_intersects_labels(label, &other_labels)
             || label_intersects_route_paths(label, others.iter().copied())
-            || connectors.iter().any(|bound| label_intersects_bounds(label, bound))
+            || connectors
+                .iter()
+                .any(|bound| label_intersects_bounds(label, bound))
     };
     let current = route_label_layout(route);
     if !intersects(&current) {
         return route.clone();
     }
-    let with_label = |point: Point| Route { label_point: Some(point), ..route.clone() };
+    let with_label = |point: Point| Route {
+        label_point: Some(point),
+        ..route.clone()
+    };
     let seen: std::cell::RefCell<HashSet<Point>> = Default::default();
     let budget = std::cell::Cell::new(CANDIDATE_BUDGET);
     let available = |candidate: Point| {
@@ -1154,7 +1557,10 @@ fn avoid_label_overlap(
         if !seen.borrow_mut().insert(candidate) {
             return false;
         }
-        !intersects(&LabelLayout { point: candidate, ..current.clone() })
+        !intersects(&LabelLayout {
+            point: candidate,
+            ..current.clone()
+        })
     };
     let remaining = || budget.get();
     let mut index = 1;
@@ -1163,9 +1569,17 @@ fn avoid_label_overlap(
             index += 1;
             continue;
         };
-        let label = edge_label_layout(&route.points, &route.edge.label, route.label_axis, Some(index - 1));
+        let label = edge_label_layout(
+            &route.points,
+            &route.edge.label,
+            route.label_axis,
+            Some(index - 1),
+        );
         let fixed = if segment.axis == Axis::Y {
-            vec![label.point, point(segment.from.x - label.width, label.point.y)]
+            vec![
+                label.point,
+                point(segment.from.x - label.width, label.point.y),
+            ]
         } else {
             vec![
                 label.point,
@@ -1201,7 +1615,11 @@ fn avoid_label_overlap(
         let right = segment.from.x.max(segment.to.x) - label.width + 1;
         let mut x = segment.from.x.min(segment.to.x);
         while x <= right && remaining() > 0 {
-            for y in [segment.from.y, segment.from.y - label.height, segment.from.y + 1] {
+            for y in [
+                segment.from.y,
+                segment.from.y - label.height,
+                segment.from.y + 1,
+            ] {
                 if available(point(x, y)) {
                     return with_label(point(x, y));
                 }
@@ -1225,7 +1643,12 @@ fn avoid_label_overlap(
                 vec![current.point.y - distance, current.point.y + distance]
             };
             for y in ys {
-                if y < 0 || intersects(&LabelLayout { point: point(x, y), ..current.clone() }) {
+                if y < 0
+                    || intersects(&LabelLayout {
+                        point: point(x, y),
+                        ..current.clone()
+                    })
+                {
                     continue;
                 }
                 return with_label(point(x, y));
@@ -1245,17 +1668,31 @@ pub fn route_edges(
     locked: Option<&[Route]>,
 ) -> Vec<Route> {
     let routed = Diagram {
-        edges: diagram.edges.iter().filter(|edge| !edge.order_only).cloned().collect(),
+        edges: diagram
+            .edges
+            .iter()
+            .filter(|edge| !edge.order_only)
+            .cloned()
+            .collect(),
         ..diagram.clone()
     };
-    let locked_ids: HashSet<usize> = locked.unwrap_or_default().iter().map(|route| route.edge.id).collect();
+    let locked_ids: HashSet<usize> = locked
+        .unwrap_or_default()
+        .iter()
+        .map(|route| route.edge.id)
+        .collect();
     let mut router = Router {
         endpoints: Endpoints { nodes, frames },
         handled: locked_ids.clone(),
         routes: locked.unwrap_or_default().to_vec(),
     };
     let left_boundary = frames.map(|frames| {
-        nodes.values().map(|node| node.bounds.left).chain(frames.values().map(|frame| frame.bounds.left)).min().unwrap_or(i32::MAX)
+        nodes
+            .values()
+            .map(|node| node.bounds.left)
+            .chain(frames.values().map(|frame| frame.bounds.left))
+            .min()
+            .unwrap_or(i32::MAX)
     });
 
     router.parallel_edges(&routed, direction_for, direction_aligned);
@@ -1293,14 +1730,21 @@ pub fn route_edges(
         if router.handled.contains(&edge.id) {
             continue;
         }
-        let (Some(from), Some(to)) = (router.endpoints.get(&edge.from), router.endpoints.get(&edge.to)) else {
+        let (Some(from), Some(to)) = (
+            router.endpoints.get(&edge.from),
+            router.endpoints.get(&edge.to),
+        ) else {
             continue;
         };
         let points = edge_path(from, to, direction_for(edge), left_boundary);
         router.routes.push(Route::new(edge.clone(), points));
     }
 
-    let context = ObstacleContext { nodes, frames, diagram: &routed };
+    let context = ObstacleContext {
+        nodes,
+        frames,
+        diagram: &routed,
+    };
     let mut routes = router.routes;
     for index in (0..routes.len()).rev() {
         if locked_ids.contains(&routes[index].edge.id) {
@@ -1315,7 +1759,9 @@ pub fn route_edges(
         let mut ids: HashSet<&str> = HashSet::new();
         let mut current = match by_id(id) {
             Some(direct) => direct.parent_id.as_deref().and_then(by_id),
-            None => subgraphs.iter().find(|subgraph| subgraph.node_ids.iter().any(|member| member == id)),
+            None => subgraphs
+                .iter()
+                .find(|subgraph| subgraph.node_ids.iter().any(|member| member == id)),
         };
         while let Some(subgraph) = current {
             ids.insert(&subgraph.id);
@@ -1368,7 +1814,10 @@ pub fn route_edges(
 }
 
 pub fn avoid_frame_borders(routes: &mut [Route], nodes: &Nodes, frames: &Frames) {
-    let endpoints = Endpoints { nodes, frames: Some(frames) };
+    let endpoints = Endpoints {
+        nodes,
+        frames: Some(frames),
+    };
     let inside = |endpoint: Endpoint, frame: &SubgraphBounds| {
         let node = endpoint.bounds();
         let outer = &frame.bounds;
@@ -1393,36 +1842,46 @@ pub fn avoid_frame_borders(routes: &mut [Route], nodes: &Nodes, frames: &Frames)
                     continue;
                 };
                 let span = segment_span(&segment);
-                let horizontal = if segment.axis == Axis::X && span.end.min(right) > span.start.max(b.left) {
-                    if segment.from.y == b.top {
-                        Some(Side::Top)
-                    } else if segment.from.y == bottom {
-                        Some(Side::Bottom)
+                let horizontal =
+                    if segment.axis == Axis::X && span.end.min(right) > span.start.max(b.left) {
+                        if segment.from.y == b.top {
+                            Some(Side::Top)
+                        } else if segment.from.y == bottom {
+                            Some(Side::Bottom)
+                        } else {
+                            None
+                        }
                     } else {
                         None
-                    }
-                } else {
-                    None
-                };
-                let vertical = if segment.axis == Axis::Y && span.end.min(bottom) > span.start.max(b.top) {
-                    if segment.from.x == b.left {
-                        Some(Side::Left)
-                    } else if segment.from.x == right {
-                        Some(Side::Right)
+                    };
+                let vertical =
+                    if segment.axis == Axis::Y && span.end.min(bottom) > span.start.max(b.top) {
+                        if segment.from.x == b.left {
+                            Some(Side::Left)
+                        } else if segment.from.x == right {
+                            Some(Side::Right)
+                        } else {
+                            None
+                        }
                     } else {
                         None
-                    }
-                } else {
-                    None
-                };
+                    };
                 let step = |inner: bool| if inner == inward { 1 } else { -1 };
                 match (horizontal, vertical) {
                     (Some(side), _) => {
-                        let offset = if side == Side::Top { b.top + step(true) } else { bottom - step(true) };
+                        let offset = if side == Side::Top {
+                            b.top + step(true)
+                        } else {
+                            bottom - step(true)
+                        };
                         points.extend([point(from.x, offset), point(to.x, offset), to]);
                     }
                     (None, Some(side)) => {
-                        let offset = if side == Side::Left { b.left + step(true) } else { right - step(true) };
+                        let offset = if side == Side::Left {
+                            b.left + step(true)
+                        } else {
+                            right - step(true)
+                        };
                         points.extend([point(offset, from.y), point(offset, to.y), to]);
                     }
                     (None, None) => points.push(to),

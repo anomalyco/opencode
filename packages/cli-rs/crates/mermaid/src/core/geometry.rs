@@ -122,22 +122,43 @@ pub fn coordinate(point: Point, axis: Axis) -> i32 {
 
 pub fn with_coordinate(point: Point, axis: Axis, value: i32) -> Point {
     match axis {
-        Axis::X => Point { x: value, y: point.y },
-        Axis::Y => Point { x: point.x, y: value },
+        Axis::X => Point {
+            x: value,
+            y: point.y,
+        },
+        Axis::Y => Point {
+            x: point.x,
+            y: value,
+        },
     }
 }
 
 pub fn shift_point(point: Point, direction: Direction, distance: i32) -> Point {
     match direction {
-        Direction::Left => Point { x: point.x - distance, y: point.y },
-        Direction::Right => Point { x: point.x + distance, y: point.y },
-        Direction::Up => Point { x: point.x, y: point.y - distance },
-        Direction::Down => Point { x: point.x, y: point.y + distance },
+        Direction::Left => Point {
+            x: point.x - distance,
+            y: point.y,
+        },
+        Direction::Right => Point {
+            x: point.x + distance,
+            y: point.y,
+        },
+        Direction::Up => Point {
+            x: point.x,
+            y: point.y - distance,
+        },
+        Direction::Down => Point {
+            x: point.x,
+            y: point.y + distance,
+        },
     }
 }
 
 pub fn clamp_point(point: Point) -> Point {
-    Point { x: point.x.max(0), y: point.y.max(0) }
+    Point {
+        x: point.x.max(0),
+        y: point.y.max(0),
+    }
 }
 
 pub fn direction_axis(direction: Direction) -> Axis {
@@ -224,7 +245,11 @@ pub fn center_coordinate(bounds: &Bounds, axis: Axis) -> i32 {
 }
 
 pub fn snap_coordinate(source: i32, target: i32, tolerance: i32) -> i32 {
-    if (source - target).abs() <= tolerance { target } else { source }
+    if (source - target).abs() <= tolerance {
+        target
+    } else {
+        source
+    }
 }
 
 pub fn path_through(points: &[Point]) -> Vec<Point> {
@@ -251,7 +276,11 @@ pub fn path_via_lane(start: Point, lane: Lane, end: Point) -> Vec<Point> {
 }
 
 fn dominant_axis(start: Point, end: Point) -> Axis {
-    if (end.x - start.x).abs() >= (end.y - start.y).abs() { Axis::X } else { Axis::Y }
+    if (end.x - start.x).abs() >= (end.y - start.y).abs() {
+        Axis::X
+    } else {
+        Axis::Y
+    }
 }
 
 fn terminal_lane(start: Point, end: Point, axis: Axis, clearance: i32) -> i32 {
@@ -296,7 +325,11 @@ pub fn walk_orthogonal_segment(
         return;
     };
     let (dx, dy) = step(direction);
-    let mut cursor = if include_start { from } else { point(from.x + dx, from.y + dy) };
+    let mut cursor = if include_start {
+        from
+    } else {
+        point(from.x + dx, from.y + dy)
+    };
     while cursor != to {
         if !visit(cursor) {
             return;
@@ -322,7 +355,11 @@ pub fn orthogonal_path_points(points: &[Point]) -> Vec<Point> {
             continue;
         };
         let (dx, dy) = step(direction);
-        let mut cursor = if path.is_empty() { from } else { point(from.x + dx, from.y + dy) };
+        let mut cursor = if path.is_empty() {
+            from
+        } else {
+            point(from.x + dx, from.y + dy)
+        };
         loop {
             path.push(cursor);
             if cursor == to {
@@ -335,11 +372,24 @@ pub fn orthogonal_path_points(points: &[Point]) -> Vec<Point> {
 }
 
 pub fn ordered_span(left: i32, right: i32) -> Span {
-    if left <= right { Span { start: left, end: right } } else { Span { start: right, end: left } }
+    if left <= right {
+        Span {
+            start: left,
+            end: right,
+        }
+    } else {
+        Span {
+            start: right,
+            end: left,
+        }
+    }
 }
 
 pub fn segment_span(segment: &Segment) -> Span {
-    ordered_span(coordinate(segment.from, segment.axis), coordinate(segment.to, segment.axis))
+    ordered_span(
+        coordinate(segment.from, segment.axis),
+        coordinate(segment.to, segment.axis),
+    )
 }
 
 pub fn point_on_segment(segment: &Segment, value: i32) -> Point {
@@ -347,7 +397,10 @@ pub fn point_on_segment(segment: &Segment, value: i32) -> Point {
 }
 
 pub fn inset_span(span: Span, amount: i32) -> Span {
-    Span { start: span.start + amount, end: span.end - amount }
+    Span {
+        start: span.start + amount,
+        end: span.end - amount,
+    }
 }
 
 pub fn span_capacity(span: Span) -> i32 {
@@ -372,7 +425,12 @@ pub fn advance_coordinate(origin: i32, direction: Direction, distance: i32) -> i
     origin + direction_sign(direction) * distance
 }
 
-pub fn before_nearest_coordinate(points: &[Point], axis: Axis, direction: Direction, clearance: i32) -> i32 {
+pub fn before_nearest_coordinate(
+    points: &[Point],
+    axis: Axis,
+    direction: Direction,
+    clearance: i32,
+) -> i32 {
     let coordinates = points.iter().map(|&p| coordinate(p, axis));
     let nearest = if direction_sign(direction) > 0 {
         coordinates.min().unwrap_or(i32::MAX)
@@ -382,7 +440,12 @@ pub fn before_nearest_coordinate(points: &[Point], axis: Axis, direction: Direct
     advance_coordinate(nearest, direction, -clearance)
 }
 
-pub fn after_farthest_coordinate(points: &[Point], axis: Axis, direction: Direction, clearance: i32) -> i32 {
+pub fn after_farthest_coordinate(
+    points: &[Point],
+    axis: Axis,
+    direction: Direction,
+    clearance: i32,
+) -> i32 {
     let coordinates = points.iter().map(|&p| coordinate(p, axis));
     let farthest = if direction_sign(direction) > 0 {
         coordinates.max().unwrap_or(i32::MIN)
@@ -393,9 +456,17 @@ pub fn after_farthest_coordinate(points: &[Point], axis: Axis, direction: Direct
 }
 
 pub fn keep_before(preferred: i32, boundary: i32, direction: Direction) -> i32 {
-    if direction_sign(direction) > 0 { preferred.min(boundary) } else { preferred.max(boundary) }
+    if direction_sign(direction) > 0 {
+        preferred.min(boundary)
+    } else {
+        preferred.max(boundary)
+    }
 }
 
 pub fn keep_after(preferred: i32, boundary: i32, direction: Direction) -> i32 {
-    if direction_sign(direction) > 0 { preferred.max(boundary) } else { preferred.min(boundary) }
+    if direction_sign(direction) > 0 {
+        preferred.max(boundary)
+    } else {
+        preferred.min(boundary)
+    }
 }

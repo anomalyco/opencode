@@ -193,7 +193,12 @@ impl Directions {
 }
 
 pub fn line_glyph(directions: Directions, corner: CornerStyle, line: LineStyle) -> &'static str {
-    let Directions { up, down, left, right } = directions;
+    let Directions {
+        up,
+        down,
+        left,
+        right,
+    } = directions;
     if line == LineStyle::Heavy {
         let chars = HEAVY;
         return if up && down && left && right {
@@ -248,23 +253,47 @@ pub fn line_glyph(directions: Directions, corner: CornerStyle, line: LineStyle) 
 
 fn segment_glyph(direction: Direction, line: LineStyle) -> &'static str {
     let directions = match direction {
-        Direction::Left | Direction::Right => Directions { left: true, right: true, ..Default::default() },
-        _ => Directions { up: true, down: true, ..Default::default() },
+        Direction::Left | Direction::Right => Directions {
+            left: true,
+            right: true,
+            ..Default::default()
+        },
+        _ => Directions {
+            up: true,
+            down: true,
+            ..Default::default()
+        },
     };
     line_glyph(
         directions,
         CornerStyle::Square,
-        if line == LineStyle::Heavy { LineStyle::Heavy } else { LineStyle::Single },
+        if line == LineStyle::Heavy {
+            LineStyle::Heavy
+        } else {
+            LineStyle::Single
+        },
     )
 }
 
-pub fn merge_line_glyph(existing: &str, incoming: &str, corner: CornerStyle) -> Option<&'static str> {
+pub fn merge_line_glyph(
+    existing: &str,
+    incoming: &str,
+    corner: CornerStyle,
+) -> Option<&'static str> {
     let mut directions = Directions::of(line_directions(existing)?);
     for &direction in line_directions(incoming)? {
         directions.add(direction);
     }
     let heavy = is_heavy(existing) && is_heavy(incoming);
-    Some(line_glyph(directions, corner, if heavy { LineStyle::Heavy } else { LineStyle::Single }))
+    Some(line_glyph(
+        directions,
+        corner,
+        if heavy {
+            LineStyle::Heavy
+        } else {
+            LineStyle::Single
+        },
+    ))
 }
 
 pub fn arrow_head(direction: Direction, style: ArrowHeadStyle) -> &'static str {
@@ -281,10 +310,17 @@ pub fn arrow_head(direction: Direction, style: ArrowHeadStyle) -> &'static str {
 }
 
 pub fn arrow_head_between(from: Point, to: Point, style: ArrowHeadStyle) -> &'static str {
-    arrow_head(direction_between(from, to).unwrap_or(Direction::Right), style)
+    arrow_head(
+        direction_between(from, to).unwrap_or(Direction::Right),
+        style,
+    )
 }
 
-pub fn draw_frame(bounds: &Bounds, chars: &BorderChars, mut set: impl FnMut(i32, i32, &'static str)) {
+pub fn draw_frame(
+    bounds: &Bounds,
+    chars: &BorderChars,
+    mut set: impl FnMut(i32, i32, &'static str),
+) {
     let right = bounds.left + bounds.width - 1;
     let bottom = bounds.top + bounds.height - 1;
     set(bounds.left, bounds.top, chars.top_left);
@@ -309,7 +345,11 @@ pub fn fill_frame_interior(bounds: &Bounds, mut set: impl FnMut(i32, i32)) {
     }
 }
 
-pub fn draw_diamond(bounds: &Bounds, chars: &DiamondChars, mut set: impl FnMut(i32, i32, &'static str)) {
+pub fn draw_diamond(
+    bounds: &Bounds,
+    chars: &DiamondChars,
+    mut set: impl FnMut(i32, i32, &'static str),
+) {
     let left = bounds.left;
     let right = bounds.left + bounds.width - 1;
     let top = bounds.top;
@@ -379,7 +419,11 @@ pub fn draw_orthogonal_path(
             true
         });
     }
-    let corner_line = if line == LineStyle::Heavy { LineStyle::Heavy } else { LineStyle::Single };
+    let corner_line = if line == LineStyle::Heavy {
+        LineStyle::Heavy
+    } else {
+        LineStyle::Single
+    };
     for index in 1..points.len().saturating_sub(1) {
         let (previous, current, next) = (points[index - 1], points[index], points[index + 1]);
         let mut directions = Directions::default();
@@ -389,6 +433,10 @@ pub fn draw_orthogonal_path(
         if let Some(direction) = direction_between(current, next) {
             directions.add(direction);
         }
-        set(current.x, current.y, line_glyph(directions, corner, corner_line));
+        set(
+            current.x,
+            current.y,
+            line_glyph(directions, corner, corner_line),
+        );
     }
 }

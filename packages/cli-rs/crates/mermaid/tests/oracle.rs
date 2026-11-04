@@ -8,7 +8,9 @@ use opentui::prelude::Color;
 const CORPUS: &str = include_str!("../../../parity/fixtures/P.3/corpus.json");
 
 fn hex(color: Option<Color>) -> String {
-    color.map_or("-".to_string(), |c| format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a))
+    color.map_or("-".to_string(), |c| {
+        format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a)
+    })
 }
 
 /// A case as the fixture stores it: lines and per-line [code points, style key] runs.
@@ -17,17 +19,29 @@ type Case = (Vec<String>, Vec<Vec<(usize, String)>>);
 fn rust_case(source: &str, width: u16, palette: &Palette) -> Option<Case> {
     let diagram = match render(source, width, palette) {
         Rendered::Diagram(diagram) => diagram,
-        Rendered::Syntax { prefix: Some(diagram), .. } => diagram,
+        Rendered::Syntax {
+            prefix: Some(diagram),
+            ..
+        } => diagram,
         Rendered::Code | Rendered::Syntax { prefix: None, .. } => return None,
     };
-    let lines = diagram.lines.iter().map(|line| line.iter().map(|run| run.text.as_str()).collect()).collect();
+    let lines = diagram
+        .lines
+        .iter()
+        .map(|line| line.iter().map(|run| run.text.as_str()).collect())
+        .collect();
     let runs = diagram
         .lines
         .iter()
         .map(|line| {
             line.iter()
                 .filter(|run| !run.text.is_empty())
-                .map(|run| (run.text.chars().count(), format!("{} {} {}", hex(run.fg), hex(run.bg), run.attributes)))
+                .map(|run| {
+                    (
+                        run.text.chars().count(),
+                        format!("{} {} {}", hex(run.fg), hex(run.bg), run.attributes),
+                    )
+                })
                 .collect()
         })
         .collect();
@@ -45,9 +59,6 @@ fn merged(runs: Vec<(usize, String)>) -> Vec<(usize, String)> {
     }
     out
 }
-
-/// The diagram kinds the port covers so far.
-const PORTED: &[&str] = &["flowchart", "sequence", "gantt", "gitGraph", "timeline"];
 
 /// The kind a source's header names, independent of the Rust detector under test.
 fn header_kind(source: &str) -> &'static str {
@@ -72,9 +83,16 @@ fn header_kind(source: &str) -> &'static str {
 #[test]
 fn diagrams_match_typescript() {
     let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
-    let styles: Vec<String> =
-        corpus["styles"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect();
-    let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+    let styles: Vec<String> = corpus["styles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect();
+    let theme = Catalog::default()
+        .load("opencode", ThemeMode::Dark)
+        .unwrap()
+        .theme;
     let palette = Palette::from_theme(&theme);
     let only = std::env::var("MERMAID_ONLY").ok();
     let mut failures: Vec<String> = Vec::new();
@@ -83,7 +101,8 @@ fn diagrams_match_typescript() {
         let source = case["source"].as_str().unwrap();
         let width = case["width"].as_u64().unwrap() as u16;
         let kind = header_kind(source);
-        if !PORTED.contains(&kind) || only.as_deref().is_some_and(|only| only != kind) {
+        // MERMAID_ONLY=<kind> narrows a run to one diagram kind while debugging.
+        if only.as_deref().is_some_and(|only| only != kind) {
             continue;
         }
         total += 1;
@@ -92,7 +111,10 @@ fn diagrams_match_typescript() {
             if empty {
                 return (Vec::new(), Vec::new());
             }
-            let lines: Vec<String> = lines.iter().map(|line| line.as_str().unwrap().to_string()).collect();
+            let lines: Vec<String> = lines
+                .iter()
+                .map(|line| line.as_str().unwrap().to_string())
+                .collect();
             let runs: Vec<Vec<(usize, String)>> = case["runs"]
                 .as_array()
                 .unwrap()
@@ -102,7 +124,10 @@ fn diagrams_match_typescript() {
                         .unwrap()
                         .iter()
                         .map(|run| {
-                            (run[0].as_u64().unwrap() as usize, styles[run[1].as_u64().unwrap() as usize].clone())
+                            (
+                                run[0].as_u64().unwrap() as usize,
+                                styles[run[1].as_u64().unwrap() as usize].clone(),
+                            )
                         })
                         .collect()
                 })
@@ -116,7 +141,11 @@ fn diagrams_match_typescript() {
             (None, Some(_)) => Some("TS keeps the code; Rust draws a diagram".to_string()),
             (Some((lines, runs)), Some((actual_lines, actual_runs))) => {
                 if lines != actual_lines {
-                    Some(format!("text differs:\n--- TS\n{}\n--- Rust\n{}", lines.join("\n"), actual_lines.join("\n")))
+                    Some(format!(
+                        "text differs:\n--- TS\n{}\n--- Rust\n{}",
+                        lines.join("\n"),
+                        actual_lines.join("\n")
+                    ))
                 } else {
                     let row = runs
                         .iter()
@@ -135,16 +164,28 @@ fn diagrams_match_typescript() {
             failures.push(format!("[{kind} width {width}]\n{source}\n{report}"));
         }
     }
-    eprintln!("P.3 oracle: {} of {total} cases equal", total - failures.len());
+    eprintln!(
+        "P.3 oracle: {} of {total} cases equal",
+        total - failures.len()
+    );
     if !failures.is_empty() {
         let directory = std::env::temp_dir().join("opencode-parity/P.3");
         std::fs::create_dir_all(&directory).unwrap();
-        std::fs::write(directory.join("failures.txt"), failures.join("\n\n========\n\n")).unwrap();
+        std::fs::write(
+            directory.join("failures.txt"),
+            failures.join("\n\n========\n\n"),
+        )
+        .unwrap();
         panic!(
             "{} of {total} cases differ from TS (details in {}):\n\n{}",
             failures.len(),
             directory.join("failures.txt").display(),
-            failures.iter().take(3).cloned().collect::<Vec<_>>().join("\n\n========\n\n")
+            failures
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n\n========\n\n")
         );
     }
 }
