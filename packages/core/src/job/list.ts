@@ -12,7 +12,7 @@ export type Item = Job.Info
 
 export type Live = {
   readonly info: Info
-  readonly isBackgrounded: boolean
+  readonly phase: { readonly backgrounded: boolean }
   readonly recovery?: Recovery
 }
 
@@ -108,7 +108,7 @@ export function read<Entry extends Live>(
       )
     }
     for (const live of active.values()) {
-      if (!live.isBackgrounded || !live.recovery) continue
+      if (!live.phase.backgrounded || !live.recovery) continue
       if (live.info.notificationID && seen.has(live.info.notificationID)) continue
       items.push(
         toItem({
