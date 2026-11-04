@@ -332,7 +332,11 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    onResponseSubmit: input.timeline.actions.resume,
+    // Submitting keeps following only when already following. A reader scrolled up stays where they are; the
+    // jump-to-latest button takes them down.
+    onResponseSubmit: () => {
+      if (input.timeline.view.pinned()) input.timeline.actions.resume()
+    },
     openParent,
     focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
