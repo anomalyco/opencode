@@ -100,6 +100,7 @@ async function record(name: string, file: string) {
     if ("pty" in step) pty?.step(step.pty)
     if ("keys" in step) step.keys.forEach((key) => press(setup, key))
     if ("type" in step) await setup.mockInput.typeText(step.type)
+    if ("paste" in step) await setup.mockInput.pasteBracketedText(step.paste)
     if ("click" in step) await setup.mockMouse.click(...step.click)
     if ("event" in step) setup.events.emit(step.event as never)
     if ("drag" in step) await setup.mockMouse.drag(...step.drag[0], ...step.drag[1])
