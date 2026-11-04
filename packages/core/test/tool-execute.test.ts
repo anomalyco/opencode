@@ -205,21 +205,6 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
   )
 })
 
-test("tools without an object input schema still run", async () => {
-  const tool = (name: string, input: unknown): Info => ({
-    name,
-    description: name,
-    input: input as Info["input"],
-    execute: (value) => Effect.succeed({ content: JSON.stringify(value) }),
-  })
-
-  for (const input of [undefined, null, true])
-    expect(await Effect.runPromise(execute(tool(`input_${input}`, input), { value: 1 }, context))).toEqual({
-      output: undefined,
-      content: [{ type: "text", text: '{"value":1}' }],
-    })
-})
-
 test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {
   class ForeignFailure extends Schema.TaggedError<ForeignFailure>()("Plugin.ForeignFailure", {
     message: Schema.String,

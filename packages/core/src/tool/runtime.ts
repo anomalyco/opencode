@@ -15,8 +15,6 @@ const jsonSchemas = new WeakMap<object, Schema.Codec<unknown> | undefined>()
 const codecFor = (schema: JsonSchema.JsonSchema) => {
   if (jsonSchemas.has(schema)) return jsonSchemas.get(schema)
   const codec = Result.try(() => jsonSchema(schema)).pipe(Result.getOrUndefined)
-  // JavaScript plugins can register a tool without `input`, or with a boolean schema, and a WeakMap only takes objects.
-  if (typeof schema !== "object" || schema === null) return codec
   jsonSchemas.set(schema, codec)
   return codec
 }
