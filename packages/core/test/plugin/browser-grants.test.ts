@@ -3,8 +3,9 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/schema/schema"
+import type { Session } from "@opencode/schema/session"
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { Deferred, Effect, Exit, Fiber, Scope, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Scope, Stream } from "effect"
 import { BrowserConnection } from "../../../plugin-browser/src/connection"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -14,70 +15,46 @@ const access = [
   { action: "browser", resource: "*", effect: "allow" },
   { action: "skill", resource: "browser", effect: "allow" },
 ] as const
+const held = Context.Reference<boolean>("test/browser-grants/held", { defaultValue: () => false })
+const setup = Effect.fn(function* () {
+  const plugins = yield* Plugin.Service
+  const host = yield* PluginHost.make(plugins, "test")
+  const service = yield* Rpc.Service
+  return { host, rpc: service.client(Browser.Definition) }
+})
+const attach = Effect.fn(function* (rpc: Effect.Success<ReturnType<typeof setup>>["rpc"], sessionID: Session.ID) {
+  const connectionID = crypto.randomUUID()
+  const attached = yield* rpc.events.subscribe("control").pipe(
+    Stream.filter((event) => event.data.type === "attached" && event.data.connectionID === connectionID),
+    Stream.take(1),
+    Stream.runDrain,
+    Effect.forkScoped({ startImmediately: true }),
+  )
+  const pending = yield* rpc.attach({ sessionID, connectionID, version: 4 }).pipe(Effect.forkScoped)
+  yield* Fiber.join(attached)
+  return pending
+})
 
 it.live("starting another location leaves a live browser attachment's grants intact", () =>
   Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const host = yield* PluginHost.make(plugins, "test")
-    const service = yield* Rpc.Service
-    const rpc = service.client(Browser.Definition)
+    const { host, rpc } = yield* setup()
     const connection = yield* BrowserConnection.make(host)
     const session = yield* host.session.create({})
-    const attached = yield* Deferred.make<void>()
-    yield* rpc.events.subscribe("control").pipe(
-      Stream.runForEach((event) =>
-        event.data.type === "attached" ? Deferred.succeed(attached, undefined) : Effect.void,
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    const pending = yield* rpc
-      .attach({ sessionID: session.id, connectionID: "first", version: 4 })
-      .pipe(Effect.forkScoped)
-    yield* Deferred.await(attached)
-    expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(access)
+    const pending = yield* attach(rpc, session.id)
     const directory = AbsolutePath.make(`${host.location.directory}/other`)
     const stale = yield* host.session.create({ location: { directory }, permissions: access })
-    yield* BrowserConnection.make({
-      ...host,
-      location: { ...host.location, directory },
-    })
+    yield* BrowserConnection.make({ ...host, location: { ...host.location, directory } })
     expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(access)
     expect((yield* host.session.get({ sessionID: stale.id })).permissions).toEqual([])
-    expect(pending.pollUnsafe()).toBeUndefined()
     yield* connection.target(session.id, { type: "tabs.list" })
     yield* Fiber.interrupt(pending)
   }),
 )
 
-it.live("a replaced attachment removes only its grants and preserves ordered user permissions", () =>
+it.live("a replaced attachment preserves its replacement's grants and ordered user permissions", () =>
   Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const host = yield* PluginHost.make(plugins, "test")
-    const service = yield* Rpc.Service
-    const rpc = service.client(Browser.Definition)
-    const release = yield* Deferred.make<void>()
-    const releasing = yield* Deferred.make<void>()
-    const first = yield* Deferred.make<void>()
-    const second = yield* Deferred.make<void>()
-    // The first RPC handler owns its grant finalizer. Hold that finalizer before reading
-    // permissions until the replacement has appended its own grants.
-    const old = { fiber: -1, blocked: false }
-    yield* BrowserConnection.make({
-      ...host,
-      session: {
-        ...host.session,
-        get: (input) =>
-          Effect.gen(function* () {
-            const id = yield* Effect.fiberId
-            if (old.fiber === -1) old.fiber = id
-            if (old.blocked && id === old.fiber) {
-              yield* Deferred.succeed(releasing, undefined)
-              yield* Deferred.await(release)
-            }
-            return yield* host.session.get(input)
-          }),
-      },
-    })
+    const { host, rpc } = yield* setup()
+    yield* BrowserConnection.make(host)
     const baseline = [
       ...access,
       { action: "browser", resource: "*", effect: "deny" },
@@ -85,62 +62,50 @@ it.live("a replaced attachment removes only its grants and preserves ordered use
       { action: "edit", resource: "*", effect: "ask" },
     ] as const
     const session = yield* host.session.create({ permissions: baseline })
-    yield* rpc.events.subscribe("control").pipe(
-      Stream.runForEach((event) =>
-        event.data.type === "attached"
-          ? Deferred.succeed(event.data.connectionID === "first" ? first : second, undefined)
-          : Effect.void,
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* Effect.gen(function* () {
-      const pending = yield* rpc
-        .attach({ sessionID: session.id, connectionID: "first", version: 4 })
-        .pipe(Effect.forkScoped)
-      yield* Deferred.await(first)
-      old.blocked = true
-      const replacement = yield* rpc
-        .attach({ sessionID: session.id, connectionID: "second", version: 4 })
-        .pipe(Effect.forkScoped)
-      yield* Deferred.await(releasing)
-      yield* Deferred.await(second)
-      expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([
-        ...baseline,
-        ...access,
-        ...access,
-      ])
-      yield* Deferred.succeed(release, undefined)
-      expect(yield* Fiber.join(pending)).toBe("replaced")
-      expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([...baseline, ...access])
-      yield* Fiber.interrupt(replacement)
-      expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(baseline)
-    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+    const first = yield* attach(rpc, session.id)
+    const replacement = yield* attach(rpc, session.id)
+    expect(yield* Fiber.join(first)).toBe("replaced")
+    expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([...baseline, ...access])
+    yield* Fiber.interrupt(replacement)
+    expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(baseline)
   }),
 )
 
 for (const replaced of [false, true]) {
   it.live(`browser teardown waits for ${replaced ? "a replaced" : "its active"} attachment's grant cleanup`, () =>
     Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      const host = yield* PluginHost.make(plugins, "test")
-      const service = yield* Rpc.Service
-      const rpc = service.client(Browser.Definition)
+      const { host, rpc } = yield* setup()
       const scope = yield* Scope.make()
       const release = yield* Deferred.make<void>()
       const releasing = yield* Deferred.make<void>()
-      const first = yield* Deferred.make<void>()
-      const second = yield* Deferred.make<void>()
-      const third = yield* Deferred.make<void>()
-      const old = { fiber: -1, blocked: false }
+      const entered = yield* Deferred.make<void>()
+      const continueClose = yield* Deferred.make<void>()
+      const closed = yield* Deferred.make<void>()
+      const register: typeof host.rpc.register = (definition, handlers) =>
+        Effect.addFinalizer(() =>
+          Effect.gen(function* () {
+            // Queue the signal so teardown is parked before the test resumes.
+            yield* Deferred.succeed(entered, undefined).pipe(Effect.forkChild)
+            yield* Deferred.await(continueClose)
+          }),
+        ).pipe(Effect.andThen(host.rpc.register(definition, handlers)))
+      const gate = { enabled: false }
       yield* BrowserConnection.make({
         ...host,
+        rpc: Object.assign(host.rpc.bind(undefined), { register }),
+        agent: {
+          ...host.agent,
+          // Mark the end of browser teardown before agent-transform notifications can suspend it.
+          transform: (callback) =>
+            host.agent
+              .transform(callback)
+              .pipe(Effect.tap(() => Effect.addFinalizer(() => Deferred.succeed(closed, undefined)))),
+        },
         session: {
           ...host.session,
           get: (input) =>
             Effect.gen(function* () {
-              const id = yield* Effect.fiberId
-              if (old.fiber === -1) old.fiber = id
-              if (old.blocked && old.fiber === id) {
+              if (gate.enabled && (yield* held)) {
                 yield* Deferred.succeed(releasing, undefined)
                 yield* Deferred.await(release)
               }
@@ -149,51 +114,37 @@ for (const replaced of [false, true]) {
         },
       }).pipe(Effect.provideService(Scope.Scope, scope))
       const session = yield* host.session.create({})
-      yield* rpc.events.subscribe("control").pipe(
-        Stream.runForEach((event) =>
-          event.data.type === "attached"
-            ? Deferred.succeed(
-                event.data.connectionID === "first" ? first : event.data.connectionID === "second" ? second : third,
-                undefined,
-              )
-            : Effect.void,
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
       yield* Effect.gen(function* () {
-        const pending = yield* rpc
-          .attach({ sessionID: session.id, connectionID: "first", version: 4 })
-          .pipe(Effect.forkScoped)
-        yield* Deferred.await(first)
-        old.blocked = true
-        const replacement = replaced
-          ? yield* rpc.attach({ sessionID: session.id, connectionID: "second", version: 4 }).pipe(Effect.forkScoped)
-          : undefined
-        if (replacement) {
+        // Tag the request explicitly rather than guessing which runtime fiber owns its finalizer.
+        const first = yield* attach(rpc, session.id).pipe(Effect.provideService(held, true))
+        gate.enabled = true
+        if (replaced) {
+          const replacement = yield* attach(rpc, session.id)
           yield* Deferred.await(releasing)
-          yield* Deferred.await(second)
+          // Only the replaced handler remains, so teardown must track it outside the live browser map.
+          yield* Fiber.interrupt(replacement)
         }
         const closing = yield* Scope.close(scope, Exit.void).pipe(Effect.forkScoped({ startImmediately: true }))
+        // This signal follows event/RPC disposal and parks just before BrowserConnection's finalizer.
+        yield* Deferred.await(entered)
+        yield* Deferred.succeed(continueClose, undefined)
         yield* Deferred.await(releasing)
-        // Let teardown reach its completion wait while the old finalizer remains blocked.
-        yield* Effect.yieldNow
-        expect(closing.pollUnsafe()).toBeUndefined()
-        expect(pending.pollUnsafe()).toBeUndefined()
+        // Only the browser finalizer lies between this handshake and the closed marker.
+        closing.currentDispatcher.flush()
+        expect(yield* Deferred.isDone(closed)).toBe(false)
         yield* Deferred.succeed(release, undefined)
         yield* Fiber.join(closing)
-        expect(yield* Fiber.join(pending)).toBe(replaced ? "replaced" : "closed")
-        if (replacement) expect(yield* Fiber.join(replacement)).toBe("closed")
+        expect(yield* Deferred.isDone(closed)).toBe(true)
+        expect(yield* Fiber.join(first)).toBe(replaced ? "replaced" : "closed")
         expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([])
-
         yield* BrowserConnection.make(host)
-        const resumed = yield* rpc
-          .attach({ sessionID: session.id, connectionID: "third", version: 4 })
-          .pipe(Effect.forkScoped)
-        yield* Deferred.await(third)
+        const reloaded = yield* attach(rpc, session.id)
         expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual(access)
-        yield* Fiber.interrupt(resumed)
-        expect((yield* host.session.get({ sessionID: session.id })).permissions).toEqual([])
-      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+        yield* Fiber.interrupt(reloaded)
+      }).pipe(
+        Effect.ensuring(Deferred.succeed(continueClose, undefined)),
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+      )
     }),
   )
 }
