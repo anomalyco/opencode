@@ -37,12 +37,9 @@ fn fixture(response: &Slot<Reply>, admission: Option<&Slot<Reply>>) -> Data {
     let response = response.clone();
     let admission = admission.cloned();
     data(
-        handler(move |req: Req| {
-            let wait = match (&admission, req.method.as_str()) {
-                (Some(admission), "POST") => admission.wait(),
-                _ => response.wait(),
-            };
-            wait
+        handler(move |req: Req| match (&admission, req.method.as_str()) {
+            (Some(admission), "POST") => admission.wait(),
+            _ => response.wait(),
         }),
         Options::default(),
     )

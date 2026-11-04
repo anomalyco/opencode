@@ -397,7 +397,7 @@ async fn delayed_metadata_and_family_reads_do_not_resurrect_sessions_deleted_whi
     assert!(data.read(|state| state.session(&child).is_none()));
     assert_eq!(
         data.read(|state| state.family(&root).to_vec()),
-        [root.clone()]
+        std::slice::from_ref(&root)
     );
     let error = tokio::time::timeout(Duration::from_secs(2), data.session_sync(&child, false))
         .await

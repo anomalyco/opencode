@@ -2077,7 +2077,7 @@
           "path": "/api/session/ses_resume/environment",
           "replies": [
             {
-              "status": 200
+              "status": 204
             }
           ]
         }
@@ -2119,8 +2119,12 @@
           "agent": null
         },
         "outcome": {
-          "error": {
-            "kind": "mutation"
+          "ok": {
+            "session": "ses_resume",
+            "location": "/session",
+            "model": null,
+            "agent": null,
+            "resume": true
           }
         }
       }

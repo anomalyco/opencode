@@ -697,7 +697,7 @@ async fn keeps_global_forms_per_location_and_settles_them_with_the_location_head
                 req.header("x-opencode-directory").map(str::to_owned),
             ));
             async move {
-                if req.method == "POST" {
+                if req.method != "GET" {
                     return Reply::Json(
                         404,
                         json!({ "_tag": "FormNotFoundError", "id": "frm_global", "message": "gone" }),
