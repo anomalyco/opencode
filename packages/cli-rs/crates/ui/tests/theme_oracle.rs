@@ -198,6 +198,45 @@ fn builtin_themes_match_the_typescript_resolver() {
     report(failures, builtins.len());
 }
 
+/// A copy of a token shifts like the token, or, when tokens of its value shift differently, stays unchanged; never a
+/// wrong step. TypeScript passes the token object itself; a Rust caller often copies the `Color` first
+/// (`let raised = theme.background.raised.base`), and the raised background always shifts.
+#[test]
+fn copied_tokens_shift_like_the_typescript_tokens() {
+    let fixture = fixture();
+    let paths = paths(&fixture);
+    let catalog = Catalog::default();
+    let mut failures = Vec::new();
+    let builtins = fixture["builtins"].as_object().unwrap();
+    for (key, expected) in builtins {
+        let [name, requested] = key.splitn(2, '/').collect::<Vec<_>>()[..] else {
+            panic!("{key}")
+        };
+        let theme = catalog.load(name, mode(requested)).unwrap().theme;
+        for what in ["decrease", "increase"] {
+            let wanted = unpack(expected[what].as_str().unwrap());
+            for (path, wanted) in paths.iter().zip(wanted) {
+                let Some(copy) = theme.get(path).copied() else {
+                    continue;
+                };
+                let shifted = if what == "decrease" {
+                    theme.decrease(&copy, 1)
+                } else {
+                    theme.increase(&copy, 2)
+                };
+                let ambiguous = shifted == copy && path != "background.raised.base";
+                if pack(shifted) != wanted && !ambiguous {
+                    failures.push(format!(
+                        "{key}: {what} of a copy of {path} is {}, expected {wanted}",
+                        pack(shifted)
+                    ));
+                }
+            }
+        }
+    }
+    report(failures, builtins.len());
+}
+
 /// The raw V1 assets, migrated in Rust as custom themes, give the same tokens as the TypeScript migration.
 #[test]
 fn v1_migration_matches_the_typescript_migration() {
