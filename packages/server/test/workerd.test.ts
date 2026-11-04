@@ -50,5 +50,9 @@ it.effect("turns off the background Console check unless the host asks for it", 
     const storage = makeDurableObjectStorage()
     expect(ServerWorkerd.serverOptions({ storage }).console).toEqual({ poll: false })
     expect(ServerWorkerd.serverOptions({ storage, console: { poll: true } }).console).toEqual({ poll: true })
+    expect(ServerWorkerd.serverOptions({ storage, console: { required: true } }).console).toEqual({
+      poll: false,
+      required: true,
+    })
   }),
 )

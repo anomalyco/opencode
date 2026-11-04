@@ -46,6 +46,8 @@ import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { StepFailedError } from "@opencode/core/session/error"
+import { SessionGate } from "@opencode/core/session/gate"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionRunnerLLM } from "@opencode/core/session/runner/llm"
@@ -497,6 +499,7 @@ const layer = Layer.unwrap(
         LayerNodePlatform.llmClient,
         SessionRunnerLLM.node,
         SessionExecution.node,
+        SessionGate.node,
         Session.node,
       ]),
       [
@@ -1509,6 +1512,53 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(1)
     expect(messageRoles(s.requests[0])).toEqual(["user"])
+  })
+
+  scenario("fails an execution before any model request while a Session gate fails", function* (s) {
+    const gate = yield* SessionGate.Service
+    const error = { type: "test.gate", message: "Gate closed" }
+    yield* gate.register(new StepFailedError({ error }))
+    yield* s.admit("First")
+
+    const exit = yield* s.resume.pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(new StepFailedError({ error }))
+    expect(s.requests).toHaveLength(0)
+    expect(yield* SessionInbox.has(s.db, sessionID, "steer")).toBe(true)
+  })
+
+  scenario("selects a resumed execution's tools only after the Session gates pass", function* (s) {
+    const gate = yield* SessionGate.Service
+    const registry = yield* Tool.Service
+    const scope = yield* Scope.Scope
+    const open = yield* Deferred.make<void>()
+    // Stands in for config a gate applies, such as the MCP servers an organization's config adds.
+    const gated = {
+      name: "gated",
+      description: "Added by the gate",
+      input: Schema.Struct({}),
+      output: Schema.Struct({}),
+      execute: () => Effect.succeed({ output: {} }),
+    }
+    yield* gate.register(
+      Deferred.await(open).pipe(
+        Effect.andThen(transformTools(registry, { gated }, { codemode: false })),
+        Effect.asVoid,
+        Scope.provide(scope),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.admit("First")
+
+    const run = yield* s.resume.pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Effect.yieldNow
+    expect(s.requests).toHaveLength(0)
+    expect(run.pollUnsafe()).toBeUndefined()
+
+    yield* Deferred.succeed(open, undefined)
+    yield* Fiber.join(run)
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("gated")
   })
 
   scenario(

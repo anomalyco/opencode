@@ -65,6 +65,7 @@ import { Ripgrep } from "../ripgrep.js"
 import { Schedule } from "../schedule.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
+import { SessionGate } from "../session/gate.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
@@ -159,6 +160,7 @@ const services = [
   Schedule.Service,
   Session.Service,
   SessionCompaction.Service,
+  SessionGate.Service,
   SessionInstructions.Service,
   SubagentJob.Service,
   SharedCache.Service,
@@ -219,6 +221,7 @@ export const requirements = LayerNode.group([
   Schedule.node,
   Session.node,
   SessionCompaction.node,
+  SessionGate.node,
   SessionInstructions.node,
   SubagentJob.node,
   SharedCache.node,

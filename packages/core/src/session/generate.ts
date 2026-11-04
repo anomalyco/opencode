@@ -8,7 +8,7 @@ import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
-import type { AgentNotFoundError } from "./error.js"
+import type { AgentNotFoundError, StepFailedError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
 import { ModelRetry } from "../model-retry.js"
@@ -17,6 +17,7 @@ import type { SessionSchema } from "./schema.js"
 
 export type Error =
   | AgentNotFoundError
+  | StepFailedError
   | Instructions.InitializationBlocked
   | SessionRunnerModel.Error
   | AIError

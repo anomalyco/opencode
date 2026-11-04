@@ -41,7 +41,9 @@ test("accepts an embedder fetch and rejects other values", () => {
   expect(Option.isNone(decode({ fetch: "https://example.com" }))).toBe(true)
 })
 
-test("accepts Console refresh options", () => {
+test("accepts Console options", () => {
   expect(Option.getOrThrow(decode({ console: { poll: false } })).console).toEqual({ poll: false })
+  expect(Option.getOrThrow(decode({ console: { required: true } })).console).toEqual({ required: true })
   expect(Option.isNone(decode({ console: { poll: "no" } }))).toBe(true)
+  expect(Option.isNone(decode({ console: { required: "yes" } }))).toBe(true)
 })

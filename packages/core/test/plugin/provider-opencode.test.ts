@@ -4,7 +4,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -18,6 +18,7 @@ import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { ConsoleAccess } from "@opencode/core/console-access"
 import { Credential } from "@opencode/core/credential"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
@@ -29,10 +30,11 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { SessionGate } from "@opencode/core/session/gate"
 import { SessionMessage } from "@opencode/core/session/message"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
-import { drain } from "../lib/clock"
+import { advance, drain } from "../lib/clock"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { emptyMcp } from "../fixture/mcp"
@@ -878,7 +880,10 @@ describe("OpencodePlugin", () => {
         integrationID: Integration.ID.make("opencode"),
         value: key(server),
       })
-      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll }))
+      yield* addPlugin().pipe(
+        inProcess(server),
+        Effect.provideService(ConsoleAccess.Options, { poll, required: false }),
+      )
       yield* drain
       return credential
     })
@@ -989,6 +994,164 @@ describe("OpencodePlugin", () => {
           }),
         ({ server }) => Effect.promise(() => server.stop(true)),
       ),
+    )
+  })
+
+  describe("requiring Console config", () => {
+    // Answers each key with an instruction naming it, so the applied config shows which credential it came from.
+    const consoleApi = () => {
+      const state = { status: 200, body: undefined as unknown, hang: new Set<string>(), requests: [] as string[] }
+      const hanging: (() => void)[] = []
+      return {
+        state,
+        release: () => hanging.splice(0).forEach((resolve) => resolve()),
+        fetch: (request: Request) => {
+          const key = request.headers.get("authorization")?.replace("Bearer ", "") ?? ""
+          state.requests.push(key)
+          const response = () =>
+            Response.json(
+              state.body ?? { providers: {}, library: { instructions: [{ id: key, content: `Use ${key}` }] } },
+              { status: state.status },
+            )
+          if (!state.hang.has(key)) return response()
+          return new Promise<Response>((resolve) => hanging.push(() => resolve(response())))
+        },
+      }
+    }
+    type ConsoleApi = ReturnType<typeof consoleApi>
+    const key = (key: string) => Credential.Key.make({ type: "key", key, metadata: { server: "https://console.test" } })
+    const connect = Effect.fn(function* (api: ConsoleApi, required = true) {
+      const credentials = yield* Credential.Service
+      const credential = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: key("one"),
+      })
+      // Startup waits out the Console's retries when it fails.
+      const started = yield* addPlugin().pipe(
+        inProcess(api),
+        Effect.provideService(ConsoleAccess.Options, { poll: false, required }),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* advance(() => started.pollUnsafe() !== undefined)
+      yield* Fiber.join(started)
+      return credential
+    })
+    // What every model request waits on before its instructions and tools are read.
+    const request = Effect.fn(function* () {
+      const gate = yield* SessionGate.Service
+      return yield* gate.wait.pipe(Effect.forkChild({ startImmediately: true }))
+    })
+    const settled = Effect.fn(function* (fiber: Fiber.Fiber<void, unknown>) {
+      const started = yield* Clock.currentTimeMillis
+      yield* advance(() => fiber.pollUnsafe() !== undefined)
+      return { exit: yield* Fiber.await(fiber), elapsed: (yield* Clock.currentTimeMillis) - started }
+    })
+    const failure = (exit: Exit.Exit<void, unknown>) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)
+    const unavailable = { _tag: "Session.StepFailedError", error: { type: "console.config-unavailable" } }
+    const instructions = Effect.gen(function* () {
+      const discovery = yield* InstructionDiscovery.Service
+      const files = yield* discovery.list()
+      return Array.isArray(files) ? files.map((file) => file.content) : []
+    })
+
+    it.effect("fails a request on a cold start whose Console keeps answering 503", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        api.state.status = 503
+        yield* connect(api)
+        const sent = api.state.requests.length
+
+        const result = yield* settled(yield* request())
+        expect(failure(result.exit)).toMatchObject(unavailable)
+        // A fresh load with its retries, not the failure startup left in the cache.
+        expect(api.state.requests.length).toBe(sent * 2)
+        expect(result.elapsed).toBeGreaterThanOrEqual(7_000)
+      }),
+    )
+
+    it.effect("fails a request after 10 seconds when the Console doesn't answer", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        api.state.status = 503
+        yield* connect(api)
+
+        api.state.hang.add("one")
+        const result = yield* settled(yield* request())
+        expect(failure(result.exit)).toMatchObject(unavailable)
+        expect(result.elapsed).toBeGreaterThanOrEqual(10_000)
+        api.release()
+      }),
+    )
+
+    it.effect("doesn't count a malformed config as loaded", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        api.state.body = "not a config"
+        yield* connect(api)
+
+        expect(failure((yield* settled(yield* request())).exit)).toMatchObject(unavailable)
+        expect(yield* instructions).toEqual([])
+
+        api.state.body = undefined
+        expect(Exit.isSuccess((yield* settled(yield* request())).exit)).toBe(true)
+        expect(yield* instructions).toEqual(["Use one"])
+      }),
+    )
+
+    it.effect("holds the first request after a credential switch until the new config applies", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        yield* connect(api)
+        yield* Fiber.join(yield* request())
+        expect(yield* instructions).toEqual(["Use one"])
+
+        api.state.hang.add("two")
+        yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("two") })
+        const held = yield* request()
+        // Past the 3 seconds a prompt waits on an applied config's refresh.
+        yield* TestClock.adjust("4 seconds")
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+        expect(held.pollUnsafe()).toBeUndefined()
+
+        api.release()
+        yield* Fiber.join(held)
+        expect(yield* instructions).toEqual(["Use two"])
+      }),
+    )
+
+    it.effect("holds the first request after a key is replaced in place until its config applies", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const api = consoleApi()
+        const credential = yield* connect(api)
+        yield* Fiber.join(yield* request())
+
+        api.state.hang.add("rotated")
+        yield* credentials.update(credential.id, { value: key("rotated") })
+        const held = yield* request()
+        yield* TestClock.adjust("4 seconds")
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+        expect(held.pollUnsafe()).toBeUndefined()
+
+        api.release()
+        yield* Fiber.join(held)
+        expect(yield* instructions).toEqual(["Use rotated"])
+      }),
+    )
+
+    it.effect("holds no request without the option", () =>
+      Effect.gen(function* () {
+        const api = consoleApi()
+        api.state.status = 503
+        yield* connect(api, false)
+        const sent = api.state.requests.length
+
+        const result = yield* settled(yield* request())
+        expect(Exit.isSuccess(result.exit)).toBe(true)
+        expect(result.elapsed).toBe(0)
+        expect(api.state.requests.length).toBe(sent)
+      }),
     )
   })
 
@@ -2017,7 +2180,7 @@ describe("OpencodePlugin prompt refresh", () => {
           const host = yield* PluginHost.make(yield* Plugin.Service, "test")
           yield* OpencodePlugin.effect(host).pipe(
             inProcess(server),
-            Effect.provideService(ConsoleAccess.Options, { poll: false }),
+            Effect.provideService(ConsoleAccess.Options, { poll: false, required: false }),
           )
           yield* ConfigMcpPlugin.Plugin.effect(host)
           yield* ConfigPolicyPlugin.Plugin.effect(host)

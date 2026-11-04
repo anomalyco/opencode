@@ -77,6 +77,12 @@ With an [OpenCode Console](/console) connection, the Workerd profile refreshes t
 starts, not every minute, so an idle Durable Object can hibernate. Pass `console: { poll: true }` to refresh every
 minute as other hosts do.
 
+By default, a turn runs on the last config OpenCode has when the Console doesn't answer within 3 seconds. Pass
+`console: { required: true }` to make every model request, including turns resumed after an eviction, wait until the
+connected credential's config is loaded and applied. If that doesn't happen within 10 seconds, or the Console returns
+an error or a config OpenCode can't read, the turn fails with a `console.config-unavailable` error without sending the
+request. After switching credentials or replacing a key, the next request waits for the new credential's config.
+
 ## Customize
 
 Customize your OpenCode instance by registering plugins bundled with your

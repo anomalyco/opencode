@@ -5,15 +5,21 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import type { Credential } from "./credential.js"
 
 /**
- * How the host keeps a connected Console's config fresh. `poll` re-checks it every minute in the background; without
- * it, the config refreshes only when a prompt starts, so a host that suspends between prompts stays idle.
+ * How the host uses a connected Console's config. `poll` re-checks it every minute in the background; without it,
+ * the config refreshes only when a prompt starts, so a host that suspends between prompts stays idle. `required`
+ * holds every model request until the active credential's config is loaded and applied, and fails it otherwise.
  */
-export const Options = Context.Reference<{ readonly poll: boolean }>("@opencode/ConsoleAccess/Options", {
-  defaultValue: () => ({ poll: true }),
-})
+export const Options = Context.Reference<{ readonly poll: boolean; readonly required: boolean }>(
+  "@opencode/ConsoleAccess/Options",
+  { defaultValue: () => ({ poll: true, required: false }) },
+)
 
-export const configured = (options?: { readonly poll?: boolean }) =>
-  makeGlobalNode({ service: Options, layer: Layer.succeed(Options, { poll: options?.poll ?? true }), deps: [] })
+export const configured = (options?: { readonly poll?: boolean; readonly required?: boolean }) =>
+  makeGlobalNode({
+    service: Options,
+    layer: Layer.succeed(Options, { poll: options?.poll ?? true, required: options?.required ?? false }),
+    deps: [],
+  })
 
 export const node = configured()
 

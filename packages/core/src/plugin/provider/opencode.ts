@@ -16,6 +16,8 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { AbsolutePath } from "../../schema.js"
+import { StepFailedError } from "../../session/error.js"
+import { SessionGate } from "../../session/gate.js"
 import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
@@ -169,6 +171,7 @@ export const OpencodePlugin = define<
   | Bus.Service
   | Config.Service
   | InstructionDiscovery.Service
+  | SessionGate.Service
   | SharedCache.Service
   | Skill.Service
   | Scope.Scope
@@ -186,6 +189,7 @@ export const OpencodePlugin = define<
     const cache = yield* SharedCache.Service
     const scope = yield* Scope.Scope
     const settings = yield* ConsoleAccess.Options
+    const gate = yield* SessionGate.Service
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
@@ -195,7 +199,9 @@ export const OpencodePlugin = define<
       organization: string | undefined
       // Fingerprint of an API key, so a key replaced in place counts as a new sign-in.
       access: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined }
+      // Whether the Console answered for this connection, rather than a failed load leaving it empty.
+      loaded: boolean
+    } = { remote: undefined, connection: undefined, organization: undefined, access: undefined, loaded: false }
     let instructions: InstructionDiscovery.File[] = []
     // Tagged with the account and workspace they were downloaded for, so a switch hides them right away.
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
@@ -219,7 +225,10 @@ export const OpencodePlugin = define<
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { _tag: "Loaded", next: { remote: undefined, connection, organization: undefined, access: undefined } }
+        return {
+          _tag: "Loaded",
+          next: { remote: undefined, connection, organization: undefined, access: undefined, loaded: true },
+        }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -228,7 +237,13 @@ export const OpencodePlugin = define<
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined, access: undefined })
+            return Effect.succeed({
+              remote: undefined,
+              connection,
+              organization: undefined,
+              access: undefined,
+              loaded: true,
+            })
           return cache
             .get({
               key: `opencode-console:${workspaceKey(connection, credential)}`,
@@ -251,6 +266,7 @@ export const OpencodePlugin = define<
                 connection,
                 organization: organizationName(credential),
                 access: accessFingerprint(credential),
+                loaded: true,
               })),
             )
         }),
@@ -272,7 +288,7 @@ export const OpencodePlugin = define<
     const fallback = (connection: ActiveConnection): typeof snapshot =>
       IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
         ? { ...snapshot, connection }
-        : { remote: undefined, connection, organization: undefined, access: undefined }
+        : { remote: undefined, connection, organization: undefined, access: undefined, loaded: false }
     // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
     // while the rest of the document merges through config.
     let integrated: ConfigIntegration.Document | undefined
@@ -528,6 +544,35 @@ export const OpencodePlugin = define<
     // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
     // 3 seconds; the turn then runs on the config it has.
     yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
+
+    // With the `console.required` server option, no model request is built on another credential's config or on
+    // none: each waits until the active credential's config is loaded and applied, or fails. Until then every request
+    // loads again rather than reusing a failure; once applied, a stale config refreshes as a prompt's does and stays
+    // in effect if the Console doesn't answer.
+    const applied = Effect.gen(function* () {
+      const active = yield* ctx.integration.connection.active("opencode")
+      if (!active || !snapshot.loaded) return false
+      if (IntegrationConnection.key(active) !== IntegrationConnection.key(snapshot.connection)) return false
+      const credential = Option.getOrUndefined(yield* ctx.integration.connection.resolve(active).pipe(Effect.option))
+      if (!credential) return false
+      return snapshot.access === (credential.type === "external" ? undefined : accessFingerprint(credential))
+    })
+    if (settings.required)
+      yield* gate.register(
+        Effect.gen(function* () {
+          yield* (yield* applied)
+            ? check(Duration.minutes(1), Duration.seconds(3))
+            : check(Duration.zero, Duration.seconds(10))
+          if (yield* applied) return
+          // A status the Console reported, such as an expired SSO sign-in, names the fix.
+          const reason =
+            reported?.message ??
+            (snapshot.connection
+              ? "Couldn't load the OpenCode Console config for the connected account"
+              : "Connect OpenCode Console to continue")
+          return yield* new StepFailedError({ error: { type: "console.config-unavailable", message: `${reason}.` } })
+        }),
+      )
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.

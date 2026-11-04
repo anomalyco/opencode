@@ -16,7 +16,8 @@ import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
-import { AgentNotFoundError } from "./error.js"
+import { AgentNotFoundError, type StepFailedError } from "./error.js"
+import { SessionGate } from "./gate.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
@@ -48,8 +49,8 @@ export interface Loaded {
  * capabilities they need; request preparation stays separate from selection.
  */
 export interface Interface {
-  /** Selects the Session, agent, instructions, and tools used by subsequent work. */
-  readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  /** Waits on the Session gates, then selects the Session, agent, instructions, and tools used by subsequent work. */
+  readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError | StepFailedError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
@@ -79,6 +80,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
+    const gate = yield* SessionGate.Service
     const location = yield* Location.Service
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
@@ -129,6 +131,8 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
 
+      // Before anything is read, so what a gate applies, such as an organization's config, shapes this request.
+      yield* gate.wait
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
@@ -218,6 +222,7 @@ export const node = makeLocationNode({
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,
+    SessionGate.node,
     SessionStore.node,
     SkillInstructions.node,
     Tool.node,
