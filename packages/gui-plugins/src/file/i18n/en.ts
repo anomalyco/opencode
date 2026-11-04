@@ -24,6 +24,8 @@ export default {
   "view.table.copyCell": "Copy cell",
   "view.table.copyFailed": "Couldn't copy this cell.",
   "view.fontSample": "Sphinx of black quartz, judge my vow.",
+  "view.properties": "Properties",
+  "view.properties.showAll": "Show all {{count}} properties",
   "open.in": "Open in",
   "open.ariaLabel": "Open in {{app}}",
   "open.menu": "Open options",
