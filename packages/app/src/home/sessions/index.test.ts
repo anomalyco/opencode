@@ -92,6 +92,21 @@ describe("Home session index", () => {
     expect(ids(result)).toEqual(ids(live))
   })
 
+  test("keeps a pinned session outside the per-directory retention window", () => {
+    const all = history("/repo", HOME_SESSION_LIMIT + 20)
+    const pinned = {
+      ...all[all.length - 1]!,
+      time: { created: now - 5 * 60 * minute, updated: now - 5 * 60 * minute },
+    }
+    const sessions = all.map((item) => (item.id === pinned.id ? pinned : item))
+
+    expect(ids(retainHomeSessions(sessions, HOME_SESSION_LIMIT, now))).not.toContain(pinned.id)
+
+    const result = retainHomeSessions(sessions, HOME_SESSION_LIMIT, now, new Set([pinned.id]))
+    expect(ids(result)).toContain(pinned.id)
+    expect(result.filter((item) => item.id === pinned.id)).toHaveLength(1)
+  })
+
   test("keeps only visible roots", () => {
     expect(
       parseHomeSessionIndex([

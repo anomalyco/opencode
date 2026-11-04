@@ -13,6 +13,7 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
 import { mergeHomeSessionIndex } from "@/home/sessions/index"
+import { createHomeSessionPins } from "@/home/sessions/pins"
 import { homeSessionsQuery } from "@/home/sessions/queries"
 import { listClosedTabs, type ClosedTab } from "@/shell/tabs/closed"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
@@ -28,6 +29,7 @@ export function RecentlyClosedTabsMenu(props: {
   const language = useLanguage()
   const tabs = useTabs()
   const global = useGlobal()
+  const pins = createHomeSessionPins()
   const [state, setState] = createStore({ query: "", open: false })
   let search: HTMLInputElement | undefined
 
@@ -53,8 +55,8 @@ export function RecentlyClosedTabsMenu(props: {
       const ctx = global.serverCtx(ServerConnection.key(conn))
 
       return {
-        ...homeSessionsQuery(conn, ctx),
-        enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected",
+        ...homeSessionsQuery(conn, ctx, () => new Set(pins.ids(ServerConnection.key(conn)))),
+        enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected" && pins.ready(),
       }
     }),
   }))

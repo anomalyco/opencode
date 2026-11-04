@@ -7,11 +7,20 @@ import { loadHomeSessionIndex } from "./index"
 // Keep the immutable result opaque so Solid Query does not recursively unwrap every session on mount.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
 
-export function homeSessionsQuery(conn: ServerConnection.Any | undefined, ctx: ServerCtx | undefined) {
+export function homeSessionsQuery(
+  conn: ServerConnection.Any | undefined,
+  ctx: ServerCtx | undefined,
+  keep?: () => ReadonlySet<string>,
+) {
   return queryOptions({
     queryKey: ["home-sessions", conn] as const,
     queryFn: ctx
-      ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
+      ? ({ signal }) =>
+          loadHomeSessionIndex(
+            (input, options) => ctx.sdk.api.session.list(input, options),
+            signal,
+            keep?.(),
+          )
       : skipToken,
     retry: false,
     staleTime: 30_000,

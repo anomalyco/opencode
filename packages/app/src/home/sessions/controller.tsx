@@ -21,13 +21,14 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import { homeSessionsQuery } from "./queries"
+import { createHomeSessionPins } from "./pins"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
 export type HomeSessionGroup = {
-  id: "today" | "yesterday" | "older"
+  id: "pinned" | "today" | "yesterday" | "older"
   title: string
   sessions: HomeSessionRecord[]
 }
@@ -41,6 +42,14 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+  const pins = createHomeSessionPins()
+
+  const pinnedIDs = createMemo(() => {
+    const conn = home.server.focused()
+
+    return conn ? pins.ids(ServerConnection.key(conn)) : []
+  })
+  const pinnedSet = createMemo(() => new Set(pinnedIDs()))
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -56,8 +65,8 @@ export function createHomeSessionsController(home: HomeController) {
     const conn = home.server.focused()
 
     return {
-      ...homeSessionsQuery(conn, ctx),
-      enabled: !!ctx && ctx.sdk.connection.status() === "connected",
+      ...homeSessionsQuery(conn, ctx, () => pinnedSet()),
+      enabled: !!ctx && ctx.sdk.connection.status() === "connected" && pins.ready(),
     }
   })
 
@@ -73,6 +82,7 @@ export function createHomeSessionsController(home: HomeController) {
       ),
       HOME_SESSION_LIMIT,
       Date.now(),
+      pinnedSet(),
     )
   })
 
@@ -85,8 +95,23 @@ export function createHomeSessionsController(home: HomeController) {
     }),
   )
 
-  const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
-  const groups = createMemo(() => groupSessions(records(), language))
+  const records = createMemo(() => {
+    const all = allRecords()
+    const pinned = pinnedSet()
+
+    if (pinned.size === 0) return all.slice(0, HOME_SESSION_LIMIT)
+
+    const byID = new Map(all.map((record) => [record.session.id, record] as const))
+    const head = pinnedIDs().flatMap((id) => {
+      const record = byID.get(id)
+
+      return record ? [record] : []
+    })
+    const tail = all.filter((record) => !pinned.has(record.session.id))
+
+    return [...head, ...tail.slice(0, Math.max(0, HOME_SESSION_LIMIT - head.length))]
+  })
+  const groups = createMemo(() => groupSessions(records(), pinnedSet(), language))
   const prefetched = new Set<string>()
 
   const location = (record: HomeSessionRecord) => {
@@ -231,6 +256,8 @@ export function createHomeSessionsController(home: HomeController) {
 
     if (!conn || !ctx) return false
     const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
+    const connKey = ServerConnection.key(conn)
+    ids.forEach((id) => pins.remove(connKey, id))
     const rows = homeRowTops()
     // session.deleted clears the local hide mutation before the refetch lands,
     // so the cached index must drop the row now or it briefly reappears.
@@ -311,6 +338,16 @@ export function createHomeSessionsController(home: HomeController) {
     session: {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
+      isPinned: (session: SessionInfo) => {
+        const conn = home.server.focused()
+
+        return conn ? pins.isPinned(ServerConnection.key(conn), session.id) : false
+      },
+      togglePin: (session: SessionInfo) => {
+        const conn = home.server.focused()
+
+        if (conn) pins.toggle(ServerConnection.key(conn), session.id)
+      },
       canCreate: () => !!home.project.newSession(),
       lookup: async (sessionID: string) => {
         const ctx = home.server.focusedContext()
@@ -422,15 +459,21 @@ function localDay(date: Date) {
   return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate()
 }
 
-function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
+function groupSessions(
+  records: HomeSessionRecord[],
+  pinned: ReadonlySet<string>,
+  language: ReturnType<typeof useLanguage>,
+): HomeSessionGroup[] {
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
   const day = (record: HomeSessionRecord) =>
     localDay(new Date(record.session.time.updated ?? record.session.time.created))
-  const todaySessions = records.filter((record) => day(record) === today)
-  const yesterdaySessions = records.filter((record) => day(record) === yesterday)
-  const olderSessions = records.filter((record) => day(record) !== today && day(record) !== yesterday)
+  const pinnedSessions = pinned.size > 0 ? records.filter((record) => pinned.has(record.session.id)) : []
+  const rest = pinned.size > 0 ? records.filter((record) => !pinned.has(record.session.id)) : records
+  const todaySessions = rest.filter((record) => day(record) === today)
+  const yesterdaySessions = rest.filter((record) => day(record) === yesterday)
+  const olderSessions = rest.filter((record) => day(record) !== today && day(record) !== yesterday)
 
   const olderTitle =
     todaySessions.length === 0 && yesterdaySessions.length === 0
@@ -438,6 +481,9 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
       : language.t("home.sessions.group.older")
 
   return [
+    ...(pinnedSessions.length > 0
+      ? [{ id: "pinned" as const, title: language.t("home.sessions.group.pinned"), sessions: pinnedSessions }]
+      : []),
     { id: "today" as const, title: language.t("home.sessions.group.today"), sessions: todaySessions },
     { id: "yesterday" as const, title: language.t("home.sessions.group.yesterday"), sessions: yesterdaySessions },
     { id: "older" as const, title: olderTitle, sessions: olderSessions },

@@ -24,6 +24,7 @@ export async function loadHomeSessionIndex(
     options: { signal?: AbortSignal },
   ) => Promise<SessionsResponse>,
   signal?: AbortSignal,
+  keep?: ReadonlySet<string>,
 ) {
   const now = Date.now()
   let retained: SessionInfo[] = []
@@ -43,7 +44,12 @@ export async function loadHomeSessionIndex(
     // Fold each page in as it arrives: pages are newest first, so later pages
     // can only fill directories that still have room. Peak allocation is one
     // page plus the retained subset, not the whole history.
-    retained = retainHomeSessions([...retained, ...parseHomeSessionIndex(response.data)], HOME_SESSION_INDEX_LIMIT, now)
+    retained = retainHomeSessions(
+      [...retained, ...parseHomeSessionIndex(response.data)],
+      HOME_SESSION_INDEX_LIMIT,
+      now,
+      keep,
+    )
 
     if (response.data.length < HOME_V2_SESSION_PAGE_LIMIT || !response.cursor.next) return retained
     cursor = response.cursor.next
@@ -61,7 +67,12 @@ export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo
   ])
 }
 
-export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: number) {
+export function retainHomeSessions(
+  sessions: SessionInfo[],
+  limit: number,
+  now: number,
+  keep?: ReadonlySet<string>,
+) {
   return [...Map.groupBy(sessions, (session) => pathKey(session.location.directory)).values()].flatMap((items) => {
     const sorted = items.toSorted((a, b) => {
       const updated = (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)
@@ -69,11 +80,15 @@ export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: 
       return updated || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
     })
 
-    const recent = sorted
+    // A pinned session must survive the per-directory window even when it is
+    // older than every retained row, otherwise its row would vanish from Home.
+    const kept = keep && keep.size > 0 ? sorted.filter((session) => keep.has(session.id)) : []
+    const rest = keep && keep.size > 0 ? sorted.filter((session) => !keep.has(session.id)) : sorted
+    const recent = rest
       .slice(limit)
       .filter((session) => (session.time.updated ?? session.time.created) > now - SESSION_RECENT_WINDOW)
       .slice(0, SESSION_RECENT_LIMIT)
 
-    return [...sorted.slice(0, limit), ...recent]
+    return [...kept, ...rest.slice(0, limit), ...recent]
   })
 }

@@ -25,6 +25,17 @@
   }
 }
 
+/* Pinned rows keep a quiet accent so the Pinned group stays scannable. */
+[data-component="home-session-row-container"][data-pinned]::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--v2-icon-icon-accent);
+}
+
 /* The highlight sweeps in reading direction. */
 [data-component="home-session-skeleton"] {
   opacity: 0;

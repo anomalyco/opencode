@@ -77,6 +77,8 @@ export type HomeSessionsViewProps = {
   onCreateSession: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
+  onTogglePin: (session: SessionInfo) => void
+  isPinned: (session: SessionInfo) => boolean
   onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
   onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
@@ -189,6 +191,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                 {(group, index) => (
                   <>
                     <HomeSessionGroupHeader
+                      id={group().id}
                       title={group().title}
                       titleOpacity={props.titleOpacity(group().id)}
                       onSetRef={(element) => props.onSetHeader(group().id, element)}
@@ -498,6 +501,7 @@ function HomeSessionSearchResultRow(
 }
 
 function HomeSessionGroupHeader(props: {
+  id: HomeSessionGroup["id"]
   title: string
   titleOpacity: number
   onSetRef: (element: HTMLDivElement) => void
@@ -506,14 +510,18 @@ function HomeSessionGroupHeader(props: {
   return (
     <div
       ref={props.onSetRef}
+      data-group={props.id}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
         bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
-      <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
-        {props.title}
+      <div class={`${HOME_SECTION_LABEL} flex min-w-0 items-center gap-1.5`} style={{ opacity: props.titleOpacity }}>
+        <Show when={props.id === "pinned"}>
+          <Icon name="pin" class="shrink-0 text-v2-icon-icon-accent" />
+        </Show>
+        <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{props.title}</span>
       </div>
     </div>
   )
@@ -532,6 +540,7 @@ function HomeSessionRow(
   const title = createMemo(() => sessionLabel(props.record.session))
   const location = createMemo(() => props.location(props.record))
   const showProjectName = () => props.showProjectName && props.record.projectName
+  const pinned = () => props.isPinned(props.record.session)
   const sessionID = () => props.record.session.id
   const menu = () => (props.rowUI.menu?.id === sessionID() ? props.rowUI.menu : undefined)
   const editor = () => (props.rowUI.editor?.id === sessionID() ? props.rowUI.editor : undefined)
@@ -610,6 +619,7 @@ function HomeSessionRow(
       data-component="home-session-row-container"
       data-project-name={!!showProjectName()}
       data-session-id={props.record.session.id}
+      data-pinned={pinned() ? "" : undefined}
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
       onContextMenu={(event) => {
         // While renaming, keep the native menu so paste and spelling work.
@@ -628,6 +638,9 @@ function HomeSessionRow(
           >
             <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
             <div data-slot="home-session-labels" class="contents">
+              <Show when={pinned()}>
+                <Icon name="pin" data-component="home-session-pin" class="shrink-0 text-v2-icon-icon-accent" />
+              </Show>
               <InlineInput
                 data-component="home-session-rename"
                 aria-label={props.language.t("common.rename")}
@@ -755,6 +768,9 @@ function HomeSessionRow(
             class="min-w-0 flex-1 items-center gap-1.5"
             classList={{ flex: props.desktop, contents: !props.desktop }}
           >
+            <Show when={pinned()}>
+              <Icon name="pin" data-component="home-session-pin" class="shrink-0 text-v2-icon-icon-accent" />
+            </Show>
             <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
             <Show when={showProjectName()}>
               <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} />
@@ -807,6 +823,9 @@ function HomeSessionRow(
               requestAnimationFrame(() => rowButton()?.focus())
             }}
           >
+            <Menu.Item onSelect={() => props.onTogglePin(props.record.session)}>
+              {pinned() ? props.language.t("common.unpin") : props.language.t("common.pin")}
+            </Menu.Item>
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
               {props.language.t("common.export")}…

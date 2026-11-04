@@ -89,7 +89,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Pin", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -131,6 +131,37 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+})
+
+test("a Home session can be pinned, survives reload, and can be unpinned", async ({ page }) => {
+  await openHome(page)
+  const target = row(page, fixture.expected.targetTitle)
+  await expect(target).toBeVisible()
+  await expect(page.locator('[data-group="pinned"]')).toHaveCount(0)
+
+  await target.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
+
+  await expect(page.locator('[data-group="pinned"]')).toBeVisible()
+  const container = page.locator(
+    `[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"]`,
+  )
+  await expect(container).toHaveAttribute("data-pinned", "")
+  await expect(target.locator('[data-component="home-session-pin"]')).toBeVisible()
+
+  const pinStorage = "opencode.global.dat:home.sessions.pinned"
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), pinStorage)).not.toBeNull()
+  const stored = await page.evaluate((key) => localStorage.getItem(key), pinStorage)
+  expect(JSON.parse(stored!)).toMatchObject({ pinned: { [fixture.serverKey]: [fixture.targetID] } })
+
+  await page.reload()
+  await expect(container).toHaveAttribute("data-pinned", "")
+  await expect(page.locator('[data-group="pinned"]')).toBeVisible()
+
+  await row(page, fixture.expected.targetTitle).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Unpin", exact: true }).click()
+  await expect(page.locator('[data-group="pinned"]')).toHaveCount(0)
+  await expect(container).not.toHaveAttribute("data-pinned", "")
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {
