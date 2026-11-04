@@ -6,8 +6,7 @@
 //!
 //! The cell-level proofs are the P-APP scenarios `E.12/tab-strip` and `E.12/rail-resize`.
 
-#[path = "support/wait.rs"]
-mod wait;
+use crate::support::wait;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -1,4 +1,4 @@
-//! How long a test waits for a condition, shared by the test binaries.
+//! How long a test waits for a condition, shared by the test modules.
 
 use std::time::Duration;
 
