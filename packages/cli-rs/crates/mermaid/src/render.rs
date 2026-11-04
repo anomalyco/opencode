@@ -2,9 +2,9 @@
 
 use opentui::prelude::Color;
 
-use crate::core::canvas::{Canvas, TRIM_BOTH, TRIM_NONE, Trim};
-use crate::core::color::ramp;
-use crate::{flowchart, sequence};
+use crate::core::canvas::{Canvas, TRIM_BOTH, TRIM_BOTTOM, TRIM_NONE, Trim};
+use crate::core::color::{blend, ramp, rgb};
+use crate::{flowchart, gantt, gitgraph, sequence, timeline};
 use crate::{Kind, Palette, SyntaxError, detect};
 
 /// One styled run of a diagram row.
@@ -86,6 +86,21 @@ fn prepare(kind: Kind, source: &str, palette: &Palette, max_width: i32) -> Resul
             let grid = sequence::drawing::draw(&diagram, true).map_err(|_| Failure::Unrenderable)?;
             sequence_lines(&grid, palette)
         }
+        Kind::Gantt => {
+            let diagram = gantt::parse(source).map_err(Failure::Syntax)?;
+            let grid = gantt::draw(&diagram, max_width).map_err(|_| Failure::Unrenderable)?;
+            gantt_lines(&grid, palette)
+        }
+        Kind::GitGraph => {
+            let diagram = gitgraph::parse(source).map_err(Failure::Syntax)?;
+            let grid = gitgraph::draw(&diagram).map_err(|_| Failure::Unrenderable)?;
+            gitgraph_lines(&grid, palette)
+        }
+        Kind::Timeline => {
+            let diagram = timeline::parse(source).map_err(Failure::Syntax)?;
+            let grid = timeline::draw(&diagram).map_err(|_| Failure::Unrenderable)?;
+            timeline_lines(&grid, palette)
+        }
         _ => return Err(Failure::Unrenderable),
     };
     Ok(Diagram { kind, lines })
@@ -134,6 +149,48 @@ fn sequence_lines(grid: &sequence::drawing::Grid, palette: &Palette) -> Vec<Vec<
         _ => None,
     };
     runs(grid, TRIM_NONE, |cell| cell.style, |style| style.map(fg), |style| style.and_then(bg))
+}
+
+fn gantt_lines(grid: &gantt::Grid, palette: &Palette) -> Vec<Vec<Run>> {
+    use gantt::Style;
+    let fg = |style: Style| match style {
+        Style::Title => palette.text,
+        Style::Axis | Style::Done => palette.muted,
+        Style::Section => palette.secondary,
+        Style::Task | Style::Active => palette.primary,
+        Style::Critical => palette.warning,
+        Style::Milestone => rgb(198, 160, 246),
+        Style::TrackFaint => blend(palette.muted, palette.background, 0.72),
+    };
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
+}
+
+fn gitgraph_lines(grid: &gitgraph::Grid, palette: &Palette) -> Vec<Vec<Run>> {
+    use gitgraph::Style;
+    let fg = |style: Style| match style {
+        Style::Branch(_) => palette.muted,
+        Style::Commit => palette.primary,
+        Style::Merge => palette.secondary,
+        Style::Highlight | Style::Reverse => palette.warning,
+        Style::Label => palette.text,
+    };
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
+}
+
+fn timeline_lines(grid: &timeline::Grid, palette: &Palette) -> Vec<Vec<Run>> {
+    use timeline::Style;
+    const FADES: [f64; 3] = [0.5, 0.67, 0.83];
+    let (section, period, spine) = (palette.secondary, palette.warning, palette.muted);
+    let fg = |style: Style| match style {
+        Style::Title => palette.text,
+        Style::Section => section,
+        Style::Period => period,
+        Style::Spine => spine,
+        Style::Event => palette.primary,
+        Style::SectionFade(step) => blend(section, spine, FADES[usize::from(step)]),
+        Style::PeriodFade(step) => blend(period, spine, FADES[usize::from(step)]),
+    };
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
 }
 
 fn runs<S: Copy + PartialEq, K: PartialEq>(
