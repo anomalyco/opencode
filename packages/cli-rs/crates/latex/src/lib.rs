@@ -69,7 +69,7 @@ pub fn renderer() -> impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> {
 }
 
 /// The formula's widget: structure in the muted text color, relations bold, and a row that scrolls sideways instead
-/// of wrapping.
+/// of wrapping. TS adds a row of top margin; the Rust Markdown already puts a blank row between blocks.
 fn formula(app: &App, layout: &Layout, theme: &Theme) -> AnyWidget {
     let (text, subdued) = (theme.text.base, theme.text.muted);
     let mut spans: Vec<Span<'static>> = Vec::new();
@@ -120,7 +120,6 @@ fn formula(app: &App, layout: &Layout, theme: &Theme) -> AnyWidget {
         .width(Length::percent(100.0))
         .height(layout.height as f32)
         .shrink(0.0)
-        .margin_edge(Edge::Top, 1)
         .axes(true, false)
         .scrollbars(false)
         .child(&content)
