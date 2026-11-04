@@ -849,7 +849,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  describe("with background polling off", () => {
+  describe("refreshing Console config", () => {
     const serve = () =>
       Effect.sync(() => {
         const state = { advertised: false, requests: [] as (string | null)[], hang: false }
@@ -870,13 +870,15 @@ describe("OpencodePlugin", () => {
       })
     const key = (server: Bun.Server<undefined>, key = "secret") =>
       Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
-    const connect = Effect.fn(function* (server: Bun.Server<undefined>) {
+    // A real macrotask, so a request can reach the server without advancing the TestClock as `drain` does.
+    const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+    const connect = Effect.fn(function* (server: Bun.Server<undefined>, poll = false) {
       const credentials = yield* Credential.Service
       const credential = yield* credentials.create({
         integrationID: Integration.ID.make("opencode"),
         value: key(server),
       })
-      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll: false }))
+      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll }))
       yield* drain
       return credential
     })
@@ -935,6 +937,34 @@ describe("OpencodePlugin", () => {
             const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
             yield* TestClock.adjust("3 seconds")
             yield* Fiber.join(admitted)
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("admits a prompt within 3 seconds while a background check waits on the Console", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            state.advertised = true
+            yield* connect(server, true)
+
+            state.hang = true
+            state.advertised = false
+            yield* TestClock.adjust("1 minute")
+            yield* settle
+            expect(state.requests).toHaveLength(2)
+
+            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
+            yield* settle
+            yield* TestClock.adjust("3 seconds")
+            yield* Fiber.join(admitted)
+            // The prompt joined the background check's request rather than sending its own.
             expect(state.requests).toHaveLength(2)
             expect(yield* websearch.providers()).toContainEqual(consoleSearch)
             release()
