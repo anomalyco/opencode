@@ -1560,14 +1560,9 @@ pub fn choose(local: &Rc<Local>, model: &Model) {
     local.dialogs.clear();
 }
 
-/// `DialogModel`'s `connect`: the integration dialog, which is E.17a's. Until it lands this says so; E.17a
-/// reopens this dialog with `show(local, Some(provider))` once a provider connects.
+/// `DialogModel`'s `connect`: the integration dialog, which reopens this dialog on the connected provider.
 pub fn connect(local: &Rc<Local>) {
-    local.dialogs.clear();
-    local.toasts.show(ToastOptions::new(
-        Variant::Info,
-        "Connecting an integration is not available in this client yet",
-    ));
+    crate::dialogs::integration::show(local, Some(crate::dialogs::integration::show_models()));
 }
 
 /// Registers the model, agent, variant, and usage commands and their keys (`app.tsx:903-1018`).
