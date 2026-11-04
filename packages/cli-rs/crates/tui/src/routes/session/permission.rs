@@ -425,8 +425,13 @@ impl Inner {
         reply(&tui, &request, decision, None, Box::new(|| {}));
     }
 
+    /// Back to the question, which starts over as TS remounts it.
     fn cancel_reject(self: &Rc<Self>) {
-        self.prompted.borrow_mut().stage = Stage::Permission;
+        let mut prompted = self.prompted.borrow_mut();
+        prompted.stage = Stage::Permission;
+        prompted.selected = 0;
+        prompted.expanded = false;
+        drop(prompted);
         self.stage_changed();
     }
 
@@ -799,10 +804,13 @@ fn presentation_body(
 fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);
-    let scroll = || {
+    // A scroll box has no height of its own: start from its row count, shrink under the inline cap, and
+    // grow in full screen.
+    let scroll = |rows: usize| {
         ScrollBox::new(app)
             .grow(1.0)
-            .basis(Length::Auto)
+            .shrink(1.0)
+            .basis(Length::Cells(rows as f32))
             .min_height(0)
     };
     let column = View::new(app)
@@ -820,14 +828,20 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
         };
         let file = current.file.as_deref().unwrap_or_default();
         let filetype = opentui::syntax::filetype_for_path(file);
+        // Every line but the file headers and the first hunk's `@@` line.
+        let rows = diff
+            .lines()
+            .filter(|line| !line.starts_with("---") && !line.starts_with("+++"))
+            .count()
+            .saturating_sub(1);
         let diff =
             opencode_ui::diff::view(app, theme, &syntax, diff, view, filetype, WrapMode::Word, 0);
-        return column.child(&scroll().child(&diff));
+        return column.child(&scroll(rows).child(&diff));
     }
     if let Some(patch) = &current.patch {
         let code =
             opencode_ui::code::view(app, theme, &syntax, Some("diff"), patch).fg(theme.text.muted);
-        return column.child(&scroll().child(&code));
+        return column.child(&scroll(patch.lines().count()).child(&code));
     }
     column.child(
         &View::new(app)
