@@ -1,6 +1,7 @@
 export * as MessageOrigin from "./message-origin.js"
 
 import { Schema } from "effect"
+import { optional } from "./schema.js"
 
 /** The user-message metadata key that holds a {@link MessageOrigin.Info}. */
 export const Key = "opencode.origin"
@@ -17,7 +18,7 @@ export const Value = Schema.String.check(
 ).annotate({ identifier: "MessageOrigin.Value" })
 
 // `actor` names whoever sent it when that isn't the person who owns the session.
-const actor = Schema.optionalKey(Value)
+const actor = Value.pipe(optional)
 
 export interface From extends Schema.Schema.Type<typeof From> {}
 /** A machine sent the message: another session, a schedule, a tool. */
@@ -40,7 +41,7 @@ export const Info = Schema.Union([From, Via]).annotate({ identifier: "MessageOri
 export type Info = From | Via
 
 /** User-message metadata whose {@link Key} entry, when present, is a valid origin. */
-export const Metadata = Schema.StructWithRest(Schema.Struct({ [Key]: Schema.optionalKey(Info) }), [
+export const Metadata = Schema.StructWithRest(Schema.Struct({ [Key]: Info.pipe(optional) }), [
   Schema.Record(Schema.String, Schema.Unknown),
 ]).annotate({ identifier: "MessageOrigin.Metadata" })
 export type Metadata = typeof Metadata.Type

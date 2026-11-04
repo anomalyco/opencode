@@ -218,8 +218,11 @@ export type SessionPromptInput = {
   readonly metadata?:
     | ({
         readonly "opencode.origin"?:
-          | { readonly from: string; readonly via?: never; readonly actor?: string }
-          | { readonly via: string; readonly from?: never; readonly actor?: string }
+          | (
+              | { readonly from: string; readonly via?: never; readonly actor?: string | undefined }
+              | { readonly via: string; readonly from?: never; readonly actor?: string | undefined }
+            )
+          | undefined
       } & { readonly [x: string]: unknown })
     | undefined
   readonly delivery?: SessionInbox.Delivery | undefined

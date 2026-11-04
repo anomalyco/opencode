@@ -38,6 +38,12 @@ test("metadata keeps other keys and checks only the origin", () => {
     [MessageOrigin.Key]: { via: "voice:ios" },
     source: "api",
   })
+  expect(Schema.encodeSync(MessageOrigin.Metadata)({ [MessageOrigin.Key]: { via: "seer", actor: undefined } })).toEqual(
+    { [MessageOrigin.Key]: { via: "seer" } },
+  )
+  expect(Schema.encodeSync(MessageOrigin.Metadata)({ [MessageOrigin.Key]: undefined, source: "api" })).toEqual({
+    source: "api",
+  })
   expect(() => decodeMetadata({ [MessageOrigin.Key]: { kind: "session", sessionID: "ses_1" } })).toThrow()
   expect(() => decodeMetadata({ [MessageOrigin.Key]: { from: "a", via: "b" } })).toThrow()
 })
