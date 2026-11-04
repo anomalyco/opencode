@@ -7,6 +7,7 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { SpawnFailure } from "./spawn-failure"
 
 export * as BackgroundService from "./background-service"
 
@@ -55,14 +56,14 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         )
       : undefined
 
-  const ensure = (required = version) =>
+  const ensure = (required = version, executable: readonly string[] = cli.command) =>
     client.Service.ensure({
       file,
       version: required,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
       command: [
-        ...cli.command,
+        ...executable,
         "serve",
         "--service",
         ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
@@ -71,11 +72,11 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
 
-  const runEnsure = () =>
-    ensure().catch((error) => {
+  const runEnsure = (executable: readonly string[] = cli.command) =>
+    ensure(version, executable).catch((error) => {
       if (!shouldRetryEnsure(version, error instanceof Error ? error.message : String(error))) throw error
 
-      return ensure(cli.version)
+      return ensure(cli.version, executable)
     })
 
   // A compatible service the entry module already found is adopted at once; ensure() still runs
@@ -83,7 +84,21 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
 
   if (early) yield* Effect.sync(() => void runEnsure().catch(() => undefined))
-  const service = early ?? (yield* Effect.tryPromise(runEnsure))
+  // Some Windows profiles refuse to run programs from userData, where the staged copy lives. The shipped
+  // executable in the installation then starts the service instead. It stays locked while the service runs, so
+  // an update has to stop the service first; that is why it is not the default.
+  let bundled = false
+  const service =
+    early ??
+    (yield* Effect.tryPromise(() =>
+      runEnsure().catch((error) => {
+        if (!cli.bundled || !SpawnFailure.is(error)) throw error
+        bundled = true
+        runFork(Effect.logWarning("staged v2 CLI could not be started, using the bundled executable", { error }))
+
+        return runEnsure([cli.bundled])
+      }),
+    ))
 
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
@@ -105,9 +120,10 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ...endpoint(url.origin),
   })
 
-  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree.
+  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree, and so does the
+  // bundled one, whose folder the cleanup must not touch.
   // Keep both the bundled stage and any adopted server's stage so its executable stays on disk.
-  if (mode === "initial" && (app.isPackaged || isolated) && cli.binary && runningVersion)
+  if (mode === "initial" && (app.isPackaged || isolated) && !bundled && cli.binary && runningVersion)
     runFork(
       cleanStages(cli.binary, { keep: keptStages(cli.version, runningVersion) }).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
