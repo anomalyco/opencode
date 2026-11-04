@@ -82,6 +82,7 @@ Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-a
 - Don't destructure props; read `props.x` so the getter stays reactive (`splitProps` when you must). Call signals when passing them as JSX props. Use `<Show>` and `<For>`, not `&&` and `.map`, in JSX.
 - Use `createStore` for objects and collections, `createSignal` for single values.
 - Async data goes through `createLatest`, a resource, or a guarded promise that ignores stale results, under the Suspense rules below, never an effect that fetches and then sets.
+- Lifecycles follow the State Machines section of `packages/app/AGENTS.md`: one union, a pure `transition`, selectors for the UI, and a driver whose results carry attempt ids. Keep the machine state in the plugin's store, not in module state. Precedents: `src/terminal/machine.ts`, `src/wsl/machine.ts`, `src/updater/machine.ts`.
 
 ## Performance
 
