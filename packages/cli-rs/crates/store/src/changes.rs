@@ -170,6 +170,11 @@ impl Log {
         changes
     }
 
+    /// Everything may have changed (a reconnect): every view looks again.
+    pub(crate) fn everything(&mut self) {
+        self.current.all = true;
+    }
+
     pub(crate) fn session(&mut self, id: &SessionID) {
         self.current.sessions = true;
         self.current.session.insert(id.clone());

@@ -561,9 +561,8 @@ impl Data {
 
     /// `server.connected`: reads the default location's info without the sync key, as TS does.
     pub(crate) fn rehydrate_location(&self) {
-        let data = self.clone();
         let location = self.resolve(None);
-        self.refresh(async move {
+        self.refresh(|data| async move {
             let info = data
                 .client()
                 .location_get(
@@ -581,14 +580,13 @@ impl Data {
     }
 
     pub(crate) fn refresh_catalogs(&self, catalogs: Vec<Catalog>, location: Location) {
-        if !self.live() {
-            return;
-        }
-        let reads: Vec<Task<()>> = catalogs
-            .into_iter()
-            .map(|catalog| self.catalog_sync(catalog, Some(&location)))
-            .collect();
-        self.refresh(async move { try_join_all(reads).await.map(|_| ()) });
+        self.refresh(|data| {
+            let reads: Vec<Task<()>> = catalogs
+                .into_iter()
+                .map(|catalog| data.catalog_sync(catalog, Some(&location)))
+                .collect();
+            async move { try_join_all(reads).await.map(|_| ()) }
+        });
     }
 
     /// Reads `catalog` once a burst of events under `key` goes quiet for [`SETTLE`].
