@@ -571,7 +571,7 @@ impl Host {
 pub struct SessionForms {
     host: Host,
     session: SessionID,
-    /// Owners whose pending forms were read.
+    /// Owners whose pending forms were read since the last full sync.
     synced: RefCell<HashSet<String>>,
 }
 
@@ -594,7 +594,7 @@ impl SessionForms {
     }
 
     /// `blocked`: a permission request shows instead.
-    pub fn sync(&self, tui: &Tui, _changes: &Changes, blocked: bool) {
+    pub fn sync(&self, tui: &Tui, changes: &Changes, blocked: bool) {
         let (owners, location, head) = tui.data.read(|state| {
             let session = state.session(&self.session);
             let location = session.map(|info| Location::from(&info.location));
@@ -614,6 +614,10 @@ impl SessionForms {
             let head = first_form(state, &owners, location.as_ref());
             (owners, location, head)
         });
+        // A full sync (a reconnect) reads again: the store invalidated what it read before.
+        if changes.all {
+            self.synced.borrow_mut().clear();
+        }
         for owner in &owners {
             if self.synced.borrow_mut().insert(owner.clone()) {
                 quiet(tui, tui.data.form_sync(owner, None));

@@ -41,7 +41,7 @@ struct Inner {
     prompted: RefCell<Prompted>,
     layer: RefCell<Option<Disposer>>,
     reject: RefCell<Option<Textarea>>,
-    /// Sessions whose pending permissions were read.
+    /// Sessions whose pending permissions were read since the last full sync.
     synced: RefCell<HashSet<SessionID>>,
     /// Requests answered by `autoaccept`.
     approved: RefCell<HashSet<PermissionID>>,
@@ -135,6 +135,10 @@ impl Permission {
                 .collect();
             (requests, family)
         });
+        // A full sync (a reconnect) reads again: the store invalidated what it read before.
+        if changes.all {
+            inner.synced.borrow_mut().clear();
+        }
         for id in family {
             if inner.synced.borrow_mut().insert(id.clone()) {
                 // TS ignores failures (`routes/session/index.tsx:333-347`): a session still being
