@@ -73,6 +73,7 @@ fn handle(tui: &Tui, event: &V2Event) {
         return;
     }
     crate::terminal::event(tui, event);
+    crate::client_mcp::event(tui, event);
     match event {
         V2Event::TuiCommandExecute(event) if here(tui, event.location.as_ref()) => {
             tui.keymap.dispatch(&event.data.command, None);

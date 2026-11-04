@@ -97,6 +97,10 @@ pub struct Tui {
     pub panels: crate::panel::Panels,
     /// Session terminals (E.13a).
     pub terminals: crate::terminal::Terminals,
+    /// The client MCP socket (E.13b).
+    pub client_mcp: crate::client_mcp::ClientMcp,
+    /// What the composer keeps across session views (E.13b).
+    pub composer: crate::composer::Memory,
     files: Option<Files>,
     route: RefCell<Route>,
     view: RefCell<Option<Box<dyn RouteView>>>,
@@ -396,6 +400,8 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
         frame: crate::frame::Frame::new(app, this.clone()),
         panels: Default::default(),
         terminals: Default::default(),
+        client_mcp: Default::default(),
+        composer: Default::default(),
         files,
         route: RefCell::new(Route::Home),
         view: RefCell::new(None),
@@ -414,6 +420,7 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
     install_wakeups(&tui, deps.events);
     crate::tabs::install(&tui);
     crate::terminal::install(&tui);
+    crate::client_mcp::install(&tui);
     crate::frame::install(&tui, &shell);
     crate::features::clear::install(&tui);
     crate::features::quick_switch::install(&tui);
