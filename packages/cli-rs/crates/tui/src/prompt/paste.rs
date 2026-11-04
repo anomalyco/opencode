@@ -409,6 +409,50 @@ pub fn expanded_text(prompt: &Inner) -> String {
     expand_tracked(&text, ranges)
 }
 
+/// The text a copy of the mouse selection puts on the clipboard: with the prompt focused, its paste labels
+/// become their text (the prompt textarea's `getClipboardText`).
+pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
+    let Some(prompt) = tui.prompt.current.borrow().upgrade() else {
+        return text.to_owned();
+    };
+    if !prompt.focused() {
+        return text.to_owned();
+    }
+    let info = prompt.prompt.borrow();
+    expand_placeholders(
+        text,
+        info["pasted"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default(),
+    )
+}
+
+/// `expandPastedTextPlaceholders`: each paste's label, found in order of where the paste sits, becomes its
+/// text.
+fn expand_placeholders(text: &str, pasted: &[Value]) -> String {
+    let mut parts: Vec<&Value> = pasted.iter().collect();
+    parts.sort_by(|a, b| {
+        let start = |part: &Value| part["source"]["start"].as_f64().unwrap_or(0.0);
+        start(a).total_cmp(&start(b))
+    });
+    let mut cursor = 0;
+    let mut result = String::new();
+    for part in parts {
+        let (Some(label), Some(content)) = (part["source"]["text"].as_str(), part["text"].as_str())
+        else {
+            continue;
+        };
+        let Some(index) = text[cursor..].find(label).map(|index| index + cursor) else {
+            continue;
+        };
+        result.push_str(&text[cursor..index]);
+        result.push_str(content);
+        cursor = index + label.len();
+    }
+    result + &text[cursor..]
+}
+
 /// `expandPromptInputPastedText`: the prompt with its pastes' text in place, and the mentions after
 /// each paste moved by the length it gained, for the external editor.
 pub fn expand_prompt(prompt: &Value) -> Value {
@@ -543,6 +587,20 @@ mod tests {
         let text = "[A] 世 [B] end";
         let ranges = vec![(0, 3, "one\ntwo".to_owned()), (7, 10, "three".to_owned())];
         assert_eq!(expand_tracked(text, ranges), "one\ntwo 世 three end");
+    }
+
+    #[test]
+    fn copied_labels_become_their_text_in_paste_order() {
+        let pasted = [
+            json!({ "text": "B", "source": { "start": 20, "text": "[Pasted ~3 lines]" } }),
+            json!({ "text": "A", "source": { "start": 0, "text": "[Pasted ~3 lines]" } }),
+            json!({ "text": "gone", "source": { "start": 40, "text": "[Pasted ~9 lines]" } }),
+        ];
+        assert_eq!(
+            expand_placeholders("[Pasted ~3 lines] and [Pasted ~3 lines]!", &pasted),
+            "A and B!"
+        );
+        assert_eq!(expand_placeholders("plain", &pasted), "plain");
     }
 
     #[test]

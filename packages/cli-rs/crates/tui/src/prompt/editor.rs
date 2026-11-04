@@ -67,6 +67,8 @@ pub struct Shared {
     pub editor: editor_context::Context,
     /// Stashed prompts (E.4).
     pub stash: super::stash::Stash,
+    /// The prompt last mounted, whose pastes a copy expands (E.4).
+    pub(crate) current: RefCell<Weak<Inner>>,
 }
 
 impl Shared {
@@ -75,6 +77,7 @@ impl Shared {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
             stash: super::stash::Stash::load(app, state.clone()),
+            current: RefCell::new(Weak::new()),
             preferences: Preferences::load(app, state),
             complete: autocomplete::Shared::default(),
             editor: editor_context::Context::default(),
@@ -369,6 +372,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .autocomplete
         .set(autocomplete::mount(tui, &inner, &inner.root));
     *tui.textarea.borrow_mut() = Some(inner.textarea.clone());
+    *tui.prompt.current.borrow_mut() = Rc::downgrade(&inner);
     if let Some(draft) = tui.prompt.drafts.take(session) {
         let cursor = draft.cursor;
         inner.restore(draft.prompt);
