@@ -360,12 +360,14 @@ story("keeps favicon space stable across loading and failure without fetching pr
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
   const docs = markdown.getByRole("link", { name: "docs" })
   const mark = docs.locator(".markdown-link-favicon")
+
   const artwork = (mark: Locator) =>
     mark.evaluate((icon) => {
       const style = getComputedStyle(icon, "::before")
 
       return { mask: style.maskImage, background: style.backgroundImage }
     })
+
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
   await expect(mark).not.toHaveAttribute("data-loaded", "")
   expect((await artwork(mark)).mask).toContain("data:image/svg+xml")
@@ -465,6 +467,7 @@ story("selects the whole paragraph on triple click across link icons", async ({ 
 
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   })
+
   await page.mouse.click(point.x, point.y, { clickCount: 3 })
 
   expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe(
