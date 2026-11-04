@@ -82,5 +82,7 @@ export default defineApp({
     { path: "/api/session/ses_tools/message", json: { data: messages.toReversed(), cursor: {} } },
     { path: "/api/session/ses_tools/inbox", json: { data: [] } },
   ],
-  steps: [{ checkpoint: "open", until: "unused variable", deviation: ["V01-plain-transcript", "P01-read-only-prompt"] }],
+  steps: [
+    { checkpoint: "open", until: "unused variable", deviation: ["V01-plain-transcript", "P01-read-only-prompt"] },
+  ],
 })
