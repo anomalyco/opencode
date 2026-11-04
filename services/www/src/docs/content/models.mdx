@@ -212,6 +212,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
           "name": "Coding default",
           "capabilities": {
             "tools": true,
+            "freeform": ["text", "lark"],
             "input": ["text", "image"],
             "output": ["text"],
           },
@@ -229,7 +230,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
 Here, `openai/coding-default` is the selectable reference and `gpt-6.1-sol` is sent to the provider. For a model that is not
 already in the catalog, OpenCode assumes:
 
-- Tool support, text and image input, and text output.
+- JSON tool support, text and image input, and text output. No freeform tool input unless `capabilities.freeform` lists the format.
 - A 200,000-token context limit and 32,000-token output limit.
 - An unspecified input limit.
 

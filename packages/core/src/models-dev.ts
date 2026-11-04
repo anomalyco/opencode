@@ -69,6 +69,11 @@ type SourceCost = typeof SourceCost.Type
 // entry this version doesn't understand is skipped instead of failing the model.
 const SourceApi = Schema.Struct({
   base_url: Schema.optional(Schema.String),
+  capabilities: Schema.optional(
+    Schema.Struct({
+      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+    }),
+  ),
   sdk: Schema.optional(
     Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
   ),
@@ -146,6 +151,7 @@ export type Snapshot = {
 
 type Route = {
   readonly package: string
+  readonly freeform?: readonly string[]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
 }
@@ -272,6 +278,7 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   }
   return {
     package: packageName,
+    freeform: api.capabilities?.tools?.freeform,
     // An empty base_url is how models.dev says it has no URL for the API.
     ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
     ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
@@ -441,6 +448,7 @@ function modelInfo(
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.capabilities.tools.supported,
+      ...(source.route.freeform && { freeform: source.route.freeform }),
       input: modalities(model.modalities.input),
       output: modalities(model.modalities.output),
       temperature: model.capabilities.temperature,

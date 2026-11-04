@@ -33,6 +33,7 @@ export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilit
   const fallback = base ?? Capabilities.default()
   return {
     tools: config.tools ?? fallback.tools,
+    freeform: (config.freeform ?? base?.freeform)?.slice(),
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
     temperature: config.temperature ?? base?.temperature,

@@ -8,6 +8,14 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
+/** Optional wire encoding of a tool's single required string field. Execution still receives the object. */
+export const Freeform = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+]).annotate({ identifier: "LLM.Freeform" })
+export type Freeform = typeof Freeform.Type
+
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type
 
@@ -95,6 +103,7 @@ export type Info<
 > = {
   readonly name: string
   readonly input: Input
+  readonly freeform?: Freeform
   readonly description: string
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
   readonly output?: Output

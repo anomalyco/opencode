@@ -278,8 +278,13 @@ describe("ModelsDev Service", () => {
                 responses: {
                   base_url: "https://api.acme.test/v1",
                   sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
+                  capabilities: { tools: { freeform: ["text", "lark"] } },
                 },
-                "chat-completions": { base_url: "https://other.acme.test/v1", sdk: { aisdk: "@ai-sdk/openai" } },
+                "chat-completions": {
+                  base_url: "https://other.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai" },
+                  capabilities: { tools: { freeform: ["regex"] } },
+                },
               },
             }),
             "acme-fallback": sourceModel("acme-fallback", {
@@ -316,8 +321,10 @@ describe("ModelsDev Service", () => {
       const acmeModel = (id: string) => acme?.models.find((model) => model.id === id)
       expect(acmeModel("acme-responses")?.package).toBe("@opencode/ai/providers/openai/responses")
       expect(acmeModel("acme-responses")?.settings).toBeUndefined()
+      expect(acmeModel("acme-responses")?.capabilities.freeform).toEqual(["text", "lark"])
       // Without an opencode package, the AI SDK package maps to the native one as before.
       expect(acmeModel("acme-fallback")?.package).toBe("@opencode/ai/providers/anthropic")
+      expect(acmeModel("acme-fallback")?.capabilities.freeform).toBeUndefined()
       expect(acmeModel("acme-fallback")?.settings).toEqual({ baseURL: "https://claude.acme.test/v1" })
 
       const azureModel = (id: string) => azure?.models.find((model) => model.id === id)

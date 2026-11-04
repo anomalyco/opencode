@@ -16802,6 +16802,12 @@
           "tools": {
             "type": "boolean"
           },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "input": {
             "type": "array",
             "items": {
@@ -20491,6 +20497,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "input": {
             "type": "array",

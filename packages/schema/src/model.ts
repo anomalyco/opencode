@@ -77,6 +77,8 @@ export const Overlays = {
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  /** Freeform tool input formats advertised by the selected API. Absent or empty means JSON tools only. */
+  freeform: Schema.Array(Schema.String).pipe(optional),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
   /** Whether the model accepts a sampling temperature. Unknown when unset. */

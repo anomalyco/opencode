@@ -122,7 +122,9 @@ OpenAI Responses and Chat Completions, and every provider that reuses them, send
 JSON tool. Only set `freeform` for models that accept custom tools in that format; nothing checks this or falls back
 to JSON, so an unsupported model returns the provider's error. Calls, tool input events, results and history always
 use the `{ code }` object, and past calls replay the way the tool is declared in the current request, so the same
-history works with or without `freeform`.
+history works with or without `freeform`. OpenCode Core handles this selection for registered tools: it omits the
+freeform declaration, not the tool, unless the selected model API advertises that format in models.dev (or model
+configuration). An absent or empty list supports no freeform formats. Standalone AI package callers choose for themselves.
 
 ### Structured output
 
