@@ -144,7 +144,7 @@ export function DialogMcpSignIn(props: {
                   aria-describedby={store.error ? errorID : undefined}
                   autocomplete="off"
                   spellcheck={false}
-                  onInput={(event) => setStore("value", event.currentTarget.value)}
+                  onInput={(event) => setStore({ value: event.currentTarget.value, error: undefined })}
                 />
               </label>
               <Show when={store.error}>
