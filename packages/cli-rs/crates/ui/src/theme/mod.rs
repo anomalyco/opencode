@@ -24,6 +24,7 @@ use opentui::style::Color;
 pub use opentui::theme::ThemeMode;
 
 pub use catalog::{Catalog, Loaded, ThemeSource};
+pub use color::tint;
 pub use discovery::{config_directories, discover};
 pub use state::{Effect, ModeSetting, ThemeError, ThemeState, ThemeStateOptions};
 pub use system::{TerminalColors, generate_system, terminal_mode};
