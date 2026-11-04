@@ -1047,7 +1047,13 @@ function mockHandlers(
         // Like the server, which also answers 204 for a shell that already ended.
         shellRemove: () => noContent,
         persistentPtyList: (ctx) =>
-          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+          persistentPtyEnabled.pipe(
+            Effect.andThen(() =>
+              state.persistentPty.listFails
+                ? Effect.fail(new MockInternal({ message: "Listing terminals failed" }))
+                : Effect.succeed({ data: state.persistentPty.list(ctx.params.sessionID) }),
+            ),
+          ),
         persistentPtyCreate: (ctx) =>
           persistentPtyEnabled.pipe(
             Effect.map(() => {
